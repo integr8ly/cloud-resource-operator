@@ -1,12 +1,32 @@
 module github.com/integr8ly/cloud-resource-operator
 
 require (
+	github.com/aws/aws-sdk-go v1.23.17
+	github.com/go-openapi/spec v0.19.0
+	github.com/gogo/protobuf v1.3.0 // indirect
+	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
+	github.com/googleapis/gnostic v0.3.1 // indirect
+	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
+	github.com/hashicorp/golang-lru v0.5.3 // indirect
+	github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190905003907-4ebf3aa52e61
+	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v1.1.0 // indirect
+	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
+	github.com/prometheus/procfs v0.0.4 // indirect
 	github.com/spf13/pflag v1.0.3
-	k8s.io/api v0.0.0-20190612125737-db0771252981
-	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
+	go.uber.org/atomic v1.4.0 // indirect
+	go.uber.org/zap v1.10.0 // indirect
+	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472 // indirect
+	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297 // indirect
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
+	golang.org/x/sys v0.0.0-20190904154756-749cb33beabd // indirect
+	google.golang.org/appengine v1.6.2 // indirect
+	k8s.io/api v0.0.0-20190905160310-fb749d2f1064
+	k8s.io/apimachinery v0.0.0-20190831074630-461753078381
 	k8s.io/client-go v11.0.0+incompatible
-	k8s.io/kube-openapi v0.0.0-20190603182131-db7b694dc208 // indirect
+	k8s.io/klog v0.4.0 // indirect
+	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
 )

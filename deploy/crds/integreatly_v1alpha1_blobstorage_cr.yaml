@@ -1,0 +1,7 @@
+apiVersion: integreatly.org/v1alpha1
+kind: BlobStorage
+metadata:
+  name: example-blobstorage
+spec:
+  # Add fields here
+  size: 3
