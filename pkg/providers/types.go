@@ -12,7 +12,8 @@ type ResourceType string
 const (
 	ManagedDeploymentType = "managed"
 
-	AWSDeploymentStrategy = "aws"
+	AWSDeploymentStrategy       = "aws"
+	OpenShiftDeploymentStrategy = "openshift"
 
 	BlobStorageResourceType    ResourceType = "blobstorage"
 	PostgresResourceType       ResourceType = "postgres"
@@ -33,4 +34,11 @@ type BlobStorageProvider interface {
 	SupportsStrategy(s string) bool
 	CreateStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error)
 	DeleteStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) error
+}
+
+type RedisProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	CreateRedis(ctx context.Context) error
+	DeleteRedis(ctx context.Context) error
 }

@@ -14,6 +14,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"./pkg/apis/integreatly/v1alpha1.BlobStorage":       schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref),
 		"./pkg/apis/integreatly/v1alpha1.BlobStorageSpec":   schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref),
 		"./pkg/apis/integreatly/v1alpha1.BlobStorageStatus": schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref),
+		"./pkg/apis/integreatly/v1alpha1.Redis":             schema_pkg_apis_integreatly_v1alpha1_Redis(ref),
+		"./pkg/apis/integreatly/v1alpha1.RedisSpec":         schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref),
+		"./pkg/apis/integreatly/v1alpha1.RedisStatus":       schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref),
 	}
 }
 
@@ -122,5 +125,85 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 		},
 		Dependencies: []string{
 			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_Redis(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Redis is the Schema for the redis API",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.RedisSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.RedisStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"./pkg/apis/integreatly/v1alpha1.RedisSpec", "./pkg/apis/integreatly/v1alpha1.RedisStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RedisSpec defines the desired state of Redis",
+				Properties: map[string]spec.Schema{
+					"tier": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RedisStatus defines the observed state of Redis",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
 	}
 }

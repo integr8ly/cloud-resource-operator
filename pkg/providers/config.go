@@ -18,6 +18,7 @@ const (
 
 type DeploymentStrategyMapping struct {
 	BlobStorage string `json:"blobstorage"`
+	Redis       string `json:"redis"`
 }
 
 type ConfigManager struct {
