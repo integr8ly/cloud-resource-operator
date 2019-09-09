@@ -13,7 +13,8 @@ type ResourceType string
 const (
 	ManagedDeploymentType = "managed"
 
-	AWSDeploymentStrategy = "aws"
+	AWSDeploymentStrategy       = "aws"
+	OpenShiftDeploymentStrategy = "openshift"
 
 	BlobStorageResourceType    ResourceType = "blobstorage"
 	PostgresResourceType       ResourceType = "postgres"
@@ -45,4 +46,11 @@ type SMTPCredentialsProvider interface {
 	SupportsStrategy(s string) bool
 	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error)
 	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error
+}
+
+type RedisProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	CreateRedis(ctx context.Context) error
+	DeleteRedis(ctx context.Context) error
 }

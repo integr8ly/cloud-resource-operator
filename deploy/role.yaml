@@ -64,5 +64,6 @@ rules:
   resources:
   - '*'
   - smtpcredentialset
+  - redis
   verbs:
   - '*'
