@@ -3,6 +3,7 @@ package blobstorage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 
@@ -131,7 +132,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			if err = r.client.Status().Update(ctx, instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 			}
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.BlobStorage))
