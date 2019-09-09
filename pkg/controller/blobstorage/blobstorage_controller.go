@@ -114,7 +114,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			sec := &corev1.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      instance.Spec.SecretRef.Name,
-					Namespace: instance.Spec.SecretRef.Namespace,
+					Namespace: instance.Namespace,
 				},
 			}
 			controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
