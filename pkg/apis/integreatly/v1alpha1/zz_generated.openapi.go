@@ -81,7 +81,7 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref common.ReferenceCa
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/api/core/v1.SecretReference"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
@@ -89,7 +89,7 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref common.ReferenceCa
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.SecretReference"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -114,13 +114,13 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/api/core/v1.SecretReference"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.SecretReference"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }

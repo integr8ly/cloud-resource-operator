@@ -30,6 +30,9 @@ spec:
         spec:
           properties:
             secretRef:
+              properties:
+                name:
+                  type: string
               type: object
             tier:
               type: string
@@ -49,6 +52,9 @@ spec:
             provider:
               type: string
             secretRef:
+              properties:
+                name:
+                  type: string
               type: object
             strategy:
               description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
