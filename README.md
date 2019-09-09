@@ -1,5 +1,7 @@
 # Cloud Resource Operator
 
+[![Coverage Status](https://coveralls.io/repos/github/integr8ly/cloud-resource-operator/badge.svg)](https://coveralls.io/github/integr8ly/cloud-resource-operator)
+
 Operator to provision resources such as Postgres, Redis and storage for you, either in-cluster or through a cloud
 provider such as Amazon AWS.
 

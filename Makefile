@@ -20,6 +20,10 @@ code/fix:
 	@go mod tidy
 	@gofmt -w `find . -type f -name '*.go' -not -path "./vendor/*"`
 
+.PHONY: code/check
+code/check:
+	bash -c "diff -u <(echo -n) <(gofmt -d ./)"
+
 .PHONY: cluster/prepare
 cluster/prepare:
 	oc new-project $(NAMESPACE) || true
@@ -35,4 +39,4 @@ cluster/clean:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	go test -v -race -coverprofile=coverage.out ./pkg/...
+	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
