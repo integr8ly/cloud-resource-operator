@@ -1,0 +1,24 @@
+language: go
+
+sudo: required
+
+go:
+  - 1.13.x
+
+git:
+  depth: 1
+
+stages:
+  - test
+
+before_install:
+  - go get github.com/mattn/goveralls
+
+jobs:
+  include:
+    - stage: test
+      script:
+        - go get github.com/mattn/goveralls
+        - make code/check
+        - make test/unit
+        - $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken=$COVERALLS_TOKEN
