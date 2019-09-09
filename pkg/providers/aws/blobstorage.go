@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
@@ -180,8 +182,14 @@ func (p *AWSBlobStorageProvider) DeleteStorage(ctx context.Context, client clien
 	_, err = s3svc.DeleteBucket(&s3.DeleteBucketInput{
 		Bucket: bucketCreateCfg.Bucket,
 	})
-	if err != nil {
+	s3err, isAWSErr := err.(awserr.Error)
+	if err != nil && !isAWSErr {
 		return errorUtil.Wrapf(err, "failed to delete s3 bucket %s", *bucketCreateCfg.Bucket)
+	}
+	if err != nil && isAWSErr {
+		if s3err.Code() != s3.ErrCodeNoSuchBucket {
+			return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCreateCfg.Bucket)
+		}
 	}
 	err = s3svc.WaitUntilBucketNotExists(&s3.HeadBucketInput{
 		Bucket: bucketCreateCfg.Bucket,

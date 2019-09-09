@@ -3,5 +3,11 @@ kind: BlobStorage
 metadata:
   name: example-blobstorage
 spec:
-  # Add fields here
-  size: 3
+  # i want my blob storage information output in a Secret named test in the Namespace cloud-resource-operator
+  secretRef:
+    name: test
+    namespace: cloud-resource-operator
+  # i want a blob storage of a development-level tier
+  tier: development
+  # i want a blob storage for the type managed
+  type: managed

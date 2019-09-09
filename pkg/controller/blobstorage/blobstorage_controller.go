@@ -116,7 +116,6 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 					Namespace: instance.Spec.SecretRef.Namespace,
 				},
 			}
-			fmt.Println("pk")
 			controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
 				e := existing.(*corev1.Secret)
 				if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {

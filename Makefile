@@ -3,11 +3,11 @@ VERSION=0.1.0
 
 .PHONY: build
 build:
-	GO111MODULE=on go build
+	go build cmd/manager/main.go
 
 .PHONY: run
 run:
-	operator-sdk up local --namespace=$(NAMESPACE)
+	operator-sdk up local --namespace=""
 
 .PHONY: code/gen
 code/gen:
@@ -22,8 +22,10 @@ code/fix:
 
 .PHONY: cluster/prepare
 cluster/prepare:
-	oc new-project $(NAMESPACE)
-	oc create -f ./deploy/crds/*_crd.yaml
+	oc new-project $(NAMESPACE) || true
+	oc apply -f ./deploy/crds/*_crd.yaml
+	oc apply -f ./deploy/examples/
+	oc apply -f ./deploy/crds/*_cr.yaml -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:
