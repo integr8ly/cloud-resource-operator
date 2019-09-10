@@ -29,12 +29,33 @@ spec:
           type: object
         spec:
           properties:
+            secretRef:
+              properties:
+                name:
+                  type: string
+              type: object
             tier:
               type: string
             type:
               type: string
+          required:
+          - type
+          - tier
+          - secretRef
           type: object
         status:
+          properties:
+            provider:
+              type: string
+            secretRef:
+              properties:
+                name:
+                  type: string
+              type: object
+            strategy:
+              type: string
+          required:
+          - secretRef
           type: object
   version: v1alpha1
   versions:

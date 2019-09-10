@@ -31,25 +31,25 @@ import (
 const (
 	defaultRegion = "eu-west-1"
 
-	dataBucketName          = "bucketName"
-	dataCredentialKeyID     = "credentialKeyID"
-	dataCredentialSecretKey = "credentialSecretKey"
+	dataBucketName            = "bucketName"
+	dataS3CredentialKeyID     = "credentialKeyID"
+	dataS3CredentialSecretKey = "credentialSecretKey"
 
 	defaultFinalizer = "finalizers.aws.cloud-resources-operator.integreatly.org"
 )
 
 // AWSDeploymentDetails Provider-specific details about the AWS S3 bucket created
-type AWSDeploymentDetails struct {
+type AWSs3DeploymentDetails struct {
 	BucketName          string
 	CredentialKeyID     string
 	CredentialSecretKey string
 }
 
-func (d *AWSDeploymentDetails) Data() map[string][]byte {
+func (d *AWSs3DeploymentDetails) Data() map[string][]byte {
 	return map[string][]byte{
-		dataBucketName:          []byte(d.BucketName),
-		dataCredentialKeyID:     []byte(d.CredentialKeyID),
-		dataCredentialSecretKey: []byte(d.CredentialSecretKey),
+		dataBucketName:            []byte(d.BucketName),
+		dataS3CredentialKeyID:     []byte(d.CredentialKeyID),
+		dataS3CredentialSecretKey: []byte(d.CredentialSecretKey),
 	}
 }
 
@@ -77,11 +77,11 @@ func (p *AWSBlobStorageProvider) SupportsStrategy(d string) bool {
 }
 
 // CreateStorage Create S3 bucket from strategy config and credentials to interact with it
-func (p *AWSBlobStorageProvider) CreateStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, error) {
+func (p *AWSBlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, error) {
 	// handle provider-specific finalizer
 	if bs.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&bs.ObjectMeta, defaultFinalizer)
-		if err := client.Update(ctx, bs); err != nil {
+		if err := p.Client.Update(ctx, bs); err != nil {
 			return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
 		}
 	}
@@ -97,7 +97,7 @@ func (p *AWSBlobStorageProvider) CreateStorage(ctx context.Context, client clien
 
 	// create the credentials to be used by the end-user, whoever created the blobstorage instance
 	endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
-	endUserCreds, _, err := p.CredentialManager.ReoncileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
+	endUserCreds, _, err := p.CredentialManager.ReconcileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to reconcile s3 put object credentials")
 	}
@@ -131,7 +131,7 @@ func (p *AWSBlobStorageProvider) CreateStorage(ctx context.Context, client clien
 
 	// pre-create the blobstorageinstance that will be returned if everything is successful
 	bsi := &providers.BlobStorageInstance{
-		DeploymentDetails: &AWSDeploymentDetails{
+		DeploymentDetails: &AWSs3DeploymentDetails{
 			BucketName:          *bucketCreateCfg.Bucket,
 			CredentialKeyID:     endUserCreds.AccessKeyID,
 			CredentialSecretKey: endUserCreds.SecretAccessKey,
@@ -157,7 +157,7 @@ func (p *AWSBlobStorageProvider) CreateStorage(ctx context.Context, client clien
 }
 
 // DeleteStorage Delete S3 bucket and credentials to add objects to it
-func (p *AWSBlobStorageProvider) DeleteStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) error {
+func (p *AWSBlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error {
 	// resolve bucket information for bucket created by provider
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	if err != nil {
@@ -206,20 +206,20 @@ func (p *AWSBlobStorageProvider) DeleteStorage(ctx context.Context, client clien
 			Namespace: bs.Namespace,
 		},
 	}
-	if err := client.Delete(ctx, putObjCredReq); err != nil {
+	if err := p.Client.Delete(ctx, putObjCredReq); err != nil {
 		return errorUtil.Wrapf(err, "failed to delete credential request %s", putObjCredsName)
 	}
 
 	// remove the finalizer added by the provider
 	resources.RemoveFinalizer(&bs.ObjectMeta, defaultFinalizer)
-	if err := client.Update(ctx, bs); err != nil {
+	if err := p.Client.Update(ctx, bs); err != nil {
 		return errorUtil.Wrapf(err, "failed to update instance as part of finalizer reconcile")
 	}
 	return nil
 }
 
 func (p *AWSBlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *StrategyConfig, error) {
-	stratCfg, err := p.ConfigManager.ReadBlobStorageStrategy(ctx, bs.Spec.Tier)
+	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.BlobStorageResourceType, bs.Spec.Tier)
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
@@ -227,10 +227,10 @@ func (p *AWSBlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1al
 		stratCfg.Region = defaultRegion
 	}
 
-	// delete the s3 bucket created by the provider
-	s3cbi := &s3.CreateBucketInput{}
-	if err = json.Unmarshal(stratCfg.RawStrategy, s3cbi); err != nil {
+	// unmarshal the s3 bucket config
+	s3config := &s3.CreateBucketInput{}
+	if err = json.Unmarshal(stratCfg.RawStrategy, s3config); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
-	return s3cbi, stratCfg, nil
+	return s3config, stratCfg, nil
 }

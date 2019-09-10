@@ -5,6 +5,6 @@ metadata:
   namespace: kube-system
 data:
   managed: |
-    {"blobstorage":"aws"}
+    {"blobstorage":"aws", "redis": "aws"}
   workshop: |
-    {"blobstorage":"openshift"}
+    {"blobstorage":"openshift", "redis": "openshift"}

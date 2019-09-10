@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	createBucketEntries = []v1.StatementEntry{
+	operatorEntries = []v1.StatementEntry{
 		{
 			Effect: "Allow",
 			Action: []string{
@@ -37,8 +37,12 @@ var (
 				"s3:DeleteBucket",
 				"s3:ListBucket",
 				"s3:ListAllMyBuckets",
+				"s3:GetObject",
+				"elasticache:CreateReplicationGroup",
+				"elasticache:DeleteReplicationGroup",
+				"elasticache:DescribeReplicationGroups",
 			},
-			Resource: "arn:aws:s3:::*",
+			Resource: "*",
 		},
 	}
 )
@@ -81,14 +85,14 @@ func NewCredentialManager(client client.Client) *CredentialManager {
 
 // Ensure the credentials the AWS provider requires are available
 func (m *CredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
-	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, createBucketEntries)
+	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
 	if err != nil {
 		return nil, err
 	}
 	return creds, nil
 }
 
-func (m *CredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
+func (m *CredentialManager) ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
 	cr, creds, err := m.ReconcileCredentials(ctx, name, ns, buildPutBucketObjectEntries(bucket))
 	if err != nil {
 		return nil, nil, err

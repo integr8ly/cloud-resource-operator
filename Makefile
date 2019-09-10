@@ -27,9 +27,10 @@ code/check:
 .PHONY: cluster/prepare
 cluster/prepare:
 	oc new-project $(NAMESPACE) || true
-	oc apply -f ./deploy/crds/*_crd.yaml
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
 	oc apply -f ./deploy/examples/
-	oc apply -f ./deploy/crds/*_cr.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/*cr.yaml -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:

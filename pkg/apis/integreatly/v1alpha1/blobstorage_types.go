@@ -7,33 +7,13 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// SecretRef This represents a namespace-scoped Secret
-type SecretRef struct {
-	Name string `json:"name,omitempty"`
-}
-
 // BlobStorageSpec defines the desired state of BlobStorage
 // +k8s:openapi-gen=true
-type BlobStorageSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	Type      string    `json:"type"`
-	Tier      string    `json:"tier"`
-	SecretRef SecretRef `json:"secretRef"`
-}
+type BlobStorageSpec ResourceTypeSpec
 
 // BlobStorageStatus defines the observed state of BlobStorage
 // +k8s:openapi-gen=true
-type BlobStorageStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	Strategy  string    `json:"strategy,omitempty"`
-	Provider  string    `json:"provider,omitempty"`
-	SecretRef SecretRef `json:"secretRef,omitempty"`
-}
-
+type BlobStorageStatus ResourceTypeStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // BlobStorage is the Schema for the blobstorages API

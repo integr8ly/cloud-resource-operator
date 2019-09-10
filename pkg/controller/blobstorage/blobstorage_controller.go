@@ -98,19 +98,21 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 	for _, p := range providerList {
 		if p.SupportsStrategy(stratMap.BlobStorage) {
 			if instance.GetDeletionTimestamp() != nil {
-				if err := p.DeleteStorage(ctx, r.client, instance); err != nil {
+				if err := p.DeleteStorage(ctx, instance); err != nil {
 					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 				}
 				return reconcile.Result{}, nil
 			}
 
-			bsi, err := p.CreateStorage(ctx, r.client, instance)
+			bsi, err := p.CreateStorage(ctx, instance)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
 			if bsi == nil {
 				return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
 			}
+
+			// create the secret with user aws credentials
 			sec := &corev1.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      instance.Spec.SecretRef.Name,

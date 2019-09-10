@@ -46,20 +46,20 @@ func NewDefaultConfigManager(client client.Client) *ConfigManager {
 	return NewConfigManager(DefaultConfigMapName, DefaultConfigMapNamespace, client)
 }
 
-func (m *ConfigManager) ReadBlobStorageStrategy(ctx context.Context, tier string) (*StrategyConfig, error) {
+func (m *ConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 	cm := &v1.ConfigMap{}
 	err := m.client.Get(ctx, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, cm)
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
-	rawStrategyCfg := cm.Data[string(providers.BlobStorageResourceType)]
+	rawStrategyCfg := cm.Data[string(rt)]
 	if rawStrategyCfg == "" {
-		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", providers.BlobStorageResourceType))
+		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", rt))
 	}
 
 	var strategies map[string]*StrategyConfig
 	if err = json.Unmarshal([]byte(rawStrategyCfg), &strategies); err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", providers.BlobStorageResourceType)
+		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
 	tierStrat := strategies[tier]
 	return tierStrat, nil
