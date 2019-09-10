@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	createBucketEntries = []v1.StatementEntry{
+	operatorEntries = []v1.StatementEntry{
 		{
 			Effect: "Allow",
 			Action: []string{
@@ -38,8 +38,12 @@ var (
 				"s3:DeleteBucket",
 				"s3:ListBucket",
 				"s3:ListAllMyBuckets",
+				"s3:GetObject",
+				"elasticache:CreateReplicationGroup",
+				"elasticache:DeleteReplicationGroup",
+				"elasticache:DescribeReplicationGroups",
 			},
-			Resource: "arn:aws:s3:::*",
+			Resource: "*",
 		},
 	}
 	sendRawMailEntries = []v1.StatementEntry{

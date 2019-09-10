@@ -1,7 +1,13 @@
 apiVersion: integreatly.org/v1alpha1
 kind: Redis
 metadata:
+  # name must be between 1-40 characters
   name: example-redis
 spec:
-  # Add fields here
-  size: 3
+  # i want my redis storage information output in a Secret named test in the Namespace cloud-resource-operator
+  secretRef:
+    name: redis-test-0001
+  # i want a redis storage of a development-level tier
+  tier: development
+  # i want a redis storage for the type managed
+  type: managed

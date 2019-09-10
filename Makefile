@@ -33,6 +33,7 @@ cluster/prepare:
 	oc new-project $(NAMESPACE) || true
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
 	oc apply -f ./deploy/examples/
 
 .PHONY: cluster/seed/smtp
@@ -42,6 +43,10 @@ cluster/seed/smtp:
 .PHONY: cluster/seed/blobstorage
 cluster/seed/blobstorage:
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml -n $(NAMESPACE)
+
+.PHONY: cluster/seed/redis
+cluster/seed/redis:
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:
