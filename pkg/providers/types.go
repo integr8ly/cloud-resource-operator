@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+
 	"github.com/aws/aws-sdk-go/service/elasticache"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
