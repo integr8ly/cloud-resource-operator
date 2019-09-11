@@ -3,10 +3,11 @@ package redis
 import (
 	"context"
 	"fmt"
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strconv"
 	"time"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -118,13 +119,9 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		if p.SupportsStrategy(stratMap.Redis) {
 			// handle deletion of redis and remove any finalizers added
 			if instance.GetDeletionTimestamp() != nil {
-				redis, err := p.DeleteRedis(ctx, instance)
+				err := p.DeleteRedis(ctx, instance)
 				if err != nil {
 					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
-				}
-				if redis == nil {
-					reqLogger.Info("waiting for redis cluster to delete")
-					return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 				}
 				return reconcile.Result{}, nil
 			}
@@ -140,14 +137,13 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 			}
 
 			// create the secret with the redis cluster connection details
-			reqLogger.Info("creating or updating client secret")
 			sec := &corev1.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
-					Name: 		instance.Spec.SecretRef.Name,
-					Namespace: 	instance.Namespace,
+					Name:      instance.Spec.SecretRef.Name,
+					Namespace: instance.Namespace,
 				},
 			}
-
+			reqLogger.Info("creating or updating client secret")
 			_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
 				e := existing.(*corev1.Secret)
 				if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
@@ -163,10 +159,10 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 				return nil
 			})
 			if err != nil {
-				fmt.Println("error: %s", err)
 				return reconcile.Result{}, err
 			}
 
+			// update the redis custom resource
 			instance.Status.SecretRef = instance.Spec.SecretRef
 			instance.Status.Strategy = stratMap.Redis
 			instance.Status.Provider = p.GetName()

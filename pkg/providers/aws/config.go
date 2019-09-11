@@ -28,14 +28,9 @@ const (
 	sesSMTPEndpointEUWest1 = "email-smtp.eu-west-1.amazonaws.com"
 )
 
-type StrategyConfig struct {
-	Region      string          `json:"region"`
-	RawStrategy json.RawMessage `json:"strategy"`
-}
-
 //go:generate moq -out config_moq.go . ConfigManager
 type ConfigManager interface {
-	ReadBlobStorageStrategy(ctx context.Context, tier string) (*StrategyConfig, error)
+	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
 	ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error)
 	GetDefaultRegionSMTPServerMapping() map[string]string
 }
@@ -46,6 +41,11 @@ type ConfigMapConfigManager struct {
 	configMapName      string
 	configMapNamespace string
 	client             client.Client
+}
+
+type StrategyConfig struct {
+	Region      string          `json:"region"`
+	RawStrategy json.RawMessage `json:"strategy"`
 }
 
 func NewConfigMapConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager {
@@ -66,10 +66,10 @@ func NewDefaultConfigMapConfigManager(client client.Client) *ConfigMapConfigMana
 	return NewConfigMapConfigManager(DefaultConfigMapName, DefaultConfigMapNamespace, client)
 }
 
-func (m *ConfigMapConfigManager) ReadBlobStorageStrategy(ctx context.Context, tier string) (*StrategyConfig, error) {
-	stratCfg, err := m.getTierStrategyForProvider(ctx, string(providers.BlobStorageResourceType), tier)
+func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+	stratCfg, err := m.getTierStrategyForProvider(ctx, string(rt), tier)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(providers.BlobStorageResourceType))
+		return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(rt))
 	}
 	return stratCfg, nil
 }
@@ -96,13 +96,13 @@ func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context,
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
-	rawStrategyMapping := cm.Data[string(providers.BlobStorageResourceType)]
+	rawStrategyMapping := cm.Data[resourceType]
 	if rawStrategyMapping == "" {
-		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", providers.BlobStorageResourceType))
+		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", rt))
 	}
 	var strategyMapping map[string]*StrategyConfig
 	if err = json.Unmarshal([]byte(rawStrategyMapping), &strategyMapping); err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", providers.BlobStorageResourceType)
+		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
 	return strategyMapping[tier], nil
 }
