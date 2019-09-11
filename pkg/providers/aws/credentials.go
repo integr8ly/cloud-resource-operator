@@ -71,6 +71,13 @@ type AWSCredentials struct {
 	SecretAccessKey string
 }
 
+//go:generate moq -out credentials_moq.go . CredentialManagerInterface
+type CredentialManagerInterface interface {
+	ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error)
+	ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error)
+	ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error)
+}
+
 type CredentialManager struct {
 	ProviderCredentialName string
 	Client                 client.Client

@@ -14,6 +14,7 @@ type BlobStorageSpec ResourceTypeSpec
 // BlobStorageStatus defines the observed state of BlobStorage
 // +k8s:openapi-gen=true
 type BlobStorageStatus ResourceTypeStatus
+
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // BlobStorage is the Schema for the blobstorages API

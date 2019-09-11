@@ -17,15 +17,22 @@ const (
 	DefaultConfigMapNamespace = "kube-system"
 )
 
-type StrategyConfig struct {
-	Region      string          `json:"region"`
-	RawStrategy json.RawMessage `json:"strategy"`
+//go:generate moq -out config_moq.go . ConfigManagerInterface
+type ConfigManagerInterface interface {
+	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
 }
+
+var _ ConfigManagerInterface = (*ConfigManager)(nil)
 
 type ConfigManager struct {
 	configMapName      string
 	configMapNamespace string
 	client             client.Client
+}
+
+type StrategyConfig struct {
+	Region      string          `json:"region"`
+	RawStrategy json.RawMessage `json:"strategy"`
 }
 
 func NewConfigManager(cm string, namespace string, client client.Client) *ConfigManager {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -97,7 +98,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cm := NewConfigManager(tc.cmName, tc.cmNamespace, tc.client)
-			sc, err := cm.ReadBlobStorageStrategy(context.TODO(), tc.tier)
+			sc, err := cm.ReadStorageStrategy(context.TODO(), providers.BlobStorageResourceType, tc.tier)
 			if err != nil {
 				t.Fatal("unexpected error", err)
 			}
