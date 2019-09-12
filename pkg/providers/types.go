@@ -48,5 +48,5 @@ type RedisProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
 	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, error)
-	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, error)
+	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error
 }

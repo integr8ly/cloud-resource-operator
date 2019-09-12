@@ -119,13 +119,9 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		if p.SupportsStrategy(stratMap.Redis) {
 			// handle deletion of redis and remove any finalizers added
 			if instance.GetDeletionTimestamp() != nil {
-				redis, err := p.DeleteRedis(ctx, instance)
+				err := p.DeleteRedis(ctx, instance)
 				if err != nil {
 					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
-				}
-				if redis == nil {
-					reqLogger.Info("waiting for redis cluster to delete")
-					return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 				}
 				return reconcile.Result{}, nil
 			}
