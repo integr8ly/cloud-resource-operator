@@ -1,24 +1,22 @@
-package blobstorage
+package smtpcredentialset
 
 import (
 	"context"
-	"fmt"
-	"github.com/sirupsen/logrus"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
-
+	v1 "k8s.io/api/core/v1"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	controllerruntime "sigs.k8s.io/controller-runtime"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/sirupsen/logrus"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	errorUtil "github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	errorUtil "github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,9 +26,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_blobstorage")
+var log = logf.Log.WithName("controller_smtpcredentialset")
 
-// Add creates a new BlobStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
+/**
+* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
+* business logic.  Delete these comments after modifying this file.*
+ */
+
+// Add creates a new SMTPCredentials Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -38,45 +41,58 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileBlobStorage{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileSMTPCredentialSet{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("blobstorage-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("smtpcredentialset-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to primary resource BlobStorage
-	err = c.Watch(&source.Kind{Type: &integreatlyv1alpha1.BlobStorage{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to primary resource SMTPCredentials
+	err = c.Watch(&source.Kind{Type: &integreatlyv1alpha1.SMTPCredentialSet{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-// blank assignment to verify that ReconcileBlobStorage implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileBlobStorage{}
+// blank assignment to verify that ReconcileSMTPCredentials implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileSMTPCredentialSet{}
 
-// ReconcileBlobStorage reconciles a BlobStorage object
-type ReconcileBlobStorage struct {
+// ReconcileSMTPCredentials reconciles a SMTPCredentials object
+type ReconcileSMTPCredentialSet struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
 }
 
-func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+// Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
+// and what is in the SMTPCredentials.Spec
+// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
+// a Pod as an example
+// Note:
+// The Controller will requeue the Request to be processed again if the returned error is non-nil or
+// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
+func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	ctx := context.TODO()
+
+	logrus.SetFormatter(&logrus.TextFormatter{})
+	logrus.SetLevel(logrus.DebugLevel)
+
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
-	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(r.client, logger)}
+	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(r.client, logger)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
 
-	logger.Info("Reconciling BlobStorage")
-	// Fetch the BlobStorage instance
-	instance := &integreatlyv1alpha1.BlobStorage{}
+	logger.Info("Reconciling SMTPCredentials")
+
+	// Fetch the SMTPCredentials instance
+	instance := &integreatlyv1alpha1.SMTPCredentialSet{}
 	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -93,37 +109,38 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 	if err != nil {
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
+	logger.Infof("checking for provider for deployment strategy %s", stratMap.SMTPCredentials)
 	for _, p := range providerList {
-		if !p.SupportsStrategy(stratMap.BlobStorage) {
+		if !p.SupportsStrategy(stratMap.SMTPCredentials) {
+			logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.SMTPCredentials)
 			continue
 		}
 		if instance.GetDeletionTimestamp() != nil {
-			if err := p.DeleteStorage(ctx, instance); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
+			logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
+			if err = p.DeleteSMTPCredentials(ctx, instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
+			logger.Infof("deletion handler for smtp credential instance %s successful, ending reconciliation", instance.Name)
 			return reconcile.Result{}, nil
 		}
-
-		bsi, err := p.CreateStorage(ctx, instance)
+		smtpCredentialSetInst, err := p.CreateSMTPCredentials(ctx, instance)
 		if err != nil {
-			return reconcile.Result{}, err
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
 		}
-		if bsi == nil {
-			return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
-		}
-		sec := &corev1.Secret{
+
+		sec := &v1.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
 				Name:      instance.Spec.SecretRef.Name,
 				Namespace: instance.Namespace,
 			},
 		}
 		_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
-			e := existing.(*corev1.Secret)
+			e := existing.(*v1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
-			e.Data = bsi.DeploymentDetails.Data()
-			e.Type = corev1.SecretTypeOpaque
+			e.Data = smtpCredentialSetInst.DeploymentDetails.Data()
+			e.Type = v1.SecretTypeOpaque
 			return nil
 		})
 		if err != nil {
@@ -137,5 +154,6 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 	}
-	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.BlobStorage))
+
+	return reconcile.Result{Requeue: true}, nil
 }

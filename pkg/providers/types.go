@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ResourceType string
@@ -20,17 +19,28 @@ const (
 	SMTPCredentialResourceType ResourceType = "smtpcredential"
 )
 
-type BlobStorageInstance struct {
-	DeploymentDetails BlobStorageDeploymentDetails
+type DeploymentDetails interface {
+	Data() map[string][]byte
 }
 
-type BlobStorageDeploymentDetails interface {
-	Data() map[string][]byte
+type SMTPCredentialSetInstance struct {
+	DeploymentDetails DeploymentDetails
+}
+
+type BlobStorageInstance struct {
+	DeploymentDetails DeploymentDetails
 }
 
 type BlobStorageProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
-	CreateStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error)
-	DeleteStorage(ctx context.Context, client client.Client, bs *v1alpha1.BlobStorage) error
+	CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error)
+	DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error
+}
+
+type SMTPCredentialsProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error)
+	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error
 }

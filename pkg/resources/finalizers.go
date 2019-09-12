@@ -9,7 +9,7 @@ func HasFinalizer(om *controllerruntime.ObjectMeta, finalizer string) bool {
 }
 
 func AddFinalizer(om *controllerruntime.ObjectMeta, finalizer string) {
-	if !contains(om.GetFinalizers(), finalizer) {
+	if !HasFinalizer(om, finalizer) {
 		om.SetFinalizers([]string{finalizer})
 	}
 }

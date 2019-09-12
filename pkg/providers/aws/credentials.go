@@ -24,7 +24,8 @@ import (
 const (
 	defaultProviderCredentialName = "cloud-resources-aws-credentials"
 
-	defaultCredentialsKeyIDName     = "aws_access_key_id"
+	defaultCredentialsKeyIDName = "aws_access_key_id"
+	// #nosec G101
 	defaultCredentialsSecretKeyName = "aws_secret_access_key"
 )
 
@@ -39,6 +40,15 @@ var (
 				"s3:ListAllMyBuckets",
 			},
 			Resource: "arn:aws:s3:::*",
+		},
+	}
+	sendRawMailEntries = []v1.StatementEntry{
+		{
+			Effect: "Allow",
+			Action: []string{
+				"ses:SendRawEmail",
+			},
+			Resource: "*",
 		},
 	}
 )
@@ -63,24 +73,37 @@ func buildPutBucketObjectEntries(bucket string) []v1.StatementEntry {
 }
 
 type AWSCredentials struct {
+	Username        string
+	PolicyName      string
 	AccessKeyID     string
 	SecretAccessKey string
 }
 
-type CredentialManager struct {
+//go:generate moq -out credentials_moq.go . CredentialManager
+type CredentialManager interface {
+	ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error)
+	ReconcileSESCredentials(ctx context.Context, name, ns string) (*AWSCredentials, error)
+	ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error)
+	ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error)
+}
+
+var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)
+
+// CredentialMinterCredentialManager Implementation of CredentialManager using the openshift cloud credential minter
+type CredentialMinterCredentialManager struct {
 	ProviderCredentialName string
 	Client                 client.Client
 }
 
-func NewCredentialManager(client client.Client) *CredentialManager {
-	return &CredentialManager{
+func NewCredentialMinterCredentialManager(client client.Client) *CredentialMinterCredentialManager {
+	return &CredentialMinterCredentialManager{
 		ProviderCredentialName: defaultProviderCredentialName,
 		Client:                 client,
 	}
 }
 
 // Ensure the credentials the AWS provider requires are available
-func (m *CredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
+func (m *CredentialMinterCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
 	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, createBucketEntries)
 	if err != nil {
 		return nil, err
@@ -88,7 +111,15 @@ func (m *CredentialManager) ReconcileProviderCredentials(ctx context.Context, ns
 	return creds, nil
 }
 
-func (m *CredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
+func (m *CredentialMinterCredentialManager) ReconcileSESCredentials(ctx context.Context, name, ns string) (*AWSCredentials, error) {
+	_, creds, err := m.ReconcileCredentials(ctx, name, ns, sendRawMailEntries)
+	if err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+func (m *CredentialMinterCredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
 	cr, creds, err := m.ReconcileCredentials(ctx, name, ns, buildPutBucketObjectEntries(bucket))
 	if err != nil {
 		return nil, nil, err
@@ -96,7 +127,7 @@ func (m *CredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, 
 	return creds, cr, nil
 }
 
-func (m *CredentialManager) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) {
+func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) {
 	cr, err := m.reconcileCredentialRequest(ctx, name, ns, entries)
 	if err != nil {
 		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
@@ -113,14 +144,28 @@ func (m *CredentialManager) ReconcileCredentials(ctx context.Context, name strin
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "timed out waiting for credential request to become provisioned")
 	}
-	awsCreds, err := m.reconcileAWSCredentials(ctx, cr)
+
+	codec, err := v1.NewCodec()
+	if err != nil {
+		return nil, nil, errorUtil.Wrap(err, "failed to create credentials codec")
+	}
+	awsProvStatus := &v1.AWSProviderStatus{}
+	if err = codec.DecodeProviderSpec(cr.Status.ProviderStatus, awsProvStatus); err != nil {
+		return nil, nil, errorUtil.Wrapf(err, "failed to decode credentials request %s", cr.Name)
+	}
+	accessKeyID, secAccessKey, err := m.reconcileAWSCredentials(ctx, cr)
 	if err != nil {
 		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credentials from credential request %s", cr.Name)
 	}
-	return cr, awsCreds, nil
+	return cr, &AWSCredentials{
+		Username:        awsProvStatus.User,
+		PolicyName:      awsProvStatus.Policy,
+		AccessKeyID:     accessKeyID,
+		SecretAccessKey: secAccessKey,
+	}, nil
 }
 
-func (m *CredentialManager) reconcileCredentialRequest(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, error) {
+func (m *CredentialMinterCredentialManager) reconcileCredentialRequest(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, error) {
 	codec, err := v1.NewCodec()
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create provider codec")
@@ -140,7 +185,7 @@ func (m *CredentialManager) reconcileCredentialRequest(ctx context.Context, name
 			Namespace: ns,
 		},
 	}
-	controllerutil.CreateOrUpdate(ctx, m.Client, cr, func(existing runtime.Object) error {
+	_, err = controllerutil.CreateOrUpdate(ctx, m.Client, cr, func(existing runtime.Object) error {
 		r := existing.(*v1.CredentialsRequest)
 		r.Spec.ProviderSpec = providerSpec
 		r.Spec.SecretRef = v12.ObjectReference{
@@ -149,25 +194,25 @@ func (m *CredentialManager) reconcileCredentialRequest(ctx context.Context, name
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to reconcile credential request %s in namespace %s", cr.Name, cr.Namespace)
+	}
 	return cr, nil
 }
 
-func (m *CredentialManager) reconcileAWSCredentials(ctx context.Context, cr *v1.CredentialsRequest) (*AWSCredentials, error) {
+func (m *CredentialMinterCredentialManager) reconcileAWSCredentials(ctx context.Context, cr *v1.CredentialsRequest) (string, string, error) {
 	sec := &v12.Secret{}
 	err := m.Client.Get(ctx, types.NamespacedName{Name: cr.Spec.SecretRef.Name, Namespace: cr.Spec.SecretRef.Namespace}, sec)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to get aws credentials secret %s", cr.Spec.SecretRef.Name)
+		return "", "", errorUtil.Wrapf(err, "failed to get aws credentials secret %s", cr.Spec.SecretRef.Name)
 	}
 	awsAccessKeyID := string(sec.Data[defaultCredentialsKeyIDName])
 	awsSecretAccessKey := string(sec.Data[defaultCredentialsSecretKeyName])
 	if awsAccessKeyID == "" {
-		return nil, errorUtil.New(fmt.Sprintf("aws access key id is undefined in secret %s", sec.Name))
+		return "", "", errorUtil.New(fmt.Sprintf("aws access key id is undefined in secret %s", sec.Name))
 	}
 	if awsSecretAccessKey == "" {
-		return nil, errorUtil.New(fmt.Sprintf("aws secret access key is undefined in secret %s", sec.Name))
+		return "", "", errorUtil.New(fmt.Sprintf("aws secret access key is undefined in secret %s", sec.Name))
 	}
-	return &AWSCredentials{
-		AccessKeyID:     awsAccessKeyID,
-		SecretAccessKey: awsSecretAccessKey,
-	}, nil
+	return awsAccessKeyID, awsSecretAccessKey, nil
 }
