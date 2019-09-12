@@ -24,6 +24,10 @@ code/fix:
 code/check:
 	bash -c "diff -u <(echo -n) <(gofmt -d ./)"
 
+.PHONY: code/audit
+code/audit:
+	gosec ./...
+
 .PHONY: cluster/prepare
 cluster/prepare:
 	oc new-project $(NAMESPACE) || true
