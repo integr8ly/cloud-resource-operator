@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -21,6 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
+)
+
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis2.AddToScheme(scheme)
@@ -30,6 +35,48 @@ func buildTestScheme() (*runtime.Scheme, error) {
 		return nil, err
 	}
 	return scheme, nil
+}
+
+func buildTestCredentialsRequest() *v1.CredentialsRequest {
+	return &v1.CredentialsRequest{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: v1.CredentialsRequestSpec{
+			SecretRef: v12.ObjectReference{
+				Name:      "test",
+				Namespace: "test",
+			},
+		},
+		Status: v1.CredentialsRequestStatus{
+			Provisioned: true,
+			ProviderStatus: &runtime.RawExtension{
+				Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+			},
+		},
+	}
+}
+
+func buildTestAWSCredentials() *AWSCredentials {
+	return &AWSCredentials{
+		Username:        "test",
+		PolicyName:      "test",
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+	}
+}
+
+func buildTestSMTPCredentialSet() *v1alpha1.SMTPCredentialSet {
+	return &v1alpha1.SMTPCredentialSet{
+		ObjectMeta: controllerruntime.ObjectMeta{},
+		Spec: v1alpha1.SMTPCredentialSetSpec{
+			Type:      "test",
+			Tier:      "test",
+			SecretRef: &v1alpha1.SecretRef{Name: "test"},
+		},
+		Status: v1alpha1.SMTPCredentialSetStatus{},
+	}
 }
 
 func Test_getSMTPPasswordFromAWSSecret(t *testing.T) {
@@ -108,13 +155,8 @@ func TestSMTPCredentialProvider_DeleteSMTPCredentials(t *testing.T) {
 		{
 			name: "test finalizer and credential request is removed successfully",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, testSMTPCred, &v1.CredentialsRequest{
-					ObjectMeta: controllerruntime.ObjectMeta{
-						Name:      "test",
-						Namespace: "test",
-					},
-				}),
-				Logger:            logrus.WithFields(logrus.Fields{}),
+				Client:            fake.NewFakeClientWithScheme(scheme, testSMTPCred),
+				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
@@ -133,8 +175,8 @@ func TestSMTPCredentialProvider_DeleteSMTPCredentials(t *testing.T) {
 		{
 			name: "test deletion handler completes successfully when credential request does not exist",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, testSMTPCred),
-				Logger:            logrus.WithFields(logrus.Fields{}),
+				Client:            fake.NewFakeClientWithScheme(scheme, testSMTPCred, buildTestCredentialsRequest()),
+				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
@@ -219,6 +261,133 @@ func TestSMTPCredentialProvider_SupportsStrategy(t *testing.T) {
 			}
 			if got := p.SupportsStrategy(tt.args.d); got != tt.want {
 				t.Errorf("SupportsStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx       context.Context
+		smtpCreds *v1alpha1.SMTPCredentialSet
+	}
+	tests := []struct {
+		name              string
+		fields            fields
+		args              args
+		validateDetailsFn func(cred *v1alpha1.SMTPCredentialSet, inst *providers.SMTPCredentialSetInstance) error
+		wantData          map[string][]byte
+		wantErr           bool
+	}{
+		{
+			name: "test smtp credential set details are retrieved successfully",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet()),
+				Logger: testLogger,
+				CredentialManager: &CredentialManagerMock{
+					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *AWSCredentials, e error) {
+						return buildTestAWSCredentials(), nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					GetDefaultRegionSMTPServerMappingFunc: func() map[string]string {
+						return map[string]string{
+							regionEUWest1: sesSMTPEndpointEUWest1,
+						}
+					},
+					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
+						return &StrategyConfig{
+							Region:      regionEUWest1,
+							RawStrategy: []byte("{}"),
+						}, nil
+					},
+				},
+			},
+			args: args{
+				ctx:       context.TODO(),
+				smtpCreds: buildTestSMTPCredentialSet(),
+			},
+			wantErr: false,
+			validateDetailsFn: func(cred *v1alpha1.SMTPCredentialSet, inst *providers.SMTPCredentialSetInstance) error {
+				if len(cred.GetFinalizers()) == 0 {
+					return errors.New("finalizer was not set on smtp credential resource")
+				}
+				return nil
+			},
+			wantData: map[string][]byte{
+				detailsSMTPUsernameKey: []byte("test"),
+				detailsSMTPPasswordKey: []byte("AsuNxtdhciTpIaQYwF9CtO/nlNX2hCZkD8E+4vZzrjs0"),
+				detailsSMTPPortKey:     []byte("465"),
+				detailsSMTPHostKey:     []byte(sesSMTPEndpointEUWest1),
+				detailsSMTPTLSKey:      []byte("true"),
+			},
+		},
+		{
+			name: "test fails if unsupported ses region is used",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet()),
+				Logger: testLogger,
+				CredentialManager: &CredentialManagerMock{
+					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *AWSCredentials, e error) {
+						return buildTestAWSCredentials(), nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					GetDefaultRegionSMTPServerMappingFunc: func() map[string]string {
+						return map[string]string{}
+					},
+					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
+						return &StrategyConfig{
+							Region:      "unsupported-region",
+							RawStrategy: []byte("{}"),
+						}, nil
+					},
+				},
+			},
+			args: args{
+				ctx:       context.TODO(),
+				smtpCreds: buildTestSMTPCredentialSet(),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &SMTPCredentialProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := p.CreateSMTPCredentials(tt.args.ctx, tt.args.smtpCreds)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CreateSMTPCredentials() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantData != nil {
+				for k, v := range tt.wantData {
+					if !bytes.Equal(v, got.DeploymentDetails.Data()[k]) {
+						t.Errorf("CreateSMTPCredentials() data = %v, wantData %v", string(got.DeploymentDetails.Data()[k]), string(v))
+						return
+					}
+				}
+			}
+			if tt.validateDetailsFn != nil {
+				if err := tt.validateDetailsFn(tt.args.smtpCreds, got); err != nil {
+					t.Error("error during validation", err)
+					return
+				}
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -85,7 +86,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	if smtpCreds.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&smtpCreds.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, smtpCreds); err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to add finalizer to blob storage instance %s", smtpCreds.Name)
+			return nil, errorUtil.Wrapf(err, "failed to add finalizer to smtp credential instance %s", smtpCreds.Name)
 		}
 	}
 
@@ -101,7 +102,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	}
 	sesSMTPHost := p.ConfigManager.GetDefaultRegionSMTPServerMapping()[awsRegion]
 	if sesSMTPHost == "" {
-		return nil, errorUtil.Wrapf(err, "unsupported aws ses smtp region %s", sesSMTPHost)
+		return nil, errorUtil.New(fmt.Sprintf("unsupported aws ses smtp region %s", sesSMTPHost))
 	}
 
 	// create smtp credentials from generated iam role
