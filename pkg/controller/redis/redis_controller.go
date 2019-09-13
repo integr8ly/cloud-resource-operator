@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -12,6 +11,7 @@ import (
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	errorUtil "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -89,7 +89,7 @@ type ReconcileRedis struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client)}
+	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client), openshift.NewOpenShiftRedisProvider(r.client)}
 
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Redis")
@@ -149,12 +149,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 				if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
 					return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 				}
-				conn := redis.DeploymentDetails.Data()
-				fmt.Printf("conn %s", conn)
-				redisConnPort := strconv.FormatInt(*conn.Port, 10)
-				e.Data = map[string][]byte{
-					"connection": []byte(fmt.Sprintf("%s:%s", *conn.Address, redisConnPort)),
-				}
+				e.Data = redis.DeploymentDetails.Data()
 				e.Type = corev1.SecretTypeOpaque
 				return nil
 			})

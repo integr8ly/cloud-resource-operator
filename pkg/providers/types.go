@@ -3,8 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/aws/aws-sdk-go/service/elasticache"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 )
 
@@ -42,7 +40,7 @@ type RedisCluster struct {
 }
 
 type RedisDeploymentDetails interface {
-	Data() *elasticache.Endpoint
+	Data() map[string][]byte
 }
 
 type RedisProvider interface {
