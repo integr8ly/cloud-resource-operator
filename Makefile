@@ -44,3 +44,8 @@ cluster/clean:
 test/unit:
 	@echo Running tests:
 	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
+
+.PHONY: test/unit/ci
+test/unit/ci: test/unit
+	@echo Removing mock file coverage
+	sed -i.bak '/_moq.go/d' coverage.out

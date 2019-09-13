@@ -41,7 +41,8 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileSMTPCredentialSet{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
+	return &ReconcileSMTPCredentialSet{client: mgr.GetClient(), scheme: mgr.GetScheme(), logger: logger}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -70,6 +71,7 @@ type ReconcileSMTPCredentialSet struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+	logger *logrus.Entry
 }
 
 // Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
@@ -81,15 +83,14 @@ type ReconcileSMTPCredentialSet struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	ctx := context.TODO()
-
-	logrus.SetFormatter(&logrus.TextFormatter{})
-	logrus.SetLevel(logrus.DebugLevel)
-
-	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
-	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(r.client, logger)}
+	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(r.client, r.logger)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
 
-	logger.Info("Reconciling SMTPCredentials")
+	return r.reconcile(ctx, request, providerList, cfgMgr)
+}
+
+func (r *ReconcileSMTPCredentialSet) reconcile(ctx context.Context, request reconcile.Request, providerList []providers.SMTPCredentialsProvider, cfgMgr providers.ConfigManager) (reconcile.Result, error) {
+	r.logger.Info("Reconciling SMTPCredentials")
 
 	// Fetch the SMTPCredentials instance
 	instance := &integreatlyv1alpha1.SMTPCredentialSet{}
@@ -109,18 +110,18 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 	if err != nil {
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
-	logger.Infof("checking for provider for deployment strategy %s", stratMap.SMTPCredentials)
+	r.logger.Infof("checking for provider for deployment strategy %s", stratMap.SMTPCredentials)
 	for _, p := range providerList {
 		if !p.SupportsStrategy(stratMap.SMTPCredentials) {
-			logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.SMTPCredentials)
+			r.logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.SMTPCredentials)
 			continue
 		}
 		if instance.GetDeletionTimestamp() != nil {
-			logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
+			r.logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
 			if err = p.DeleteSMTPCredentials(ctx, instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
-			logger.Infof("deletion handler for smtp credential instance %s successful, ending reconciliation", instance.Name)
+			r.logger.Infof("deletion handler for smtp credential instance %s successful, ending reconciliation", instance.Name)
 			return reconcile.Result{}, nil
 		}
 		smtpCredentialSetInst, err := p.CreateSMTPCredentials(ctx, instance)
