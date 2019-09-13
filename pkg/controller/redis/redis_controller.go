@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -12,7 +11,9 @@ import (
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	errorUtil "github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,11 +27,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_redis")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new Redis Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -79,6 +75,7 @@ type ReconcileRedis struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+	logger *logrus.Entry
 }
 
 // Reconcile reads that state of the cluster for a Redis object and makes changes based on the state read
@@ -89,12 +86,15 @@ type ReconcileRedis struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client)}
-
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Redis")
 	ctx := context.TODO()
+	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client), openshift.NewOpenShiftRedisProvider(r.client)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
+
+	return r.reconcile(ctx, request, providerList, cfgMgr)
+}
+
+func (r *ReconcileRedis) reconcile(ctx context.Context, request reconcile.Request, providerList []providers.RedisProvider, cfgMgr providers.ConfigManager) (reconcile.Result, error) {
+	r.logger.Info("Reconciling Redis")
 
 	// Fetch the Redis instance
 	instance := &integreatlyv1alpha1.Redis{}
@@ -116,62 +116,61 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 	}
 
 	for _, p := range providerList {
-		if p.SupportsStrategy(stratMap.Redis) {
-			// handle deletion of redis and remove any finalizers added
-			if instance.GetDeletionTimestamp() != nil {
-				err := p.DeleteRedis(ctx, instance)
-				if err != nil {
-					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
-				}
-				return reconcile.Result{}, nil
-			}
+		if !p.SupportsStrategy(stratMap.Redis) {
+			r.logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.Redis)
+			continue
+		}
 
-			// handle creation of redis and apply any finalizers to instance required for deletion
-			redis, err := p.CreateRedis(ctx, instance)
+		// handle deletion of redis and remove any finalizers added
+		if instance.GetDeletionTimestamp() != nil {
+			err := p.DeleteRedis(ctx, instance)
 			if err != nil {
-				return reconcile.Result{}, err
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
 			}
-			if redis == nil {
-				reqLogger.Info("waiting for redis cluster to become available")
-				return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
-			}
+			return reconcile.Result{}, nil
+		}
 
-			// create the secret with the redis cluster connection details
-			sec := &corev1.Secret{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      instance.Spec.SecretRef.Name,
-					Namespace: instance.Namespace,
-				},
-			}
-			reqLogger.Info("creating or updating client secret")
-			_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
-				e := existing.(*corev1.Secret)
-				if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-					return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
-				}
-				conn := redis.DeploymentDetails.Data()
-				fmt.Printf("conn %s", conn)
-				redisConnPort := strconv.FormatInt(*conn.Port, 10)
-				e.Data = map[string][]byte{
-					"connection": []byte(fmt.Sprintf("%s:%s", *conn.Address, redisConnPort)),
-				}
-				e.Type = corev1.SecretTypeOpaque
-				return nil
-			})
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			// update the redis custom resource
-			instance.Status.SecretRef = instance.Spec.SecretRef
-			instance.Status.Strategy = stratMap.Redis
-			instance.Status.Provider = p.GetName()
-			if err = r.client.Status().Update(ctx, instance); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
-			}
-
+		// handle creation of redis and apply any finalizers to instance required for deletion
+		redis, err := p.CreateRedis(ctx, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if redis == nil {
+			r.logger.Info("waiting for redis cluster to become available")
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
+
+		// create the secret with the redis cluster connection details
+		sec := &corev1.Secret{
+			ObjectMeta: controllerruntime.ObjectMeta{
+				Name:      instance.Spec.SecretRef.Name,
+				Namespace: instance.Namespace,
+			},
+		}
+		r.logger.Info("creating or updating client secret")
+		_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
+			e := existing.(*corev1.Secret)
+			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
+				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
+			}
+			e.Data = redis.DeploymentDetails.Data()
+			e.Type = corev1.SecretTypeOpaque
+			return nil
+		})
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// update the redis custom resource
+		instance.Status.SecretRef = instance.Spec.SecretRef
+		instance.Status.Strategy = stratMap.Redis
+		instance.Status.Provider = p.GetName()
+		if err = r.client.Status().Update(ctx, instance); err != nil {
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+		}
+
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 	}
+
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Redis))
 }

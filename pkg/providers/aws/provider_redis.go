@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
@@ -33,10 +35,10 @@ const (
 
 // AWSRedisDeploymentDetails provider specific details about the AWS Redis Cluster created
 type AWSRedisDeploymentDetails struct {
-	Connection *elasticache.Endpoint
+	Connection map[string][]byte
 }
 
-func (d *AWSRedisDeploymentDetails) Data() *elasticache.Endpoint {
+func (d *AWSRedisDeploymentDetails) Data() map[string][]byte {
 	return d.Connection
 }
 
@@ -111,13 +113,6 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 		return nil, err
 	}
 
-	// pre-create the redis cluster that will be returned if everything is successful
-	redis := &providers.RedisCluster{
-		DeploymentDetails: &AWSRedisDeploymentDetails{
-			Connection: &elasticache.Endpoint{},
-		},
-	}
-
 	// check if the cluster has already been created
 	var foundCache *elasticache.ReplicationGroup
 	for _, c := range rgs {
@@ -129,10 +124,11 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 	if foundCache != nil {
 		if *foundCache.Status == "available" {
 			logrus.Info("found existing redis cluster")
-			redis.DeploymentDetails = &AWSRedisDeploymentDetails{
-				Connection: foundCache.NodeGroups[0].PrimaryEndpoint,
+			primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
+			connData := map[string][]byte{
+				"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
 			}
-			return redis, nil
+			return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}, nil
 		}
 		return nil, nil
 	}

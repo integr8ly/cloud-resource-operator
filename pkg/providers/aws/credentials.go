@@ -108,7 +108,7 @@ func NewCredentialMinterCredentialManager(client client.Client) *CredentialMinte
 
 // Ensure the credentials the AWS provider requires are available
 func (m *CredentialMinterCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
-	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, createBucketEntries)
+	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
 	if err != nil {
 		return nil, err
 	}

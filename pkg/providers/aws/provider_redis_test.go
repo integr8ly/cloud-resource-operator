@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -87,8 +88,8 @@ func TestAWSRedisProvider_createRedisCluster(t *testing.T) {
 		name           string
 		instance       *v1alpha1.Redis
 		client         client.Client
-		configMgr      *ConfigManagerInterfaceMock
-		credentialMgr  *CredentialManagerInterfaceMock
+		configMgr      *ConfigManagerMock
+		credentialMgr  *CredentialManagerMock
 		expectedError  error
 		expectedResult *providers.RedisCluster
 	}{
@@ -114,7 +115,7 @@ func TestAWSRedisProvider_createRedisCluster(t *testing.T) {
 					Namespace: "test",
 				},
 			},
-			configMgr: &ConfigManagerInterfaceMock{
+			configMgr: &ConfigManagerMock{
 				ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
 					return sc, nil
 				},
@@ -169,8 +170,8 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		name          string
 		instance      *v1alpha1.Redis
 		client        client.Client
-		configMgr     *ConfigManagerInterfaceMock
-		credentialMgr *CredentialManagerInterfaceMock
+		configMgr     *ConfigManagerMock
+		credentialMgr *CredentialManagerMock
 		expectedError error
 	}{
 		{
@@ -195,13 +196,13 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 					Namespace: "test",
 				},
 			},
-			configMgr: &ConfigManagerInterfaceMock{
+			configMgr: &ConfigManagerMock{
 				ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
 					return sc, nil
 				},
 			},
-			credentialMgr: &CredentialManagerInterfaceMock{
-				ReconcileBucketOwnerCredentialsFunc: nil,
+			credentialMgr: &CredentialManagerMock{
+				ReoncileBucketOwnerCredentialsFunc: nil,
 				ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (request *v1.CredentialsRequest, credentials *AWSCredentials, e error) {
 					return &v1.CredentialsRequest{}, &AWSCredentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
 				},

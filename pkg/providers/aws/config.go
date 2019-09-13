@@ -90,13 +90,13 @@ func (m *ConfigMapConfigManager) GetDefaultRegionSMTPServerMapping() map[string]
 	}
 }
 
-func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, resourceType string, tier string) (*StrategyConfig, error) {
+func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, rt string, tier string) (*StrategyConfig, error) {
 	cm := &v1.ConfigMap{}
 	err := m.client.Get(ctx, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, cm)
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
-	rawStrategyMapping := cm.Data[resourceType]
+	rawStrategyMapping := cm.Data[rt]
 	if rawStrategyMapping == "" {
 		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", rt))
 	}

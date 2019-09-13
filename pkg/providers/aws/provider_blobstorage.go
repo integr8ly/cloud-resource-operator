@@ -257,7 +257,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 }
 
 func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *StrategyConfig, error) {
-	stratCfg, err := p.ConfigManager.ReadBlobStorageStrategy(ctx, bs.Spec.Tier)
+	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.BlobStorageResourceType, bs.Spec.Tier)
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
