@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -123,21 +123,6 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	}))
 	s3svc := s3.New(sess)
 
-	// the aws access key can sometimes still not be registered in aws on first try, so loop
-	p.Logger.Infof("listing existing aws s3 buckets")
-	var existingBuckets []*s3.Bucket
-	err = wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
-		listOutput, err := s3svc.ListBuckets(nil)
-		if err != nil {
-			return false, nil
-		}
-		existingBuckets = listOutput.Buckets
-		return true, nil
-	})
-	if err != nil {
-		return nil, errorUtil.Wrapf(err, "timed out waiting to list s3 buckets, searching for blob storage instance %s", bs.Name)
-	}
-
 	// pre-create the blobstorageinstance that will be returned if everything is successful
 	bsi := &providers.BlobStorageInstance{
 		DeploymentDetails: &BlobStorageDeploymentDetails{
@@ -148,22 +133,9 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// create bucket if it doesn't already exist, if it does exist then use the existing bucket
-	p.Logger.Infof("checking if aws s3 bucket %s already exists", *bucketCreateCfg.Bucket)
-	var foundBucket *s3.Bucket
-	for _, b := range existingBuckets {
-		if *b.Name == *bucketCreateCfg.Bucket {
-			foundBucket = b
-			break
-		}
-	}
-	if foundBucket != nil {
-		p.Logger.Infof("bucket %s already exists, using that", *foundBucket.Name)
-		return bsi, nil
-	}
-	p.Logger.Infof("bucket %s not found, creating bucket", *bucketCreateCfg.Bucket)
-	_, err = s3svc.CreateBucket(bucketCreateCfg)
-	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to create s3 bucket %s, for blob storage instance %s", *bucketCreateCfg.Bucket, bs.Name)
+	p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
+	if err := p.reconcileBucketCreate(ctx, s3svc, bucketCreateCfg); err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to reconcile aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	}
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
 	return bsi, nil
@@ -197,23 +169,8 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
 	s3svc := s3.New(sess)
 
-	_, err = s3svc.DeleteBucket(&s3.DeleteBucketInput{
-		Bucket: bucketCreateCfg.Bucket,
-	})
-	s3err, isAWSErr := err.(awserr.Error)
-	if err != nil && !isAWSErr {
-		return errorUtil.Wrapf(err, "failed to delete s3 bucket %s", *bucketCreateCfg.Bucket)
-	}
-	if err != nil && isAWSErr {
-		if s3err.Code() != s3.ErrCodeNoSuchBucket {
-			return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCreateCfg.Bucket)
-		}
-	}
-	err = s3svc.WaitUntilBucketNotExists(&s3.HeadBucketInput{
-		Bucket: bucketCreateCfg.Bucket,
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to wait for s3 bucket deletion, %s", *bucketCreateCfg.Bucket)
+	if err = p.reconcileBucketDelete(ctx, s3svc, bucketCreateCfg); err != nil {
+		return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	}
 
 	// remove the credentials request created by the provider
@@ -236,6 +193,66 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		return errorUtil.Wrapf(err, "failed to update instance %s as part of finalizer reconcile", bs.Name)
 	}
 	p.Logger.Infof("deletion handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
+	return nil
+}
+
+func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
+	_, err := s3svc.DeleteBucket(&s3.DeleteBucketInput{
+		Bucket: bucketCfg.Bucket,
+	})
+	s3err, isAWSErr := err.(awserr.Error)
+	if err != nil && !isAWSErr {
+		return errorUtil.Wrapf(err, "failed to delete s3 bucket %s", *bucketCfg.Bucket)
+	}
+	if err != nil && isAWSErr {
+		if s3err.Code() != s3.ErrCodeNoSuchBucket {
+			return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCfg.Bucket)
+		}
+	}
+	err = s3svc.WaitUntilBucketNotExists(&s3.HeadBucketInput{
+		Bucket: bucketCfg.Bucket,
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to wait for s3 bucket deletion, %s", *bucketCfg.Bucket)
+	}
+	return nil
+}
+
+func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
+	// the aws access key can sometimes still not be registered in aws on first try, so loop
+	p.Logger.Infof("listing existing aws s3 buckets")
+	var existingBuckets []*s3.Bucket
+	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+		listOutput, err := s3svc.ListBuckets(nil)
+		if err != nil {
+			return false, nil
+		}
+		existingBuckets = listOutput.Buckets
+		return true, nil
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "timed out waiting to list s3 buckets")
+	}
+
+	// create bucket if it doesn't already exist, if it does exist then use the existing bucket
+	p.Logger.Infof("checking if aws s3 bucket %s already exists", *bucketCfg.Bucket)
+	var foundBucket *s3.Bucket
+	for _, b := range existingBuckets {
+		if *b.Name == *bucketCfg.Bucket {
+			foundBucket = b
+			break
+		}
+	}
+	if foundBucket != nil {
+		p.Logger.Infof("bucket %s already exists, using that", *foundBucket.Name)
+		return nil
+	}
+	p.Logger.Infof("bucket %s not found, creating bucket", *bucketCfg.Bucket)
+	_, err = s3svc.CreateBucket(bucketCfg)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to create s3 bucket %s", *bucketCfg.Bucket)
+	}
+	p.Logger.Infof("reconcile for aws s3 bucket completed successfully, bucket created")
 	return nil
 }
 
