@@ -5,4 +5,6 @@ metadata:
   namespace: kube-system
 data:
   blobstorage: |
-    {"development": { "region": "eu-west-1", "strategy": { }}}
+    {"development": { "region": "eu-west-1", "strategy": {} }}
+  smtpcredentials: |
+    {"development": { "region": "eu-west-1", "strategy": {} }}

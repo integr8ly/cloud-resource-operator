@@ -41,7 +41,7 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_smtpcredentialset"})
 	return &ReconcileSMTPCredentialSet{client: mgr.GetClient(), scheme: mgr.GetScheme(), logger: logger}
 }
 
