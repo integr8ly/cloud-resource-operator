@@ -49,6 +49,9 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 				},
 				Status: v1.CredentialsRequestStatus{
 					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
 				},
 			}, &v12.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
@@ -64,7 +67,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client)
+			cm := NewCredentialMinterCredentialManager(tc.client)
 			_, awsCreds, err := cm.ReconcileCredentials(context.TODO(), tc.credName, tc.credNS, tc.entries)
 			if err != nil {
 				t.Fatal("unexpected error", err)

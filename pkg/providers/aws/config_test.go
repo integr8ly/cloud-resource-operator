@@ -42,7 +42,7 @@ func TestNewConfigManager(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewConfigManager(tc.cmName, tc.cmNamespace, tc.client)
+			cm := NewConfigMapConfigManager(tc.cmName, tc.cmNamespace, tc.client)
 			if cm.configMapName != tc.expectedName {
 				t.Fatalf("unexpected name, expected %s but got %s", tc.expectedName, cm.configMapName)
 			}
@@ -96,7 +96,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewConfigManager(tc.cmName, tc.cmNamespace, tc.client)
+			cm := NewConfigMapConfigManager(tc.cmName, tc.cmNamespace, tc.client)
 			sc, err := cm.ReadBlobStorageStrategy(context.TODO(), tc.tier)
 			if err != nil {
 				t.Fatal("unexpected error", err)

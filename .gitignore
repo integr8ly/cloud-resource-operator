@@ -77,5 +77,7 @@ tags
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Goland ###
 .idea
+### CI ###
+coverage.out.bak
 ### macOS ###
 .DS_Store

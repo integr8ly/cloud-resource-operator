@@ -7,36 +7,36 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// BlobStorageSpec defines the desired state of BlobStorage
+// SMTPCredentialsSpec defines the desired state of SMTPCredentials
 // +k8s:openapi-gen=true
-type BlobStorageSpec ResourceTypeSpec
+type SMTPCredentialSetSpec ResourceTypeSpec
 
-// BlobStorageStatus defines the observed state of BlobStorage
+// SMTPCredentialsStatus defines the observed state of SMTPCredentials
 // +k8s:openapi-gen=true
-type BlobStorageStatus ResourceTypeStatus
+type SMTPCredentialSetStatus ResourceTypeStatus
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// BlobStorage is the Schema for the blobstorages API
+// SMTPCredentials is the Schema for the smtpcredentialset API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-type BlobStorage struct {
+type SMTPCredentialSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BlobStorageSpec   `json:"spec,omitempty"`
-	Status BlobStorageStatus `json:"status,omitempty"`
+	Spec   SMTPCredentialSetSpec   `json:"spec,omitempty"`
+	Status SMTPCredentialSetStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// BlobStorageList contains a list of BlobStorage
-type BlobStorageList struct {
+// SMTPCredentialsList contains a list of SMTPCredentials
+type SMTPCredentialSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BlobStorage `json:"items"`
+	Items           []SMTPCredentialSet `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&BlobStorage{}, &BlobStorageList{})
+	SchemeBuilder.Register(&SMTPCredentialSet{}, &SMTPCredentialSetList{})
 }

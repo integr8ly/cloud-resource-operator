@@ -7,6 +7,8 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/sirupsen/logrus"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -66,6 +68,10 @@ func main() {
 	logf.SetLogger(zap.Logger())
 
 	printVersion()
+
+	// Setup logrus settings
+	logrus.SetFormatter(&logrus.TextFormatter{})
+	logrus.SetLevel(logrus.DebugLevel)
 
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {

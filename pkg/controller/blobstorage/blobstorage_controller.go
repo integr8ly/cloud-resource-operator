@@ -3,6 +3,7 @@ package blobstorage
 import (
 	"context"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -53,7 +54,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -69,13 +69,12 @@ type ReconcileBlobStorage struct {
 }
 
 func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(r.client)}
-
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling BlobStorage")
 	ctx := context.TODO()
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
+	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(r.client, logger)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
 
+	logger.Info("Reconciling BlobStorage")
 	// Fetch the BlobStorage instance
 	instance := &integreatlyv1alpha1.BlobStorage{}
 	err := r.client.Get(ctx, request.NamespacedName, instance)
@@ -94,46 +93,49 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 	if err != nil {
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
-
 	for _, p := range providerList {
-		if p.SupportsStrategy(stratMap.BlobStorage) {
-			if instance.GetDeletionTimestamp() != nil {
-				if err := p.DeleteStorage(ctx, r.client, instance); err != nil {
-					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
-				}
-				return reconcile.Result{}, nil
-			}
-
-			bsi, err := p.CreateStorage(ctx, r.client, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			if bsi == nil {
-				return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
-			}
-			sec := &corev1.Secret{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      instance.Spec.SecretRef.Name,
-					Namespace: instance.Namespace,
-				},
-			}
-			controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
-				e := existing.(*corev1.Secret)
-				if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-					return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
-				}
-				e.Data = bsi.DeploymentDetails.Data()
-				e.Type = corev1.SecretTypeOpaque
-				return nil
-			})
-			instance.Status.SecretRef = instance.Spec.SecretRef
-			instance.Status.Strategy = stratMap.BlobStorage
-			instance.Status.Provider = p.GetName()
-			if err = r.client.Status().Update(ctx, instance); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
-			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+		if !p.SupportsStrategy(stratMap.BlobStorage) {
+			continue
 		}
+		if instance.GetDeletionTimestamp() != nil {
+			if err := p.DeleteStorage(ctx, instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
+			}
+			return reconcile.Result{}, nil
+		}
+
+		bsi, err := p.CreateStorage(ctx, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if bsi == nil {
+			return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
+		}
+		sec := &corev1.Secret{
+			ObjectMeta: controllerruntime.ObjectMeta{
+				Name:      instance.Spec.SecretRef.Name,
+				Namespace: instance.Namespace,
+			},
+		}
+		_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
+			e := existing.(*corev1.Secret)
+			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
+				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
+			}
+			e.Data = bsi.DeploymentDetails.Data()
+			e.Type = corev1.SecretTypeOpaque
+			return nil
+		})
+		if err != nil {
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile blob storage instance secret %s", sec.Name)
+		}
+		instance.Status.SecretRef = instance.Spec.SecretRef
+		instance.Status.Strategy = stratMap.BlobStorage
+		instance.Status.Provider = p.GetName()
+		if err = r.client.Status().Update(ctx, instance); err != nil {
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.BlobStorage))
 }

@@ -24,12 +24,24 @@ code/fix:
 code/check:
 	bash -c "diff -u <(echo -n) <(gofmt -d ./)"
 
+.PHONY: code/audit
+code/audit:
+	gosec ./...
+
 .PHONY: cluster/prepare
 cluster/prepare:
 	oc new-project $(NAMESPACE) || true
-	oc apply -f ./deploy/crds/*_crd.yaml
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
 	oc apply -f ./deploy/examples/
-	oc apply -f ./deploy/crds/*_cr.yaml -n $(NAMESPACE)
+
+.PHONY: cluster/seed/smtp
+cluster/seed/smtp:
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml -n $(NAMESPACE)
+
+.PHONY: cluster/seed/blobstorage
+cluster/seed/blobstorage:
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:
@@ -40,3 +52,8 @@ cluster/clean:
 test/unit:
 	@echo Running tests:
 	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
+
+.PHONY: test/unit/ci
+test/unit/ci: test/unit
+	@echo Removing mock file coverage
+	sed -i.bak '/_moq.go/d' coverage.out

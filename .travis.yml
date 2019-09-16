@@ -13,6 +13,7 @@ stages:
 
 before_install:
   - go get github.com/mattn/goveralls
+  - go get github.com/securego/gosec/cmd/gosec
 
 jobs:
   include:
@@ -20,5 +21,6 @@ jobs:
       script:
         - go get github.com/mattn/goveralls
         - make code/check
-        - make test/unit
+        - make test/unit/ci
         - $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken=$COVERALLS_TOKEN
+        - make code/audit

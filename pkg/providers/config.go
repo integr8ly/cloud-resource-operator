@@ -17,23 +17,31 @@ const (
 )
 
 type DeploymentStrategyMapping struct {
-	BlobStorage string `json:"blobstorage"`
+	BlobStorage     string `json:"blobstorage"`
+	SMTPCredentials string `json:"smtpCredentials"`
 }
 
-type ConfigManager struct {
+//go:generate moq -out config_moq.go . ConfigManager
+type ConfigManager interface {
+	GetStrategyMappingForDeploymentType(ctx context.Context, t string) (*DeploymentStrategyMapping, error)
+}
+
+var _ ConfigManager = (*ConfigMapConfigManager)(nil)
+
+type ConfigMapConfigManager struct {
 	client                     client.Client
 	providerConfigMapName      string
 	providerConfigMapNamespace string
 }
 
-func NewConfigManager(cm string, namespace string, client client.Client) *ConfigManager {
+func NewConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager {
 	if cm == "" {
 		cm = DefaultProviderConfigMapName
 	}
 	if namespace == "" {
 		namespace = DefaultConfigNamespace
 	}
-	return &ConfigManager{
+	return &ConfigMapConfigManager{
 		client:                     client,
 		providerConfigMapName:      cm,
 		providerConfigMapNamespace: namespace,
@@ -41,7 +49,7 @@ func NewConfigManager(cm string, namespace string, client client.Client) *Config
 }
 
 // Get high-level information about the strategy used in a deployment type
-func (m *ConfigManager) GetStrategyMappingForDeploymentType(ctx context.Context, t string) (*DeploymentStrategyMapping, error) {
+func (m *ConfigMapConfigManager) GetStrategyMappingForDeploymentType(ctx context.Context, t string) (*DeploymentStrategyMapping, error) {
 	cm := &v1.ConfigMap{}
 	err := m.client.Get(ctx, types.NamespacedName{Name: m.providerConfigMapName, Namespace: m.providerConfigMapNamespace}, cm)
 	if err != nil {
