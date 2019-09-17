@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -18,6 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"testing"
+)
+
+var (
+	testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
 )
 
 type mockElasticacheClient struct {
@@ -57,7 +63,7 @@ func TestAWSRedisProvider_newProvider(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := NewAWSRedisProvider(tc.client)
+			p := NewAWSRedisProvider(tc.client, testLogger)
 			supportsStrategy := p.SupportsStrategy(tc.strategy)
 			if supportsStrategy != tc.expectedResult {
 				t.Fatalf("unexpected outcome, expected %t but got %t", tc.expectedResult, supportsStrategy)

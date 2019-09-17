@@ -45,14 +45,16 @@ func (d *AWSRedisDeploymentDetails) Data() map[string][]byte {
 // AWS Redis Provider implementation for AWS Elasticache
 type AWSRedisProvider struct {
 	Client            client.Client
+	Logger            *logrus.Entry
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
 	CacheSvc          elasticacheiface.ElastiCacheAPI
 }
 
-func NewAWSRedisProvider(client client.Client) *AWSRedisProvider {
+func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *AWSRedisProvider {
 	return &AWSRedisProvider{
 		Client:            client,
+		Logger:            logger.WithFields(logrus.Fields{"provider": "aws_redis"}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}

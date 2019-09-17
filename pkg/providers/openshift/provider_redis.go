@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	controllerruntime "sigs.k8s.io/controller-runtime"
+
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -23,18 +25,18 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	errorUtil "github.com/pkg/errors"
 
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	redisObjectMetaName    = "redis"
-	redisDCSelectorName    = redisObjectMetaName
-	redisStorageVolumeName = "redis-storage"
-	redisConfigVolumeName  = "redis-config"
-	redisConfigMapKey      = "redis.conf"
-	redisContainerName     = "redis"
-	redisPort              = "6379"
-	redisContainerCommand  = "/opt/rh/rh-redis32/root/usr/bin/redis-server"
+	redisObjectMetaName   = "redis"
+	redisDCSelectorName   = redisObjectMetaName
+	redisConfigVolumeName = "redis-config"
+	redisConfigMapKey     = "redis.conf"
+	redisContainerName    = "redis"
+	redisPort             = "6379"
+	redisContainerCommand = "/opt/rh/rh-redis32/root/usr/bin/redis-server"
 )
 
 type OpenShiftRedisDeploymentDetails struct {
@@ -47,12 +49,14 @@ func (d *OpenShiftRedisDeploymentDetails) Data() map[string][]byte {
 
 type OpenShiftRedisProvider struct {
 	Client        client.Client
+	Logger        *logrus.Entry
 	ConfigManager *ConfigManager
 }
 
-func NewOpenShiftRedisProvider(client client.Client) *OpenShiftRedisProvider {
+func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
 	return &OpenShiftRedisProvider{
 		Client:        client,
+		Logger:        logger.WithFields(logrus.Fields{"provider": "aws_redis"}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
@@ -105,7 +109,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	}
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
-			logrus.Info("found redis deployment")
+			p.Logger.Info("found redis deployment")
 			connData := map[string][]byte{
 				"uri":  []byte(fmt.Sprintf("%s.%s.svc.cluster.local", r.Name, r.Namespace)),
 				"port": []byte(redisPort),
@@ -117,6 +121,87 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 }
 
 func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error {
+	// check deployment status
+	dpl := &appsv1.Deployment{}
+	err := p.Client.Get(ctx, types.NamespacedName{Name: r.Name, Namespace: r.Namespace}, dpl)
+	if err != nil {
+		if k8serr.IsNotFound(err) {
+			return nil
+		}
+		return errorUtil.Wrap(err, "failed to get deployment")
+	}
+	for _, s := range dpl.Status.Conditions {
+		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
+			// delete service
+			p.Logger.Info("Deleting redis service")
+			svc := &apiv1.Service{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      r.Name,
+					Namespace: r.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, svc)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete service")
+			}
+
+			// delete pv
+			p.Logger.Info("Deleting redis persistent volume")
+			pv := &apiv1.PersistentVolume{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      r.Name,
+					Namespace: r.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, pv)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete persistent volume")
+			}
+
+			// delete pvc
+			p.Logger.Info("Deleting redis persistent volume claim")
+			pvc := &apiv1.PersistentVolumeClaim{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      r.Name,
+					Namespace: r.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, pvc)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete persistent volume claim")
+			}
+
+			// delete config map
+			p.Logger.Info("Deleting redis configmap")
+			cm := &apiv1.ConfigMap{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      r.Name,
+					Namespace: r.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, cm)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete configmap")
+			}
+
+			// clean up objects
+			p.Logger.Info("Deleting redis deployment")
+			err = p.Client.Delete(ctx, dpl)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete deployment")
+			}
+
+			// remove the finalizer added by the provider
+			p.Logger.Info("Removing finalizer")
+			resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
+			if err := p.Client.Update(ctx, r); err != nil {
+				return errorUtil.Wrapf(err, "failed to update instance as part of finalizer reconcile")
+			}
+
+			p.Logger.Infof("deletion handler for redis %s in namespace %s finished successfully", r.Name, r.Namespace)
+		}
+	}
+
 	return nil
 }
 
@@ -158,8 +243,8 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: apiv1.PodTemplateSpec{
 				Spec: apiv1.PodSpec{
-					Volumes:    buildDefaultRedisPodVolumes(),
-					Containers: buildDefaultRedisPodContainers(),
+					Volumes:    buildDefaultRedisPodVolumes(r),
+					Containers: buildDefaultRedisPodContainers(r),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -181,7 +266,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 	return dc
 }
 
-func buildDefaultRedisPodContainers() []apiv1.Container {
+func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
 	return []apiv1.Container{
 		{
 			Image:           "registry.redhat.io/rhscl/redis-32-rhel7",
@@ -231,7 +316,7 @@ func buildDefaultRedisPodContainers() []apiv1.Container {
 			},
 			VolumeMounts: []apiv1.VolumeMount{
 				{
-					Name:      redisStorageVolumeName,
+					Name:      r.Name,
 					MountPath: "/var/lib/redis/data",
 				},
 				{
@@ -243,13 +328,13 @@ func buildDefaultRedisPodContainers() []apiv1.Container {
 	}
 }
 
-func buildDefaultRedisPodVolumes() []apiv1.Volume {
+func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []apiv1.Volume {
 	return []apiv1.Volume{
 		{
-			Name: redisStorageVolumeName,
+			Name: r.Name,
 			VolumeSource: apiv1.VolumeSource{
 				PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
-					ClaimName: redisStorageVolumeName,
+					ClaimName: r.Name,
 				},
 			},
 		},
@@ -358,7 +443,7 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 		},
 		Spec: apiv1.PersistentVolumeClaimSpec{
 			AccessModes: []apiv1.PersistentVolumeAccessMode{
-				apiv1.ReadWriteOnce, // TODO be able to configure this because we have different volume access modes for different claims
+				apiv1.ReadWriteOnce,
 			},
 			Resources: apiv1.ResourceRequirements{
 				Requests: apiv1.ResourceList{
@@ -366,7 +451,6 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 				},
 			},
 		},
-		// TODO be able to configure StorageClass in case one wants to be used
 	}
 }
 
@@ -378,8 +462,8 @@ func (p *OpenShiftRedisProvider) CreateDeploymentConfig(ctx context.Context, d *
 			e.Spec = d.Spec
 			return nil
 		}
-		e.Spec = *redisCfg.RedisDeploymentSpec
 
+		e.Spec = *redisCfg.RedisDeploymentSpec
 		return nil
 	})
 	if err != nil {
@@ -414,8 +498,8 @@ func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.
 			e.Data = cm.Data
 			return nil
 		}
-		e.Data = redisCfg.RedisConfigMapData
 
+		e.Data = redisCfg.RedisConfigMapData
 		return nil
 	})
 	if err != nil {
@@ -432,8 +516,8 @@ func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.Persi
 			e.Spec = pvc.Spec
 			return nil
 		}
-		e.Spec = *redisCfg.RedisPVCSpec
 
+		e.Spec = *redisCfg.RedisPVCSpec
 		return nil
 	})
 	if err != nil {

@@ -36,7 +36,8 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileRedis{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis"})
+	return &ReconcileRedis{client: mgr.GetClient(), scheme: mgr.GetScheme(), logger: logger}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -87,7 +88,7 @@ type ReconcileRedis struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	ctx := context.TODO()
-	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client), openshift.NewOpenShiftRedisProvider(r.client)}
+	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(r.client, r.logger), openshift.NewOpenShiftRedisProvider(r.client, r.logger)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
 
 	return r.reconcile(ctx, request, providerList, cfgMgr)
