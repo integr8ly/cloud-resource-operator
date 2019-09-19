@@ -45,7 +45,10 @@ cluster/seed/blobstorage:
 
 .PHONY: cluster/clean
 cluster/clean:
-	oc delete -f ./deploy/crds/*_crd.yaml
+	oc project $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit
