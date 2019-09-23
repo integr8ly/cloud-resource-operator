@@ -33,6 +33,7 @@ const (
 	redisObjectMetaName   = "redis"
 	redisDCSelectorName   = redisObjectMetaName
 	redisConfigVolumeName = "redis-config"
+	redisConfigMapName    = "redis-config"
 	redisConfigMapKey     = "redis.conf"
 	redisContainerName    = "redis"
 	redisPort             = "6379"
@@ -175,7 +176,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			p.Logger.Info("Deleting redis configmap")
 			cm := &apiv1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      r.Name,
+					Name:      redisConfigMapName,
 					Namespace: r.Namespace,
 				},
 			}
@@ -342,8 +343,8 @@ func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []apiv1.Volume {
 			Name: redisConfigVolumeName,
 			VolumeSource: apiv1.VolumeSource{
 				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{ //The name of the ConfigMap
-						Name: redisConfigVolumeName,
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: redisConfigMapName, // the name of the ConfigMap
 					},
 					Items: []apiv1.KeyToPath{
 						{
@@ -385,7 +386,7 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 func buildDefaultRedisConfigMap(r *v1alpha1.Redis) *apiv1.ConfigMap {
 	return &apiv1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.Name,
+			Name:      redisConfigMapName,
 			Namespace: r.Namespace,
 		},
 		TypeMeta: metav1.TypeMeta{

@@ -2,7 +2,8 @@ package v1alpha1
 
 // SecretRef Represents a namespace-scoped Secret
 type SecretRef struct {
-	Name string `json:"name,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // ResourceTypeSpec Represents the basic information required to provision a resource type

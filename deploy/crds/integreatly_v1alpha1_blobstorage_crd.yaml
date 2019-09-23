@@ -33,6 +33,8 @@ spec:
               properties:
                 name:
                   type: string
+                namespace:
+                  type: string
               type: object
             tier:
               type: string
@@ -50,6 +52,8 @@ spec:
             secretRef:
               properties:
                 name:
+                  type: string
+                namespace:
                   type: string
               type: object
             strategy:

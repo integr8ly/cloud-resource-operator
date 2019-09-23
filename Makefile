@@ -46,7 +46,7 @@ cluster/seed/blobstorage:
 
 .PHONY: cluster/seed/redis
 cluster/seed/redis:
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_cr.yaml -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:

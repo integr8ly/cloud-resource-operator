@@ -112,6 +112,8 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
+		// return nil error so this function can be requeueed
+		logrus.Info("error getting replication groups:", err)
 		return nil, err
 	}
 

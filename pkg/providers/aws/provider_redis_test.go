@@ -22,9 +22,7 @@ import (
 	"testing"
 )
 
-var (
-	testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
-)
+var testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
 
 type mockElasticacheClient struct {
 	elasticacheiface.ElastiCacheAPI
