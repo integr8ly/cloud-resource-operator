@@ -51,7 +51,7 @@ func (d *OpenShiftRedisDeploymentDetails) Data() map[string][]byte {
 type OpenShiftRedisProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
-	ConfigManager *ConfigManager
+	ConfigManager ConfigManager
 }
 
 func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
@@ -234,8 +234,8 @@ type RedisStrat struct {
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 	dc := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "DeploymentConfig",
-			APIVersion: "apps.openshift.io/v1",
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.Name,

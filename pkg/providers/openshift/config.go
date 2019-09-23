@@ -22,31 +22,38 @@ type StrategyConfig struct {
 	RawStrategy json.RawMessage `json:"strategy"`
 }
 
-type ConfigManager struct {
+//go:generate moq -out config_moq.go . ConfigManager
+type ConfigManager interface {
+	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
+}
+
+type ConfigMapConfigManager struct {
 	configMapName      string
 	configMapNamespace string
 	client             client.Client
 }
 
-func NewConfigManager(cm string, namespace string, client client.Client) *ConfigManager {
+var _ ConfigManager = (*ConfigMapConfigManager)(nil)
+
+func NewConfigMapConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager {
 	if cm == "" {
 		cm = DefaultConfigMapName
 	}
 	if namespace == "" {
 		namespace = DefaultConfigMapNamespace
 	}
-	return &ConfigManager{
+	return &ConfigMapConfigManager{
 		configMapName:      cm,
 		configMapNamespace: namespace,
 		client:             client,
 	}
 }
 
-func NewDefaultConfigManager(client client.Client) *ConfigManager {
-	return NewConfigManager(DefaultConfigMapName, DefaultConfigMapNamespace, client)
+func NewDefaultConfigManager(client client.Client) *ConfigMapConfigManager {
+	return NewConfigMapConfigManager(DefaultConfigMapName, DefaultConfigMapNamespace, client)
 }
 
-func (m *ConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 	cm := &v1.ConfigMap{}
 	err := m.client.Get(ctx, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, cm)
 	if err != nil {

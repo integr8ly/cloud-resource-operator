@@ -2,35 +2,50 @@ package aws
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
-	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"testing"
 )
 
-var testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
+var (
+	testLogger  = logrus.WithFields(logrus.Fields{"testing": "true"})
+	testAddress = aws.String("redis")
+	testPort    = aws.Int64(6397)
+)
 
 type mockElasticacheClient struct {
 	elasticacheiface.ElastiCacheAPI
+	wantErrList       bool
+	wantErrCreate     bool
+	wantErrDelete     bool
+	wantEmpty         bool
+	replicationGroups []*elasticache.ReplicationGroup
 }
 
 // mock elasticache DescribeReplicationGroups output
 func (m *mockElasticacheClient) DescribeReplicationGroups(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-	return &elasticache.DescribeReplicationGroupsOutput{}, nil
+	if m.wantEmpty {
+		return &elasticache.DescribeReplicationGroupsOutput{}, nil
+	}
+	return &elasticache.DescribeReplicationGroupsOutput{
+		ReplicationGroups: m.replicationGroups,
+	}, nil
 }
 
 // mock elasticache CreateReplicationGroup output
@@ -38,203 +53,197 @@ func (m *mockElasticacheClient) CreateReplicationGroup(*elasticache.CreateReplic
 	return &elasticache.CreateReplicationGroupOutput{}, nil
 }
 
-func TestAWSRedisProvider_newProvider(t *testing.T) {
-	cases := []struct {
-		name           string
-		client         client.Client
-		strategy       string
-		expectedResult bool
-	}{
-		{
-			"test supported strategy",
-			fake.NewFakeClient(),
-			"aws",
-			true,
-		},
-		{
-			"test unsupported strategy",
-			fake.NewFakeClient(),
-			"azure",
-			false,
-		},
-	}
+// mock elasticache DeleteReplicationGroup output
+func (m *mockElasticacheClient) DeleteReplicationGroup(*elasticache.DeleteReplicationGroupInput) (*elasticache.DeleteReplicationGroupOutput, error) {
+	return &elasticache.DeleteReplicationGroupOutput{}, nil
+}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := NewAWSRedisProvider(tc.client, testLogger)
-			supportsStrategy := p.SupportsStrategy(tc.strategy)
-			if supportsStrategy != tc.expectedResult {
-				t.Fatalf("unexpected outcome, expected %t but got %t", tc.expectedResult, supportsStrategy)
-			}
-		})
+func buildTestRedisCR() *v1alpha1.Redis {
+	return &v1alpha1.Redis{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
 	}
 }
 
-func TestAWSRedisProvider_createRedisCluster(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := v1.AddToScheme(scheme)
-	err = corev1.AddToScheme(scheme)
-	err = v1alpha1.SchemeBuilder.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-
-	sc := &StrategyConfig{
-		Region:      "eu-west-1",
-		RawStrategy: json.RawMessage("{}"),
-	}
-	rawStratCfg, err := json.Marshal(sc)
-	if err != nil {
-		t.Fatal("failed to marshal strategy config", err)
-	}
-
-	cases := []struct {
-		name           string
-		instance       *v1alpha1.Redis
-		client         client.Client
-		configMgr      *ConfigManagerMock
-		credentialMgr  *CredentialManagerMock
-		expectedError  error
-		expectedResult *providers.RedisCluster
-	}{
+func buildReplicationGroup() []*elasticache.ReplicationGroup {
+	return []*elasticache.ReplicationGroup{
 		{
-			name: "test redis cluster is created as expected",
-			client: fake.NewFakeClientWithScheme(scheme, &v1alpha1.Redis{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-				},
-			}, &corev1.ConfigMap{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "cloud-resources-aws-strategies",
-					Namespace: "kube-system",
-				},
-				Data: map[string]string{
-					"redis": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
-				},
-			}),
-			instance: &v1alpha1.Redis{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-				},
-			},
-			configMgr: &ConfigManagerMock{
-				ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
-					return sc, nil
-				},
-			},
-			expectedError:  nil,
-			expectedResult: nil,
+			ReplicationGroupId: aws.String("test-id"),
+			Status:             aws.String("pending"),
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := &AWSRedisProvider{
-				Client:            tc.client,
-				CredentialManager: tc.credentialMgr,
-				ConfigManager:     tc.configMgr,
-			}
-			redisConfig, _, err := p.getRedisConfig(context.TODO(), tc.instance)
-			if err != nil {
-				t.Fatal("", err)
-			}
+}
 
-			mockSvc := &mockElasticacheClient{}
-			redis, err := createRedisCluster(mockSvc, redisConfig)
-			if redis != tc.expectedResult {
-				t.Fatalf("unexpected outcome, expected %s but got %s", tc.expectedResult, redis)
+func buildReplicationGroupReady() []*elasticache.ReplicationGroup {
+	return []*elasticache.ReplicationGroup{
+		{
+			ReplicationGroupId: aws.String("test-id"),
+			Status:             aws.String("available"),
+			NodeGroups: []*elasticache.NodeGroup{
+				{
+					NodeGroupId:      aws.String("primary-node"),
+					NodeGroupMembers: nil,
+					PrimaryEndpoint: &elasticache.Endpoint{
+						Address: testAddress,
+						Port:    testPort,
+					},
+				},
+			},
+		},
+	}
+}
+
+func buildTestRedisCluster() *providers.RedisCluster {
+	primaryEndpoint := &elasticache.Endpoint{
+		Address: testAddress,
+		Port:    testPort,
+	}
+	connData := map[string][]byte{
+		"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
+	}
+	return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}
+}
+
+func Test_createRedisCluster(t *testing.T) {
+	type args struct {
+		cacheSvc    elasticacheiface.ElastiCacheAPI
+		redisConfig *elasticache.CreateReplicationGroupInput
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *providers.RedisCluster
+		wantErr bool
+	}{
+		{
+			name: "test redis is created",
+			args: args{
+				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
+				redisConfig: &elasticache.CreateReplicationGroupInput{},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test redis already exists",
+			args: args{
+				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroup()},
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test redis already exists and is ready",
+			args: args{
+				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := createRedisCluster(tt.args.cacheSvc, tt.args.redisConfig)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("createRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if err != tc.expectedError {
-				t.Fatalf("unexpected error, expected %s but got %s", tc.expectedError, redis)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("createRedisCluster() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := v1.AddToScheme(scheme)
-	err = corev1.AddToScheme(scheme)
-	err = v1alpha1.SchemeBuilder.AddToScheme(scheme)
+	scheme, err := buildTestScheme()
 	if err != nil {
-		t.Fatal("failed to build scheme", err)
+		t.Error("failed to build scheme", err)
+		return
 	}
 
-	sc := &StrategyConfig{
-		Region:      "eu-west-1",
-		RawStrategy: json.RawMessage("{}"),
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		CacheSvc          elasticacheiface.ElastiCacheAPI
 	}
-	rawStratCfg, err := json.Marshal(sc)
-	if err != nil {
-		t.Fatal("failed to marshal strategy config", err)
+	type args struct {
+		cacheSvc    elasticacheiface.ElastiCacheAPI
+		redisConfig *elasticache.CreateReplicationGroupInput
+		ctx         context.Context
+		redis       *v1alpha1.Redis
 	}
-
-	cases := []struct {
-		name          string
-		instance      *v1alpha1.Redis
-		client        client.Client
-		configMgr     *ConfigManagerMock
-		credentialMgr *CredentialManagerMock
-		expectedError error
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
 	}{
 		{
-			name: "test redis cluster is deleted as expected",
-			client: fake.NewFakeClientWithScheme(scheme, &v1alpha1.Redis{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-				},
-			}, &corev1.ConfigMap{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "cloud-resources-aws-strategies",
-					Namespace: "kube-system",
-				},
-				Data: map[string]string{
-					"redis": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
-				},
-			}),
-			instance: &v1alpha1.Redis{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-				},
+			name: "test successful delete with no redis",
+			args: args{
+				redisConfig: &elasticache.CreateReplicationGroupInput{},
+				redis:       buildTestRedisCR(),
 			},
-			configMgr: &ConfigManagerMock{
-				ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
-					return sc, nil
-				},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				CacheSvc:          &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
 			},
-			credentialMgr: &CredentialManagerMock{
-				ReoncileBucketOwnerCredentialsFunc: nil,
-				ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (request *v1.CredentialsRequest, credentials *AWSCredentials, e error) {
-					return &v1.CredentialsRequest{}, &AWSCredentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
-				},
-				ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (credentials *AWSCredentials, e error) {
-					return &AWSCredentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
-				},
+			wantErr: false,
+		},
+		{
+			name: "test successful delete with existing unavailable redis",
+			args: args{
+
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:       buildTestRedisCR(),
 			},
-			expectedError: nil,
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				CacheSvc:          &mockElasticacheClient{replicationGroups: buildReplicationGroup()},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test successful delete with existing available redis",
+			args: args{
+
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:       buildTestRedisCR(),
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				CacheSvc:          &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+			},
+			wantErr: false,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			p := &AWSRedisProvider{
-				Client:            tc.client,
-				CredentialManager: tc.credentialMgr,
-				ConfigManager:     tc.configMgr,
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				CacheSvc:          tt.fields.CacheSvc,
 			}
-
-			ctx := context.TODO()
-			redisConfig, _, err := p.getRedisConfig(ctx, tc.instance)
-			if err != nil {
-				t.Fatal("", err)
-			}
-
-			mockSvc := &mockElasticacheClient{}
-			err = p.deleteRedisCluster(mockSvc, redisConfig, ctx, tc.instance)
-			if err != tc.expectedError {
-				t.Fatalf("unexpected error, expected %s but got %s", tc.expectedError, err)
+			if err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
+				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
-	"github.com/openshift/origin/Godeps/_workspace/src/github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/sirupsen/logrus"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
@@ -27,7 +27,7 @@ import (
 
 const (
 	defaultCacheNodeType     = "cache.t2.micro"
-	defaultEngineVersion     = "2.8.24"
+	defaultEngineVersion     = "3.2.10"
 	defaultDescription       = "A Redis replication group"
 	defaultNumCacheClusters  = 2
 	defaultSnapshotRetention = 30
