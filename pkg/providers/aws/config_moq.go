@@ -5,13 +5,14 @@ package aws
 
 import (
 	"context"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"sync"
 )
 
 var (
 	lockConfigManagerMockGetDefaultRegionSMTPServerMapping sync.RWMutex
-	lockConfigManagerMockReadBlobStorageStrategy           sync.RWMutex
 	lockConfigManagerMockReadSMTPCredentialSetStrategy     sync.RWMutex
+	lockConfigManagerMockReadStorageStrategy               sync.RWMutex
 )
 
 // Ensure, that ConfigManagerMock does implement ConfigManager.
@@ -27,11 +28,11 @@ var _ ConfigManager = &ConfigManagerMock{}
 //             GetDefaultRegionSMTPServerMappingFunc: func() map[string]string {
 // 	               panic("mock out the GetDefaultRegionSMTPServerMapping method")
 //             },
-//             ReadBlobStorageStrategyFunc: func(ctx context.Context, tier string) (*StrategyConfig, error) {
-// 	               panic("mock out the ReadBlobStorageStrategy method")
-//             },
 //             ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (*StrategyConfig, error) {
 // 	               panic("mock out the ReadSMTPCredentialSetStrategy method")
+//             },
+//             ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+// 	               panic("mock out the ReadStorageStrategy method")
 //             },
 //         }
 //
@@ -43,28 +44,30 @@ type ConfigManagerMock struct {
 	// GetDefaultRegionSMTPServerMappingFunc mocks the GetDefaultRegionSMTPServerMapping method.
 	GetDefaultRegionSMTPServerMappingFunc func() map[string]string
 
-	// ReadBlobStorageStrategyFunc mocks the ReadBlobStorageStrategy method.
-	ReadBlobStorageStrategyFunc func(ctx context.Context, tier string) (*StrategyConfig, error)
-
 	// ReadSMTPCredentialSetStrategyFunc mocks the ReadSMTPCredentialSetStrategy method.
 	ReadSMTPCredentialSetStrategyFunc func(ctx context.Context, tier string) (*StrategyConfig, error)
+
+	// ReadStorageStrategyFunc mocks the ReadStorageStrategy method.
+	ReadStorageStrategyFunc func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
 		// GetDefaultRegionSMTPServerMapping holds details about calls to the GetDefaultRegionSMTPServerMapping method.
 		GetDefaultRegionSMTPServerMapping []struct {
 		}
-		// ReadBlobStorageStrategy holds details about calls to the ReadBlobStorageStrategy method.
-		ReadBlobStorageStrategy []struct {
+		// ReadSMTPCredentialSetStrategy holds details about calls to the ReadSMTPCredentialSetStrategy method.
+		ReadSMTPCredentialSetStrategy []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Tier is the tier argument value.
 			Tier string
 		}
-		// ReadSMTPCredentialSetStrategy holds details about calls to the ReadSMTPCredentialSetStrategy method.
-		ReadSMTPCredentialSetStrategy []struct {
+		// ReadStorageStrategy holds details about calls to the ReadStorageStrategy method.
+		ReadStorageStrategy []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
+			// Rt is the rt argument value.
+			Rt providers.ResourceType
 			// Tier is the tier argument value.
 			Tier string
 		}
@@ -94,41 +97,6 @@ func (mock *ConfigManagerMock) GetDefaultRegionSMTPServerMappingCalls() []struct
 	lockConfigManagerMockGetDefaultRegionSMTPServerMapping.RLock()
 	calls = mock.calls.GetDefaultRegionSMTPServerMapping
 	lockConfigManagerMockGetDefaultRegionSMTPServerMapping.RUnlock()
-	return calls
-}
-
-// ReadBlobStorageStrategy calls ReadBlobStorageStrategyFunc.
-func (mock *ConfigManagerMock) ReadBlobStorageStrategy(ctx context.Context, tier string) (*StrategyConfig, error) {
-	if mock.ReadBlobStorageStrategyFunc == nil {
-		panic("ConfigManagerMock.ReadBlobStorageStrategyFunc: method is nil but ConfigManager.ReadBlobStorageStrategy was just called")
-	}
-	callInfo := struct {
-		Ctx  context.Context
-		Tier string
-	}{
-		Ctx:  ctx,
-		Tier: tier,
-	}
-	lockConfigManagerMockReadBlobStorageStrategy.Lock()
-	mock.calls.ReadBlobStorageStrategy = append(mock.calls.ReadBlobStorageStrategy, callInfo)
-	lockConfigManagerMockReadBlobStorageStrategy.Unlock()
-	return mock.ReadBlobStorageStrategyFunc(ctx, tier)
-}
-
-// ReadBlobStorageStrategyCalls gets all the calls that were made to ReadBlobStorageStrategy.
-// Check the length with:
-//     len(mockedConfigManager.ReadBlobStorageStrategyCalls())
-func (mock *ConfigManagerMock) ReadBlobStorageStrategyCalls() []struct {
-	Ctx  context.Context
-	Tier string
-} {
-	var calls []struct {
-		Ctx  context.Context
-		Tier string
-	}
-	lockConfigManagerMockReadBlobStorageStrategy.RLock()
-	calls = mock.calls.ReadBlobStorageStrategy
-	lockConfigManagerMockReadBlobStorageStrategy.RUnlock()
 	return calls
 }
 
@@ -164,5 +132,44 @@ func (mock *ConfigManagerMock) ReadSMTPCredentialSetStrategyCalls() []struct {
 	lockConfigManagerMockReadSMTPCredentialSetStrategy.RLock()
 	calls = mock.calls.ReadSMTPCredentialSetStrategy
 	lockConfigManagerMockReadSMTPCredentialSetStrategy.RUnlock()
+	return calls
+}
+
+// ReadStorageStrategy calls ReadStorageStrategyFunc.
+func (mock *ConfigManagerMock) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+	if mock.ReadStorageStrategyFunc == nil {
+		panic("ConfigManagerMock.ReadStorageStrategyFunc: method is nil but ConfigManager.ReadStorageStrategy was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Rt   providers.ResourceType
+		Tier string
+	}{
+		Ctx:  ctx,
+		Rt:   rt,
+		Tier: tier,
+	}
+	lockConfigManagerMockReadStorageStrategy.Lock()
+	mock.calls.ReadStorageStrategy = append(mock.calls.ReadStorageStrategy, callInfo)
+	lockConfigManagerMockReadStorageStrategy.Unlock()
+	return mock.ReadStorageStrategyFunc(ctx, rt, tier)
+}
+
+// ReadStorageStrategyCalls gets all the calls that were made to ReadStorageStrategy.
+// Check the length with:
+//     len(mockedConfigManager.ReadStorageStrategyCalls())
+func (mock *ConfigManagerMock) ReadStorageStrategyCalls() []struct {
+	Ctx  context.Context
+	Rt   providers.ResourceType
+	Tier string
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Rt   providers.ResourceType
+		Tier string
+	}
+	lockConfigManagerMockReadStorageStrategy.RLock()
+	calls = mock.calls.ReadStorageStrategy
+	lockConfigManagerMockReadStorageStrategy.RUnlock()
 	return calls
 }

@@ -22,10 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	testLogger = logrus.WithFields(logrus.Fields{"testing": "true"})
-)
-
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis2.AddToScheme(scheme)

@@ -3,8 +3,9 @@ package blobstorage
 import (
 	"context"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 

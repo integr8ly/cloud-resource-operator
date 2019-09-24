@@ -19,6 +19,7 @@ const (
 type DeploymentStrategyMapping struct {
 	BlobStorage     string `json:"blobstorage"`
 	SMTPCredentials string `json:"smtpCredentials"`
+	Redis           string `json:"redis"`
 }
 
 //go:generate moq -out config_moq.go . ConfigManager

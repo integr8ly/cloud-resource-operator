@@ -1,4 +1,4 @@
-package aws
+package openshift
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestNewConfigManager(t *testing.T) {
@@ -29,7 +27,7 @@ func TestNewConfigManager(t *testing.T) {
 			name:              "test defaults are set when empty strings are provided",
 			cmName:            "",
 			cmNamespace:       "",
-			expectedName:      "cloud-resources-aws-strategies",
+			expectedName:      "cloud-resources-openshift-strategies",
 			expectedNamespace: "kube-system",
 			client:            nil,
 		},
@@ -61,9 +59,9 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+
 	sc := &StrategyConfig{
-		Region:      "eu-west-1",
-		RawStrategy: json.RawMessage("{\"bucket\":\"testbucket\"}"),
+		RawStrategy: json.RawMessage("{}"),
 	}
 	rawStratCfg, err := json.Marshal(sc)
 	if err != nil {
@@ -74,7 +72,6 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 		cmName              string
 		cmNamespace         string
 		tier                string
-		expectedRegion      string
 		expectedRawStrategy string
 		client              client.Client
 	}{
@@ -83,7 +80,6 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			cmName:              "test",
 			cmNamespace:         "test",
 			tier:                "test",
-			expectedRegion:      "eu-west-1",
 			expectedRawStrategy: string(sc.RawStrategy),
 			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
@@ -102,9 +98,6 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			sc, err := cm.ReadStorageStrategy(context.TODO(), providers.BlobStorageResourceType, tc.tier)
 			if err != nil {
 				t.Fatal("unexpected error", err)
-			}
-			if sc.Region != tc.expectedRegion {
-				t.Fatalf("unexpected region, expected %s but got %s", tc.expectedRegion, sc.Region)
 			}
 			if string(sc.RawStrategy) != tc.expectedRawStrategy {
 				t.Fatalf("unexpected raw strategy, expected %s but got %s", tc.expectedRawStrategy, sc.RawStrategy)

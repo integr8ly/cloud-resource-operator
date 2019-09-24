@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	createBucketEntries = []v1.StatementEntry{
+	operatorEntries = []v1.StatementEntry{
 		{
 			Effect: "Allow",
 			Action: []string{
@@ -38,8 +38,12 @@ var (
 				"s3:DeleteBucket",
 				"s3:ListBucket",
 				"s3:ListAllMyBuckets",
+				"s3:GetObject",
+				"elasticache:CreateReplicationGroup",
+				"elasticache:DeleteReplicationGroup",
+				"elasticache:DescribeReplicationGroups",
 			},
-			Resource: "arn:aws:s3:::*",
+			Resource: "*",
 		},
 	}
 	sendRawMailEntries = []v1.StatementEntry{
@@ -104,7 +108,7 @@ func NewCredentialMinterCredentialManager(client client.Client) *CredentialMinte
 
 // Ensure the credentials the AWS provider requires are available
 func (m *CredentialMinterCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
-	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, createBucketEntries)
+	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
 	if err != nil {
 		return nil, err
 	}
