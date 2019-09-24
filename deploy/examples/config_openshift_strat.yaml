@@ -5,6 +5,8 @@ metadata:
   namespace: kube-system
 data:
   blobstorage: |
-    {"development": { "strategy": { }}}
+    {"development": { "strategy": {} }}
   redis: |
-    {"development": { "strategy": { }}}
+    {"development": { "strategy": {} }}
+  postgres: |
+    {"development": { "strategy": {} }}

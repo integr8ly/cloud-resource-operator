@@ -1,0 +1,7 @@
+apiVersion: integreatly.org/v1alpha1
+kind: Postgres
+metadata:
+  name: example-postgres
+spec:
+  # Add fields here
+  size: 3
