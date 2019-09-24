@@ -14,6 +14,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorage":             schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref),
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageSpec":         schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref),
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageStatus":       schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref),
+		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.Postgres":                schema_pkg_apis_integreatly_v1alpha1_Postgres(ref),
+		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec":            schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref),
+		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus":          schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref),
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.Redis":                   schema_pkg_apis_integreatly_v1alpha1_Redis(ref),
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisSpec":               schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref),
 		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisStatus":             schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref),
@@ -103,6 +106,112 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "BlobStorageStatus defines the observed state of BlobStorage",
+				Properties: map[string]spec.Schema{
+					"strategy": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"provider": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"secretRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_Postgres(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Postgres is the Schema for the postgres API",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec", "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostgresSpec defines the desired state of Postgres",
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"tier": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"secretRef": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+						},
+					},
+				},
+				Required: []string{"type", "tier", "secretRef"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+	}
+}
+
+func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostgresStatus defines the observed state of Postgres",
 				Properties: map[string]spec.Schema{
 					"strategy": {
 						SchemaProps: spec.SchemaProps{

@@ -57,7 +57,7 @@ type OpenShiftRedisProvider struct {
 func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
 	return &OpenShiftRedisProvider{
 		Client:        client,
-		Logger:        logger.WithFields(logrus.Fields{"provider": "aws_redis"}),
+		Logger:        logger.WithFields(logrus.Fields{"provider": "openshift_redis"}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
@@ -206,7 +206,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 	return nil
 }
 
-// getRedisConfig retrieves the redis config from the cloud-resources-openshift-strategies configmap
+// getPostgresConfig retrieves the redis config from the cloud-resources-openshift-strategies configmap
 func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*RedisStrat, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
 	if err != nil {
