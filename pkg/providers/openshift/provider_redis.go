@@ -86,7 +86,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 		return nil, errorUtil.Wrap(err, "failed to create or update redis config map")
 	}
 	// deploy deployment
-	if err := p.CreateDeploymentConfig(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
+	if err := p.CreateDeployment(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create or update redis deployment")
 	}
 	// deploy service
@@ -239,7 +239,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"deploymentConfig": redisDCSelectorName,
+						"deployment": redisDCSelectorName,
 					},
 				},
 			},
@@ -248,7 +248,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"deploymentConfig": redisDCSelectorName,
+					"deployment": redisDCSelectorName,
 				},
 			},
 			Replicas: int32Ptr(1),
@@ -367,7 +367,7 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"deploymentConfig": redisDCSelectorName,
+				"deployment": redisDCSelectorName,
 			},
 		},
 	}
@@ -445,7 +445,7 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 	}
 }
 
-func (p *OpenShiftRedisProvider) CreateDeploymentConfig(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
+func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
 	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 
