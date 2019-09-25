@@ -57,11 +57,11 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 	cm := &v1.ConfigMap{}
 	err := m.client.Get(ctx, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, cm)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
+		return nil, errorUtil.Wrapf(err, "failed to get openshift strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
 	rawStrategyCfg := cm.Data[string(rt)]
 	if rawStrategyCfg == "" {
-		return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", rt))
+		return nil, errorUtil.New(fmt.Sprintf("openshift strategy for resource type %s is not defined", rt))
 	}
 
 	var strategies map[string]*StrategyConfig
@@ -69,5 +69,6 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
 	tierStrat := strategies[tier]
+
 	return tierStrat, nil
 }

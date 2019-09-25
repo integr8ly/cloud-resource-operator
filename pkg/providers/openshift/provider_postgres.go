@@ -27,20 +27,20 @@ import (
 )
 
 var (
-	defaultPostgresPort      = 5432
-	defaultPostgresUser      = "user"
-	defaultPostgressPassword = "password"
-	defaultCredentialsSecret = "postgres-credentials"
+	defaultPostgresPort     = 5432
+	defaultPostgresUser     = "user"
+	defaultPostgresPassword = "password"
+	defaultCredentialsSec   = "postgres-credentials"
 )
 
 // PostgresStrat to be used to unmarshal strat map
 type PostgresStrat struct {
 	_ struct{} `type:"structure"`
 
-	PostgresDeploymentSpec *appsv1.DeploymentSpec        `type:"deploymentSpec"`
-	PostgresServiceSpec    *v1.ServiceSpec               `type:"serviceSpec"`
-	PostgresPVCSpec        *v1.PersistentVolumeClaimSpec `type:"pvcSpec"`
-	PostgresSecretData     map[string][]byte             `type:"secretData"`
+	PostgresDeploymentSpec *appsv1.DeploymentSpec        `json:"deploymentSpec"`
+	PostgresServiceSpec    *v1.ServiceSpec               `json:"serviceSpec"`
+	PostgresPVCSpec        *v1.PersistentVolumeClaimSpec `json:"pvcSpec"`
+	PostgresSecretData     map[string]string             `json:"secretData"`
 }
 
 type OpenShiftPostgresDeploymentDetails struct {
@@ -92,7 +92,7 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 	if err := p.CreatePVC(ctx, buildDefaultPostgresPVC(ps), postgresCfg); err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create or update postgres PVC")
 	}
-	// deploy secret
+	// deploy credentials secret
 	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(ps), postgresCfg); err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create or update postgres secret")
 	}
@@ -111,19 +111,25 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get postgres deployment")
 	}
+
+	// check if deployment is ready and return connection details
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
 			p.Logger.Info("found postgres deployment")
-			uri := fmt.Sprintf("postgres://%s:%s@%s.%s.svc.cluster.local:%d/%s", defaultPostgresUser, defaultPostgressPassword, ps.Name, ps.Namespace, defaultPostgresPort, ps.Name)
-			return &providers.PostgresInstance{DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
-				Connection: map[string][]byte{
-					"uri": []byte(uri),
+			return &providers.PostgresInstance{
+				DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
+					Connection: map[string][]byte{
+						"user":     []byte(defaultPostgresUser),
+						"password": []byte(defaultPostgresPassword),
+						"uri":      []byte(fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace)),
+						"database": []byte(ps.Name),
+					},
 				},
-			},
 			}, nil
 		}
 	}
 
+	// deployment is in progress
 	return nil, nil
 }
 
@@ -143,6 +149,7 @@ func (p *OpenShiftPostgresProvider) getPostgresConfig(ctx context.Context, ps *v
 	if err := json.Unmarshal(stratCfg.RawStrategy, postgresCfg); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal openshift postgres configuration")
 	}
+
 	return postgresCfg, stratCfg, nil
 }
 
@@ -191,7 +198,7 @@ func (p *OpenShiftPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secr
 			return nil
 		}
 
-		e.Data = postgresCfg.PostgresSecretData
+		e.StringData = postgresCfg.PostgresSecretData
 		return nil
 	})
 	if err != nil {
@@ -249,7 +256,7 @@ func buildDefaultPostgresPVC(ps *v1alpha1.Postgres) *v1.PersistentVolumeClaim {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "postgresql-data",
+			Name:      ps.Name,
 			Namespace: ps.Namespace,
 		},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -319,8 +326,8 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 				},
 			},
 			Env: []v1.EnvVar{
-				envVarFromSecret("POSTGRESQL_USER", defaultCredentialsSecret, defaultPostgresUser),
-				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSecret, defaultPostgressPassword),
+				envVarFromSecret("POSTGRESQL_USER", defaultCredentialsSec, defaultPostgresUser),
+				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSec, defaultPostgresPassword),
 				envVarFromValue("POSTGRESQL_DATABASE", ps.Name),
 			},
 			//Resources: v1
@@ -384,12 +391,12 @@ func buildDefaultPostgresSecret(ps *v1alpha1.Postgres) *v1.Secret {
 			Kind:       "Secret",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultCredentialsSecret,
+			Name:      defaultCredentialsSec,
 			Namespace: ps.Namespace,
 		},
 		StringData: map[string]string{
 			"user":     defaultPostgresUser,
-			"password": defaultPostgressPassword,
+			"password": defaultPostgresPassword,
 		},
 		Type: v1.SecretTypeOpaque,
 	}
