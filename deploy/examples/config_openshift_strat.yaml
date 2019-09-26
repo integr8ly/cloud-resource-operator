@@ -9,4 +9,4 @@ data:
   redis: |
     {"development": { "strategy": {} }}
   postgres: |
-    {"development": { "strategy": {} }}
+    {"development": { "strategy": { "secretData": {"user":"test", "password": "test"} } }}

@@ -225,10 +225,10 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 type RedisStrat struct {
 	_ struct{} `type:"structure"`
 
-	RedisDeploymentSpec *appsv1.DeploymentSpec           `type:"deploymentSpec"`
-	RedisServiceSpec    *apiv1.ServiceSpec               `type:"serviceSpec"`
-	RedisPVCSpec        *apiv1.PersistentVolumeClaimSpec `type:"pvcSpec"`
-	RedisConfigMapData  map[string]string                `type:"configMapData"`
+	RedisDeploymentSpec *appsv1.DeploymentSpec           `json:"deploymentSpec"`
+	RedisServiceSpec    *apiv1.ServiceSpec               `json:"serviceSpec"`
+	RedisPVCSpec        *apiv1.PersistentVolumeClaimSpec `json:"pvcSpec"`
+	RedisConfigMapData  map[string]string                `json:"configMapData"`
 }
 
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
