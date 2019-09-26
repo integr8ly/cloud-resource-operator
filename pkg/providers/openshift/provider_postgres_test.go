@@ -202,7 +202,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 				postgres: buildTestPostgresCR(),
 				object:   v1.PersistentVolume{},
 			},
-			want: &v1.PersistentVolumeClaimSpec{
+			want: v1.PersistentVolumeClaimSpec{
 				AccessModes: []v1.PersistentVolumeAccessMode{"ReadWriteOnce"},
 				Resources: v1.ResourceRequirements{
 					Requests: v1.ResourceList{
