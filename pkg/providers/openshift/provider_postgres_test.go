@@ -169,24 +169,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override pvc defaults",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), &v1.PersistentVolumeClaim{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       "PersistentVolumeClaim",
-						APIVersion: "v1",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      testPostgresName,
-						Namespace: testPostgresNamespace,
-					},
-					Spec: v1.PersistentVolumeClaimSpec{
-						AccessModes: []v1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								"storage": resource.MustParse("1Gi"),
-							},
-						},
-					},
-				}),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
 				Logger: testLogger,
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
@@ -236,7 +219,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 					return
 				}
 				if !reflect.DeepEqual(got.Spec, tt.want) {
-					t.Errorf("overrideDefaults() \ngot = %+v, \nwant %+v", got.Spec, tt.want.(*v1.PersistentVolumeClaim).Spec)
+					t.Errorf("overrideDefaults() \ngot = %+v, \nwant %+v", got.Spec, tt.want)
 				}
 			}
 
