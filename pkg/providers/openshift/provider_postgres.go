@@ -10,6 +10,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	errorUtil "github.com/pkg/errors"
@@ -17,6 +18,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -134,6 +136,88 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 }
 
 func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) error {
+	// check deployment status
+	dpl := &appsv1.Deployment{}
+	err := p.Client.Get(ctx, types.NamespacedName{Name: ps.Name, Namespace: ps.Namespace}, dpl)
+	if err != nil {
+		if k8serr.IsNotFound(err) {
+			return nil
+		}
+		return errorUtil.Wrap(err, "failed to get postgres deployment")
+	}
+
+	for _, s := range dpl.Status.Conditions {
+		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
+			// delete service
+			p.Logger.Info("Deleting postgres service")
+			svc := &v1.Service{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      ps.Name,
+					Namespace: ps.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, svc)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete postgres service")
+			}
+
+			// delete pv
+			p.Logger.Info("Deleting postgres persistent volume")
+			pv := &v1.PersistentVolume{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      ps.Name,
+					Namespace: ps.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, pv)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete postgres persistent volume")
+			}
+
+			// delete pvc
+			p.Logger.Info("Deleting postgres persistent volume claim")
+			pvc := &v1.PersistentVolumeClaim{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      ps.Name,
+					Namespace: ps.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, pvc)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete postgres persistent volume claim")
+			}
+
+			// delete secret
+			p.Logger.Info("Deleting postgres secret")
+			sec := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      defaultCredentialsSec,
+					Namespace: ps.Namespace,
+				},
+			}
+			err = p.Client.Delete(ctx, sec)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to deleted postgres secrets")
+			}
+
+			// clean up objects
+			p.Logger.Info("Deleting postgres deployment")
+			err = p.Client.Delete(ctx, dpl)
+			if err != nil && !k8serr.IsNotFound(err) {
+				return errorUtil.Wrap(err, "failed to delete postgres deployment")
+			}
+
+			// remove the finalizer added by the provider
+			p.Logger.Info("Removing postgres finalizer")
+			resources.RemoveFinalizer(&ps.ObjectMeta, DefaultFinalizer)
+			if err := p.Client.Update(ctx, ps); err != nil {
+				return errorUtil.Wrapf(err, "failed to update instance as part of the postgres finalizer reconcile")
+			}
+
+			p.Logger.Infof("deletion handler for postgres %s in namespace %s finished successfully", ps.Name, ps.Namespace)
+		}
+	}
+
 	return nil
 }
 
@@ -294,10 +378,10 @@ func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
 						{
-							Name: "postgresql-data",
+							Name: ps.Name,
 							VolumeSource: v1.VolumeSource{
 								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "postgresql-data",
+									ClaimName: ps.Name,
 								},
 							},
 						},
@@ -330,26 +414,19 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSec, defaultPostgresPassword),
 				envVarFromValue("POSTGRESQL_DATABASE", ps.Name),
 			},
-			//Resources: v1
-			// .ResourceRequirements{
-			//	Limits: v1
-			//	.ResourceList{
-			//		v1
-			//		.ResourceCPU:    resource.MustParse("500m"),
-			//		v1
-			//		.ResourceMemory: resource.MustParse("32Gi"),
-			//	},
-			//	Requests: v1
-			//	.ResourceList{
-			//		v1
-			//		.ResourceCPU:    resource.MustParse("150m"),
-			//		v1
-			//		.ResourceMemory: resource.MustParse("256Mi"),
-			//	},
-			//},
+			Resources: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("250m"),
+					v1.ResourceMemory: resource.MustParse("2Gi"),
+				},
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("50m"),
+					v1.ResourceMemory: resource.MustParse("512Mi"),
+				},
+			},
 			VolumeMounts: []v1.VolumeMount{
 				{
-					Name:      "postgresql-data",
+					Name:      ps.Name,
 					MountPath: "/var/lib/pgsql/data",
 				},
 			},
