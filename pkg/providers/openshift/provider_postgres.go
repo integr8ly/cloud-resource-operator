@@ -114,6 +114,13 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 		return nil, errorUtil.Wrap(err, "failed to get postgres deployment")
 	}
 
+	// get the cred secret
+	sec := &v1.Secret{}
+	err = p.Client.Get(ctx, types.NamespacedName{Name: defaultCredentialsSec, Namespace: ps.Namespace}, sec)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get postgres creds")
+	}
+
 	// check if deployment is ready and return connection details
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
@@ -121,10 +128,11 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 			return &providers.PostgresInstance{
 				DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
 					Connection: map[string][]byte{
-						"user":     []byte(defaultPostgresUser),
-						"password": []byte(defaultPostgresPassword),
+						"user":     sec.Data["user"],
+						"password": sec.Data["password"],
 						"uri":      []byte(fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace)),
 						"database": []byte(ps.Name),
+						"port":     []byte(fmt.Sprintf("%d", defaultPostgresPort)),
 					},
 				},
 			}, nil

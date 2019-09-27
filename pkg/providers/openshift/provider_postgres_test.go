@@ -23,6 +23,8 @@ import (
 var (
 	testPostgresName      = "test-postgres"
 	testPostgresNamespace = "test-postgres"
+	testPostgresUser      = "test-user"
+	testPostgresPassword  = "test-password"
 )
 
 func buildTestPostgresCR() *v1alpha1.Postgres {
@@ -33,6 +35,19 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 		},
 		Spec:   v1alpha1.PostgresSpec{},
 		Status: v1alpha1.PostgresStatus{},
+	}
+}
+
+func buildTestPostgresDeployment() *appsv1.Deployment {
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testPostgresName,
+			Namespace: testPostgresNamespace,
+		},
 	}
 }
 
@@ -57,14 +72,32 @@ func buildTestPostgresDeploymentReady() *appsv1.Deployment {
 	}
 }
 
+func buildTestCredsSecret() *v1.Secret {
+	return &v1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultCredentialsSec,
+			Namespace: testPostgresNamespace,
+		},
+		Data: map[string][]byte{
+			"user":     []byte(testPostgresUser),
+			"password": []byte(testPostgresPassword),
+		},
+	}
+}
+
 func buildTestPostgresInstance() *providers.PostgresInstance {
 	return &providers.PostgresInstance{
 		DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
 			Connection: map[string][]byte{
-				"user":     []byte(defaultPostgresUser),
-				"password": []byte(defaultPostgresPassword),
+				"user":     []byte(testPostgresUser),
+				"password": []byte(testPostgresPassword),
 				"uri":      []byte(fmt.Sprintf("%s.%s.svc.cluster.local", testPostgresName, testPostgresNamespace)),
 				"database": []byte(testPostgresName),
+				"port":     []byte(fmt.Sprintf("%d", defaultPostgresPort)),
 			},
 		},
 	}
@@ -83,7 +116,6 @@ func buildTestConfigManager(strategy string) *ConfigManagerMock {
 func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
-		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
 
@@ -120,7 +152,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR()),
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -145,7 +177,67 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreatePostgres() got = %v, want %v", got, tt.want)
+				t.Errorf("CreatePostgres() got = %+v, want %+v", got.DeploymentDetails, tt.want.DeploymentDetails)
+			}
+		})
+	}
+}
+
+func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type fields struct {
+		Client        client.Client
+		Logger        *logrus.Entry
+		ConfigManager ConfigManager
+	}
+	type args struct {
+		ctx      context.Context
+		postgres *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "test successful delete",
+			fields: fields{
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR()),
+				Logger:        testLogger,
+				ConfigManager: nil,
+			},
+			args: args{
+				ctx:      context.TODO(),
+				postgres: buildTestPostgresCR(),
+			},
+		},
+		{
+			name: "test delete when deployment not ready",
+			fields: fields{
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeployment(), buildTestPostgresCR()),
+				Logger:        testLogger,
+				ConfigManager: nil,
+			},
+			args: args{
+				ctx:      context.TODO(),
+				postgres: buildTestPostgresCR(),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &OpenShiftPostgresProvider{
+				Client:        tt.fields.Client,
+				Logger:        tt.fields.Logger,
+				ConfigManager: tt.fields.ConfigManager,
+			}
+			if err := p.DeletePostgres(tt.args.ctx, tt.args.postgres); (err != nil) != tt.wantErr {
+				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
