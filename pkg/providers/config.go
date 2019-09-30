@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	errorUtil "github.com/pkg/errors"
@@ -52,8 +56,7 @@ func NewConfigManager(cm string, namespace string, client client.Client) *Config
 
 // Get high-level information about the strategy used in a deployment type
 func (m *ConfigMapConfigManager) GetStrategyMappingForDeploymentType(ctx context.Context, t string) (*DeploymentStrategyMapping, error) {
-	cm := &v1.ConfigMap{}
-	err := m.client.Get(ctx, types.NamespacedName{Name: m.providerConfigMapName, Namespace: m.providerConfigMapNamespace}, cm)
+	cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.providerConfigMapName, Namespace: m.providerConfigMapNamespace}, m.buildDefaultConfigMap())
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to read provider config from configmap %s in namespace %s", m.providerConfigMapName, m.providerConfigMapNamespace)
 	}
@@ -62,4 +65,17 @@ func (m *ConfigMapConfigManager) GetStrategyMappingForDeploymentType(ctx context
 		return nil, errorUtil.Wrapf(err, "failed to unmarshal config for deployment type %s", t)
 	}
 	return dsm, nil
+}
+
+func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
+	return &v1.ConfigMap{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      m.providerConfigMapName,
+			Namespace: m.providerConfigMapNamespace,
+		},
+		Data: map[string]string{
+			"managed":  "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\"}",
+			"workshop": "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\"}",
+		},
+	}
 }

@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	errorUtil "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -91,8 +95,7 @@ func (m *ConfigMapConfigManager) GetDefaultRegionSMTPServerMapping() map[string]
 }
 
 func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, rt string, tier string) (*StrategyConfig, error) {
-	cm := &v1.ConfigMap{}
-	err := m.client.Get(ctx, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, cm)
+	cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, m.buildDefaultConfigMap())
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
@@ -105,4 +108,19 @@ func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context,
 		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
 	return strategyMapping[tier], nil
+}
+
+func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
+	return &v1.ConfigMap{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      m.configMapName,
+			Namespace: m.configMapNamespace,
+		},
+		Data: map[string]string{
+			"blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+			"redis":           "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+			"postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+		},
+	}
 }

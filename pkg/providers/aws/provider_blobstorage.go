@@ -31,6 +31,8 @@ import (
 )
 
 const (
+	blobstorageProviderName = "aws-s3"
+
 	dataBucketName          = "bucketName"
 	dataCredentialKeyID     = "credentialKeyID"
 	dataCredentialSecretKey = "credentialSecretKey"
@@ -64,14 +66,14 @@ type BlobStorageProvider struct {
 func NewAWSBlobStorageProvider(client client.Client, logger *logrus.Entry) *BlobStorageProvider {
 	return &BlobStorageProvider{
 		Client:            client,
-		Logger:            logger.WithFields(logrus.Fields{"provider": "aws_s3"}),
+		Logger:            logger.WithFields(logrus.Fields{"provider": blobstorageProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
 
 func (p *BlobStorageProvider) GetName() string {
-	return providers.AWSDeploymentStrategy
+	return blobstorageProviderName
 }
 
 func (p *BlobStorageProvider) SupportsStrategy(d string) bool {

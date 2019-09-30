@@ -98,13 +98,6 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 				return nil
 			},
 		},
-		{
-			name:        "test error is returned when config map doesn't exist",
-			cmName:      "err",
-			cmNamespace: "err",
-			client:      fakeClient,
-			expectError: true,
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

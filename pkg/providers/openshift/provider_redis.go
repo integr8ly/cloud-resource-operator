@@ -30,6 +30,8 @@ import (
 )
 
 const (
+	redisProviderName = "openshift-redis-template"
+
 	redisObjectMetaName   = "redis"
 	redisDCSelectorName   = redisObjectMetaName
 	redisConfigVolumeName = "redis-config"
@@ -49,13 +51,13 @@ type OpenShiftRedisProvider struct {
 func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
 	return &OpenShiftRedisProvider{
 		Client:        client,
-		Logger:        logger.WithFields(logrus.Fields{"provider": "openshift_redis"}),
+		Logger:        logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
 
 func (p *OpenShiftRedisProvider) GetName() string {
-	return providers.OpenShiftDeploymentStrategy
+	return redisProviderName
 }
 
 func (p *OpenShiftRedisProvider) SupportsStrategy(d string) bool {
