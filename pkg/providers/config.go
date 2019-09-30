@@ -74,8 +74,8 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.providerConfigMapNamespace,
 		},
 		Data: map[string]string{
-			"managed":  "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\"}",
-			"workshop": "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\"}",
+			"managed":  "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\", \"redis\":\"aws\", \"postgres\":\"aws\"}",
+			"workshop": "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
 		},
 	}
 }

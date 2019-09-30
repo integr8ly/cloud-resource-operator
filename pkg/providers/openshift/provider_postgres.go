@@ -30,6 +30,8 @@ import (
 )
 
 var (
+	postgresProviderName = "openshift-postgres-template"
+
 	defaultPostgresPort        = 5432
 	defaultPostgresUser        = "user"
 	defaultPostgresPassword    = "password"
@@ -76,13 +78,13 @@ type OpenShiftPostgresProvider struct {
 func NewOpenShiftPostgresProvider(client client.Client, logger *logrus.Entry) *OpenShiftPostgresProvider {
 	return &OpenShiftPostgresProvider{
 		Client:        client,
-		Logger:        logger.WithFields(logrus.Fields{"provider": "openshift_postgres"}),
+		Logger:        logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
 
 func (p *OpenShiftPostgresProvider) GetName() string {
-	return providers.OpenShiftDeploymentStrategy
+	return postgresProviderName
 }
 
 func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
