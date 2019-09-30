@@ -133,7 +133,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 			return reconcile.Result{}, err
 		}
 		if redis == nil {
-			r.logger.Info("waiting for redis cluster to become available")
+			r.logger.Info("Waiting for redis cluster to become available")
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 

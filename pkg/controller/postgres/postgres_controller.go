@@ -126,13 +126,14 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, nil
 		}
 
+		// create the postgres instance
 		ps, err := p.CreatePostgres(r.ctx, instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
-			return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		// return the connection secret

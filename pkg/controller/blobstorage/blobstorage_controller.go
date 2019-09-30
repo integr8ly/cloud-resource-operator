@@ -39,7 +39,12 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileBlobStorage{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	client := mgr.GetClient()
+	ctx := context.TODO()
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
+	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(client, logger)}
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
+	return &ReconcileBlobStorage{client: client, scheme: mgr.GetScheme(), logger: logger, ctx: ctx, providerList: providerList, cfgMgr: cfgMgr}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -65,20 +70,20 @@ var _ reconcile.Reconciler = &ReconcileBlobStorage{}
 type ReconcileBlobStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client       client.Client
+	scheme       *runtime.Scheme
+	logger       *logrus.Entry
+	ctx          context.Context
+	providerList []providers.BlobStorageProvider
+	cfgMgr       providers.ConfigManager
 }
 
 func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	ctx := context.TODO()
-	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
-	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(r.client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, r.client)
+	r.logger.Info("Reconciling BlobStorage")
 
-	logger.Info("Reconciling BlobStorage")
 	// Fetch the BlobStorage instance
 	instance := &integreatlyv1alpha1.BlobStorage{}
-	err := r.client.Get(ctx, request.NamespacedName, instance)
+	err := r.client.Get(r.ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -90,35 +95,37 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
+	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
-	for _, p := range providerList {
+	for _, p := range r.providerList {
 		if !p.SupportsStrategy(stratMap.BlobStorage) {
 			continue
 		}
 		if instance.GetDeletionTimestamp() != nil {
-			if err := p.DeleteStorage(ctx, instance); err != nil {
+			if err := p.DeleteStorage(r.ctx, instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 			return reconcile.Result{}, nil
 		}
 
-		bsi, err := p.CreateStorage(ctx, instance)
+		bsi, err := p.CreateStorage(r.ctx, instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 		if bsi == nil {
-			return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
+			r.logger.Info("Secret data is still reconciling, blob storage is nil")
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
+
 		sec := &corev1.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
 				Name:      instance.Spec.SecretRef.Name,
 				Namespace: instance.Namespace,
 			},
 		}
-		_, err = controllerruntime.CreateOrUpdate(ctx, r.client, sec, func(existing runtime.Object) error {
+		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*corev1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
@@ -133,7 +140,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.BlobStorage
 		instance.Status.Provider = p.GetName()
-		if err = r.client.Status().Update(ctx, instance); err != nil {
+		if err = r.client.Status().Update(r.ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
