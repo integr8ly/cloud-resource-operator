@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -130,7 +129,8 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 			logrus.Info("found existing redis cluster")
 			primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
 			connData := map[string][]byte{
-				"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
+				"uri":  []byte(*primaryEndpoint.Address),
+				"port": []byte(strconv.FormatInt(*primaryEndpoint.Port, 10)),
 			}
 			return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}, nil
 		}

@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strconv"
 
@@ -101,7 +100,8 @@ func buildTestRedisCluster() *providers.RedisCluster {
 		Port:    testPort,
 	}
 	connData := map[string][]byte{
-		"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
+		"uri":  []byte(*primaryEndpoint.Address),
+		"port": []byte(strconv.FormatInt(*primaryEndpoint.Port, 10)),
 	}
 	return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}
 }
