@@ -131,6 +131,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
+			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
 			return reconcile.Result{}, errorUtil.New("secret data is still reconciling")
 		}
 

@@ -23,6 +23,7 @@ import (
 var (
 	testPostgresName      = "test-postgres"
 	testPostgresNamespace = "test-postgres"
+	testPostgresDatabase  = "test-postgres"
 	testPostgresUser      = "test-user"
 	testPostgresPassword  = "test-password"
 )
@@ -85,6 +86,7 @@ func buildTestCredsSecret() *v1.Secret {
 		Data: map[string][]byte{
 			"user":     []byte(testPostgresUser),
 			"password": []byte(testPostgresPassword),
+			"database": []byte(testPostgresDatabase),
 		},
 	}
 }
@@ -92,13 +94,11 @@ func buildTestCredsSecret() *v1.Secret {
 func buildTestPostgresInstance() *providers.PostgresInstance {
 	return &providers.PostgresInstance{
 		DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
-			Connection: map[string][]byte{
-				"user":     []byte(testPostgresUser),
-				"password": []byte(testPostgresPassword),
-				"uri":      []byte(fmt.Sprintf("%s.%s.svc.cluster.local", testPostgresName, testPostgresNamespace)),
-				"database": []byte(testPostgresName),
-				"port":     []byte(fmt.Sprintf("%d", defaultPostgresPort)),
-			},
+			Username: testPostgresUser,
+			Password: testPostgresPassword,
+			Database: testPostgresDatabase,
+			Port:     defaultPostgresPort,
+			Host:     fmt.Sprintf("%s.%s.svc.cluster.local", testPostgresName, testPostgresNamespace),
 		},
 	}
 }

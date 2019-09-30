@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -29,10 +30,13 @@ import (
 )
 
 var (
-	defaultPostgresPort     = 5432
-	defaultPostgresUser     = "user"
-	defaultPostgresPassword = "password"
-	defaultCredentialsSec   = "postgres-credentials"
+	defaultPostgresPort        = 5432
+	defaultPostgresUser        = "user"
+	defaultPostgresPassword    = "password"
+	defaultPostgresUserKey     = "user"
+	defaultPostgresPasswordKey = "password"
+	defaultPostgresDatabaseKey = "database"
+	defaultCredentialsSec      = "postgres-credentials"
 )
 
 // PostgresStrat to be used to unmarshal strat map
@@ -46,11 +50,21 @@ type PostgresStrat struct {
 }
 
 type OpenShiftPostgresDeploymentDetails struct {
-	Connection map[string][]byte
+	Username string
+	Password string
+	Host     string
+	Database string
+	Port     int
 }
 
 func (d *OpenShiftPostgresDeploymentDetails) Data() map[string][]byte {
-	return d.Connection
+	return map[string][]byte{
+		"username": []byte(d.Username),
+		"password": []byte(d.Password),
+		"host":     []byte(d.Host),
+		"database": []byte(d.Database),
+		"port":     []byte(strconv.Itoa(d.Port)),
+	}
 }
 
 type OpenShiftPostgresProvider struct {
@@ -124,22 +138,21 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 	// check if deployment is ready and return connection details
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
-			p.Logger.Info("found postgres deployment")
+			p.Logger.Info("Found postgres deployment")
 			return &providers.PostgresInstance{
 				DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
-					Connection: map[string][]byte{
-						"user":     sec.Data["user"],
-						"password": sec.Data["password"],
-						"uri":      []byte(fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace)),
-						"database": []byte(ps.Name),
-						"port":     []byte(fmt.Sprintf("%d", defaultPostgresPort)),
-					},
+					Username: string(sec.Data["user"]),
+					Password: string(sec.Data["password"]),
+					Database: string(sec.Data["database"]),
+					Host:     fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace),
+					Port:     defaultPostgresPort,
 				},
 			}, nil
 		}
 	}
 
 	// deployment is in progress
+	p.Logger.Info("Postgres deployment is not ready")
 	return nil, nil
 }
 
@@ -418,9 +431,9 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 				},
 			},
 			Env: []v1.EnvVar{
-				envVarFromSecret("POSTGRESQL_USER", defaultCredentialsSec, defaultPostgresUser),
-				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSec, defaultPostgresPassword),
-				envVarFromValue("POSTGRESQL_DATABASE", ps.Name),
+				envVarFromSecret("POSTGRESQL_USER", defaultCredentialsSec, defaultPostgresUserKey),
+				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSec, defaultPostgresPasswordKey),
+				envVarFromSecret("POSTGRESQL_DATABASE", defaultCredentialsSec, defaultPostgresDatabaseKey),
 			},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
@@ -482,16 +495,9 @@ func buildDefaultPostgresSecret(ps *v1alpha1.Postgres) *v1.Secret {
 		StringData: map[string]string{
 			"user":     defaultPostgresUser,
 			"password": defaultPostgresPassword,
+			"database": ps.Name,
 		},
 		Type: v1.SecretTypeOpaque,
-	}
-}
-
-// create an environment variable from a value
-func envVarFromValue(name string, value string) v1.EnvVar {
-	return v1.EnvVar{
-		Name:  name,
-		Value: value,
 	}
 }
 
