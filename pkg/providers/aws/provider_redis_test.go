@@ -2,9 +2,7 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"reflect"
-	"strconv"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -96,14 +94,10 @@ func buildReplicationGroupReady() []*elasticache.ReplicationGroup {
 }
 
 func buildTestRedisCluster() *providers.RedisCluster {
-	primaryEndpoint := &elasticache.Endpoint{
-		Address: testAddress,
-		Port:    testPort,
-	}
-	connData := map[string][]byte{
-		"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
-	}
-	return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}
+	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+		URI:  *testAddress,
+		Port: *testPort,
+	}}
 }
 
 func Test_createRedisCluster(t *testing.T) {

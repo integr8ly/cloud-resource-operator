@@ -3,8 +3,6 @@ package aws
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
@@ -32,15 +30,6 @@ const (
 	defaultNumCacheClusters  = 2
 	defaultSnapshotRetention = 30
 )
-
-// AWSRedisDeploymentDetails provider specific details about the AWS Redis Cluster created
-type AWSRedisDeploymentDetails struct {
-	Connection map[string][]byte
-}
-
-func (d *AWSRedisDeploymentDetails) Data() map[string][]byte {
-	return d.Connection
-}
 
 // AWS Redis Provider implementation for AWS Elasticache
 type AWSRedisProvider struct {
@@ -129,10 +118,10 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 		if *foundCache.Status == "available" {
 			logrus.Info("found existing redis cluster")
 			primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
-			connData := map[string][]byte{
-				"connection": []byte(fmt.Sprintf("%s:%s", *primaryEndpoint.Address, strconv.FormatInt(*primaryEndpoint.Port, 10))),
-			}
-			return &providers.RedisCluster{DeploymentDetails: &AWSRedisDeploymentDetails{Connection: connData}}, nil
+			return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+				URI:  *primaryEndpoint.Address,
+				Port: *primaryEndpoint.Port,
+			}}, nil
 		}
 		return nil, nil
 	}

@@ -36,17 +36,9 @@ const (
 	redisConfigMapName    = "redis-config"
 	redisConfigMapKey     = "redis.conf"
 	redisContainerName    = "redis"
-	redisPort             = "6379"
+	redisPort             = 6379
 	redisContainerCommand = "/opt/rh/rh-redis32/root/usr/bin/redis-server"
 )
-
-type OpenShiftRedisDeploymentDetails struct {
-	Connection map[string][]byte
-}
-
-func (d *OpenShiftRedisDeploymentDetails) Data() map[string][]byte {
-	return d.Connection
-}
 
 type OpenShiftRedisProvider struct {
 	Client        client.Client
@@ -111,11 +103,9 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
 			p.Logger.Info("found redis deployment")
-			connData := map[string][]byte{
-				"uri":  []byte(fmt.Sprintf("%s.%s.svc.cluster.local", r.Name, r.Namespace)),
-				"port": []byte(redisPort),
-			}
-			return &providers.RedisCluster{DeploymentDetails: &OpenShiftRedisDeploymentDetails{Connection: connData}}, nil
+			return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+				URI:  fmt.Sprintf("%s.%s.svc.cluster.local", r.Name, r.Namespace),
+				Port: redisPort}}, nil
 		}
 	}
 	return nil, nil

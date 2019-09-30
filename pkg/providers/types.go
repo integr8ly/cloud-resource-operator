@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 )
@@ -57,4 +58,18 @@ type RedisProvider interface {
 	SupportsStrategy(s string) bool
 	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, error)
 	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error
+}
+
+// RedisDeploymentDetails provider specific details about the AWS Redis Cluster created
+type RedisDeploymentDetails struct {
+	URI  string
+	Port int64
+}
+
+// Redis provider Data function
+func (r *RedisDeploymentDetails) Data() map[string][]byte {
+	return map[string][]byte{
+		"uri":  []byte(r.URI),
+		"port": []byte(strconv.FormatInt(r.Port, 10)),
+	}
 }
