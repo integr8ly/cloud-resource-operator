@@ -129,11 +129,9 @@ func buildTestDeploymentReady() *appsv1.Deployment {
 }
 
 func buildTestRedisCluster() *providers.RedisCluster {
-	connData := map[string][]byte{
-		"uri":  []byte(fmt.Sprintf("%s.%s.svc.cluster.local", testRedisName, testRedisNamespace)),
-		"port": []byte(redisPort),
-	}
-	return &providers.RedisCluster{DeploymentDetails: &OpenShiftRedisDeploymentDetails{Connection: connData}}
+	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+		URI:  fmt.Sprintf("%s.%s.svc.cluster.local", testRedisName, testRedisNamespace),
+		Port: redisPort}}
 }
 
 func TestOpenShiftRedisProvider_SupportsStrategy(t *testing.T) {
