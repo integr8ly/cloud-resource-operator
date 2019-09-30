@@ -39,6 +39,10 @@ type RedisCluster struct {
 	DeploymentDetails DeploymentDetails
 }
 
+type PostgresInstance struct {
+	DeploymentDetails DeploymentDetails
+}
+
 type BlobStorageProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
@@ -58,6 +62,13 @@ type RedisProvider interface {
 	SupportsStrategy(s string) bool
 	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, error)
 	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error
+}
+
+type PostgresProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, error)
+	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) error
 }
 
 // RedisDeploymentDetails provider specific details about the AWS Redis Cluster created

@@ -49,7 +49,7 @@ type OpenShiftRedisProvider struct {
 func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
 	return &OpenShiftRedisProvider{
 		Client:        client,
-		Logger:        logger.WithFields(logrus.Fields{"provider": "aws_redis"}),
+		Logger:        logger.WithFields(logrus.Fields{"provider": "openshift_redis"}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
@@ -86,7 +86,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 		return nil, errorUtil.Wrap(err, "failed to create or update redis config map")
 	}
 	// deploy deployment
-	if err := p.CreateDeploymentConfig(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
+	if err := p.CreateDeployment(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create or update redis deployment")
 	}
 	// deploy service
@@ -196,7 +196,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 	return nil
 }
 
-// getRedisConfig retrieves the redis config from the cloud-resources-openshift-strategies configmap
+// getPostgresConfig retrieves the redis config from the cloud-resources-openshift-strategies configmap
 func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*RedisStrat, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
 	if err != nil {
@@ -215,10 +215,10 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 type RedisStrat struct {
 	_ struct{} `type:"structure"`
 
-	RedisDeploymentSpec *appsv1.DeploymentSpec           `type:"deploymentSpec"`
-	RedisServiceSpec    *apiv1.ServiceSpec               `type:"serviceSpec"`
-	RedisPVCSpec        *apiv1.PersistentVolumeClaimSpec `type:"pvcSpec"`
-	RedisConfigMapData  map[string]string                `type:"configMapData"`
+	RedisDeploymentSpec *appsv1.DeploymentSpec           `json:"deploymentSpec"`
+	RedisServiceSpec    *apiv1.ServiceSpec               `json:"serviceSpec"`
+	RedisPVCSpec        *apiv1.PersistentVolumeClaimSpec `json:"pvcSpec"`
+	RedisConfigMapData  map[string]string                `json:"configMapData"`
 }
 
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
@@ -239,7 +239,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"deploymentConfig": redisDCSelectorName,
+						"deployment": redisDCSelectorName,
 					},
 				},
 			},
@@ -248,7 +248,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"deploymentConfig": redisDCSelectorName,
+					"deployment": redisDCSelectorName,
 				},
 			},
 			Replicas: int32Ptr(1),
@@ -367,7 +367,7 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"deploymentConfig": redisDCSelectorName,
+				"deployment": redisDCSelectorName,
 			},
 		},
 	}
@@ -445,7 +445,7 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 	}
 }
 
-func (p *OpenShiftRedisProvider) CreateDeploymentConfig(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
+func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
 	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 

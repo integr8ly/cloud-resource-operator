@@ -15,7 +15,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -41,7 +40,7 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildTestRedis() *v1alpha1.Redis {
+func buildTestRedisCR() *v1alpha1.Redis {
 	return &v1alpha1.Redis{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      testRedisName,
@@ -49,38 +48,6 @@ func buildTestRedis() *v1alpha1.Redis {
 		},
 		Spec:   v1alpha1.RedisSpec{},
 		Status: v1alpha1.RedisStatus{},
-	}
-}
-
-func buildTestDeployment() *appsv1.Deployment {
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-redis",
-			Namespace: "test-redis",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{},
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"deploymentConfig": redisDCSelectorName,
-					},
-				},
-			},
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
-			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"deploymentConfig": redisDCSelectorName,
-				},
-			},
-			Replicas: int32Ptr(1),
-		},
 	}
 }
 
@@ -94,34 +61,11 @@ func buildTestDeploymentReady() *appsv1.Deployment {
 			Name:      "test-redis",
 			Namespace: "test-redis",
 		},
-		Spec: appsv1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{},
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"deploymentConfig": redisDCSelectorName,
-					},
-				},
-			},
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
-			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"deploymentConfig": redisDCSelectorName,
-				},
-			},
-			Replicas: int32Ptr(1),
-		},
 		Status: appsv1.DeploymentStatus{
 			Conditions: []appsv1.DeploymentCondition{
 				{
-					Type:               appsv1.DeploymentAvailable,
-					Status:             "True",
-					LastUpdateTime:     metav1.Time{},
-					LastTransitionTime: metav1.Time{},
-					Reason:             "",
-					Message:            "",
+					Type:   appsv1.DeploymentAvailable,
+					Status: "True",
 				},
 			},
 		},
@@ -132,6 +76,14 @@ func buildTestRedisCluster() *providers.RedisCluster {
 	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
 		URI:  fmt.Sprintf("%s.%s.svc.cluster.local", testRedisName, testRedisNamespace),
 		Port: redisPort}}
+}
+
+func buildDefaultConfigManager() *ConfigManagerMock {
+	return &ConfigManagerMock{
+		ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
+			return &StrategyConfig{RawStrategy: []byte("{}")}, nil
+		},
+	}
 }
 
 func TestOpenShiftRedisProvider_SupportsStrategy(t *testing.T) {
@@ -210,19 +162,13 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestDeployment(), buildTestRedis()),
-				Logger: testLogger,
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
-						return &StrategyConfig{
-							RawStrategy: []byte("{}"),
-						}, nil
-					},
-				},
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Logger:        testLogger,
+				ConfigManager: buildDefaultConfigManager(),
 			},
 			args: args{
 				ctx:   context.TODO(),
-				redis: buildTestRedis(),
+				redis: buildTestRedisCR(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -230,19 +176,13 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedis()),
-				Logger: testLogger,
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
-						return &StrategyConfig{
-							RawStrategy: []byte("{}"),
-						}, nil
-					},
-				},
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
+				Logger:        testLogger,
+				ConfigManager: buildDefaultConfigManager(),
 			},
 			args: args{
 				ctx:   context.TODO(),
-				redis: buildTestRedis(),
+				redis: buildTestRedisCR(),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -292,19 +232,13 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 		{
 			name: "test successful deletion",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedis()),
-				Logger: testLogger,
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (config *StrategyConfig, e error) {
-						return &StrategyConfig{
-							RawStrategy: []byte("{}"),
-						}, nil
-					},
-				},
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
+				Logger:        testLogger,
+				ConfigManager: buildDefaultConfigManager(),
 			},
 			args: args{
 				ctx:   context.TODO(),
-				redis: buildTestRedis(),
+				redis: buildTestRedisCR(),
 			},
 			wantErr: false,
 		},
