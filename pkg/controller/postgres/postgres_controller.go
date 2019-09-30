@@ -123,7 +123,8 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			if err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
-			return reconcile.Result{}, nil
+			r.logger.Info("Waiting on Postgres to successfully delete")
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		// create the postgres instance

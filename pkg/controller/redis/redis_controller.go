@@ -124,7 +124,8 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 			if err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
 			}
-			return reconcile.Result{}, nil
+			r.logger.Info("Waiting for redis cluster to successfully delete")
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		// handle creation of redis and apply any finalizers to instance required for deletion

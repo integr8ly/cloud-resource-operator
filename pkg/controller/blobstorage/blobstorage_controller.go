@@ -107,7 +107,8 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			if err := p.DeleteStorage(r.ctx, instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
-			return reconcile.Result{}, nil
+			r.logger.Info("Waiting on blob storage to successfully delete")
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		bsi, err := p.CreateStorage(r.ctx, instance)
