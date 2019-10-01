@@ -20,7 +20,6 @@ Operator is running.
 |      [SMTP](./doc/smtp.md)     	|     :x:     	|  :heavy_check_mark:  	|
 
 ## Running the Cloud Resource Operator
-
 ## Locally
 
 Prerequisites:
@@ -62,14 +61,15 @@ $ make cluster/clean
 
 ***In development***
 
-## Usage
+## Deployment
+Two config maps are expected by the operator, which will provide configuration needed to outline the deployment methods and strategies available to the Cloud Resources.
 ### Provider
-A config map object is expected to exist with a mapping from type name to deployment method, and example of this can be seen [here](deploy/examples/cloud_resource_config.yaml)
+A config map object is expected to exist with a mapping from type name to deployment method, an example of this can be seen [here](deploy/examples/cloud_resource_config.yaml).
 ### Strategy 
 A config map object is expected to exist for each provider that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml)
 ### Custom Resources
 With a `Provider` and `Strategy` config map in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
-In the spec of this CR, we outline the Secret name where we want the blob storage information to be output. The `tier` outlines the `Strategy` we wish to use. The `type` references the `Provider` to be used.
+In the spec of this CR, we outline the secret name where we want the blob storage information to be output. If the provider type were AWS, for example, the output secret would contain connection information to the S3 bucket that was created. The `tier` outlines the `Strategy` we wish to use. The `type` references the deployment to be used.
 ```
 spec:
   # i want my blob storage information output in a Secret named blob-test in the current namespace

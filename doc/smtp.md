@@ -7,4 +7,4 @@ $ make cluster/prepare
 $ make cluster/seed/smtp
 ```
 ### AWS Strategy
-A JSON object containing two keys - `region`, which is a supported [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region).
+A JSON object containing a `region` key, which is a supported [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region).   

@@ -8,8 +8,7 @@ $ make cluster/seed/postgres
 ```
 
 ### Kubernetes/Openshift Strategy
-For Kubernetes/Openshift the JSON object contains a single key, `strategy`. The `strategy` object can contain the  following keys which are used to overwrite specific object configuration: 
-- [PostgresDeploymentSpec](https://godoc.org/k8s.io/api/apps/v1#DeploymentSpec)
+For Kubernetes/Openshift the JSON object contains a single key, `strategy`. The `strategy` object can contain the  following keys, which are used to overwrite specific object configuration: - [PostgresDeploymentSpec](https://godoc.org/k8s.io/api/apps/v1#DeploymentSpec)
 - [PostgresServiceSpec](https://godoc.org/k8s.io/api/core/v1#ServiceSpec)
 - [PostgresPVCSpec](https://godoc.org/k8s.io/api/core/v1#PersistentVolumeClaimSpec)
 - PostgresSecretData - A JSON object with the following keys 
