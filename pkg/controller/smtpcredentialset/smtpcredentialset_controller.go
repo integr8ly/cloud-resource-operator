@@ -116,7 +116,7 @@ func (r *ReconcileSMTPCredentialSet) reconcile(ctx context.Context, request reco
 			if err = p.DeleteSMTPCredentials(ctx, instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
-			r.logger.Infof("waiting on successful deletion handler for smtp credential instance %s", instance.Name)
+			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 		smtpCredentialSetInst, err := p.CreateSMTPCredentials(ctx, instance)
