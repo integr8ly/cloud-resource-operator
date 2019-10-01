@@ -64,9 +64,9 @@ $ make cluster/clean
 
 ## Usage
 ### Provider
-A config map object is expected to exist with a mapping from type name to deployment method, and example of this can be seen [here](./deploy/examples/config_aws_provider.yaml)
+A config map object is expected to exist with a mapping from type name to deployment method, and example of this can be seen [here](deploy/examples/cloud_resource_config.yaml)
 ### Strategy 
-A config map object is expected to exist for each provider that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](./deploy/examples/config_aws_strat.yaml)
+A config map object is expected to exist for each provider that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml)
 ### Custom Resources
 With a `Provider` and `Strategy` config map in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
 In the spec of this CR, we outline the Secret name where we want the blob storage information to be output. The `tier` outlines the `Strategy` we wish to use. The `type` references the `Provider` to be used.
