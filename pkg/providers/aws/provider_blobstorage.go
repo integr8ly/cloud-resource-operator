@@ -153,7 +153,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		return errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(fmt.Sprintf("%s-%s", bs.Namespace, bs.Name))
+		bucketCreateCfg.Bucket = aws.String(bs.Name)
 	}
 
 	// get provider aws creds so the bucket can be deleted
