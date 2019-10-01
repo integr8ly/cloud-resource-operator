@@ -11,8 +11,15 @@ Operator is running.
 
 ***Note: This operator is in the very early stages of development. There will be bugs and regular breaking changes***
 
-## Running the Cloud Resource Operator
+## Supported Cloud Resources
+| Cloud Resource 	| Openshift 	| AWS 	|
+|:--------------:	|:---------:	|:---------:	|
+|  [Blob Storage](./doc/blobstorage.md)  	|     :x:     	| :heavy_check_mark: 	|
+|     [Redis](./doc/redis.md)  	|     :heavy_check_mark:     	|  :heavy_check_mark: 	|
+|   [PostgreSQL](./doc/postgresql.md) 	|     :heavy_check_mark:     	|  :x:  	|
+|      [SMTP](./doc/smtp.md)     	|     :x:     	|  :heavy_check_mark:  	|
 
+## Running the Cloud Resource Operator
 ## Locally
 
 Prerequisites:
@@ -45,10 +52,35 @@ Run the operator:
 $ make run
 ```
 
+Clean up the Kubernetes/OpenShift cluster:
+```
+$ make cluster/clean
+```
+
 ## Via the Operator Catalog
 
 ***In development***
 
+## Deployment
+Two config maps are expected by the operator, which will provide configuration needed to outline the deployment methods and strategies available to the Cloud Resources.
+### Provider
+A config map object is expected to exist with a mapping from type name to deployment method, an example of this can be seen [here](deploy/examples/cloud_resource_config.yaml).
+### Strategy 
+A config map object is expected to exist for each provider that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml)
+### Custom Resources
+With a `Provider` and `Strategy` config map in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
+In the spec of this CR, we outline the secret name where we want the blob storage information to be output. If the provider type were AWS, for example, the output secret would contain connection information to the S3 bucket that was created. The `tier` outlines the `Strategy` we wish to use. The `type` references the deployment to be used.
+```
+spec:
+  # i want my blob storage information output in a Secret named blob-test in the current namespace
+  secretRef:
+    name: blob-test
+  # i want a blob storage of a development-level tier
+  tier: development
+  # i want a blob storage for the type managed
+  type: managed
+
+```
 ## Development
 
 ### Contributing
