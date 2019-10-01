@@ -25,6 +25,8 @@ import (
 )
 
 const (
+	smtpCredentialProviderName = "aws-ses"
+
 	detailsSMTPUsernameKey = "username"
 	detailsSMTPPasswordKey = "password"
 	detailsSMTPPortKey     = "port"
@@ -63,14 +65,14 @@ type SMTPCredentialProvider struct {
 func NewAWSSMTPCredentialProvider(client client.Client, logger *logrus.Entry) *SMTPCredentialProvider {
 	return &SMTPCredentialProvider{
 		Client:            client,
-		Logger:            logger.WithFields(logrus.Fields{"provider": "aws_ses"}),
+		Logger:            logger.WithFields(logrus.Fields{"provider": smtpCredentialProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
 
 func (p *SMTPCredentialProvider) GetName() string {
-	return providers.AWSDeploymentStrategy
+	return smtpCredentialProviderName
 }
 
 func (p *SMTPCredentialProvider) SupportsStrategy(d string) bool {

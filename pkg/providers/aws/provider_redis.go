@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	redisProviderName = "aws-elasticache"
+
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
 	defaultDescription       = "A Redis replication group"
@@ -43,14 +45,14 @@ type AWSRedisProvider struct {
 func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *AWSRedisProvider {
 	return &AWSRedisProvider{
 		Client:            client,
-		Logger:            logger.WithFields(logrus.Fields{"provider": "aws_redis"}),
+		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
 
 func (p *AWSRedisProvider) GetName() string {
-	return providers.AWSDeploymentStrategy
+	return redisProviderName
 }
 
 func (p *AWSRedisProvider) SupportsStrategy(d string) bool {
