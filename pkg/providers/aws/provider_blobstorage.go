@@ -99,7 +99,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		return nil, errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(fmt.Sprintf("%s-%s", bs.Namespace, bs.Name))
+		bucketCreateCfg.Bucket = aws.String(bs.Name)
 	}
 
 	// create the credentials to be used by the end-user, whoever created the blobstorage instance
