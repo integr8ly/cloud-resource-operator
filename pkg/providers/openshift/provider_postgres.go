@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -49,24 +48,6 @@ type PostgresStrat struct {
 	PostgresServiceSpec    *v1.ServiceSpec               `json:"serviceSpec"`
 	PostgresPVCSpec        *v1.PersistentVolumeClaimSpec `json:"pvcSpec"`
 	PostgresSecretData     map[string]string             `json:"secretData"`
-}
-
-type OpenShiftPostgresDeploymentDetails struct {
-	Username string
-	Password string
-	Host     string
-	Database string
-	Port     int
-}
-
-func (d *OpenShiftPostgresDeploymentDetails) Data() map[string][]byte {
-	return map[string][]byte{
-		"username": []byte(d.Username),
-		"password": []byte(d.Password),
-		"host":     []byte(d.Host),
-		"database": []byte(d.Database),
-		"port":     []byte(strconv.Itoa(d.Port)),
-	}
 }
 
 type OpenShiftPostgresProvider struct {
@@ -142,7 +123,7 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
 			p.Logger.Info("Found postgres deployment")
 			return &providers.PostgresInstance{
-				DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
+				DeploymentDetails: &providers.PostgresDeploymentDetails{
 					Username: string(sec.Data["user"]),
 					Password: string(sec.Data["password"]),
 					Database: string(sec.Data["database"]),

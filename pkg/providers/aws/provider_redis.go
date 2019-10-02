@@ -89,8 +89,7 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
-		msg := "failed to reconcile s3 put object credentials"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, errorUtil.Wrap(err, "failed to reconcile elasticache credentials")
 	}
 
 	// setup aws redis cluster sdk session

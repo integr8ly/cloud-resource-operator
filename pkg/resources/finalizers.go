@@ -5,7 +5,7 @@ import (
 )
 
 func HasFinalizer(om *controllerruntime.ObjectMeta, finalizer string) bool {
-	return contains(om.GetFinalizers(), finalizer)
+	return Contains(om.GetFinalizers(), finalizer)
 }
 
 func AddFinalizer(om *controllerruntime.ObjectMeta, finalizer string) {
@@ -18,7 +18,7 @@ func RemoveFinalizer(om *controllerruntime.ObjectMeta, finalizer string) {
 	om.SetFinalizers(remove(om.GetFinalizers(), finalizer))
 }
 
-func contains(list []string, s string) bool {
+func Contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
 			return true

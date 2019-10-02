@@ -1,0 +1,1988 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/config.go (61.5%)</option>
+				
+				<option value="file1">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/config_moq.go (33.3%)</option>
+				
+				<option value="file2">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/credentials.go (55.7%)</option>
+				
+				<option value="file3">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/credentials_moq.go (12.5%)</option>
+				
+				<option value="file4">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/provider_blobstorage.go (29.0%)</option>
+				
+				<option value="file5">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/provider_postgres.go (51.8%)</option>
+				
+				<option value="file6">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/provider_redis.go (52.9%)</option>
+				
+				<option value="file7">github.com/integr8ly/cloud-resource-operator/pkg/providers/aws/provider_smtpcredentialset.go (78.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package aws
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+        controllerruntime "sigs.k8s.io/controller-runtime"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+        errorUtil "github.com/pkg/errors"
+        v1 "k8s.io/api/core/v1"
+        "k8s.io/apimachinery/pkg/types"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+        DefaultConfigMapName      = "cloud-resources-aws-strategies"
+        DefaultConfigMapNamespace = "kube-system"
+
+        DefaultFinalizer = "finalizers.aws.cloud-resources-operator.integreatly.org"
+        DefaultRegion    = "eu-west-1"
+
+        regionUSEast1 = "us-east-1"
+        regionUSWest2 = "us-west-2"
+        regionEUWest1 = "eu-west-1"
+
+        sesSMTPEndpointUSEast1 = "email-smtp.us-east-1.amazonaws.com"
+        sesSMTPEndpointUSWest2 = "email-smtp.us-west-2.amazonaws.com"
+        sesSMTPEndpointEUWest1 = "email-smtp.eu-west-1.amazonaws.com"
+)
+
+//go:generate moq -out config_moq.go . ConfigManager
+type ConfigManager interface {
+        ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
+        ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error)
+        GetDefaultRegionSMTPServerMapping() map[string]string
+}
+
+var _ ConfigManager = (*ConfigMapConfigManager)(nil)
+
+type ConfigMapConfigManager struct {
+        configMapName      string
+        configMapNamespace string
+        client             client.Client
+}
+
+type StrategyConfig struct {
+        Region      string          `json:"region"`
+        RawStrategy json.RawMessage `json:"strategy"`
+}
+
+func NewConfigMapConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager <span class="cov8" title="1">{
+        if cm == "" </span><span class="cov8" title="1">{
+                cm = DefaultConfigMapName
+        }</span>
+        <span class="cov8" title="1">if namespace == "" </span><span class="cov8" title="1">{
+                namespace = DefaultConfigMapNamespace
+        }</span>
+        <span class="cov8" title="1">return &amp;ConfigMapConfigManager{
+                configMapName:      cm,
+                configMapNamespace: namespace,
+                client:             client,
+        }</span>
+}
+
+func NewDefaultConfigMapConfigManager(client client.Client) *ConfigMapConfigManager <span class="cov0" title="0">{
+        return NewConfigMapConfigManager(DefaultConfigMapName, DefaultConfigMapNamespace, client)
+}</span>
+
+func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) <span class="cov8" title="1">{
+        stratCfg, err := m.getTierStrategyForProvider(ctx, string(rt), tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(rt))
+        }</span>
+        <span class="cov8" title="1">return stratCfg, nil</span>
+}
+
+func (m *ConfigMapConfigManager) ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error) <span class="cov0" title="0">{
+        stratCfg, err := m.getTierStrategyForProvider(ctx, string(providers.SMTPCredentialResourceType), tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(providers.BlobStorageResourceType))
+        }</span>
+        <span class="cov0" title="0">return stratCfg, nil</span>
+}
+
+func (m *ConfigMapConfigManager) GetDefaultRegionSMTPServerMapping() map[string]string <span class="cov0" title="0">{
+        return map[string]string{
+                regionUSEast1: sesSMTPEndpointUSEast1,
+                regionUSWest2: sesSMTPEndpointUSWest2,
+                regionEUWest1: sesSMTPEndpointEUWest1,
+        }
+}</span>
+
+func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, rt string, tier string) (*StrategyConfig, error) <span class="cov8" title="1">{
+        cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, m.buildDefaultConfigMap())
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
+        }</span>
+        <span class="cov8" title="1">rawStrategyMapping := cm.Data[rt]
+        if rawStrategyMapping == "" </span><span class="cov0" title="0">{
+                return nil, errorUtil.New(fmt.Sprintf("aws strategy for resource type %s is not defined", rt))
+        }</span>
+        <span class="cov8" title="1">var strategyMapping map[string]*StrategyConfig
+        if err = json.Unmarshal([]byte(rawStrategyMapping), &amp;strategyMapping); err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
+        }</span>
+        <span class="cov8" title="1">return strategyMapping[tier], nil</span>
+}
+
+func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap <span class="cov8" title="1">{
+        return &amp;v1.ConfigMap{
+                ObjectMeta: controllerruntime.ObjectMeta{
+                        Name:      m.configMapName,
+                        Namespace: m.configMapNamespace,
+                },
+                Data: map[string]string{
+                        "blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+                        "smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+                        "redis":           "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+                        "postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+                },
+        }
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Code generated by moq; DO NOT EDIT.
+// github.com/matryer/moq
+
+package aws
+
+import (
+        "context"
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+        "sync"
+)
+
+var (
+        lockConfigManagerMockGetDefaultRegionSMTPServerMapping sync.RWMutex
+        lockConfigManagerMockReadSMTPCredentialSetStrategy     sync.RWMutex
+        lockConfigManagerMockReadStorageStrategy               sync.RWMutex
+)
+
+// Ensure, that ConfigManagerMock does implement ConfigManager.
+// If this is not the case, regenerate this file with moq.
+var _ ConfigManager = &amp;ConfigManagerMock{}
+
+// ConfigManagerMock is a mock implementation of ConfigManager.
+//
+//     func TestSomethingThatUsesConfigManager(t *testing.T) {
+//
+//         // make and configure a mocked ConfigManager
+//         mockedConfigManager := &amp;ConfigManagerMock{
+//             GetDefaultRegionSMTPServerMappingFunc: func() map[string]string {
+//                        panic("mock out the GetDefaultRegionSMTPServerMapping method")
+//             },
+//             ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (*StrategyConfig, error) {
+//                        panic("mock out the ReadSMTPCredentialSetStrategy method")
+//             },
+//             ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+//                        panic("mock out the ReadStorageStrategy method")
+//             },
+//         }
+//
+//         // use mockedConfigManager in code that requires ConfigManager
+//         // and then make assertions.
+//
+//     }
+type ConfigManagerMock struct {
+        // GetDefaultRegionSMTPServerMappingFunc mocks the GetDefaultRegionSMTPServerMapping method.
+        GetDefaultRegionSMTPServerMappingFunc func() map[string]string
+
+        // ReadSMTPCredentialSetStrategyFunc mocks the ReadSMTPCredentialSetStrategy method.
+        ReadSMTPCredentialSetStrategyFunc func(ctx context.Context, tier string) (*StrategyConfig, error)
+
+        // ReadStorageStrategyFunc mocks the ReadStorageStrategy method.
+        ReadStorageStrategyFunc func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
+
+        // calls tracks calls to the methods.
+        calls struct {
+                // GetDefaultRegionSMTPServerMapping holds details about calls to the GetDefaultRegionSMTPServerMapping method.
+                GetDefaultRegionSMTPServerMapping []struct {
+                }
+                // ReadSMTPCredentialSetStrategy holds details about calls to the ReadSMTPCredentialSetStrategy method.
+                ReadSMTPCredentialSetStrategy []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Tier is the tier argument value.
+                        Tier string
+                }
+                // ReadStorageStrategy holds details about calls to the ReadStorageStrategy method.
+                ReadStorageStrategy []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Rt is the rt argument value.
+                        Rt providers.ResourceType
+                        // Tier is the tier argument value.
+                        Tier string
+                }
+        }
+}
+
+// GetDefaultRegionSMTPServerMapping calls GetDefaultRegionSMTPServerMappingFunc.
+func (mock *ConfigManagerMock) GetDefaultRegionSMTPServerMapping() map[string]string <span class="cov8" title="1">{
+        if mock.GetDefaultRegionSMTPServerMappingFunc == nil </span><span class="cov0" title="0">{
+                panic("ConfigManagerMock.GetDefaultRegionSMTPServerMappingFunc: method is nil but ConfigManager.GetDefaultRegionSMTPServerMapping was just called")</span>
+        }
+        <span class="cov8" title="1">callInfo := struct {
+        }{}
+        lockConfigManagerMockGetDefaultRegionSMTPServerMapping.Lock()
+        mock.calls.GetDefaultRegionSMTPServerMapping = append(mock.calls.GetDefaultRegionSMTPServerMapping, callInfo)
+        lockConfigManagerMockGetDefaultRegionSMTPServerMapping.Unlock()
+        return mock.GetDefaultRegionSMTPServerMappingFunc()</span>
+}
+
+// GetDefaultRegionSMTPServerMappingCalls gets all the calls that were made to GetDefaultRegionSMTPServerMapping.
+// Check the length with:
+//     len(mockedConfigManager.GetDefaultRegionSMTPServerMappingCalls())
+func (mock *ConfigManagerMock) GetDefaultRegionSMTPServerMappingCalls() []struct {
+} <span class="cov0" title="0">{
+        var calls []struct {
+        }
+        lockConfigManagerMockGetDefaultRegionSMTPServerMapping.RLock()
+        calls = mock.calls.GetDefaultRegionSMTPServerMapping
+        lockConfigManagerMockGetDefaultRegionSMTPServerMapping.RUnlock()
+        return calls
+}</span>
+
+// ReadSMTPCredentialSetStrategy calls ReadSMTPCredentialSetStrategyFunc.
+func (mock *ConfigManagerMock) ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error) <span class="cov8" title="1">{
+        if mock.ReadSMTPCredentialSetStrategyFunc == nil </span><span class="cov0" title="0">{
+                panic("ConfigManagerMock.ReadSMTPCredentialSetStrategyFunc: method is nil but ConfigManager.ReadSMTPCredentialSetStrategy was just called")</span>
+        }
+        <span class="cov8" title="1">callInfo := struct {
+                Ctx  context.Context
+                Tier string
+        }{
+                Ctx:  ctx,
+                Tier: tier,
+        }
+        lockConfigManagerMockReadSMTPCredentialSetStrategy.Lock()
+        mock.calls.ReadSMTPCredentialSetStrategy = append(mock.calls.ReadSMTPCredentialSetStrategy, callInfo)
+        lockConfigManagerMockReadSMTPCredentialSetStrategy.Unlock()
+        return mock.ReadSMTPCredentialSetStrategyFunc(ctx, tier)</span>
+}
+
+// ReadSMTPCredentialSetStrategyCalls gets all the calls that were made to ReadSMTPCredentialSetStrategy.
+// Check the length with:
+//     len(mockedConfigManager.ReadSMTPCredentialSetStrategyCalls())
+func (mock *ConfigManagerMock) ReadSMTPCredentialSetStrategyCalls() []struct {
+        Ctx  context.Context
+        Tier string
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx  context.Context
+                Tier string
+        }
+        lockConfigManagerMockReadSMTPCredentialSetStrategy.RLock()
+        calls = mock.calls.ReadSMTPCredentialSetStrategy
+        lockConfigManagerMockReadSMTPCredentialSetStrategy.RUnlock()
+        return calls
+}</span>
+
+// ReadStorageStrategy calls ReadStorageStrategyFunc.
+func (mock *ConfigManagerMock) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) <span class="cov0" title="0">{
+        if mock.ReadStorageStrategyFunc == nil </span><span class="cov0" title="0">{
+                panic("ConfigManagerMock.ReadStorageStrategyFunc: method is nil but ConfigManager.ReadStorageStrategy was just called")</span>
+        }
+        <span class="cov0" title="0">callInfo := struct {
+                Ctx  context.Context
+                Rt   providers.ResourceType
+                Tier string
+        }{
+                Ctx:  ctx,
+                Rt:   rt,
+                Tier: tier,
+        }
+        lockConfigManagerMockReadStorageStrategy.Lock()
+        mock.calls.ReadStorageStrategy = append(mock.calls.ReadStorageStrategy, callInfo)
+        lockConfigManagerMockReadStorageStrategy.Unlock()
+        return mock.ReadStorageStrategyFunc(ctx, rt, tier)</span>
+}
+
+// ReadStorageStrategyCalls gets all the calls that were made to ReadStorageStrategy.
+// Check the length with:
+//     len(mockedConfigManager.ReadStorageStrategyCalls())
+func (mock *ConfigManagerMock) ReadStorageStrategyCalls() []struct {
+        Ctx  context.Context
+        Rt   providers.ResourceType
+        Tier string
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx  context.Context
+                Rt   providers.ResourceType
+                Tier string
+        }
+        lockConfigManagerMockReadStorageStrategy.RLock()
+        calls = mock.calls.ReadStorageStrategy
+        lockConfigManagerMockReadStorageStrategy.RUnlock()
+        return calls
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package aws
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "k8s.io/apimachinery/pkg/api/errors"
+
+        "k8s.io/apimachinery/pkg/util/wait"
+
+        "k8s.io/apimachinery/pkg/types"
+
+        "sigs.k8s.io/controller-runtime/pkg/client"
+
+        v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+        errorUtil "github.com/pkg/errors"
+        v12 "k8s.io/api/core/v1"
+        "k8s.io/apimachinery/pkg/runtime"
+        controllerruntime "sigs.k8s.io/controller-runtime"
+        "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+const (
+        defaultProviderCredentialName = "cloud-resources-aws-credentials"
+
+        defaultCredentialsKeyIDName = "aws_access_key_id"
+        // #nosec G101
+        defaultCredentialsSecretKeyName = "aws_secret_access_key"
+)
+
+var (
+        operatorEntries = []v1.StatementEntry{
+                {
+                        Effect: "Allow",
+                        Action: []string{
+                                "s3:CreateBucket",
+                                "s3:DeleteBucket",
+                                "s3:ListBucket",
+                                "s3:ListAllMyBuckets",
+                                "s3:GetObject",
+                                "elasticache:CreateReplicationGroup",
+                                "elasticache:DeleteReplicationGroup",
+                                "elasticache:DescribeReplicationGroups",
+                                "rds:DescribeDBInstances",
+                                "rds:CreateDBInstance",
+                                "rds:DeleteDBInstance",
+                        },
+                        Resource: "*",
+                },
+        }
+        sendRawMailEntries = []v1.StatementEntry{
+                {
+                        Effect: "Allow",
+                        Action: []string{
+                                "ses:SendRawEmail",
+                        },
+                        Resource: "*",
+                },
+        }
+)
+
+func buildPutBucketObjectEntries(bucket string) []v1.StatementEntry <span class="cov0" title="0">{
+        return []v1.StatementEntry{
+                {
+                        Effect: "Allow",
+                        Action: []string{
+                                "s3:*",
+                        },
+                        Resource: fmt.Sprintf("arn:aws:s3:::%s", bucket),
+                },
+                {
+                        Effect: "Allow",
+                        Action: []string{
+                                "s3:*",
+                        },
+                        Resource: fmt.Sprintf("arn:aws:s3:::%s/*", bucket),
+                },
+        }
+}</span>
+
+type AWSCredentials struct {
+        Username        string
+        PolicyName      string
+        AccessKeyID     string
+        SecretAccessKey string
+}
+
+//go:generate moq -out credentials_moq.go . CredentialManager
+type CredentialManager interface {
+        ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error)
+        ReconcileSESCredentials(ctx context.Context, name, ns string) (*AWSCredentials, error)
+        ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error)
+        ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error)
+}
+
+var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)
+
+// CredentialMinterCredentialManager Implementation of CredentialManager using the openshift cloud credential minter
+type CredentialMinterCredentialManager struct {
+        ProviderCredentialName string
+        Client                 client.Client
+}
+
+func NewCredentialMinterCredentialManager(client client.Client) *CredentialMinterCredentialManager <span class="cov8" title="1">{
+        return &amp;CredentialMinterCredentialManager{
+                ProviderCredentialName: defaultProviderCredentialName,
+                Client:                 client,
+        }
+}</span>
+
+// Ensure the credentials the AWS provider requires are available
+func (m *CredentialMinterCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) <span class="cov0" title="0">{
+        _, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return creds, nil</span>
+}
+
+func (m *CredentialMinterCredentialManager) ReconcileSESCredentials(ctx context.Context, name, ns string) (*AWSCredentials, error) <span class="cov0" title="0">{
+        _, creds, err := m.ReconcileCredentials(ctx, name, ns, sendRawMailEntries)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return creds, nil</span>
+}
+
+func (m *CredentialMinterCredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) <span class="cov0" title="0">{
+        cr, creds, err := m.ReconcileCredentials(ctx, name, ns, buildPutBucketObjectEntries(bucket))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, err
+        }</span>
+        <span class="cov0" title="0">return creds, cr, nil</span>
+}
+
+func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) <span class="cov8" title="1">{
+        cr, err := m.reconcileCredentialRequest(ctx, name, ns, entries)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
+        }</span>
+        <span class="cov8" title="1">err = wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) </span><span class="cov8" title="1">{
+                if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil </span><span class="cov0" title="0">{
+                        if errors.IsNotFound(err) </span><span class="cov0" title="0">{
+                                return false, nil
+                        }</span>
+                        <span class="cov0" title="0">return false, err</span>
+                }
+                <span class="cov8" title="1">return cr.Status.Provisioned, nil</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "timed out waiting for credential request to become provisioned")
+        }</span>
+
+        <span class="cov8" title="1">codec, err := v1.NewCodec()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to create credentials codec")
+        }</span>
+        <span class="cov8" title="1">awsProvStatus := &amp;v1.AWSProviderStatus{}
+        if err = codec.DecodeProviderSpec(cr.Status.ProviderStatus, awsProvStatus); err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrapf(err, "failed to decode credentials request %s", cr.Name)
+        }</span>
+        <span class="cov8" title="1">accessKeyID, secAccessKey, err := m.reconcileAWSCredentials(ctx, cr)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credentials from credential request %s", cr.Name)
+        }</span>
+        <span class="cov8" title="1">return cr, &amp;AWSCredentials{
+                Username:        awsProvStatus.User,
+                PolicyName:      awsProvStatus.Policy,
+                AccessKeyID:     accessKeyID,
+                SecretAccessKey: secAccessKey,
+        }, nil</span>
+}
+
+func (m *CredentialMinterCredentialManager) reconcileCredentialRequest(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, error) <span class="cov8" title="1">{
+        codec, err := v1.NewCodec()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to create provider codec")
+        }</span>
+        <span class="cov8" title="1">providerSpec, err := codec.EncodeProviderSpec(&amp;v1.AWSProviderSpec{
+                TypeMeta: controllerruntime.TypeMeta{
+                        Kind: "AWSProviderSpec",
+                },
+                StatementEntries: entries,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to encode provider spec")
+        }</span>
+        <span class="cov8" title="1">cr := &amp;v1.CredentialsRequest{
+                ObjectMeta: controllerruntime.ObjectMeta{
+                        Name:      name,
+                        Namespace: ns,
+                },
+        }
+        _, err = controllerutil.CreateOrUpdate(ctx, m.Client, cr, func(existing runtime.Object) error </span><span class="cov8" title="1">{
+                r := existing.(*v1.CredentialsRequest)
+                r.Spec.ProviderSpec = providerSpec
+                r.Spec.SecretRef = v12.ObjectReference{
+                        Name:      name,
+                        Namespace: ns,
+                }
+                return nil
+        }</span>)
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to reconcile credential request %s in namespace %s", cr.Name, cr.Namespace)
+        }</span>
+        <span class="cov8" title="1">return cr, nil</span>
+}
+
+func (m *CredentialMinterCredentialManager) reconcileAWSCredentials(ctx context.Context, cr *v1.CredentialsRequest) (string, string, error) <span class="cov8" title="1">{
+        sec := &amp;v12.Secret{}
+        err := m.Client.Get(ctx, types.NamespacedName{Name: cr.Spec.SecretRef.Name, Namespace: cr.Spec.SecretRef.Namespace}, sec)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", "", errorUtil.Wrapf(err, "failed to get aws credentials secret %s", cr.Spec.SecretRef.Name)
+        }</span>
+        <span class="cov8" title="1">awsAccessKeyID := string(sec.Data[defaultCredentialsKeyIDName])
+        awsSecretAccessKey := string(sec.Data[defaultCredentialsSecretKeyName])
+        if awsAccessKeyID == "" </span><span class="cov0" title="0">{
+                return "", "", errorUtil.New(fmt.Sprintf("aws access key id is undefined in secret %s", sec.Name))
+        }</span>
+        <span class="cov8" title="1">if awsSecretAccessKey == "" </span><span class="cov0" title="0">{
+                return "", "", errorUtil.New(fmt.Sprintf("aws secret access key is undefined in secret %s", sec.Name))
+        }</span>
+        <span class="cov8" title="1">return awsAccessKeyID, awsSecretAccessKey, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Code generated by moq; DO NOT EDIT.
+// github.com/matryer/moq
+
+package aws
+
+import (
+        "context"
+        "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+        "sync"
+)
+
+var (
+        lockCredentialManagerMockReconcileCredentials           sync.RWMutex
+        lockCredentialManagerMockReconcileProviderCredentials   sync.RWMutex
+        lockCredentialManagerMockReconcileSESCredentials        sync.RWMutex
+        lockCredentialManagerMockReoncileBucketOwnerCredentials sync.RWMutex
+)
+
+// Ensure, that CredentialManagerMock does implement CredentialManager.
+// If this is not the case, regenerate this file with moq.
+var _ CredentialManager = &amp;CredentialManagerMock{}
+
+// CredentialManagerMock is a mock implementation of CredentialManager.
+//
+//     func TestSomethingThatUsesCredentialManager(t *testing.T) {
+//
+//         // make and configure a mocked CredentialManager
+//         mockedCredentialManager := &amp;CredentialManagerMock{
+//             ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) {
+//                        panic("mock out the ReconcileCredentials method")
+//             },
+//             ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*AWSCredentials, error) {
+//                        panic("mock out the ReconcileProviderCredentials method")
+//             },
+//             ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (*AWSCredentials, error) {
+//                        panic("mock out the ReconcileSESCredentials method")
+//             },
+//             ReoncileBucketOwnerCredentialsFunc: func(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
+//                        panic("mock out the ReoncileBucketOwnerCredentials method")
+//             },
+//         }
+//
+//         // use mockedCredentialManager in code that requires CredentialManager
+//         // and then make assertions.
+//
+//     }
+type CredentialManagerMock struct {
+        // ReconcileCredentialsFunc mocks the ReconcileCredentials method.
+        ReconcileCredentialsFunc func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error)
+
+        // ReconcileProviderCredentialsFunc mocks the ReconcileProviderCredentials method.
+        ReconcileProviderCredentialsFunc func(ctx context.Context, ns string) (*AWSCredentials, error)
+
+        // ReconcileSESCredentialsFunc mocks the ReconcileSESCredentials method.
+        ReconcileSESCredentialsFunc func(ctx context.Context, name string, ns string) (*AWSCredentials, error)
+
+        // ReoncileBucketOwnerCredentialsFunc mocks the ReoncileBucketOwnerCredentials method.
+        ReoncileBucketOwnerCredentialsFunc func(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error)
+
+        // calls tracks calls to the methods.
+        calls struct {
+                // ReconcileCredentials holds details about calls to the ReconcileCredentials method.
+                ReconcileCredentials []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Name is the name argument value.
+                        Name string
+                        // Ns is the ns argument value.
+                        Ns string
+                        // Entries is the entries argument value.
+                        Entries []v1.StatementEntry
+                }
+                // ReconcileProviderCredentials holds details about calls to the ReconcileProviderCredentials method.
+                ReconcileProviderCredentials []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Ns is the ns argument value.
+                        Ns string
+                }
+                // ReconcileSESCredentials holds details about calls to the ReconcileSESCredentials method.
+                ReconcileSESCredentials []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Name is the name argument value.
+                        Name string
+                        // Ns is the ns argument value.
+                        Ns string
+                }
+                // ReoncileBucketOwnerCredentials holds details about calls to the ReoncileBucketOwnerCredentials method.
+                ReoncileBucketOwnerCredentials []struct {
+                        // Ctx is the ctx argument value.
+                        Ctx context.Context
+                        // Name is the name argument value.
+                        Name string
+                        // Ns is the ns argument value.
+                        Ns string
+                        // Bucket is the bucket argument value.
+                        Bucket string
+                }
+        }
+}
+
+// ReconcileCredentials calls ReconcileCredentialsFunc.
+func (mock *CredentialManagerMock) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) <span class="cov0" title="0">{
+        if mock.ReconcileCredentialsFunc == nil </span><span class="cov0" title="0">{
+                panic("CredentialManagerMock.ReconcileCredentialsFunc: method is nil but CredentialManager.ReconcileCredentials was just called")</span>
+        }
+        <span class="cov0" title="0">callInfo := struct {
+                Ctx     context.Context
+                Name    string
+                Ns      string
+                Entries []v1.StatementEntry
+        }{
+                Ctx:     ctx,
+                Name:    name,
+                Ns:      ns,
+                Entries: entries,
+        }
+        lockCredentialManagerMockReconcileCredentials.Lock()
+        mock.calls.ReconcileCredentials = append(mock.calls.ReconcileCredentials, callInfo)
+        lockCredentialManagerMockReconcileCredentials.Unlock()
+        return mock.ReconcileCredentialsFunc(ctx, name, ns, entries)</span>
+}
+
+// ReconcileCredentialsCalls gets all the calls that were made to ReconcileCredentials.
+// Check the length with:
+//     len(mockedCredentialManager.ReconcileCredentialsCalls())
+func (mock *CredentialManagerMock) ReconcileCredentialsCalls() []struct {
+        Ctx     context.Context
+        Name    string
+        Ns      string
+        Entries []v1.StatementEntry
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx     context.Context
+                Name    string
+                Ns      string
+                Entries []v1.StatementEntry
+        }
+        lockCredentialManagerMockReconcileCredentials.RLock()
+        calls = mock.calls.ReconcileCredentials
+        lockCredentialManagerMockReconcileCredentials.RUnlock()
+        return calls
+}</span>
+
+// ReconcileProviderCredentials calls ReconcileProviderCredentialsFunc.
+func (mock *CredentialManagerMock) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) <span class="cov0" title="0">{
+        if mock.ReconcileProviderCredentialsFunc == nil </span><span class="cov0" title="0">{
+                panic("CredentialManagerMock.ReconcileProviderCredentialsFunc: method is nil but CredentialManager.ReconcileProviderCredentials was just called")</span>
+        }
+        <span class="cov0" title="0">callInfo := struct {
+                Ctx context.Context
+                Ns  string
+        }{
+                Ctx: ctx,
+                Ns:  ns,
+        }
+        lockCredentialManagerMockReconcileProviderCredentials.Lock()
+        mock.calls.ReconcileProviderCredentials = append(mock.calls.ReconcileProviderCredentials, callInfo)
+        lockCredentialManagerMockReconcileProviderCredentials.Unlock()
+        return mock.ReconcileProviderCredentialsFunc(ctx, ns)</span>
+}
+
+// ReconcileProviderCredentialsCalls gets all the calls that were made to ReconcileProviderCredentials.
+// Check the length with:
+//     len(mockedCredentialManager.ReconcileProviderCredentialsCalls())
+func (mock *CredentialManagerMock) ReconcileProviderCredentialsCalls() []struct {
+        Ctx context.Context
+        Ns  string
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx context.Context
+                Ns  string
+        }
+        lockCredentialManagerMockReconcileProviderCredentials.RLock()
+        calls = mock.calls.ReconcileProviderCredentials
+        lockCredentialManagerMockReconcileProviderCredentials.RUnlock()
+        return calls
+}</span>
+
+// ReconcileSESCredentials calls ReconcileSESCredentialsFunc.
+func (mock *CredentialManagerMock) ReconcileSESCredentials(ctx context.Context, name string, ns string) (*AWSCredentials, error) <span class="cov8" title="1">{
+        if mock.ReconcileSESCredentialsFunc == nil </span><span class="cov0" title="0">{
+                panic("CredentialManagerMock.ReconcileSESCredentialsFunc: method is nil but CredentialManager.ReconcileSESCredentials was just called")</span>
+        }
+        <span class="cov8" title="1">callInfo := struct {
+                Ctx  context.Context
+                Name string
+                Ns   string
+        }{
+                Ctx:  ctx,
+                Name: name,
+                Ns:   ns,
+        }
+        lockCredentialManagerMockReconcileSESCredentials.Lock()
+        mock.calls.ReconcileSESCredentials = append(mock.calls.ReconcileSESCredentials, callInfo)
+        lockCredentialManagerMockReconcileSESCredentials.Unlock()
+        return mock.ReconcileSESCredentialsFunc(ctx, name, ns)</span>
+}
+
+// ReconcileSESCredentialsCalls gets all the calls that were made to ReconcileSESCredentials.
+// Check the length with:
+//     len(mockedCredentialManager.ReconcileSESCredentialsCalls())
+func (mock *CredentialManagerMock) ReconcileSESCredentialsCalls() []struct {
+        Ctx  context.Context
+        Name string
+        Ns   string
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx  context.Context
+                Name string
+                Ns   string
+        }
+        lockCredentialManagerMockReconcileSESCredentials.RLock()
+        calls = mock.calls.ReconcileSESCredentials
+        lockCredentialManagerMockReconcileSESCredentials.RUnlock()
+        return calls
+}</span>
+
+// ReoncileBucketOwnerCredentials calls ReoncileBucketOwnerCredentialsFunc.
+func (mock *CredentialManagerMock) ReoncileBucketOwnerCredentials(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) <span class="cov0" title="0">{
+        if mock.ReoncileBucketOwnerCredentialsFunc == nil </span><span class="cov0" title="0">{
+                panic("CredentialManagerMock.ReoncileBucketOwnerCredentialsFunc: method is nil but CredentialManager.ReoncileBucketOwnerCredentials was just called")</span>
+        }
+        <span class="cov0" title="0">callInfo := struct {
+                Ctx    context.Context
+                Name   string
+                Ns     string
+                Bucket string
+        }{
+                Ctx:    ctx,
+                Name:   name,
+                Ns:     ns,
+                Bucket: bucket,
+        }
+        lockCredentialManagerMockReoncileBucketOwnerCredentials.Lock()
+        mock.calls.ReoncileBucketOwnerCredentials = append(mock.calls.ReoncileBucketOwnerCredentials, callInfo)
+        lockCredentialManagerMockReoncileBucketOwnerCredentials.Unlock()
+        return mock.ReoncileBucketOwnerCredentialsFunc(ctx, name, ns, bucket)</span>
+}
+
+// ReoncileBucketOwnerCredentialsCalls gets all the calls that were made to ReoncileBucketOwnerCredentials.
+// Check the length with:
+//     len(mockedCredentialManager.ReoncileBucketOwnerCredentialsCalls())
+func (mock *CredentialManagerMock) ReoncileBucketOwnerCredentialsCalls() []struct {
+        Ctx    context.Context
+        Name   string
+        Ns     string
+        Bucket string
+} <span class="cov0" title="0">{
+        var calls []struct {
+                Ctx    context.Context
+                Name   string
+                Ns     string
+                Bucket string
+        }
+        lockCredentialManagerMockReoncileBucketOwnerCredentials.RLock()
+        calls = mock.calls.ReoncileBucketOwnerCredentials
+        lockCredentialManagerMockReoncileBucketOwnerCredentials.RUnlock()
+        return calls
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package aws
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "time"
+
+        "github.com/aws/aws-sdk-go/service/s3/s3iface"
+        "github.com/sirupsen/logrus"
+        "k8s.io/apimachinery/pkg/util/wait"
+
+        "github.com/aws/aws-sdk-go/aws/awserr"
+
+        v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+        controllerruntime "sigs.k8s.io/controller-runtime"
+
+        "github.com/aws/aws-sdk-go/aws/credentials"
+        "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+
+        "github.com/aws/aws-sdk-go/aws"
+
+        "github.com/aws/aws-sdk-go/aws/session"
+        "github.com/aws/aws-sdk-go/service/s3"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+        errorUtil "github.com/pkg/errors"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+        blobstorageProviderName = "aws-s3"
+
+        dataBucketName          = "bucketName"
+        dataCredentialKeyID     = "credentialKeyID"
+        dataCredentialSecretKey = "credentialSecretKey"
+)
+
+// BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
+type BlobStorageDeploymentDetails struct {
+        BucketName          string
+        CredentialKeyID     string
+        CredentialSecretKey string
+}
+
+func (d *BlobStorageDeploymentDetails) Data() map[string][]byte <span class="cov0" title="0">{
+        return map[string][]byte{
+                dataBucketName:          []byte(d.BucketName),
+                dataCredentialKeyID:     []byte(d.CredentialKeyID),
+                dataCredentialSecretKey: []byte(d.CredentialSecretKey),
+        }
+}</span>
+
+var _ providers.BlobStorageProvider = (*BlobStorageProvider)(nil)
+
+// BlobStorageProvider BlobStorageProvider implementation for AWS S3
+type BlobStorageProvider struct {
+        Client            client.Client
+        Logger            *logrus.Entry
+        CredentialManager CredentialManager
+        ConfigManager     ConfigManager
+}
+
+func NewAWSBlobStorageProvider(client client.Client, logger *logrus.Entry) *BlobStorageProvider <span class="cov0" title="0">{
+        return &amp;BlobStorageProvider{
+                Client:            client,
+                Logger:            logger.WithFields(logrus.Fields{"provider": blobstorageProviderName}),
+                CredentialManager: NewCredentialMinterCredentialManager(client),
+                ConfigManager:     NewDefaultConfigMapConfigManager(client),
+        }
+}</span>
+
+func (p *BlobStorageProvider) GetName() string <span class="cov0" title="0">{
+        return blobstorageProviderName
+}</span>
+
+func (p *BlobStorageProvider) SupportsStrategy(d string) bool <span class="cov0" title="0">{
+        return d == providers.AWSDeploymentStrategy
+}</span>
+
+// CreateStorage Create S3 bucket from strategy config and credentials to interact with it
+func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, error) <span class="cov0" title="0">{
+        p.Logger.Infof("creating blob storage instance %s via aws s3", bs.Name)
+        // handle provider-specific finalizer
+        p.Logger.Infof("adding finalizer to blob storage instance %s", bs.Name)
+        if bs.GetDeletionTimestamp() == nil </span><span class="cov0" title="0">{
+                resources.AddFinalizer(&amp;bs.ObjectMeta, DefaultFinalizer)
+                if err := p.Client.Update(ctx, bs); err != nil </span><span class="cov0" title="0">{
+                        return nil, errorUtil.Wrapf(err, "failed to add finalizer to blob storage instance %s", bs.Name)
+                }</span>
+        }
+
+        // info about the bucket to be created
+        <span class="cov0" title="0">p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
+        bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
+        }</span>
+        <span class="cov0" title="0">if bucketCreateCfg.Bucket == nil </span><span class="cov0" title="0">{
+                bucketCreateCfg.Bucket = aws.String(bs.Name)
+        }</span>
+
+        // create the credentials to be used by the end-user, whoever created the blobstorage instance
+        <span class="cov0" title="0">endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+        p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
+        endUserCreds, _, err := p.CredentialManager.ReoncileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
+        }</span>
+
+        // create the credentials to be used by the aws resource providers, not to be used by end-user
+        <span class="cov0" title="0">p.Logger.Infof("creating provider credentials for creating s3 buckets, in namespace %s", bs.Namespace)
+        providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to reconcile aws blob storage provider credentials for blob storage instance %s", bs.Name)
+        }</span>
+
+        // setup aws s3 sdk session
+        <span class="cov0" title="0">p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
+        sess := session.Must(session.NewSession(&amp;aws.Config{
+                Region:      aws.String(stratCfg.Region),
+                Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
+        }))
+        s3svc := s3.New(sess)
+
+        // pre-create the blobstorageinstance that will be returned if everything is successful
+        bsi := &amp;providers.BlobStorageInstance{
+                DeploymentDetails: &amp;BlobStorageDeploymentDetails{
+                        BucketName:          *bucketCreateCfg.Bucket,
+                        CredentialKeyID:     endUserCreds.AccessKeyID,
+                        CredentialSecretKey: endUserCreds.SecretAccessKey,
+                },
+        }
+
+        // create bucket if it doesn't already exist, if it does exist then use the existing bucket
+        p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
+        if err := p.reconcileBucketCreate(ctx, s3svc, bucketCreateCfg); err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to reconcile aws s3 bucket %s", *bucketCreateCfg.Bucket)
+        }</span>
+        <span class="cov0" title="0">p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
+        return bsi, nil</span>
+}
+
+// DeleteStorage Delete S3 bucket and credentials to add objects to it
+func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error <span class="cov0" title="0">{
+        p.Logger.Infof("deleting blob storage instance %s via aws s3", bs.Name)
+        // resolve bucket information for bucket created by provider
+        p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
+        bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
+        if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
+        }</span>
+        <span class="cov0" title="0">if bucketCreateCfg.Bucket == nil </span><span class="cov0" title="0">{
+                bucketCreateCfg.Bucket = aws.String(bs.Name)
+        }</span>
+
+        // get provider aws creds so the bucket can be deleted
+        <span class="cov0" title="0">p.Logger.Infof("creating provider credentials for creating s3 buckets, in namespace %s", bs.Namespace)
+        providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to reconcile aws provider credentials for blob storage instance %s", bs.Name)
+        }</span>
+        <span class="cov0" title="0">sess := session.Must(session.NewSession(&amp;aws.Config{
+                Region:      aws.String(stratCfg.Region),
+                Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
+        }))
+
+        // delete the bucket that was created by the provider
+        p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
+        s3svc := s3.New(sess)
+
+        if err = p.reconcileBucketDelete(ctx, s3svc, bucketCreateCfg); err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s", *bucketCreateCfg.Bucket)
+        }</span>
+
+        // remove the credentials request created by the provider
+        <span class="cov0" title="0">endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+        p.Logger.Infof("deleting end-user credential request %s in namespace %s", endUserCredsName, bs.Namespace)
+        endUserCredsReq := &amp;v1.CredentialsRequest{
+                ObjectMeta: controllerruntime.ObjectMeta{
+                        Name:      endUserCredsName,
+                        Namespace: bs.Namespace,
+                },
+        }
+        if err := p.Client.Delete(ctx, endUserCredsReq); err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+        }</span>
+
+        // remove the finalizer added by the provider
+        <span class="cov0" title="0">p.Logger.Infof("deleting finalizer %s from blob storage instance %s in namespace %s", DefaultFinalizer, bs.Name, bs.Namespace)
+        resources.RemoveFinalizer(&amp;bs.ObjectMeta, DefaultFinalizer)
+        if err := p.Client.Update(ctx, bs); err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to update instance %s as part of finalizer reconcile", bs.Name)
+        }</span>
+        <span class="cov0" title="0">p.Logger.Infof("deletion handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
+        return nil</span>
+}
+
+func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error <span class="cov8" title="1">{
+        _, err := s3svc.DeleteBucket(&amp;s3.DeleteBucketInput{
+                Bucket: bucketCfg.Bucket,
+        })
+        s3err, isAWSErr := err.(awserr.Error)
+        if err != nil &amp;&amp; !isAWSErr </span><span class="cov8" title="1">{
+                return errorUtil.Wrapf(err, "failed to delete s3 bucket %s", *bucketCfg.Bucket)
+        }</span>
+        <span class="cov8" title="1">if err != nil &amp;&amp; isAWSErr </span><span class="cov0" title="0">{
+                if s3err.Code() != s3.ErrCodeNoSuchBucket </span><span class="cov0" title="0">{
+                        return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCfg.Bucket)
+                }</span>
+        }
+        <span class="cov8" title="1">err = s3svc.WaitUntilBucketNotExists(&amp;s3.HeadBucketInput{
+                Bucket: bucketCfg.Bucket,
+        })
+        if err != nil </span><span class="cov8" title="1">{
+                return errorUtil.Wrapf(err, "failed to wait for s3 bucket deletion, %s", *bucketCfg.Bucket)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error <span class="cov8" title="1">{
+        // the aws access key can sometimes still not be registered in aws on first try, so loop
+        p.Logger.Infof("listing existing aws s3 buckets")
+        var existingBuckets []*s3.Bucket
+        err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) </span><span class="cov8" title="1">{
+                listOutput, err := s3svc.ListBuckets(nil)
+                if err != nil </span><span class="cov0" title="0">{
+                        return false, nil
+                }</span>
+                <span class="cov8" title="1">existingBuckets = listOutput.Buckets
+                return true, nil</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrap(err, "timed out waiting to list s3 buckets")
+        }</span>
+
+        // create bucket if it doesn't already exist, if it does exist then use the existing bucket
+        <span class="cov8" title="1">p.Logger.Infof("checking if aws s3 bucket %s already exists", *bucketCfg.Bucket)
+        var foundBucket *s3.Bucket
+        for _, b := range existingBuckets </span><span class="cov8" title="1">{
+                if *b.Name == *bucketCfg.Bucket </span><span class="cov8" title="1">{
+                        foundBucket = b
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if foundBucket != nil </span><span class="cov8" title="1">{
+                p.Logger.Infof("bucket %s already exists, using that", *foundBucket.Name)
+                return nil
+        }</span>
+        <span class="cov8" title="1">p.Logger.Infof("bucket %s not found, creating bucket", *bucketCfg.Bucket)
+        _, err = s3svc.CreateBucket(bucketCfg)
+        if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to create s3 bucket %s", *bucketCfg.Bucket)
+        }</span>
+        <span class="cov8" title="1">p.Logger.Infof("reconcile for aws s3 bucket completed successfully, bucket created")
+        return nil</span>
+}
+
+func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *StrategyConfig, error) <span class="cov0" title="0">{
+        stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.BlobStorageResourceType, bs.Spec.Tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
+        }</span>
+        <span class="cov0" title="0">if stratCfg.Region == "" </span><span class="cov0" title="0">{
+                p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", DefaultRegion)
+                stratCfg.Region = DefaultRegion
+        }</span>
+
+        // delete the s3 bucket created by the provider
+        <span class="cov0" title="0">s3cbi := &amp;s3.CreateBucketInput{}
+        if err = json.Unmarshal(stratCfg.RawStrategy, s3cbi); err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
+        }</span>
+        <span class="cov0" title="0">return s3cbi, stratCfg, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package aws
+
+import (
+        "context"
+        "encoding/json"
+        "strings"
+        "time"
+
+        "k8s.io/apimachinery/pkg/types"
+
+        v1 "k8s.io/api/core/v1"
+        "k8s.io/apimachinery/pkg/runtime"
+        "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+        "github.com/google/uuid"
+
+        "k8s.io/apimachinery/pkg/util/wait"
+
+        "github.com/aws/aws-sdk-go/aws"
+        "github.com/aws/aws-sdk-go/aws/credentials"
+        "github.com/aws/aws-sdk-go/aws/session"
+        "github.com/aws/aws-sdk-go/service/rds/rdsiface"
+        "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+        "github.com/aws/aws-sdk-go/service/rds"
+        "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+        "github.com/sirupsen/logrus"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+
+        errorUtil "github.com/pkg/errors"
+        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+        postgresProviderName                 = "aws-rds"
+        defaultAwsPostgresDeletionProtection = true
+        defaultAwsPostgresPort               = 5432
+        defaultAwsPostgresUser               = "postgres"
+        defaultAwsAllocatedStorage           = 20
+        defaultAwsPostgresDatabase           = "postgres"
+        defaultAwsBackupRetentionPeriod      = 31
+        defaultAwsDBInstanceIdentifier       = "default-identifier"
+        defaultAwsDBInstanceClass            = "db.t2.small"
+        defaultAwsEngine                     = "postgres"
+        defaultAwsEngineVersion              = "10.6"
+        defaultAwsPubliclyAccessible         = false
+
+        defaultCredentialsSec      = "-aws-rds-credentials"
+        defaultPostgresUserKey     = "user"
+        defaultPostgresPasswordKey = "password"
+)
+
+var (
+        defaultSupportedEngineVersions = []string{"10.6", "9.6", "9.5"}
+        defaultAwsPostgresPassword     = ""
+)
+
+type AWSPostgresProvider struct {
+        Client            client.Client
+        Logger            *logrus.Entry
+        CredentialManager CredentialManager
+        ConfigManager     ConfigManager
+}
+
+func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *AWSPostgresProvider <span class="cov0" title="0">{
+        return &amp;AWSPostgresProvider{
+                Client:            client,
+                Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
+                CredentialManager: NewCredentialMinterCredentialManager(client),
+                ConfigManager:     NewDefaultConfigMapConfigManager(client),
+        }
+}</span>
+
+func (p *AWSPostgresProvider) GetName() string <span class="cov0" title="0">{
+        return postgresProviderName
+}</span>
+
+func (p *AWSPostgresProvider) SupportsStrategy(d string) bool <span class="cov0" title="0">{
+        return d == providers.AWSDeploymentStrategy
+}</span>
+
+// CreatePostgres creates an RDS Instance from strategy config
+func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, r *v1alpha1.Postgres) (*providers.PostgresInstance, error) <span class="cov0" title="0">{
+        // handle provider-specific finalizer
+        if r.GetDeletionTimestamp() == nil </span><span class="cov0" title="0">{
+                resources.AddFinalizer(&amp;r.ObjectMeta, DefaultFinalizer)
+                if err := p.Client.Update(ctx, r); err != nil </span><span class="cov0" title="0">{
+                        return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
+                }</span>
+        }
+
+        // info about the RDS instance to be created
+        <span class="cov0" title="0">postgresCfg, stratCfg, err := p.getPostgresConfig(ctx, r)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to retrieve aws RDS cluster config for instance %s", r.Name)
+        }</span>
+        <span class="cov0" title="0">if postgresCfg.DBInstanceIdentifier == nil </span><span class="cov0" title="0">{
+                postgresCfg.DBInstanceIdentifier = aws.String(r.Name)
+        }</span>
+
+        // create the credentials to be used by the aws resource providers, not to be used by end-user
+        <span class="cov0" title="0">provoiderCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to reconcile RDS credentials")
+        }</span>
+
+        // create credentials secret
+        <span class="cov0" title="0">if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(r)); err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to create or update postgres secret")
+        }</span>
+
+        // setup aws RDS instance sdk session
+        <span class="cov0" title="0">cacheSvc := createPostgresService(stratCfg, provoiderCreds)
+
+        // create the aws RDS instance
+        return p.createPostgresInstance(ctx, r, cacheSvc, postgresCfg)</span>
+}
+
+func createPostgresService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) rdsiface.RDSAPI <span class="cov0" title="0">{
+        sess := session.Must(session.NewSession(&amp;aws.Config{
+                Region:      aws.String(stratCfg.Region),
+                Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
+        }))
+        return rds.New(sess)
+}</span>
+
+func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, error) <span class="cov8" title="1">{
+        // the aws access key can sometimes still not be registered in aws on first try, so loop
+        pi, err := getPostgresInstances(rdsSvc)
+        if err != nil </span><span class="cov0" title="0">{
+                // return nil error so this function can be requeued
+                logrus.Info("error getting replication groups : ", err)
+                return nil, err
+        }</span>
+
+        // verify postgresConfig
+        <span class="cov8" title="1">verifyPostgresConfig(postgresCfg)
+
+        credSec := &amp;v1.Secret{}
+        if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredentialsSec, Namespace: cr.Namespace}, credSec); err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to retrieve postgres credential secret")
+        }</span>
+
+        <span class="cov8" title="1">for k, p := range credSec.Data </span><span class="cov0" title="0">{
+                if k == defaultPostgresPasswordKey </span><span class="cov0" title="0">{
+                        defaultAwsPostgresPassword = string(p)
+                }</span>
+        }
+
+        // check if the cluster has already been created
+        <span class="cov8" title="1">var foundInstance *rds.DBInstance
+        for _, i := range pi </span><span class="cov8" title="1">{
+                if *i.DBInstanceIdentifier == *postgresCfg.DBInstanceIdentifier </span><span class="cov8" title="1">{
+                        foundInstance = i
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if foundInstance != nil </span><span class="cov8" title="1">{
+                if *foundInstance.DBInstanceStatus == "available" </span><span class="cov8" title="1">{
+                        logrus.Info("found existing rds instance")
+                        mi := verifyPostgresChange(postgresCfg, foundInstance)
+                        if mi != nil </span><span class="cov8" title="1">{
+                                _, err = rdsSvc.ModifyDBInstance(mi)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">return nil, nil</span>
+                        }
+                        <span class="cov8" title="1">return &amp;providers.PostgresInstance{DeploymentDetails: &amp;providers.PostgresDeploymentDetails{
+                                Username: *foundInstance.MasterUsername,
+                                Password: defaultAwsPostgresPassword,
+                                Host:     *foundInstance.Endpoint.Address,
+                                Database: *foundInstance.DBName,
+                                Port:     int(*foundInstance.Endpoint.Port),
+                        }}, nil</span>
+                }
+                <span class="cov0" title="0">return nil, nil</span>
+        }
+
+        <span class="cov8" title="1">logrus.Info("creating rds instance")
+        _, err = rdsSvc.CreateDBInstance(postgresCfg)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return nil, nil</span>
+}
+
+func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) error <span class="cov0" title="0">{
+        //todo delete the cred secret as part of delete func
+        return nil
+}</span>
+
+func getPostgresInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) <span class="cov8" title="1">{
+        var pi []*rds.DBInstance
+        err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) </span><span class="cov8" title="1">{
+                listOutput, err := cacheSvc.DescribeDBInstances(&amp;rds.DescribeDBInstancesInput{})
+                if err != nil </span><span class="cov0" title="0">{
+                        return false, nil
+                }</span>
+                <span class="cov8" title="1">pi = listOutput.DBInstances
+                return true, nil</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return pi, nil</span>
+}
+
+func (p *AWSPostgresProvider) getPostgresConfig(ctx context.Context, r *v1alpha1.Postgres) (*rds.CreateDBInstanceInput, *StrategyConfig, error) <span class="cov0" title="0">{
+        stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, r.Spec.Tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
+        }</span>
+        <span class="cov0" title="0">if stratCfg.Region == "" </span><span class="cov0" title="0">{
+                stratCfg.Region = DefaultRegion
+        }</span>
+
+        <span class="cov0" title="0">postgresConfig := &amp;rds.CreateDBInstanceInput{}
+        if err := json.Unmarshal(stratCfg.RawStrategy, postgresConfig); err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws postgres cluster configuration")
+        }</span>
+        <span class="cov0" title="0">return postgresConfig, stratCfg, nil</span>
+}
+
+func verifyPostgresChange(postgresConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput <span class="cov8" title="1">{
+        updateFound := false
+
+        mi := &amp;rds.ModifyDBInstanceInput{}
+        mi.DBInstanceIdentifier = postgresConfig.DBInstanceIdentifier
+
+        if *postgresConfig.DeletionProtection != *foundConfig.DeletionProtection </span><span class="cov0" title="0">{
+                mi.DeletionProtection = postgresConfig.DeletionProtection
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.Port != *foundConfig.Endpoint.Port </span><span class="cov0" title="0">{
+                mi.DBPortNumber = postgresConfig.Port
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod </span><span class="cov0" title="0">{
+                mi.BackupRetentionPeriod = postgresConfig.BackupRetentionPeriod
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.DBInstanceClass != *foundConfig.DBInstanceClass </span><span class="cov0" title="0">{
+                mi.DBInstanceClass = postgresConfig.DBInstanceClass
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.PubliclyAccessible != *foundConfig.PubliclyAccessible </span><span class="cov0" title="0">{
+                mi.PubliclyAccessible = postgresConfig.PubliclyAccessible
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.AllocatedStorage != *foundConfig.AllocatedStorage </span><span class="cov0" title="0">{
+                mi.AllocatedStorage = postgresConfig.AllocatedStorage
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if *postgresConfig.EngineVersion != *foundConfig.EngineVersion </span><span class="cov8" title="1">{
+                mi.EngineVersion = postgresConfig.EngineVersion
+                updateFound = true
+        }</span>
+        <span class="cov8" title="1">if !updateFound </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">return mi</span>
+}
+
+func verifyPostgresConfig(postgresConfig *rds.CreateDBInstanceInput) <span class="cov8" title="1">{
+        if postgresConfig.DeletionProtection == nil </span><span class="cov8" title="1">{
+                postgresConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.MasterUsername == nil </span><span class="cov8" title="1">{
+                postgresConfig.MasterUsername = aws.String(defaultAwsPostgresUser)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.MasterUserPassword == nil </span><span class="cov8" title="1">{
+                postgresConfig.MasterUserPassword = aws.String(defaultAwsPostgresPassword)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.Port == nil </span><span class="cov8" title="1">{
+                postgresConfig.Port = aws.Int64(defaultAwsPostgresPort)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.DBName == nil </span><span class="cov8" title="1">{
+                postgresConfig.DBName = aws.String(defaultAwsPostgresDatabase)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.BackupRetentionPeriod == nil </span><span class="cov8" title="1">{
+                postgresConfig.BackupRetentionPeriod = aws.Int64(defaultAwsBackupRetentionPeriod)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.DBInstanceIdentifier == nil </span><span class="cov8" title="1">{
+                postgresConfig.DBInstanceIdentifier = aws.String(defaultAwsDBInstanceIdentifier)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.DBInstanceClass == nil </span><span class="cov8" title="1">{
+                postgresConfig.DBInstanceClass = aws.String(defaultAwsDBInstanceClass)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.PubliclyAccessible == nil </span><span class="cov8" title="1">{
+                postgresConfig.PubliclyAccessible = aws.Bool(defaultAwsPubliclyAccessible)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.AllocatedStorage == nil </span><span class="cov8" title="1">{
+                postgresConfig.AllocatedStorage = aws.Int64(defaultAwsAllocatedStorage)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.EngineVersion == nil </span><span class="cov8" title="1">{
+                postgresConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+        }</span>
+        <span class="cov8" title="1">if postgresConfig.EngineVersion != nil </span><span class="cov8" title="1">{
+                if !resources.Contains(defaultSupportedEngineVersions, *postgresConfig.EngineVersion) </span><span class="cov0" title="0">{
+                        postgresConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+                }</span>
+        }
+        <span class="cov8" title="1">postgresConfig.Engine = aws.String(defaultAwsEngine)</span>
+
+}
+
+func GeneratePassword() (string, error) <span class="cov0" title="0">{
+        generatedPassword, err := uuid.NewRandom()
+        if err != nil </span><span class="cov0" title="0">{
+                return "", errorUtil.Wrap(err, "error generating password")
+        }</span>
+        <span class="cov0" title="0">return strings.Replace(generatedPassword.String(), "-", "", 10), nil</span>
+}
+
+func (p *AWSPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secret) error <span class="cov0" title="0">{
+        or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error </span><span class="cov0" title="0">{
+                return nil
+        }</span>)
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to create or update secret %s, action was %s", s.Name, or)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func buildDefaultPostgresSecret(ps *v1alpha1.Postgres) *v1.Secret <span class="cov0" title="0">{
+        password, err := GeneratePassword()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov0" title="0">return &amp;v1.Secret{
+                TypeMeta: metav1.TypeMeta{
+                        APIVersion: "v1",
+                        Kind:       "Secret",
+                },
+                ObjectMeta: metav1.ObjectMeta{
+                        Name:      ps.Name + defaultCredentialsSec,
+                        Namespace: ps.Namespace,
+                },
+                StringData: map[string]string{
+                        defaultPostgresUserKey:     defaultAwsPostgresUser,
+                        defaultPostgresPasswordKey: password,
+                },
+                Type: v1.SecretTypeOpaque,
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package aws
+
+import (
+        "context"
+        "encoding/json"
+        "time"
+
+        "github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+        "github.com/sirupsen/logrus"
+
+        "github.com/aws/aws-sdk-go/aws"
+        "github.com/aws/aws-sdk-go/aws/awserr"
+        "github.com/aws/aws-sdk-go/aws/credentials"
+        "github.com/aws/aws-sdk-go/aws/session"
+        "github.com/aws/aws-sdk-go/service/elasticache"
+        "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+        "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+        "k8s.io/apimachinery/pkg/util/wait"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+
+        errorUtil "github.com/pkg/errors"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+        redisProviderName = "aws-elasticache"
+
+        defaultCacheNodeType     = "cache.t2.micro"
+        defaultEngineVersion     = "3.2.10"
+        defaultDescription       = "A Redis replication group"
+        defaultNumCacheClusters  = 2
+        defaultSnapshotRetention = 30
+)
+
+// AWS Redis Provider implementation for AWS Elasticache
+type AWSRedisProvider struct {
+        Client            client.Client
+        Logger            *logrus.Entry
+        CredentialManager CredentialManager
+        ConfigManager     ConfigManager
+        CacheSvc          elasticacheiface.ElastiCacheAPI
+}
+
+func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *AWSRedisProvider <span class="cov0" title="0">{
+        return &amp;AWSRedisProvider{
+                Client:            client,
+                Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
+                CredentialManager: NewCredentialMinterCredentialManager(client),
+                ConfigManager:     NewDefaultConfigMapConfigManager(client),
+        }
+}</span>
+
+func (p *AWSRedisProvider) GetName() string <span class="cov0" title="0">{
+        return redisProviderName
+}</span>
+
+func (p *AWSRedisProvider) SupportsStrategy(d string) bool <span class="cov0" title="0">{
+        return d == providers.AWSDeploymentStrategy
+}</span>
+
+// CreateRedis Create an Elasticache Replication Group from strategy config
+func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, error) <span class="cov0" title="0">{
+        // handle provider-specific finalizer
+        if r.GetDeletionTimestamp() == nil </span><span class="cov0" title="0">{
+                resources.AddFinalizer(&amp;r.ObjectMeta, DefaultFinalizer)
+                if err := p.Client.Update(ctx, r); err != nil </span><span class="cov0" title="0">{
+                        return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
+                }</span>
+        }
+
+        // info about the redis cluster to be created
+        <span class="cov0" title="0">redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to retrieve aws redis cluster config for instance %s", r.Name)
+        }</span>
+        <span class="cov0" title="0">if redisConfig.ReplicationGroupId == nil </span><span class="cov0" title="0">{
+                redisConfig.ReplicationGroupId = aws.String(r.Name)
+        }</span>
+
+        // create the credentials to be used by the aws resource providers, not to be used by end-user
+        <span class="cov0" title="0">providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to reconcile elasticache credentials")
+        }</span>
+
+        // setup aws redis cluster sdk session
+        <span class="cov0" title="0">cacheSvc := createCacheService(stratCfg, providerCreds)
+
+        // create the aws redis cluster
+        return createRedisCluster(cacheSvc, redisConfig)</span>
+}
+
+func createCacheService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) elasticacheiface.ElastiCacheAPI <span class="cov0" title="0">{
+        sess := session.Must(session.NewSession(&amp;aws.Config{
+                Region:      aws.String(stratCfg.Region),
+                Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
+        }))
+        return elasticache.New(sess)
+}</span>
+
+func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput) (*providers.RedisCluster, error) <span class="cov8" title="1">{
+        // the aws access key can sometimes still not be registered in aws on first try, so loop
+        rgs, err := getReplicationGroups(cacheSvc)
+        if err != nil </span><span class="cov0" title="0">{
+                // return nil error so this function can be requeueed
+                logrus.Info("error getting replication groups:", err)
+                return nil, err
+        }</span>
+
+        // check if the cluster has already been created
+        <span class="cov8" title="1">var foundCache *elasticache.ReplicationGroup
+        for _, c := range rgs </span><span class="cov8" title="1">{
+                if *c.ReplicationGroupId == *redisConfig.ReplicationGroupId </span><span class="cov8" title="1">{
+                        foundCache = c
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if foundCache != nil </span><span class="cov8" title="1">{
+                if *foundCache.Status == "available" </span><span class="cov8" title="1">{
+                        logrus.Info("found existing redis cluster")
+                        primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
+                        return &amp;providers.RedisCluster{DeploymentDetails: &amp;providers.RedisDeploymentDetails{
+                                URI:  *primaryEndpoint.Address,
+                                Port: *primaryEndpoint.Port,
+                        }}, nil
+                }</span>
+                <span class="cov8" title="1">return nil, nil</span>
+        }
+
+        // the cluster doesn't exist, so create it
+        // verify that all values are set or use defaults
+        <span class="cov8" title="1">logrus.Info("creating redis cluster")
+        verifyRedisConfig(redisConfig)
+        input := &amp;elasticache.CreateReplicationGroupInput{
+                AutomaticFailoverEnabled:    aws.Bool(true),
+                Engine:                      aws.String("redis"),
+                ReplicationGroupId:          redisConfig.ReplicationGroupId,
+                CacheNodeType:               redisConfig.CacheNodeType,
+                EngineVersion:               redisConfig.EngineVersion,
+                ReplicationGroupDescription: redisConfig.ReplicationGroupDescription,
+                NumCacheClusters:            redisConfig.NumCacheClusters,
+                SnapshotRetentionLimit:      redisConfig.SnapshotRetentionLimit,
+        }
+        _, err = cacheSvc.CreateReplicationGroup(input)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return nil, nil</span>
+}
+
+// DeleteStorage Delete elasticache replication group
+func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error <span class="cov0" title="0">{
+        // resolve redis information for redis created by provider
+        redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
+        if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to retrieve aws redis config for instance %s", r.Name)
+        }</span>
+        <span class="cov0" title="0">if redisConfig.ReplicationGroupId == nil </span><span class="cov0" title="0">{
+                redisConfig.ReplicationGroupId = aws.String(r.Name)
+        }</span>
+
+        // get provider aws creds so the redis cluster can be deleted
+        <span class="cov0" title="0">providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrap(err, "failed to reconcile aws provider credentials")
+        }</span>
+
+        // setup aws redis cluster sdk session
+        <span class="cov0" title="0">cacheSvc := createCacheService(stratCfg, providerCreds)
+
+        // delete the redis cluster
+        return p.deleteRedisCluster(cacheSvc, redisConfig, ctx, r)</span>
+}
+
+func (p *AWSRedisProvider) deleteRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) error <span class="cov8" title="1">{
+        // the aws access key can sometimes still not be registered in aws on first try, so loop
+        rgs, err := getReplicationGroups(cacheSvc)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // check if the cluster has already been deleted
+        <span class="cov8" title="1">var foundCache *elasticache.ReplicationGroup
+        for _, c := range rgs </span><span class="cov8" title="1">{
+                if *c.ReplicationGroupId == *redisConfig.ReplicationGroupId </span><span class="cov8" title="1">{
+                        foundCache = c
+                        break</span>
+                }
+        }
+        // check if replication group does not exist and delete finalizer
+        <span class="cov8" title="1">if foundCache == nil </span><span class="cov8" title="1">{
+                // remove the finalizer added by the provider
+                resources.RemoveFinalizer(&amp;r.ObjectMeta, DefaultFinalizer)
+                if err := p.Client.Update(ctx, r); err != nil </span><span class="cov0" title="0">{
+                        return errorUtil.Wrapf(err, "failed to update instance as part of finalizer reconcile")
+                }</span>
+                <span class="cov8" title="1">return nil</span>
+        }
+        // check if replication group exists and is available
+        <span class="cov8" title="1">if *foundCache.Status == "available" </span><span class="cov8" title="1">{
+                // delete the redis cluster that was created by the provider
+                _, err = cacheSvc.DeleteReplicationGroup(&amp;elasticache.DeleteReplicationGroupInput{
+                        ReplicationGroupId:   redisConfig.ReplicationGroupId,
+                        RetainPrimaryCluster: aws.Bool(false),
+                })
+                redisErr, isAwsErr := err.(awserr.Error)
+                if err != nil &amp;&amp; !isAwsErr </span><span class="cov0" title="0">{
+                        return errorUtil.Wrapf(err, "failed to delete elasticache cluster %s", *redisConfig.ReplicationGroupId)
+                }</span>
+                <span class="cov8" title="1">if err != nil &amp;&amp; isAwsErr </span><span class="cov0" title="0">{
+                        if redisErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault </span><span class="cov0" title="0">{
+                                return errorUtil.Wrapf(err, "failed to delete elasticache cluster %s, aws error", *redisConfig.ReplicationGroupId)
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+// poll for replication groups
+func getReplicationGroups(cacheSvc elasticacheiface.ElastiCacheAPI) ([]*elasticache.ReplicationGroup, error) <span class="cov8" title="1">{
+        var rgs []*elasticache.ReplicationGroup
+        err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) </span><span class="cov8" title="1">{
+                listOutput, err := cacheSvc.DescribeReplicationGroups(&amp;elasticache.DescribeReplicationGroupsInput{})
+                if err != nil </span><span class="cov0" title="0">{
+                        return false, nil
+                }</span>
+                <span class="cov8" title="1">rgs = listOutput.ReplicationGroups
+                return true, nil</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return rgs, nil</span>
+}
+
+// getRedisConfig retrieves the redis config from the cloud-resources-aws-strategies configmap
+func (p *AWSRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*elasticache.CreateReplicationGroupInput, *StrategyConfig, error) <span class="cov0" title="0">{
+        stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
+        }</span>
+        <span class="cov0" title="0">if stratCfg.Region == "" </span><span class="cov0" title="0">{
+                stratCfg.Region = DefaultRegion
+        }</span>
+
+        // unmarshal the redis cluster config
+        <span class="cov0" title="0">redisConfig := &amp;elasticache.CreateReplicationGroupInput{}
+        if err := json.Unmarshal(stratCfg.RawStrategy, redisConfig); err != nil </span><span class="cov0" title="0">{
+                return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws redis cluster configuration")
+        }</span>
+        <span class="cov0" title="0">return redisConfig, stratCfg, nil</span>
+}
+
+// verifyRedisConfig checks redis config, if none exist sets values to default
+func verifyRedisConfig(redisConfig *elasticache.CreateReplicationGroupInput) <span class="cov8" title="1">{
+        if redisConfig.CacheNodeType == nil </span><span class="cov8" title="1">{
+                redisConfig.CacheNodeType = aws.String(defaultCacheNodeType)
+        }</span>
+        <span class="cov8" title="1">if redisConfig.ReplicationGroupDescription == nil </span><span class="cov8" title="1">{
+                redisConfig.ReplicationGroupDescription = aws.String(defaultDescription)
+        }</span>
+        <span class="cov8" title="1">if redisConfig.EngineVersion == nil </span><span class="cov8" title="1">{
+                redisConfig.EngineVersion = aws.String(defaultEngineVersion)
+        }</span>
+        <span class="cov8" title="1">if redisConfig.NumCacheClusters == nil </span><span class="cov8" title="1">{
+                redisConfig.NumCacheClusters = aws.Int64(defaultNumCacheClusters)
+        }</span>
+        <span class="cov8" title="1">if redisConfig.SnapshotRetentionLimit == nil </span><span class="cov8" title="1">{
+                redisConfig.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package aws
+
+import (
+        "context"
+        "crypto/hmac"
+        "crypto/sha256"
+        "encoding/base64"
+        "fmt"
+        "strconv"
+
+        "k8s.io/apimachinery/pkg/api/errors"
+
+        v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+        controllerruntime "sigs.k8s.io/controller-runtime"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+        "github.com/sirupsen/logrus"
+
+        "github.com/integr8ly/cloud-resource-operator/pkg/providers"
+
+        errorUtil "github.com/pkg/errors"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+        smtpCredentialProviderName = "aws-ses"
+
+        detailsSMTPUsernameKey = "username"
+        detailsSMTPPasswordKey = "password"
+        detailsSMTPPortKey     = "port"
+        detailsSMTPHostKey     = "host"
+        detailsSMTPTLSKey      = "tls"
+)
+
+// SMTPCredentialSetDetails Provider-specific details about SMTP credentials derived from an AWS IAM role
+type SMTPCredentialSetDetails struct {
+        Username string
+        Password string
+        Port     int
+        Host     string
+        TLS      bool
+}
+
+func (d *SMTPCredentialSetDetails) Data() map[string][]byte <span class="cov8" title="1">{
+        return map[string][]byte{
+                detailsSMTPUsernameKey: []byte(d.Username),
+                detailsSMTPPasswordKey: []byte(d.Password),
+                detailsSMTPPortKey:     []byte(strconv.Itoa(d.Port)),
+                detailsSMTPHostKey:     []byte(d.Host),
+                detailsSMTPTLSKey:      []byte(strconv.FormatBool(d.TLS)),
+        }
+}</span>
+
+var _ providers.SMTPCredentialsProvider = (*SMTPCredentialProvider)(nil)
+
+type SMTPCredentialProvider struct {
+        Client            client.Client
+        Logger            *logrus.Entry
+        CredentialManager CredentialManager
+        ConfigManager     ConfigManager
+}
+
+func NewAWSSMTPCredentialProvider(client client.Client, logger *logrus.Entry) *SMTPCredentialProvider <span class="cov0" title="0">{
+        return &amp;SMTPCredentialProvider{
+                Client:            client,
+                Logger:            logger.WithFields(logrus.Fields{"provider": smtpCredentialProviderName}),
+                CredentialManager: NewCredentialMinterCredentialManager(client),
+                ConfigManager:     NewDefaultConfigMapConfigManager(client),
+        }
+}</span>
+
+func (p *SMTPCredentialProvider) GetName() string <span class="cov0" title="0">{
+        return smtpCredentialProviderName
+}</span>
+
+func (p *SMTPCredentialProvider) SupportsStrategy(d string) bool <span class="cov8" title="1">{
+        p.Logger.Infof("checking for support of strategy %s, supported strategies are %s", d, providers.AWSDeploymentStrategy)
+        return providers.AWSDeploymentStrategy == d
+}</span>
+
+func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, error) <span class="cov8" title="1">{
+        p.Logger.Infof("creating smtp credential instance %s via aws ses", smtpCreds.Name)
+
+        // handle provider-specific finalizer
+        p.Logger.Infof("adding finalizer to smtp credentials instance %s", smtpCreds.Name)
+        if smtpCreds.GetDeletionTimestamp() == nil </span><span class="cov8" title="1">{
+                resources.AddFinalizer(&amp;smtpCreds.ObjectMeta, DefaultFinalizer)
+                if err := p.Client.Update(ctx, smtpCreds); err != nil </span><span class="cov0" title="0">{
+                        return nil, errorUtil.Wrapf(err, "failed to add finalizer to smtp credential instance %s", smtpCreds.Name)
+                }</span>
+        }
+
+        // retrieve deployment strategy for provided tier
+        <span class="cov8" title="1">p.Logger.Infof("getting credential set strategy from aws config")
+        stratCfg, err := p.ConfigManager.ReadSMTPCredentialSetStrategy(ctx, smtpCreds.Spec.Tier)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to read deployment strategy for smtp credential instance %s", smtpCreds.Name)
+        }</span>
+        <span class="cov8" title="1">awsRegion := stratCfg.Region
+        if awsRegion == "" </span><span class="cov0" title="0">{
+                awsRegion = DefaultRegion
+        }</span>
+        <span class="cov8" title="1">sesSMTPHost := p.ConfigManager.GetDefaultRegionSMTPServerMapping()[awsRegion]
+        if sesSMTPHost == "" </span><span class="cov8" title="1">{
+                return nil, errorUtil.New(fmt.Sprintf("unsupported aws ses smtp region %s", sesSMTPHost))
+        }</span>
+
+        // create smtp credentials from generated iam role
+        <span class="cov8" title="1">p.Logger.Info("creating iam role required to send mail through aws ses")
+        sendMailCreds, err := p.CredentialManager.ReconcileSESCredentials(ctx, smtpCreds.Name, smtpCreds.Namespace)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrapf(err, "failed to create aws ses credentials request for smtp credentials instance %s", smtpCreds.Name)
+        }</span>
+
+        <span class="cov8" title="1">p.Logger.Info("creating smtp credentials from created iam role")
+        smtpPass, err := getSMTPPasswordFromAWSSecret(sendMailCreds.SecretAccessKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to create smtp credentials from aws iam role")
+        }</span>
+        // hardcoded settings based on https://docs.aws.amazon.com/ses/latest/DeveloperGuide/configure-email-client.html
+        <span class="cov8" title="1">smtpCredsInst := &amp;providers.SMTPCredentialSetInstance{
+                DeploymentDetails: &amp;SMTPCredentialSetDetails{
+                        Username: sendMailCreds.AccessKeyID,
+                        Password: smtpPass,
+                        Port:     465,
+                        Host:     sesSMTPHost,
+                        TLS:      true,
+                },
+        }
+        p.Logger.Infof("creation handler for smtp credential instance %s in namespace %s finished successfully", smtpCreds.Name, smtpCreds.Namespace)
+        return smtpCredsInst, nil</span>
+}
+
+func (p *SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error <span class="cov8" title="1">{
+        // remove the credentials request created by the provider
+        endUserCredsReq := &amp;v1.CredentialsRequest{
+                ObjectMeta: controllerruntime.ObjectMeta{
+                        Name:      smtpCreds.Name,
+                        Namespace: smtpCreds.Namespace,
+                },
+        }
+        if err := p.Client.Delete(ctx, endUserCredsReq); err != nil &amp;&amp; !errors.IsNotFound(err) </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to delete credential request %s", smtpCreds.Name)
+        }</span>
+
+        // remove the finalizer added by the provider
+        <span class="cov8" title="1">p.Logger.Infof("deleting finalizer %s from smtp credentials %s in namespace %s", DefaultFinalizer, smtpCreds.Name, smtpCreds.Namespace)
+        resources.RemoveFinalizer(&amp;smtpCreds.ObjectMeta, DefaultFinalizer)
+        if err := p.Client.Update(ctx, smtpCreds); err != nil </span><span class="cov0" title="0">{
+                return errorUtil.Wrapf(err, "failed to update instance %s as part of finalizer reconcile", smtpCreds.Name)
+        }</span>
+        <span class="cov8" title="1">p.Logger.Infof("deletion handler for smtp credentials %s in namespace %s finished successfully", smtpCreds.Name, smtpCreds.Namespace)
+        return nil</span>
+}
+
+// https://docs.aws.amazon.com/ses/latest/DeveloperGuide/example-create-smtp-credentials.html
+func getSMTPPasswordFromAWSSecret(secAccessKey string) (string, error) <span class="cov8" title="1">{
+        sig, err := makeHmac([]byte(secAccessKey), []byte("SendRawEmail"))
+        if err != nil </span><span class="cov0" title="0">{
+                return "", errorUtil.Wrap(err, "failed to create hmac using ami secret")
+        }</span>
+        <span class="cov8" title="1">sig = append([]byte{0x02}, sig...)
+        return base64.StdEncoding.EncodeToString(sig), nil</span>
+}
+
+func makeHmac(key []byte, data []byte) ([]byte, error) <span class="cov8" title="1">{
+        hash := hmac.New(sha256.New, key)
+        if _, err := hash.Write(data); err != nil </span><span class="cov0" title="0">{
+                return nil, errorUtil.Wrap(err, "failed to populate hash")
+        }</span>
+        <span class="cov8" title="1">return hash.Sum(nil), nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

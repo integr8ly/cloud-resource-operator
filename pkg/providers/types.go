@@ -84,3 +84,21 @@ func (r *RedisDeploymentDetails) Data() map[string][]byte {
 		"port": []byte(strconv.FormatInt(r.Port, 10)),
 	}
 }
+
+type PostgresDeploymentDetails struct {
+	Username string
+	Password string
+	Host     string
+	Database string
+	Port     int
+}
+
+func (d *PostgresDeploymentDetails) Data() map[string][]byte {
+	return map[string][]byte{
+		"username": []byte(d.Username),
+		"password": []byte(d.Password),
+		"host":     []byte(d.Host),
+		"database": []byte(d.Database),
+		"port":     []byte(strconv.Itoa(d.Port)),
+	}
+}
