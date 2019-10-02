@@ -10,5 +10,5 @@ spec:
     namespace: cloud-resource-operator
   # i want a postgres storage of a development-level tier
   tier: development
-  # i want a postgres storage for the type managed
+  # i want a postgres storage for the type workshop
   type: workshop

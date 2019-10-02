@@ -13,7 +13,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
@@ -55,7 +55,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource Postgres
-	err = c.Watch(&source.Kind{Type: &integreatlyv1alpha1.Postgres{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1alpha1.Postgres{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner Postgres
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &integreatlyv1alpha1.Postgres{},
+		OwnerType:    &v1alpha1.Postgres{},
 	})
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 	r.logger.Info("Reconciling Postgres")
 
 	// Fetch the Postgres instance
-	instance := &integreatlyv1alpha1.Postgres{}
+	instance := &v1alpha1.Postgres{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -130,10 +130,22 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		// create the postgres instance
 		ps, err := p.CreatePostgres(r.ctx, instance)
 		if err != nil {
+			instance.Status.SecretRef = &v1alpha1.SecretRef{}
+			instance.Status.StatusPhase = v1alpha1.PhaseFailed
+			instance.Status.StatusMessage = "failed to create postgres instance"
+			if err = r.updateResourceStatus(instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
+			instance.Status.SecretRef = &v1alpha1.SecretRef{}
+			instance.Status.StatusPhase = v1alpha1.PhaseInProgress
+			instance.Status.StatusMessage = "postgres resources are reconciling"
+			if err = r.updateResourceStatus(instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
@@ -154,17 +166,28 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return nil
 		})
 		if err != nil {
+			instance.Status.StatusPhase = v1alpha1.PhaseFailed
+			instance.Status.StatusMessage = "failed to create postgres instance"
+			if err = r.updateResourceStatus(instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile postgres instance secret %s", sec.Name)
 		}
 
+		instance.Status.StatusPhase = v1alpha1.PhaseComplete
+		instance.Status.StatusMessage = "creation complete"
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Postgres
 		instance.Status.Provider = p.GetName()
-		if err = r.client.Status().Update(r.ctx, instance); err != nil {
+		if err = r.updateResourceStatus(instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 	}
 
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Postgres))
+}
+
+func (r *ReconcilePostgres) updateResourceStatus(instance *v1alpha1.Postgres) error {
+	return r.client.Status().Update(r.ctx, instance)
 }
