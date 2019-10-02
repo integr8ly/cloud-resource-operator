@@ -128,11 +128,11 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		}
 
 		// create the postgres instance
-		ps, err := p.CreatePostgres(r.ctx, instance)
+		ps, msg, err := p.CreatePostgres(r.ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			instance.Status.StatusPhase = v1alpha1.PhaseFailed
-			instance.Status.StatusMessage = "failed to create postgres instance"
+			instance.Status.Phase = v1alpha1.PhaseFailed
+			instance.Status.Message = msg
 			if err = r.updateResourceStatus(instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 			}
@@ -141,8 +141,8 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			instance.Status.StatusPhase = v1alpha1.PhaseInProgress
-			instance.Status.StatusMessage = "postgres resources are reconciling"
+			instance.Status.Phase = v1alpha1.PhaseInProgress
+			instance.Status.Message = msg
 			if err = r.updateResourceStatus(instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 			}
@@ -166,16 +166,16 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return nil
 		})
 		if err != nil {
-			instance.Status.StatusPhase = v1alpha1.PhaseFailed
-			instance.Status.StatusMessage = "failed to create postgres instance"
+			instance.Status.Phase = v1alpha1.PhaseFailed
+			instance.Status.Message = msg
 			if err = r.updateResourceStatus(instance); err != nil {
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile postgres instance secret %s", sec.Name)
 		}
 
-		instance.Status.StatusPhase = v1alpha1.PhaseComplete
-		instance.Status.StatusMessage = "creation complete"
+		instance.Status.Phase = v1alpha1.PhaseComplete
+		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Postgres
 		instance.Status.Provider = p.GetName()

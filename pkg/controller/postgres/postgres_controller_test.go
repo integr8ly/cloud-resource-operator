@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -95,7 +96,7 @@ func TestReconcilePostgres_Reconcile(t *testing.T) {
 				ctx:    context.TODO(),
 				providerList: []providers.PostgresProvider{
 					&providers.PostgresProviderMock{
-						CreatePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) (instance *providers.PostgresInstance, e error) {
+						CreatePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) (instance *providers.PostgresInstance, msg v1alpha1.StatusMessage, e error) {
 							return &providers.PostgresInstance{
 								DeploymentDetails: &providers.DeploymentDetailsMock{
 									DataFunc: func() map[string][]byte {
@@ -104,7 +105,7 @@ func TestReconcilePostgres_Reconcile(t *testing.T) {
 										}
 									},
 								},
-							}, nil
+							}, "test", nil
 						},
 						DeletePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) error {
 							return nil
@@ -134,7 +135,10 @@ func TestReconcilePostgres_Reconcile(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			want:    reconcile.Result{},
+			want: struct {
+				Requeue      bool
+				RequeueAfter time.Duration
+			}{Requeue: true, RequeueAfter: 30 * time.Second},
 		},
 	}
 	for _, tt := range tests {

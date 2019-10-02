@@ -491,7 +491,7 @@ var _ PostgresProvider = &PostgresProviderMock{}
 //
 //         // make and configure a mocked PostgresProvider
 //         mockedPostgresProvider := &PostgresProviderMock{
-//             CreatePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, error) {
+//             CreatePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error) {
 // 	               panic("mock out the CreatePostgres method")
 //             },
 //             DeletePostgresFunc: func(ctx context.Context, ps *v1alpha1.Postgres) error {
@@ -511,7 +511,7 @@ var _ PostgresProvider = &PostgresProviderMock{}
 //     }
 type PostgresProviderMock struct {
 	// CreatePostgresFunc mocks the CreatePostgres method.
-	CreatePostgresFunc func(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, error)
+	CreatePostgresFunc func(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error)
 
 	// DeletePostgresFunc mocks the DeletePostgres method.
 	DeletePostgresFunc func(ctx context.Context, ps *v1alpha1.Postgres) error
@@ -550,7 +550,7 @@ type PostgresProviderMock struct {
 }
 
 // CreatePostgres calls CreatePostgresFunc.
-func (mock *PostgresProviderMock) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, error) {
+func (mock *PostgresProviderMock) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error) {
 	if mock.CreatePostgresFunc == nil {
 		panic("PostgresProviderMock.CreatePostgresFunc: method is nil but PostgresProvider.CreatePostgres was just called")
 	}

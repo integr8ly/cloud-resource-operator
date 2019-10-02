@@ -20,12 +20,13 @@ type ResourceTypeSpec struct {
 }
 
 type StatusPhase string
+type StatusMessage string
 
 // ResourceTypeStatus Represents the basic status information provided by a resource provider
 type ResourceTypeStatus struct {
-	Strategy      string      `json:"strategy,omitempty"`
-	Provider      string      `json:"provider,omitempty"`
-	SecretRef     *SecretRef  `json:"secretRef"`
-	StatusPhase   StatusPhase `json:"statusPhase,omitempty"`
-	StatusMessage string      `json:"statusMessage,omitempty"`
+	Strategy  string        `json:"strategy,omitempty"`
+	Provider  string        `json:"provider,omitempty"`
+	SecretRef *SecretRef    `json:"secretRef"`
+	Phase     StatusPhase   `json:"phase,omitempty"`
+	Message   StatusMessage `json:"message,omitempty"`
 }

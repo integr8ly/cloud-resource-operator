@@ -67,7 +67,7 @@ type RedisProvider interface {
 type PostgresProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
-	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, error)
+	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error)
 	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) error
 }
 

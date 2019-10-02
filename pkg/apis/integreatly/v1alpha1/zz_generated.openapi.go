@@ -124,13 +124,13 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
-					"statusPhase": {
+					"phase": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"statusMessage": {
+					"message": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
@@ -243,13 +243,13 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCal
 							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
-					"statusPhase": {
+					"phase": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"statusMessage": {
+					"message": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
@@ -362,13 +362,13 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallba
 							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
-					"statusPhase": {
+					"phase": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"statusMessage": {
+					"message": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
@@ -481,13 +481,13 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref common.Ref
 							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
-					"statusPhase": {
+					"phase": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"statusMessage": {
+					"message": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
