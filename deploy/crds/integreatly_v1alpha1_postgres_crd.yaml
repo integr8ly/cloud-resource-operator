@@ -47,6 +47,10 @@ spec:
           type: object
         status:
           properties:
+            message:
+              type: string
+            phase:
+              type: string
             provider:
               type: string
             secretRef:
@@ -56,10 +60,6 @@ spec:
                 namespace:
                   type: string
               type: object
-            statusMessage:
-              type: string
-            statusPhase:
-              type: string
             strategy:
               type: string
           required:

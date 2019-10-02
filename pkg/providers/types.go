@@ -7,7 +7,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 )
 
-//go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider SMTPCredentialsProvider PostgresProvider
+//go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider SMTPCredentialsProvider
 
 type ResourceType string
 
