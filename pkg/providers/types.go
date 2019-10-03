@@ -46,29 +46,29 @@ type PostgresInstance struct {
 type BlobStorageProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
-	CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error)
-	DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error
+	CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, v1alpha1.StatusMessage, error)
+	DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error)
 }
 
 type SMTPCredentialsProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
-	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error)
-	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error
+	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, v1alpha1.StatusMessage, error)
+	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error)
 }
 
 type RedisProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
-	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, error)
-	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error
+	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, v1alpha1.StatusMessage, error)
+	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error)
 }
 
 type PostgresProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
 	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error)
-	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) error
+	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (v1alpha1.StatusMessage, error)
 }
 
 // RedisDeploymentDetails provider specific details about the AWS Redis Cluster created

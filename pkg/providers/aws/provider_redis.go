@@ -60,19 +60,19 @@ func (p *AWSRedisProvider) SupportsStrategy(d string) bool {
 }
 
 // CreateRedis Create an Elasticache Replication Group from strategy config
-func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, error) {
+func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if r.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&r.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, r); err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
+			return nil, "failed to add finalizer to instance", errorUtil.Wrapf(err, "failed to add finalizer to instance")
 		}
 	}
 
 	// info about the redis cluster to be created
 	redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to retrieve aws redis cluster config for instance %s", r.Name)
+		return nil, "failed to retrieve aws redis cluster config", errorUtil.Wrapf(err, "failed to retrieve aws redis cluster config for instance %s", r.Name)
 	}
 	if redisConfig.ReplicationGroupId == nil {
 		redisConfig.ReplicationGroupId = aws.String(r.Name)
@@ -81,7 +81,8 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to reconcile s3 put object credentials")
+		msg := "failed to reconcile s3 put object credentials"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// setup aws redis cluster sdk session
@@ -99,13 +100,13 @@ func createCacheService(stratCfg *StrategyConfig, providerCreds *AWSCredentials)
 	return elasticache.New(sess)
 }
 
-func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput) (*providers.RedisCluster, error) {
+func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
 		// return nil error so this function can be requeueed
 		logrus.Info("error getting replication groups:", err)
-		return nil, err
+		return nil, "error getting replication groups", err
 	}
 
 	// check if the cluster has already been created
@@ -123,9 +124,9 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 			return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
 				URI:  *primaryEndpoint.Address,
 				Port: *primaryEndpoint.Port,
-			}}, nil
+			}}, "creation successful", nil
 		}
-		return nil, nil
+		return nil, "creation in progress", nil
 	}
 
 	// the cluster doesn't exist, so create it
@@ -144,18 +145,18 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 	}
 	_, err = cacheSvc.CreateReplicationGroup(input)
 	if err != nil {
-		return nil, err
+		return nil, "error creating redis cluster", err
 	}
 
-	return nil, nil
+	return nil, "redis cluster creation in progress", nil
 }
 
 // DeleteStorage Delete elasticache replication group
-func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) error {
+func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
 	// resolve redis information for redis created by provider
 	redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to retrieve aws redis config for instance %s", r.Name)
+		return "failed to retrieve aws redis config", errorUtil.Wrapf(err, "failed to retrieve aws redis config for instance %s", r.Name)
 	}
 	if redisConfig.ReplicationGroupId == nil {
 		redisConfig.ReplicationGroupId = aws.String(r.Name)
@@ -164,7 +165,8 @@ func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) e
 	// get provider aws creds so the redis cluster can be deleted
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to reconcile aws provider credentials")
+		msg := "failed to reconcile aws provider credentials"
+		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// setup aws redis cluster sdk session
@@ -174,11 +176,11 @@ func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) e
 	return p.deleteRedisCluster(cacheSvc, redisConfig, ctx, r)
 }
 
-func (p *AWSRedisProvider) deleteRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) error {
+func (p *AWSRedisProvider) deleteRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *elasticache.CreateReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
-		return err
+		return "error getting replication groups", err
 	}
 
 	// check if the cluster has already been deleted
@@ -194,9 +196,10 @@ func (p *AWSRedisProvider) deleteRedisCluster(cacheSvc elasticacheiface.ElastiCa
 		// remove the finalizer added by the provider
 		resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, r); err != nil {
-			return errorUtil.Wrapf(err, "failed to update instance as part of finalizer reconcile")
+			msg := "failed to update instance as part of finalizer reconcile"
+			return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
-		return nil
+		return "redis cache successfully deleted", nil
 	}
 	// check if replication group exists and is available
 	if *foundCache.Status == "available" {
@@ -207,15 +210,15 @@ func (p *AWSRedisProvider) deleteRedisCluster(cacheSvc elasticacheiface.ElastiCa
 		})
 		redisErr, isAwsErr := err.(awserr.Error)
 		if err != nil && !isAwsErr {
-			return errorUtil.Wrapf(err, "failed to delete elasticache cluster %s", *redisConfig.ReplicationGroupId)
+			return "failed to delete elasticache cluster", errorUtil.Wrapf(err, "failed to delete elasticache cluster %s", *redisConfig.ReplicationGroupId)
 		}
 		if err != nil && isAwsErr {
 			if redisErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault {
-				return errorUtil.Wrapf(err, "failed to delete elasticache cluster %s, aws error", *redisConfig.ReplicationGroupId)
+				return "failed to delete elasticache cluster", errorUtil.Wrapf(err, "failed to delete elasticache cluster %s, aws error", *redisConfig.ReplicationGroupId)
 			}
 		}
 	}
-	return nil
+	return "redis cache deletion in progress", nil
 }
 
 // poll for replication groups

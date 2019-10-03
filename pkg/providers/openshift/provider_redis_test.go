@@ -195,7 +195,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			got, err := p.CreateRedis(tt.args.ctx, tt.args.redis)
+			got, _, err := p.CreateRedis(tt.args.ctx, tt.args.redis)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateRedis() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -250,7 +250,7 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			if err := p.DeleteRedis(tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
+			if _, err := p.DeleteRedis(tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteRedis() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

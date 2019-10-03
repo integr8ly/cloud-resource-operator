@@ -87,10 +87,10 @@ var _ BlobStorageProvider = &BlobStorageProviderMock{}
 //
 //         // make and configure a mocked BlobStorageProvider
 //         mockedBlobStorageProvider := &BlobStorageProviderMock{
-//             CreateStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error) {
+//             CreateStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, v1alpha1.StatusMessage, error) {
 // 	               panic("mock out the CreateStorage method")
 //             },
-//             DeleteStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) error {
+//             DeleteStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error) {
 // 	               panic("mock out the DeleteStorage method")
 //             },
 //             GetNameFunc: func() string {
@@ -107,10 +107,10 @@ var _ BlobStorageProvider = &BlobStorageProviderMock{}
 //     }
 type BlobStorageProviderMock struct {
 	// CreateStorageFunc mocks the CreateStorage method.
-	CreateStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error)
+	CreateStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, v1alpha1.StatusMessage, error)
 
 	// DeleteStorageFunc mocks the DeleteStorage method.
-	DeleteStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) error
+	DeleteStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error)
 
 	// GetNameFunc mocks the GetName method.
 	GetNameFunc func() string
@@ -146,7 +146,7 @@ type BlobStorageProviderMock struct {
 }
 
 // CreateStorage calls CreateStorageFunc.
-func (mock *BlobStorageProviderMock) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, error) {
+func (mock *BlobStorageProviderMock) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, v1alpha1.StatusMessage, error) {
 	if mock.CreateStorageFunc == nil {
 		panic("BlobStorageProviderMock.CreateStorageFunc: method is nil but BlobStorageProvider.CreateStorage was just called")
 	}
@@ -181,7 +181,7 @@ func (mock *BlobStorageProviderMock) CreateStorageCalls() []struct {
 }
 
 // DeleteStorage calls DeleteStorageFunc.
-func (mock *BlobStorageProviderMock) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error {
+func (mock *BlobStorageProviderMock) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error) {
 	if mock.DeleteStorageFunc == nil {
 		panic("BlobStorageProviderMock.DeleteStorageFunc: method is nil but BlobStorageProvider.DeleteStorage was just called")
 	}
@@ -289,10 +289,10 @@ var _ SMTPCredentialsProvider = &SMTPCredentialsProviderMock{}
 //
 //         // make and configure a mocked SMTPCredentialsProvider
 //         mockedSMTPCredentialsProvider := &SMTPCredentialsProviderMock{
-//             CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error) {
+//             CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {
 // 	               panic("mock out the CreateSMTPCredentials method")
 //             },
-//             DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error {
+//             DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
 // 	               panic("mock out the DeleteSMTPCredentials method")
 //             },
 //             GetNameFunc: func() string {
@@ -309,10 +309,10 @@ var _ SMTPCredentialsProvider = &SMTPCredentialsProviderMock{}
 //     }
 type SMTPCredentialsProviderMock struct {
 	// CreateSMTPCredentialsFunc mocks the CreateSMTPCredentials method.
-	CreateSMTPCredentialsFunc func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error)
+	CreateSMTPCredentialsFunc func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, v1alpha1.StatusMessage, error)
 
 	// DeleteSMTPCredentialsFunc mocks the DeleteSMTPCredentials method.
-	DeleteSMTPCredentialsFunc func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error
+	DeleteSMTPCredentialsFunc func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error)
 
 	// GetNameFunc mocks the GetName method.
 	GetNameFunc func() string
@@ -348,7 +348,7 @@ type SMTPCredentialsProviderMock struct {
 }
 
 // CreateSMTPCredentials calls CreateSMTPCredentialsFunc.
-func (mock *SMTPCredentialsProviderMock) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, error) {
+func (mock *SMTPCredentialsProviderMock) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {
 	if mock.CreateSMTPCredentialsFunc == nil {
 		panic("SMTPCredentialsProviderMock.CreateSMTPCredentialsFunc: method is nil but SMTPCredentialsProvider.CreateSMTPCredentials was just called")
 	}
@@ -383,7 +383,7 @@ func (mock *SMTPCredentialsProviderMock) CreateSMTPCredentialsCalls() []struct {
 }
 
 // DeleteSMTPCredentials calls DeleteSMTPCredentialsFunc.
-func (mock *SMTPCredentialsProviderMock) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error {
+func (mock *SMTPCredentialsProviderMock) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
 	if mock.DeleteSMTPCredentialsFunc == nil {
 		panic("SMTPCredentialsProviderMock.DeleteSMTPCredentialsFunc: method is nil but SMTPCredentialsProvider.DeleteSMTPCredentials was just called")
 	}

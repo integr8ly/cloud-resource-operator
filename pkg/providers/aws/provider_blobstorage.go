@@ -81,14 +81,15 @@ func (p *BlobStorageProvider) SupportsStrategy(d string) bool {
 }
 
 // CreateStorage Create S3 bucket from strategy config and credentials to interact with it
-func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, error) {
+func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, v1alpha1.StatusMessage, error) {
 	p.Logger.Infof("creating blob storage instance %s via aws s3", bs.Name)
+
 	// handle provider-specific finalizer
 	p.Logger.Infof("adding finalizer to blob storage instance %s", bs.Name)
 	if bs.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&bs.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, bs); err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to add finalizer to blob storage instance %s", bs.Name)
+			return nil, "failed to add finalizer to blob storage cr", errorUtil.Wrapf(err, "failed to add finalizer to blob storage instance %s", bs.Name)
 		}
 	}
 
@@ -96,7 +97,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
+		return nil, "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
 		bucketCreateCfg.Bucket = aws.String(fmt.Sprintf("%s-%s", bs.Namespace, bs.Name))
@@ -107,14 +108,14 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
 	endUserCreds, _, err := p.CredentialManager.ReoncileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
+		return nil, "failed to reconcile s3 end-user credentials", errorUtil.Wrapf(err, "failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	p.Logger.Infof("creating provider credentials for creating s3 buckets, in namespace %s", bs.Namespace)
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to reconcile aws blob storage provider credentials for blob storage instance %s", bs.Name)
+		return nil, "failed to reconcile aws blob storage provider credentials", errorUtil.Wrapf(err, "failed to reconcile aws blob storage provider credentials for blob storage instance %s", bs.Name)
 	}
 
 	// setup aws s3 sdk session
@@ -137,20 +138,21 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	// create bucket if it doesn't already exist, if it does exist then use the existing bucket
 	p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	if err := p.reconcileBucketCreate(ctx, s3svc, bucketCreateCfg); err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to reconcile aws s3 bucket %s", *bucketCreateCfg.Bucket)
+		return nil, "failed to reconcile aws s3 bucket", errorUtil.Wrapf(err, "failed to reconcile aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	}
+
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
-	return bsi, nil
+	return bsi, "blob storage successfully created", nil
 }
 
 // DeleteStorage Delete S3 bucket and credentials to add objects to it
-func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) error {
+func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error) {
 	p.Logger.Infof("deleting blob storage instance %s via aws s3", bs.Name)
 	// resolve bucket information for bucket created by provider
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
+		return "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
 		bucketCreateCfg.Bucket = aws.String(fmt.Sprintf("%s-%s", bs.Namespace, bs.Name))
@@ -160,7 +162,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("creating provider credentials for creating s3 buckets, in namespace %s", bs.Namespace)
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to reconcile aws provider credentials for blob storage instance %s", bs.Name)
+		return "failed to reconcile aws provider credentials", errorUtil.Wrapf(err, "failed to reconcile aws provider credentials for blob storage instance %s", bs.Name)
 	}
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
@@ -172,7 +174,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	s3svc := s3.New(sess)
 
 	if err = p.reconcileBucketDelete(ctx, s3svc, bucketCreateCfg); err != nil {
-		return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s", *bucketCreateCfg.Bucket)
+		return "failed to delete aws s3 bucket", errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	}
 
 	// remove the credentials request created by the provider
@@ -185,17 +187,18 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil {
-		return errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+		return "failed to delete credential request", errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
 	}
 
 	// remove the finalizer added by the provider
 	p.Logger.Infof("deleting finalizer %s from blob storage instance %s in namespace %s", DefaultFinalizer, bs.Name, bs.Namespace)
 	resources.RemoveFinalizer(&bs.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, bs); err != nil {
-		return errorUtil.Wrapf(err, "failed to update instance %s as part of finalizer reconcile", bs.Name)
+		return "failed to update instance as part of finalizer reconcile", errorUtil.Wrapf(err, "failed to update instance %s as part of finalizer reconcile", bs.Name)
 	}
+
 	p.Logger.Infof("deletion handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
-	return nil
+	return "blob storage successfully deleted", nil
 }
 
 func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
