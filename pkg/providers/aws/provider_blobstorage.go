@@ -96,15 +96,18 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	// info about the bucket to be created
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	bucketName, err := getBucketName(ctx, p.Client, bs)
 	if err != nil {
 		return nil, "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(bs.Name)
+		bucketCreateCfg.Bucket = aws.String(bucketName)
 	}
 
 	// create the credentials to be used by the end-user, whoever created the blobstorage instance
-	endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+	endUserCredsName := buildEndUserCredentialsNameFromBucket(bucketName)
 	p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
 	endUserCreds, _, err := p.CredentialManager.ReoncileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
 	if err != nil {
@@ -148,6 +151,14 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 // DeleteStorage Delete S3 bucket and credentials to add objects to it
 func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error) {
 	p.Logger.Infof("deleting blob storage instance %s via aws s3", bs.Name)
+
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	bucketName, err := getBucketName(ctx, p.Client, bs)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build bucket name")
+	}
+
 	// resolve bucket information for bucket created by provider
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
@@ -155,7 +166,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		return "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(bs.Name)
+		bucketCreateCfg.Bucket = aws.String(bucketName)
 	}
 
 	// get provider aws creds so the bucket can be deleted
@@ -178,7 +189,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// remove the credentials request created by the provider
-	endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+	endUserCredsName := buildEndUserCredentialsNameFromBucket(bucketName)
 	p.Logger.Infof("deleting end-user credential request %s in namespace %s", endUserCredsName, bs.Namespace)
 	endUserCredsReq := &v1.CredentialsRequest{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -213,6 +224,7 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, s3svc s
 		if s3err.Code() != s3.ErrCodeNoSuchBucket {
 			return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCfg.Bucket)
 		}
+		p.Logger.Info("failed to find s3 bucket, it may have already been deleted, continuing")
 	}
 	err = s3svc.WaitUntilBucketNotExists(&s3.HeadBucketInput{
 		Bucket: bucketCfg.Bucket,
@@ -277,4 +289,16 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
 	return s3cbi, stratCfg, nil
+}
+
+func getBucketName(ctx context.Context, c client.Client, bs *v1alpha1.BlobStorage) (string, error) {
+	clusterId, err := resources.GetClusterId(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to retrieve cluster identifier")
+	}
+	return fmt.Sprintf("%s-%s-%s", clusterId, bs.Namespace, bs.Name), nil
+}
+
+func buildEndUserCredentialsNameFromBucket(b string) string {
+	return fmt.Sprintf("cro-aws-s3-%s-creds", b)
 }
