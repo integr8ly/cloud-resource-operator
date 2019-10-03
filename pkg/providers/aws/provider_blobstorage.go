@@ -98,7 +98,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	bucketName, err := getBucketName(ctx, p.Client, bs)
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta)
 	if err != nil {
 		return nil, "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
@@ -154,7 +154,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	bucketName, err := getBucketName(ctx, p.Client, bs)
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build bucket name")
 	}
@@ -289,14 +289,6 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
 	return s3cbi, stratCfg, nil
-}
-
-func getBucketName(ctx context.Context, c client.Client, bs *v1alpha1.BlobStorage) (string, error) {
-	clusterId, err := resources.GetClusterId(ctx, c)
-	if err != nil {
-		return "", errorUtil.Wrap(err, "failed to retrieve cluster identifier")
-	}
-	return fmt.Sprintf("%s-%s-%s", clusterId, bs.Namespace, bs.Name), nil
 }
 
 func buildEndUserCredentialsNameFromBucket(b string) string {
