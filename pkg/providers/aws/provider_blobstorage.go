@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -200,7 +202,10 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil {
-		return "failed to delete credential request", errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+		if !errors.IsNotFound(err) {
+			return "failed to delete credential request", errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+		}
+		p.Logger.Infof("could not find credential request %s, already deleted, continuing", endUserCredsName)
 	}
 
 	// remove the finalizer added by the provider
