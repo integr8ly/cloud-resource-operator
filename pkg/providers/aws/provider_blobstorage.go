@@ -160,7 +160,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, bucketNameLen)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to build bucket name")
+		return "failed to construct name for s3 bucket from cluster infrastructure", errorUtil.Wrap(err, "failed to build bucket name")
 	}
 
 	// resolve bucket information for bucket created by provider

@@ -74,7 +74,7 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to build redis cluster name")
+		return nil, "failed to construct name for redis cluster from cluster infrastructure", errorUtil.Wrap(err, "failed to build redis cluster name")
 	}
 
 	// info about the redis cluster to be created
@@ -165,7 +165,7 @@ func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to build redis cluster name")
+		return "failed to construct name for redis cluster from cluster infrastructure", errorUtil.Wrap(err, "failed to build redis cluster name")
 	}
 
 	// resolve redis information for redis created by provider
