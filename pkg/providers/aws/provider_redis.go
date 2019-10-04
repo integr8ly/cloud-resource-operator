@@ -25,6 +25,7 @@ import (
 
 const (
 	redisProviderName = "aws-elasticache"
+	redisNameLen      = 40
 
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
@@ -71,7 +72,7 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta)
+	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to build redis cluster name")
 	}
@@ -162,7 +163,7 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta)
+	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build redis cluster name")
 	}

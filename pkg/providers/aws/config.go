@@ -125,10 +125,10 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 	}
 }
 
-func buildInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta) (string, error) {
+func buildInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta, n int) (string, error) {
 	clusterId, err := resources.GetClusterId(ctx, c)
 	if err != nil {
 		return "", errorUtil.Wrap(err, "failed to retrieve cluster identifier")
 	}
-	return fmt.Sprintf("%s-%s-%s", clusterId, om.Namespace, om.Name), nil
+	return resources.ShortenString(fmt.Sprintf("%s-%s-%s", clusterId, om.Namespace, om.Name), n), nil
 }

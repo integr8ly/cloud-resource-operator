@@ -36,6 +36,8 @@ const (
 	dataBucketName          = "bucketName"
 	dataCredentialKeyID     = "credentialKeyID"
 	dataCredentialSecretKey = "credentialSecretKey"
+
+	bucketNameLen = 40
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -98,7 +100,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta)
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, bucketNameLen)
 	if err != nil {
 		return nil, "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
@@ -154,7 +156,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta)
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, bucketNameLen)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build bucket name")
 	}
