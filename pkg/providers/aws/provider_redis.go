@@ -25,6 +25,7 @@ import (
 
 const (
 	redisProviderName = "aws-elasticache"
+	redisNameLen      = 40
 
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
@@ -69,13 +70,20 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 		}
 	}
 
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
+	if err != nil {
+		return nil, "failed to construct name for redis cluster from cluster infrastructure", errorUtil.Wrap(err, "failed to build redis cluster name")
+	}
+
 	// info about the redis cluster to be created
 	redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
 	if err != nil {
 		return nil, "failed to retrieve aws redis cluster config", errorUtil.Wrapf(err, "failed to retrieve aws redis cluster config for instance %s", r.Name)
 	}
 	if redisConfig.ReplicationGroupId == nil {
-		redisConfig.ReplicationGroupId = aws.String(r.Name)
+		redisConfig.ReplicationGroupId = aws.String(redisName)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
@@ -153,13 +161,20 @@ func createRedisCluster(cacheSvc elasticacheiface.ElastiCacheAPI, redisConfig *e
 
 // DeleteStorage Delete elasticache replication group
 func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	redisName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, redisNameLen)
+	if err != nil {
+		return "failed to construct name for redis cluster from cluster infrastructure", errorUtil.Wrap(err, "failed to build redis cluster name")
+	}
+
 	// resolve redis information for redis created by provider
 	redisConfig, stratCfg, err := p.getRedisConfig(ctx, r)
 	if err != nil {
 		return "failed to retrieve aws redis config", errorUtil.Wrapf(err, "failed to retrieve aws redis config for instance %s", r.Name)
 	}
 	if redisConfig.ReplicationGroupId == nil {
-		redisConfig.ReplicationGroupId = aws.String(r.Name)
+		redisConfig.ReplicationGroupId = aws.String(redisName)
 	}
 
 	// get provider aws creds so the redis cluster can be deleted

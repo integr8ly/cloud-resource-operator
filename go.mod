@@ -11,6 +11,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
+	github.com/openshift/api v3.9.1-0.20191002160657-d92789481b05+incompatible
 	github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190905003907-4ebf3aa52e61
 	github.com/pkg/errors v0.8.1
@@ -23,16 +24,16 @@ require (
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/zap v1.10.0 // indirect
 	golang.org/x/crypto v0.0.0-20190923035154-9ee001bba392 // indirect
-	golang.org/x/net v0.0.0-20190923162816-aa69164e4478 // indirect
+	golang.org/x/net v0.0.0-20191003171128-d98b1b443823 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/tools v0.0.0-20190924052046-3ac2a5bbd98a // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/grpc v1.22.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
-	k8s.io/api v0.0.0-20190905160310-fb749d2f1064
-	k8s.io/apimachinery v0.0.0-20190831074630-461753078381
+	k8s.io/api v0.0.0-20191003035645-10e821c09743
+	k8s.io/apimachinery v0.0.0-20191003115452-c31ffd88d5d2
 	k8s.io/client-go v11.0.0+incompatible
-	k8s.io/klog v0.4.0 // indirect
+	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10

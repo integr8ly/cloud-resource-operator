@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -36,6 +38,8 @@ const (
 	dataBucketName          = "bucketName"
 	dataCredentialKeyID     = "credentialKeyID"
 	dataCredentialSecretKey = "credentialSecretKey"
+
+	bucketNameLen = 40
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -96,15 +100,18 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	// info about the bucket to be created
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, bucketNameLen)
 	if err != nil {
 		return nil, "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(bs.Name)
+		bucketCreateCfg.Bucket = aws.String(bucketName)
 	}
 
 	// create the credentials to be used by the end-user, whoever created the blobstorage instance
-	endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+	endUserCredsName := buildEndUserCredentialsNameFromBucket(bucketName)
 	p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
 	endUserCreds, _, err := p.CredentialManager.ReoncileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
 	if err != nil {
@@ -148,6 +155,14 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 // DeleteStorage Delete S3 bucket and credentials to add objects to it
 func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error) {
 	p.Logger.Infof("deleting blob storage instance %s via aws s3", bs.Name)
+
+	// cluster infra info
+	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, bucketNameLen)
+	if err != nil {
+		return "failed to construct name for s3 bucket from cluster infrastructure", errorUtil.Wrap(err, "failed to build bucket name")
+	}
+
 	// resolve bucket information for bucket created by provider
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
@@ -155,7 +170,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		return "failed to retrieve aws s3 bucket config", errorUtil.Wrapf(err, "failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name)
 	}
 	if bucketCreateCfg.Bucket == nil {
-		bucketCreateCfg.Bucket = aws.String(bs.Name)
+		bucketCreateCfg.Bucket = aws.String(bucketName)
 	}
 
 	// get provider aws creds so the bucket can be deleted
@@ -178,7 +193,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// remove the credentials request created by the provider
-	endUserCredsName := fmt.Sprintf("cloud-resources-aws-s3-%s-credentials", bs.Name)
+	endUserCredsName := buildEndUserCredentialsNameFromBucket(bucketName)
 	p.Logger.Infof("deleting end-user credential request %s in namespace %s", endUserCredsName, bs.Namespace)
 	endUserCredsReq := &v1.CredentialsRequest{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -187,7 +202,10 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil {
-		return "failed to delete credential request", errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+		if !errors.IsNotFound(err) {
+			return "failed to delete credential request", errorUtil.Wrapf(err, "failed to delete credential request %s", endUserCredsName)
+		}
+		p.Logger.Infof("could not find credential request %s, already deleted, continuing", endUserCredsName)
 	}
 
 	// remove the finalizer added by the provider
@@ -213,6 +231,7 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, s3svc s
 		if s3err.Code() != s3.ErrCodeNoSuchBucket {
 			return errorUtil.Wrapf(err, "failed to delete aws s3 bucket %s, aws error", *bucketCfg.Bucket)
 		}
+		p.Logger.Info("failed to find s3 bucket, it may have already been deleted, continuing")
 	}
 	err = s3svc.WaitUntilBucketNotExists(&s3.HeadBucketInput{
 		Bucket: bucketCfg.Bucket,
@@ -277,4 +296,8 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
 	return s3cbi, stratCfg, nil
+}
+
+func buildEndUserCredentialsNameFromBucket(b string) string {
+	return fmt.Sprintf("cro-aws-s3-%s-creds", b)
 }
