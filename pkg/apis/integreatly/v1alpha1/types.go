@@ -27,7 +27,7 @@ type StatusMessage string
 type ResourceTypeStatus struct {
 	Strategy  string        `json:"strategy,omitempty"`
 	Provider  string        `json:"provider,omitempty"`
-	SecretRef *SecretRef    `json:"secretRef"`
+	SecretRef *SecretRef    `json:"secretRef,omitempty"`
 	Phase     StatusPhase   `json:"phase,omitempty"`
 	Message   StatusMessage `json:"message,omitempty"`
 }

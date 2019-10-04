@@ -11,18 +11,18 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorage":             schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageSpec":         schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageStatus":       schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.Postgres":                schema_pkg_apis_integreatly_v1alpha1_Postgres(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec":            schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus":          schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.Redis":                   schema_pkg_apis_integreatly_v1alpha1_Redis(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisSpec":               schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisStatus":             schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSet":       schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSet(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec":   schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetSpec(ref),
-		"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus": schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref),
+		"./pkg/apis/integreatly/v1alpha1.BlobStorage":             schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref),
+		"./pkg/apis/integreatly/v1alpha1.BlobStorageSpec":         schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref),
+		"./pkg/apis/integreatly/v1alpha1.BlobStorageStatus":       schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref),
+		"./pkg/apis/integreatly/v1alpha1.Postgres":                schema_pkg_apis_integreatly_v1alpha1_Postgres(ref),
+		"./pkg/apis/integreatly/v1alpha1.PostgresSpec":            schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref),
+		"./pkg/apis/integreatly/v1alpha1.PostgresStatus":          schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref),
+		"./pkg/apis/integreatly/v1alpha1.Redis":                   schema_pkg_apis_integreatly_v1alpha1_Redis(ref),
+		"./pkg/apis/integreatly/v1alpha1.RedisSpec":               schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref),
+		"./pkg/apis/integreatly/v1alpha1.RedisStatus":             schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref),
+		"./pkg/apis/integreatly/v1alpha1.SMTPCredentialSet":       schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSet(ref),
+		"./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec":   schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetSpec(ref),
+		"./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus": schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref),
 	}
 }
 
@@ -53,19 +53,19 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref common.ReferenceCallba
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageSpec"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.BlobStorageSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageStatus"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.BlobStorageStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageSpec", "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.BlobStorageStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"./pkg/apis/integreatly/v1alpha1.BlobStorageSpec", "./pkg/apis/integreatly/v1alpha1.BlobStorageStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -89,7 +89,7 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref common.ReferenceCa
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
@@ -97,7 +97,7 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref common.ReferenceCa
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -121,7 +121,7 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 					"phase": {
@@ -137,11 +137,10 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 						},
 					},
 				},
-				Required: []string{"secretRef"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -172,19 +171,19 @@ func schema_pkg_apis_integreatly_v1alpha1_Postgres(ref common.ReferenceCallback)
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.PostgresSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.PostgresStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresSpec", "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.PostgresStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"./pkg/apis/integreatly/v1alpha1.PostgresSpec", "./pkg/apis/integreatly/v1alpha1.PostgresStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -208,7 +207,7 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref common.ReferenceCallb
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
@@ -216,7 +215,7 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref common.ReferenceCallb
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -240,7 +239,7 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCal
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 					"phase": {
@@ -256,11 +255,10 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCal
 						},
 					},
 				},
-				Required: []string{"secretRef"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -291,19 +289,19 @@ func schema_pkg_apis_integreatly_v1alpha1_Redis(ref common.ReferenceCallback) co
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisSpec"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.RedisSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisStatus"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.RedisStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisSpec", "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.RedisStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"./pkg/apis/integreatly/v1alpha1.RedisSpec", "./pkg/apis/integreatly/v1alpha1.RedisStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -327,7 +325,7 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref common.ReferenceCallback
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
@@ -335,7 +333,7 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -359,7 +357,7 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallba
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 					"phase": {
@@ -375,11 +373,10 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallba
 						},
 					},
 				},
-				Required: []string{"secretRef"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -410,19 +407,19 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSet(ref common.Reference
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec", "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetSpec", "./pkg/apis/integreatly/v1alpha1.SMTPCredentialSetStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -446,7 +443,7 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetSpec(ref common.Refer
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 				},
@@ -454,7 +451,7 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetSpec(ref common.Refer
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }
 
@@ -478,7 +475,7 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref common.Ref
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"),
+							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
 					"phase": {
@@ -494,10 +491,9 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref common.Ref
 						},
 					},
 				},
-				Required: []string{"secretRef"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1.SecretRef"},
+			"./pkg/apis/integreatly/v1alpha1.SecretRef"},
 	}
 }

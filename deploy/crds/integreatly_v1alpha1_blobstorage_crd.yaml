@@ -62,8 +62,6 @@ spec:
               type: object
             strategy:
               type: string
-          required:
-          - secretRef
           type: object
   version: v1alpha1
   versions:
