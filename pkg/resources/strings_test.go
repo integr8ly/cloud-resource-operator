@@ -19,7 +19,7 @@ func TestShortenString(t *testing.T) {
 				s: "my-super-long-test-name",
 				n: 12,
 			},
-			want:    "my-supe-D07q",
+			want:    "my-supe-d07q",
 			wantLen: 12,
 		},
 		{
@@ -28,7 +28,7 @@ func TestShortenString(t *testing.T) {
 				s: "23",
 				n: -1,
 			},
-			want:    "23-U1-j",
+			want:    "23-u1-j",
 			wantLen: 7,
 		},
 		{

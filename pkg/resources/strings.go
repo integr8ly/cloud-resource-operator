@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"strings"
 )
 
 // Cut string size, but maintain a reference to the original string using a hash of the full string in the result
@@ -29,5 +30,5 @@ func ShortenString(s string, n int) string {
 	}
 	hashedStr := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 
-	return fmt.Sprintf("%s-%s", cutStr, hashedStr[0:hashLen])
+	return strings.ToLower(fmt.Sprintf("%s-%s", cutStr, hashedStr[0:hashLen]))
 }
