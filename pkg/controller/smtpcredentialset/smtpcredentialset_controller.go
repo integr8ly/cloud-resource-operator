@@ -102,6 +102,9 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
+		if err = r.updatePhase(instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
 
@@ -116,23 +119,23 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			r.logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
 			msg, err := p.DeleteSMTPCredentials(r.ctx, instance)
 			if err != nil {
-				if err = r.updatePhaseFailed(instance, msg); err != nil {
-					return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+				if err = r.updatePhase(instance, v1alpha1.PhaseFailed, msg); err != nil {
+					return reconcile.Result{}, err
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
 
 			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
-			if err = r.updatePhaseDeletionInProgress(instance, msg); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			if err = r.updatePhase(instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(r.ctx, instance)
 		if err != nil {
-			if err = r.updatePhaseFailed(instance, msg); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			if err = r.updatePhase(instance, v1alpha1.PhaseFailed, msg); err != nil {
+				return reconcile.Result{}, err
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
 		}
@@ -146,8 +149,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*v1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if err = r.updatePhaseFailed(instance, msg); err != nil {
-					return errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+				if err = r.updatePhase(instance, v1alpha1.PhaseFailed, msg); err != nil {
+					return err
 				}
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
@@ -156,8 +159,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			return nil
 		})
 		if err != nil {
-			if err = r.updatePhaseFailed(instance, msg); err != nil {
-				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			if err = r.updatePhase(instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); err != nil {
+				return reconcile.Result{}, err
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile blob storage instance secret %s", sec.Name)
 		}
@@ -174,32 +177,17 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 	}
 
 	// unsupported strategy
-	if err = r.updatePhaseFailed(instance, "unsupported deployment strategy"); err != nil {
-		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+	if err = r.updatePhase(instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *ReconcileSMTPCredentialSet) updatePhaseFailed(instance *v1alpha1.SMTPCredentialSet, msg v1alpha1.StatusMessage) error {
-	instance.Status.Phase = v1alpha1.PhaseFailed
-	instance.Status.Message = msg
-	return r.client.Status().Update(r.ctx, instance)
-}
-
-func (r *ReconcileSMTPCredentialSet) updatePhaseComplete(instance *v1alpha1.SMTPCredentialSet, msg v1alpha1.StatusMessage) error {
-	instance.Status.Phase = v1alpha1.PhaseComplete
-	instance.Status.Message = msg
-	return r.client.Status().Update(r.ctx, instance)
-}
-
-func (r *ReconcileSMTPCredentialSet) updatePhaseInProgress(instance *v1alpha1.SMTPCredentialSet, msg v1alpha1.StatusMessage) error {
-	instance.Status.Phase = v1alpha1.PhaseInProgress
-	instance.Status.Message = msg
-	return r.client.Status().Update(r.ctx, instance)
-}
-
-func (r *ReconcileSMTPCredentialSet) updatePhaseDeletionInProgress(instance *v1alpha1.SMTPCredentialSet, msg v1alpha1.StatusMessage) error {
-	instance.Status.Phase = v1alpha1.PhaseDeleteInProgress
-	instance.Status.Message = msg
-	return r.client.Status().Update(r.ctx, instance)
+func (r *ReconcileSMTPCredentialSet) updatePhase(inst *v1alpha1.SMTPCredentialSet, phase v1alpha1.StatusPhase, msg v1alpha1.StatusMessage) error {
+	inst.Status.Phase = phase
+	inst.Status.Message = msg
+	if err := r.client.Status().Update(r.ctx, inst); err != nil {
+		return errorUtil.Wrap(err, "failed to update resource status phase and message")
+	}
+	return nil
 }
