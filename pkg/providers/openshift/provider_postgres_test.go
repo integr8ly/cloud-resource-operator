@@ -93,7 +93,7 @@ func buildTestCredsSecret() *v1.Secret {
 
 func buildTestPostgresInstance() *providers.PostgresInstance {
 	return &providers.PostgresInstance{
-		DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
+		DeploymentDetails: &providers.PostgresDeploymentDetails{
 			Username: testPostgresUser,
 			Password: testPostgresPassword,
 			Database: testPostgresDatabase,

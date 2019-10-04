@@ -125,9 +125,9 @@ func createPostgresService(stratCfg *StrategyConfig, providerCreds *AWSCredentia
 	return rds.New(sess)
 }
 
-func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, cacheSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, error) {
+func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
-	pi, err := getPostgresInstances(cacheSvc)
+	pi, err := getPostgresInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
 		logrus.Info("error getting replication groups : ", err)
@@ -161,7 +161,10 @@ func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1
 			logrus.Info("found existing rds instance")
 			mi := verifyPostgresChange(postgresCfg, foundInstance)
 			if mi != nil {
-				_, err = cacheSvc.ModifyDBInstance(mi)
+				_, err = rdsSvc.ModifyDBInstance(mi)
+				if err != nil {
+					return nil, err
+				}
 				return nil, nil
 			}
 			return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
@@ -176,7 +179,7 @@ func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1
 	}
 
 	logrus.Info("creating rds instance")
-	_, err = cacheSvc.CreateDBInstance(postgresCfg)
+	_, err = rdsSvc.CreateDBInstance(postgresCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -226,31 +229,31 @@ func verifyPostgresChange(postgresConfig *rds.CreateDBInstanceInput, foundConfig
 	mi := &rds.ModifyDBInstanceInput{}
 	mi.DBInstanceIdentifier = postgresConfig.DBInstanceIdentifier
 
-	if postgresConfig.DeletionProtection != foundConfig.DeletionProtection {
+	if *postgresConfig.DeletionProtection != *foundConfig.DeletionProtection {
 		mi.DeletionProtection = postgresConfig.DeletionProtection
 		updateFound = true
 	}
-	if postgresConfig.Port != foundConfig.DbInstancePort {
+	if *postgresConfig.Port != *foundConfig.Endpoint.Port {
 		mi.DBPortNumber = postgresConfig.Port
 		updateFound = true
 	}
-	if postgresConfig.BackupRetentionPeriod != foundConfig.BackupRetentionPeriod {
+	if *postgresConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod {
 		mi.BackupRetentionPeriod = postgresConfig.BackupRetentionPeriod
 		updateFound = true
 	}
-	if postgresConfig.DBInstanceClass != foundConfig.DBInstanceClass {
+	if *postgresConfig.DBInstanceClass != *foundConfig.DBInstanceClass {
 		mi.DBInstanceClass = postgresConfig.DBInstanceClass
 		updateFound = true
 	}
-	if postgresConfig.PubliclyAccessible != foundConfig.PubliclyAccessible {
+	if *postgresConfig.PubliclyAccessible != *foundConfig.PubliclyAccessible {
 		mi.PubliclyAccessible = postgresConfig.PubliclyAccessible
 		updateFound = true
 	}
-	if postgresConfig.AllocatedStorage != foundConfig.AllocatedStorage {
+	if *postgresConfig.AllocatedStorage != *foundConfig.AllocatedStorage {
 		mi.AllocatedStorage = postgresConfig.AllocatedStorage
 		updateFound = true
 	}
-	if postgresConfig.EngineVersion != foundConfig.EngineVersion {
+	if *postgresConfig.EngineVersion != *foundConfig.EngineVersion {
 		mi.EngineVersion = postgresConfig.EngineVersion
 		updateFound = true
 	}
