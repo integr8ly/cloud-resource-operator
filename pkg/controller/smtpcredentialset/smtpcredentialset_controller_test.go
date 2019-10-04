@@ -12,8 +12,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	apis2 "github.com/openshift/cloud-credential-operator/pkg/apis"
 	v12 "k8s.io/api/core/v1"
@@ -21,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -69,15 +68,15 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 	}
 
 	type fields struct {
-		client client.Client
-		scheme *runtime.Scheme
-		logger *logrus.Entry
+		client       client.Client
+		scheme       *runtime.Scheme
+		logger       *logrus.Entry
+		ctx          context.Context
+		providerList []providers.SMTPCredentialsProvider
+		cfgMgr       providers.ConfigManager
 	}
 	type args struct {
-		context       context.Context
-		request       reconcile.Request
-		providerList  []providers.SMTPCredentialsProvider
-		configManager providers.ConfigManager
+		request reconcile.Request
 	}
 	tests := []struct {
 		name    string
@@ -92,18 +91,10 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 				client: fake.NewFakeClientWithScheme(scheme, buildTestOperatorConfigMap(), buildTestSMTPCredentialSet()),
 				scheme: scheme,
 				logger: logrus.WithFields(logrus.Fields{}),
-			},
-			args: args{
-				context: context.TODO(),
-				request: reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "test",
-					},
-				},
+				ctx:    context.TODO(),
 				providerList: []providers.SMTPCredentialsProvider{
 					&providers.SMTPCredentialsProviderMock{
-						CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (instance *providers.SMTPCredentialSetInstance, e error) {
+						CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {
 							return &providers.SMTPCredentialSetInstance{
 								DeploymentDetails: &providers.DeploymentDetailsMock{
 									DataFunc: func() map[string][]byte {
@@ -112,10 +103,10 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 										}
 									},
 								},
-							}, nil
+							}, "", nil
 						},
-						DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) error {
-							return nil
+						DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
+							return "", nil
 						},
 						GetNameFunc: func() string {
 							return "test"
@@ -125,11 +116,19 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 						},
 					},
 				},
-				configManager: &providers.ConfigManagerMock{
+				cfgMgr: &providers.ConfigManagerMock{
 					GetStrategyMappingForDeploymentTypeFunc: func(ctx context.Context, t string) (*providers.DeploymentStrategyMapping, error) {
 						return &providers.DeploymentStrategyMapping{
 							SMTPCredentials: "test",
 						}, nil
+					},
+				},
+			},
+			args: args{
+				request: reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "test",
 					},
 				},
 			},
@@ -143,11 +142,14 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &ReconcileSMTPCredentialSet{
-				client: tt.fields.client,
-				scheme: tt.fields.scheme,
-				logger: tt.fields.logger,
+				client:       tt.fields.client,
+				scheme:       tt.fields.scheme,
+				logger:       tt.fields.logger,
+				ctx:          tt.fields.ctx,
+				providerList: tt.fields.providerList,
+				cfgMgr:       tt.fields.cfgMgr,
 			}
-			got, err := r.reconcile(tt.args.context, tt.args.request, tt.args.providerList, tt.args.configManager)
+			got, err := r.Reconcile(tt.args.request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Reconcile() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -13,7 +15,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
@@ -55,7 +57,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource Postgres
-	err = c.Watch(&source.Kind{Type: &integreatlyv1alpha1.Postgres{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1alpha1.Postgres{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -63,7 +65,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner Postgres
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &integreatlyv1alpha1.Postgres{},
+		OwnerType:    &v1alpha1.Postgres{},
 	})
 	if err != nil {
 		return err
@@ -95,7 +97,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 	r.logger.Info("Reconciling Postgres")
 
 	// Fetch the Postgres instance
-	instance := &integreatlyv1alpha1.Postgres{}
+	instance := &v1alpha1.Postgres{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -110,8 +112,12 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
+		if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
+
 	for _, p := range r.providerList {
 		if !p.SupportsStrategy(stratMap.Postgres) {
 			continue
@@ -119,21 +125,36 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 
 		// delete the postgres if the deletion timestamp exists
 		if instance.DeletionTimestamp != nil {
-			err := p.DeletePostgres(r.ctx, instance)
+			msg, err := p.DeletePostgres(r.ctx, instance)
 			if err != nil {
+				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
+					return reconcile.Result{}, err
+				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
+
 			r.logger.Info("Waiting on Postgres to successfully delete")
+			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
 		// create the postgres instance
-		ps, err := p.CreatePostgres(r.ctx, instance)
+		ps, msg, err := p.CreatePostgres(r.ctx, instance)
 		if err != nil {
+			instance.Status.SecretRef = &v1alpha1.SecretRef{}
+			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
+			instance.Status.SecretRef = &v1alpha1.SecretRef{}
+			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}
 
@@ -147,6 +168,9 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*corev1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
+				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to set owner on secret"); err != nil {
+					return err
+				}
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
 			e.Data = ps.DeploymentDetails.Data()
@@ -154,9 +178,14 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return nil
 		})
 		if err != nil {
+			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile postgres instance secret %s", sec.Name)
 		}
 
+		instance.Status.Phase = v1alpha1.PhaseComplete
+		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Postgres
 		instance.Status.Provider = p.GetName()
@@ -166,5 +195,9 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 	}
 
+	// unsupported strategy
+	if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Postgres))
 }

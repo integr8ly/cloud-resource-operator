@@ -47,6 +47,10 @@ spec:
           type: object
         status:
           properties:
+            message:
+              type: string
+            phase:
+              type: string
             provider:
               type: string
             secretRef:

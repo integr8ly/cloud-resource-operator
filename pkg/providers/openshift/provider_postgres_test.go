@@ -171,7 +171,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			got, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
+			got, _, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreatePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -236,7 +236,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			if err := p.DeletePostgres(tt.args.ctx, tt.args.postgres); (err != nil) != tt.wantErr {
+			if _, err := p.DeletePostgres(tt.args.ctx, tt.args.postgres); (err != nil) != tt.wantErr {
 				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -377,7 +377,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			_, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
+			_, _, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("overrideDefaults() error = %v, wantErr %v", err, tt.wantErr)
 				return

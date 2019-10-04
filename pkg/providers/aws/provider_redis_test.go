@@ -141,7 +141,7 @@ func Test_createRedisCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createRedisCluster(tt.args.cacheSvc, tt.args.redisConfig)
+			got, _, err := createRedisCluster(tt.args.cacheSvc, tt.args.redisConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -236,7 +236,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
+			if _, err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

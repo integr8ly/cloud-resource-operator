@@ -197,7 +197,7 @@ func TestSMTPCredentialProvider_DeleteSMTPCredentials(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if err := p.DeleteSMTPCredentials(tt.args.ctx, tt.args.smtpCreds); (err != nil) != tt.wantErr {
+			if _, err := p.DeleteSMTPCredentials(tt.args.ctx, tt.args.smtpCreds); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteSMTPCredentials() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if err := tt.validateCredentialFn(tt.args.smtpCreds); err != nil {
@@ -366,7 +366,7 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.CreateSMTPCredentials(tt.args.ctx, tt.args.smtpCreds)
+			got, _, err := p.CreateSMTPCredentials(tt.args.ctx, tt.args.smtpCreds)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSMTPCredentials() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -91,50 +91,50 @@ func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
 	return d == providers.OpenShiftDeploymentStrategy
 }
 
-func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, error) {
+func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if ps.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&ps.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, ps); err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
+			return nil, "failed to add finalizer to instance", errorUtil.Wrapf(err, "failed to add finalizer to instance")
 		}
 	}
 
 	// get postgres config
 	postgresCfg, _, err := p.getPostgresConfig(ctx, ps)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to retrieve openshift postgres config for instance %s", ps.Name)
+		return nil, "failed to retrieve openshift postgres config", errorUtil.Wrapf(err, "failed to retrieve openshift postgres config for instance %s", ps.Name)
 	}
 
 	// deploy pvc
 	if err := p.CreatePVC(ctx, buildDefaultPostgresPVC(ps), postgresCfg); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to create or update postgres PVC")
+		return nil, "failed to create or update postgres PVC", errorUtil.Wrap(err, "failed to create or update postgres PVC")
 	}
 	// deploy credentials secret
 	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(ps), postgresCfg); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to create or update postgres secret")
+		return nil, "failed to create or update postgres secret", errorUtil.Wrap(err, "failed to create or update postgres secret")
 	}
 	// deploy deployment
 	if err := p.CreateDeployment(ctx, buildDefaultPostgresDeployment(ps), postgresCfg); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to create or update postgres deployment")
+		return nil, "failed to create or update postgres deployment", errorUtil.Wrap(err, "failed to create or update postgres deployment")
 	}
 	// deploy service
 	if err := p.CreateService(ctx, buildDefaultPostgresService(ps), postgresCfg); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to create or update postgres service")
+		return nil, "failed to create or update postgres service", errorUtil.Wrap(err, "failed to create or update postgres service")
 	}
 
 	// check deployment status
 	dpl := &appsv1.Deployment{}
 	err = p.Client.Get(ctx, types.NamespacedName{Name: ps.Name, Namespace: ps.Namespace}, dpl)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get postgres deployment")
+		return nil, "failed to get postgres deployment", errorUtil.Wrap(err, "failed to get postgres deployment")
 	}
 
 	// get the cred secret
 	sec := &v1.Secret{}
 	err = p.Client.Get(ctx, types.NamespacedName{Name: defaultCredentialsSec, Namespace: ps.Namespace}, sec)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get postgres creds")
+		return nil, "failed to get postgres creds", errorUtil.Wrap(err, "failed to get postgres creds")
 	}
 
 	// check if deployment is ready and return connection details
@@ -149,24 +149,25 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 					Host:     fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace),
 					Port:     defaultPostgresPort,
 				},
-			}, nil
+			}, "postgres deployment is complete", nil
 		}
 	}
 
 	// deployment is in progress
 	p.Logger.Info("Postgres deployment is not ready")
-	return nil, nil
+	return nil, "postgres resources are reconciling", nil
 }
 
-func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) error {
+func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
 	// check deployment status
 	dpl := &appsv1.Deployment{}
 	err := p.Client.Get(ctx, types.NamespacedName{Name: ps.Name, Namespace: ps.Namespace}, dpl)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
-			return nil
+			return "deletion successful", nil
 		}
-		return errorUtil.Wrap(err, "failed to get postgres deployment")
+		msg := "failed to get postgres deployment"
+		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	for _, s := range dpl.Status.Conditions {
@@ -181,7 +182,8 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 			}
 			err = p.Client.Delete(ctx, svc)
 			if err != nil && !k8serr.IsNotFound(err) {
-				return errorUtil.Wrap(err, "failed to delete postgres service")
+				msg := "failed to delete postgres service"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			// delete pv
@@ -194,7 +196,8 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 			}
 			err = p.Client.Delete(ctx, pv)
 			if err != nil && !k8serr.IsNotFound(err) {
-				return errorUtil.Wrap(err, "failed to delete postgres persistent volume")
+				msg := "failed to delete postgres persistent volume"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			// delete pvc
@@ -207,7 +210,8 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 			}
 			err = p.Client.Delete(ctx, pvc)
 			if err != nil && !k8serr.IsNotFound(err) {
-				return errorUtil.Wrap(err, "failed to delete postgres persistent volume claim")
+				msg := "failed to delete postgres persistent volume claim"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			// delete secret
@@ -220,28 +224,31 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 			}
 			err = p.Client.Delete(ctx, sec)
 			if err != nil && !k8serr.IsNotFound(err) {
-				return errorUtil.Wrap(err, "failed to deleted postgres secrets")
+				msg := "failed to deleted postgres secrets"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			// clean up objects
 			p.Logger.Info("Deleting postgres deployment")
 			err = p.Client.Delete(ctx, dpl)
 			if err != nil && !k8serr.IsNotFound(err) {
-				return errorUtil.Wrap(err, "failed to delete postgres deployment")
+				msg := "failed to delete postgres deployment"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			// remove the finalizer added by the provider
 			p.Logger.Info("Removing postgres finalizer")
 			resources.RemoveFinalizer(&ps.ObjectMeta, DefaultFinalizer)
 			if err := p.Client.Update(ctx, ps); err != nil {
-				return errorUtil.Wrapf(err, "failed to update instance as part of the postgres finalizer reconcile")
+				msg := "failed to update instance as part of the postgres finalizer reconcile"
+				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
 			p.Logger.Infof("deletion handler for postgres %s in namespace %s finished successfully", ps.Name, ps.Namespace)
 		}
 	}
 
-	return nil
+	return "deletion in progress", nil
 }
 
 // getPostgresConfig retrieves the postgres config from the cloud-resources-openshift-strategies configmap
