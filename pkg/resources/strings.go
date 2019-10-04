@@ -1,7 +1,7 @@
 package resources
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 )
@@ -23,8 +23,10 @@ func ShortenString(s string, n int) string {
 	}
 	cutStr := s[0:cutSize]
 
-	hasher := sha1.New()
-	hasher.Write([]byte(s))
+	hasher := sha256.New()
+	if _, err := hasher.Write([]byte(s)); err != nil {
+		return ""
+	}
 	hashedStr := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 
 	return fmt.Sprintf("%s-%s", cutStr, hashedStr[0:hashLen])
