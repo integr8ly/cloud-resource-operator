@@ -83,19 +83,21 @@ func (p *AWSPostgresProvider) SupportsStrategy(d string) bool {
 }
 
 // CreatePostgres creates an RDS Instance from strategy config
-func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, r *v1alpha1.Postgres) (*providers.PostgresInstance, error) {
+func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, r *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if r.GetDeletionTimestamp() == nil {
 		resources.AddFinalizer(&r.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, r); err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to add finalizer to instance")
+			msg := "failed to add finalizer to instance"
+			return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
 	}
 
 	// info about the RDS instance to be created
 	postgresCfg, stratCfg, err := p.getPostgresConfig(ctx, r)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to retrieve aws RDS cluster config for instance %s", r.Name)
+		msg := "failed to retrieve aws RDS cluster config for instance"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 	if postgresCfg.DBInstanceIdentifier == nil {
 		postgresCfg.DBInstanceIdentifier = aws.String(r.Name)
@@ -104,12 +106,14 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, r *v1alpha1.Po
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	provoiderCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to reconcile RDS credentials")
+		msg := "failed to reconcile RDS credentials"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// create credentials secret
 	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(r)); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to create or update postgres secret")
+		msg := "failed to create or update postgres secret"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// setup aws RDS instance sdk session
@@ -127,23 +131,24 @@ func createPostgresService(stratCfg *StrategyConfig, providerCreds *AWSCredentia
 	return rds.New(sess)
 }
 
-func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, error) {
+func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pi, err := getPostgresInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
 		logrus.Info("error getting replication groups : ", err)
-		return nil, err
+		return nil, "error getting replication groups", err
 	}
 
 	// verify postgresConfig
 	if err := p.verifyPostgresConfig(ctx, cr, postgresCfg); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to verify aws postgres cluster configuration")
+		msg := "failed to verify aws postgres cluster configuration"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	credSec := &v1.Secret{}
 	if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredentialsSec, Namespace: cr.Namespace}, credSec); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to retrieve postgres credential secret")
+		return nil, "failed to retrieve postgres credential secret", errorUtil.Wrap(err, "failed to retrieve postgres credential secret")
 	}
 
 	for k, p := range credSec.Data {
@@ -167,9 +172,9 @@ func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1
 			if mi != nil {
 				_, err = rdsSvc.ModifyDBInstance(mi)
 				if err != nil {
-					return nil, err
+					return nil, "failed to modify instance", err
 				}
-				return nil, nil
+				return nil, "modify instance in progress", nil
 			}
 			return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: *foundInstance.MasterUsername,
@@ -177,22 +182,22 @@ func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1
 				Host:     *foundInstance.Endpoint.Address,
 				Database: *foundInstance.DBName,
 				Port:     int(*foundInstance.Endpoint.Port),
-			}}, nil
+			}}, "creation successful", nil
 		}
-		return nil, nil
+		return nil, "creation in progress", nil
 	}
 
 	logrus.Info("creating rds instance")
 	_, err = rdsSvc.CreateDBInstance(postgresCfg)
 	if err != nil {
-		return nil, err
+		return nil, "error creating postgres instance", err
 	}
-	return nil, nil
+	return nil, "postgres instance in progress", nil
 }
 
-func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) error {
+func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
 	//todo delete the cred secret as part of delete func
-	return nil
+	return "", nil
 }
 
 func getPostgresInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {

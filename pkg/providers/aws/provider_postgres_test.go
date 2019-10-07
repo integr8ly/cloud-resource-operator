@@ -215,7 +215,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.createPostgresInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.postgresCfg)
+			got, _, err := p.createPostgresInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.postgresCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createPostgresInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
