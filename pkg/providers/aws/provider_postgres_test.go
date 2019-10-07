@@ -49,6 +49,10 @@ func (m *mockRdsClient) ModifyDBInstance(*rds.ModifyDBInstanceInput) (*rds.Modif
 	return &rds.ModifyDBInstanceOutput{}, nil
 }
 
+func (m *mockRdsClient) DeleteDBInstance(*rds.DeleteDBInstanceInput) (*rds.DeleteDBInstanceOutput, error) {
+	return &rds.DeleteDBInstanceOutput{}, nil
+}
+
 func buildTestPostgresCR() *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -82,8 +86,38 @@ func builtTestCredSecret() *v1.Secret {
 	}
 }
 
+func buildDbInstanceGroupPending() []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier: aws.String("test-id"),
+			DBInstanceStatus:     aws.String("pending"),
+		},
+	}
+}
+
+func buildDbInstanceGroupAvailable() []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier: aws.String("test-id"),
+			DBInstanceStatus:     aws.String("available"),
+			DeletionProtection:   aws.Bool(false),
+		},
+	}
+}
+
+func buildDbInstanceDeletionProtection() []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier: aws.String("test-id"),
+			DBInstanceStatus:     aws.String("available"),
+			DeletionProtection:   aws.Bool(true),
+		},
+	}
+}
+
 func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	scheme, err := buildTestScheme()
+	testIdentifier := "test-identifier"
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
@@ -129,7 +163,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
 					{
-						DBInstanceIdentifier:  aws.String(defaultAwsDBInstanceIdentifier),
+						DBInstanceIdentifier:  aws.String(testIdentifier),
 						DBInstanceStatus:      aws.String("available"),
 						DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
 						MasterUsername:        aws.String(defaultAwsPostgresUser),
@@ -150,7 +184,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(defaultAwsDBInstanceIdentifier),
+					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 			},
 			fields: fields{
@@ -173,7 +207,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
 					{
-						DBInstanceIdentifier:  aws.String(defaultAwsDBInstanceIdentifier),
+						DBInstanceIdentifier:  aws.String(testIdentifier),
 						DBInstanceStatus:      aws.String("available"),
 						DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
 						MasterUsername:        aws.String("newmasteruser"),
@@ -194,7 +228,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(defaultAwsDBInstanceIdentifier),
+					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 			},
 			fields: fields{
@@ -222,6 +256,119 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("createPostgresInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
+			}
+		})
+	}
+}
+
+func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
+	scheme, err := buildTestScheme()
+	testIdentifier := "test-id"
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx                  context.Context
+		pg                   *v1alpha1.Postgres
+		instanceSvc          rdsiface.RDSAPI
+		postgresCreateConfig *rds.CreateDBInstanceInput
+		postgresDeleteConfig *rds.DeleteDBInstanceInput
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    v1alpha1.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "test successful delete with no postgres",
+			args: args{
+				postgresDeleteConfig: &rds.DeleteDBInstanceInput{},
+				postgresCreateConfig: &rds.CreateDBInstanceInput{},
+				pg:                   buildTestPostgresCR(),
+				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    v1alpha1.StatusMessage(""),
+			wantErr: false,
+		}, {
+			name: "test successful delete with existing unavailable postgres",
+			args: args{
+				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                   buildTestPostgresCR(),
+				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    v1alpha1.StatusMessage("postgres instance deletion in progress"),
+			wantErr: false,
+		}, {
+			name: "test successful delete with existing available postgres",
+			args: args{
+				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                   buildTestPostgresCR(),
+				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    v1alpha1.StatusMessage("postgres instance deletion in progress"),
+			wantErr: false,
+		}, {
+			name: "test successful delete with existing available postgres and deletion protection",
+			args: args{
+				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                   buildTestPostgresCR(),
+				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    v1alpha1.StatusMessage("turning off deletion protection"),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &AWSPostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := p.deletePostgresInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("deletePostgresInstance() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("deletePostgresInstance() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

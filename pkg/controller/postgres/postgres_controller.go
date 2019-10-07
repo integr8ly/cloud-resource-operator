@@ -128,15 +128,15 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if instance.DeletionTimestamp != nil {
 			msg, err := p.DeletePostgres(r.ctx, instance)
 			if err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return reconcile.Result{}, err
+				if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); errUpdate != nil {
+					return reconcile.Result{}, errUpdate
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on Postgres to successfully delete")
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
-				return reconcile.Result{}, err
+			if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); errUpdate != nil {
+				return reconcile.Result{}, errUpdate
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}

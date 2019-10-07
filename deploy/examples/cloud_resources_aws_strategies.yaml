@@ -11,4 +11,4 @@ data:
   redis: |
     {"development": { "region": "eu-west-1", "strategy": {} }}
   postgres: |
-    {"development": { "region": "eu-west-1", "strategy": {} }}
+    {"development": { "region": "eu-west-1", "strategy": {}, "deleteStrategy": {} }}

@@ -45,6 +45,7 @@ var (
 				"rds:DescribeDBInstances",
 				"rds:CreateDBInstance",
 				"rds:DeleteDBInstance",
+				"rds:ModifyDBInstance",
 			},
 			Resource: "*",
 		},

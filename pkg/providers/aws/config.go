@@ -48,8 +48,9 @@ type ConfigMapConfigManager struct {
 }
 
 type StrategyConfig struct {
-	Region      string          `json:"region"`
-	RawStrategy json.RawMessage `json:"strategy"`
+	Region         string          `json:"region"`
+	RawStrategy    json.RawMessage `json:"strategy"`
+	DeleteStrategy json.RawMessage `json:"deleteStrategy"`
 }
 
 func NewConfigMapConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager {
