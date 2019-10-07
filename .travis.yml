@@ -9,7 +9,9 @@ git:
   depth: 1
 
 stages:
-  - test
+  - name: test
+  - name: push
+    if: fork = false AND branch = master
 
 before_install:
   - go get github.com/mattn/goveralls
@@ -24,3 +26,8 @@ jobs:
         - make test/unit/ci
         - $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken=$COVERALLS_TOKEN
         - make code/audit
+    - stage: push
+      script:
+        - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io
+        - export TAG=$(git rev-parse --short ${TRAVIS_COMMIT})
+        - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make image/push; else make image/push VERSION=$TAG; fi

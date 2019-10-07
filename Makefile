@@ -1,10 +1,13 @@
-
+IMAGE_REG=quay.io
+IMAGE_ORG=integreatly
+IMAGE_NAME=cloud-resource-operator
 NAMESPACE=cloud-resource-operator
-VERSION=0.1.0
+VERSION=v0.1.0
+COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
 .PHONY: build
 build:
-	go build cmd/manager/main.go
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) cmd/manager/main.go
 
 .PHONY: run
 run:
@@ -68,7 +71,15 @@ test/unit:
 	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
 
 .PHONY: test/unit/ci
-test/unit/ci:
+test/unit/ci: test/unit
 	@echo Removing mock file coverage
-	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
 	sed -i.bak '/_moq.go/d' coverage.out
+
+.PHONY: image/build
+image/build: build
+	@echo Building operator image
+	@operator-sdk build $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
+
+.PHONY: image/push
+image/push: image/build
+	docker push $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)

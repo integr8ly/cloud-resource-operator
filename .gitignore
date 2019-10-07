@@ -79,6 +79,7 @@ tags
 .idea
 ### CI ###
 coverage.out.bak
+tmp/
 ### macOS ###
 .DS_Store
 cover.html
