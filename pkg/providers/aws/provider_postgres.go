@@ -40,11 +40,13 @@ const (
 	defaultAwsAllocatedStorage           = 20
 	defaultAwsPostgresDatabase           = "postgres"
 	defaultAwsBackupRetentionPeriod      = 31
-	defaultAwsDBInstanceIdentifier       = "default-identifier"
+	defaultAwsDBInstanceIdentifier       = "test-identifier"
 	defaultAwsDBInstanceClass            = "db.t2.small"
 	defaultAwsEngine                     = "postgres"
 	defaultAwsEngineVersion              = "10.6"
 	defaultAwsPubliclyAccessible         = false
+
+	defaultAwsIdentifierLength = 40
 
 	defaultCredentialsSec      = "-aws-rds-credentials"
 	defaultPostgresUserKey     = "user"
@@ -135,7 +137,9 @@ func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1
 	}
 
 	// verify postgresConfig
-	verifyPostgresConfig(postgresCfg)
+	if err := p.verifyPostgresConfig(ctx, cr, postgresCfg); err != nil {
+		return nil, errorUtil.Wrap(err, "failed to verify aws postgres cluster configuration")
+	}
 
 	credSec := &v1.Secret{}
 	if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredentialsSec, Namespace: cr.Namespace}, credSec); err != nil {
@@ -263,7 +267,7 @@ func verifyPostgresChange(postgresConfig *rds.CreateDBInstanceInput, foundConfig
 	return mi
 }
 
-func verifyPostgresConfig(postgresConfig *rds.CreateDBInstanceInput) {
+func (p *AWSPostgresProvider) verifyPostgresConfig(ctx context.Context, pg *v1alpha1.Postgres, postgresConfig *rds.CreateDBInstanceInput) error {
 	if postgresConfig.DeletionProtection == nil {
 		postgresConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
 	}
@@ -282,9 +286,6 @@ func verifyPostgresConfig(postgresConfig *rds.CreateDBInstanceInput) {
 	if postgresConfig.BackupRetentionPeriod == nil {
 		postgresConfig.BackupRetentionPeriod = aws.Int64(defaultAwsBackupRetentionPeriod)
 	}
-	if postgresConfig.DBInstanceIdentifier == nil {
-		postgresConfig.DBInstanceIdentifier = aws.String(defaultAwsDBInstanceIdentifier)
-	}
 	if postgresConfig.DBInstanceClass == nil {
 		postgresConfig.DBInstanceClass = aws.String(defaultAwsDBInstanceClass)
 	}
@@ -302,8 +303,15 @@ func verifyPostgresConfig(postgresConfig *rds.CreateDBInstanceInput) {
 			postgresConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 		}
 	}
+	instanceName, err := buildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to retrieve postgres config")
+	}
+	if postgresConfig.DBInstanceIdentifier == nil {
+		postgresConfig.DBInstanceIdentifier = aws.String(instanceName)
+	}
 	postgresConfig.Engine = aws.String(defaultAwsEngine)
-
+	return nil
 }
 
 func GeneratePassword() (string, error) {

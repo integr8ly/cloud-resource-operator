@@ -4,6 +4,9 @@ import (
 	"context"
 	"reflect"
 
+	v12 "github.com/openshift/api/config/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/aws/aws-sdk-go/aws"
 
 	v1 "k8s.io/api/core/v1"
@@ -18,7 +21,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type mockRdsClient struct {
@@ -52,6 +54,17 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
+		},
+	}
+}
+
+func buildTestInfra() *v12.Infrastructure {
+	return &v12.Infrastructure{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name: "cluster",
+		},
+		Status: v12.InfrastructureStatus{
+			InfrastructureName: "test",
 		},
 	}
 }
@@ -103,7 +116,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				postgresCfg: &rds.CreateDBInstanceInput{},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -141,7 +154,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -185,7 +198,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,

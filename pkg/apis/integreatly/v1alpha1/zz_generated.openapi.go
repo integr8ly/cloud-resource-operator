@@ -124,6 +124,18 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
 			},
 		},
@@ -228,6 +240,18 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCal
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 				},
@@ -336,6 +360,18 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallba
 							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
 						},
 					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
 			},
 		},
@@ -440,6 +476,18 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref common.Ref
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("./pkg/apis/integreatly/v1alpha1.SecretRef"),
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 				},
