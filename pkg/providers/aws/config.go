@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -132,4 +133,13 @@ func buildInfraNameFromObject(ctx context.Context, c client.Client, om controlle
 		return "", errorUtil.Wrap(err, "failed to retrieve cluster identifier")
 	}
 	return resources.ShortenString(fmt.Sprintf("%s-%s-%s", clusterId, om.Namespace, om.Name), n), nil
+}
+
+func buildTimestampedInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta, n int) (string, error) {
+	clusterId, err := resources.GetClusterId(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to retrieve timestamped cluster identifier")
+	}
+	curTime := time.Now().Unix()
+	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%d", clusterId, om.Namespace, om.Name, curTime), n), nil
 }
