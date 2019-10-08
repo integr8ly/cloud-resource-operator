@@ -120,10 +120,10 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// setup aws RDS instance sdk session
-	cacheSvc := createRDSSession(stratCfg, providerCreds)
+	rdsSession := createRDSSession(stratCfg, providerCreds)
 
 	// create the aws RDS instance
-	return p.createRDSInstance(ctx, pg, cacheSvc, rdsCfg)
+	return p.createRDSInstance(ctx, pg, rdsSession, rdsCfg)
 }
 
 func createRDSSession(stratCfg *StrategyConfig, providerCreds *AWSCredentials) rdsiface.RDSAPI {
@@ -144,6 +144,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, v1alpha1.StatusMessage(msg), err
 	}
 
+	// getting postgres user password from created secret
 	credSec := &v1.Secret{}
 	if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredSecSuffix, Namespace: cr.Namespace}, credSec); err != nil {
 		msg := "failed to retrieve rds credential secret"
@@ -171,7 +172,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		}
 	}
 
-	// create rds instance
+	// create rds instance if it doesn't exist
 	if foundInstance == nil {
 		logrus.Info("creating rds instance")
 		if _, err = rdsSvc.CreateDBInstance(rdsCfg); err != nil {
@@ -180,11 +181,12 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, "started rds provision", nil
 	}
 
-	// rds instance creation in progress
+	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
 		return nil, v1alpha1.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
+	// rds instance is available
 	// check if found instance and user strategy differs, and modify instance
 	logrus.Info("found existing rds instance")
 	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
@@ -268,13 +270,12 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 			msg := "failed to update instance as part of finalizer reconcile"
 			return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
-		return "", nil
+		return v1alpha1.StatusEmpty, nil
 	}
 
 	// return if rds instance is not available
 	if *foundInstance.DBInstanceStatus != "available" {
 		return "rds instance deletion in progress", nil
-
 	}
 
 	// delete rds instance if deletion protection is false

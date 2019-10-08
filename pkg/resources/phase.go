@@ -13,7 +13,7 @@ import (
 )
 
 func UpdatePhase(ctx context.Context, client client.Client, inst runtime.Object, phase v1alpha1.StatusPhase, msg v1alpha1.StatusMessage) error {
-	if msg == "" {
+	if msg == v1alpha1.StatusEmpty {
 		return nil
 	}
 	rts := &v1alpha1.ResourceTypeStatus{}
