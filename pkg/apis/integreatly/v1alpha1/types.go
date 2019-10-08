@@ -1,10 +1,11 @@
 package v1alpha1
 
 var (
-	PhaseInProgress       StatusPhase = "in progress"
-	PhaseDeleteInProgress StatusPhase = "deletion in progress"
-	PhaseComplete         StatusPhase = "complete"
-	PhaseFailed           StatusPhase = "failed"
+	PhaseInProgress       StatusPhase   = "in progress"
+	PhaseDeleteInProgress StatusPhase   = "deletion in progress"
+	PhaseComplete         StatusPhase   = "complete"
+	PhaseFailed           StatusPhase   = "failed"
+	StatusEmpty           StatusMessage = ""
 )
 
 // SecretRef Represents a namespace-scoped Secret

@@ -9,6 +9,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	apis2 "github.com/integr8ly/cloud-resource-operator/pkg/apis"
+	confv1 "github.com/openshift/api/config/v1"
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
@@ -25,6 +26,7 @@ import (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis2.AddToScheme(scheme)
+	err = confv1.AddToScheme(scheme)
 	err = v12.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {
@@ -304,8 +306,8 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					},
 					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
 						return &StrategyConfig{
-							Region:      regionEUWest1,
-							RawStrategy: []byte("{}"),
+							Region:         regionEUWest1,
+							CreateStrategy: []byte("{}"),
 						}, nil
 					},
 				},
@@ -345,8 +347,8 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					},
 					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
 						return &StrategyConfig{
-							Region:      "unsupported-region",
-							RawStrategy: []byte("{}"),
+							Region:         "unsupported-region",
+							CreateStrategy: []byte("{}"),
 						}, nil
 					},
 				},

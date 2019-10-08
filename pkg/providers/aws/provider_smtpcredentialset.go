@@ -84,12 +84,8 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	p.Logger.Infof("creating smtp credential instance %s via aws ses", smtpCreds.Name)
 
 	// handle provider-specific finalizer
-	p.Logger.Infof("adding finalizer to smtp credentials instance %s", smtpCreds.Name)
-	if smtpCreds.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&smtpCreds.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, smtpCreds); err != nil {
-			return nil, "failed to add finalizer to smtp credential instance", errorUtil.Wrapf(err, "failed to add finalizer to smtp credential instance %s", smtpCreds.Name)
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, smtpCreds, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// retrieve deployment strategy for provided tier

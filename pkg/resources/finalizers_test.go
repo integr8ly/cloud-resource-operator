@@ -31,7 +31,7 @@ func TestAddFinalizer(t *testing.T) {
 			om := &controllerruntime.ObjectMeta{
 				Finalizers: tc.existingFinalizers,
 			}
-			AddFinalizer(om, tc.finalizer)
+			addFinalizer(om, tc.finalizer)
 			if len(om.GetFinalizers()) != tc.expectedLength {
 				t.Fatalf("unexpected finalizer length, expected %d but got %d", tc.expectedLength, len(om.GetFinalizers()))
 			}

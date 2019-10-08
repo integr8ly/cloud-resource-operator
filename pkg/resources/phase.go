@@ -13,6 +13,9 @@ import (
 )
 
 func UpdatePhase(ctx context.Context, client client.Client, inst runtime.Object, phase v1alpha1.StatusPhase, msg v1alpha1.StatusMessage) error {
+	if msg == v1alpha1.StatusEmpty {
+		return nil
+	}
 	rts := &v1alpha1.ResourceTypeStatus{}
 	if err := runtime.Field(reflect.ValueOf(inst).Elem(), "Status", rts); err != nil {
 		return errorUtil.Wrap(err, "failed to retrieve status block from object")

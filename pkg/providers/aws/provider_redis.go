@@ -63,11 +63,8 @@ func (p *AWSRedisProvider) SupportsStrategy(d string) bool {
 // CreateRedis Create an Elasticache Replication Group from strategy config
 func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
-	if r.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&r.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, r); err != nil {
-			return nil, "failed to add finalizer to instance", errorUtil.Wrapf(err, "failed to add finalizer to instance")
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// cluster infra info
@@ -265,7 +262,7 @@ func (p *AWSRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis
 
 	// unmarshal the redis cluster config
 	redisConfig := &elasticache.CreateReplicationGroupInput{}
-	if err := json.Unmarshal(stratCfg.RawStrategy, redisConfig); err != nil {
+	if err := json.Unmarshal(stratCfg.CreateStrategy, redisConfig); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws redis cluster configuration")
 	}
 	return redisConfig, stratCfg, nil

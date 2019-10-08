@@ -6,9 +6,9 @@ metadata:
 spec:
   # i want my postgres storage information output in a Secret named test in the Namespace cloud-resource-operator
   secretRef:
-    name: postgres-test
+    name: example-postgres
     namespace: cloud-resource-operator
   # i want a postgres storage of a development-level tier
   tier: development
-  # i want a postgres storage for the type workshop
-  type: workshop
+  # i want a postgres storage for the type managed
+  type: managed

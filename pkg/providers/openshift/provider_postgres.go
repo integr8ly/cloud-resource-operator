@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -51,24 +50,6 @@ type PostgresStrat struct {
 	PostgresSecretData     map[string]string             `json:"secretData"`
 }
 
-type OpenShiftPostgresDeploymentDetails struct {
-	Username string
-	Password string
-	Host     string
-	Database string
-	Port     int
-}
-
-func (d *OpenShiftPostgresDeploymentDetails) Data() map[string][]byte {
-	return map[string][]byte{
-		"username": []byte(d.Username),
-		"password": []byte(d.Password),
-		"host":     []byte(d.Host),
-		"database": []byte(d.Database),
-		"port":     []byte(strconv.Itoa(d.Port)),
-	}
-}
-
 type OpenShiftPostgresProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
@@ -93,11 +74,8 @@ func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
 
 func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
-	if ps.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&ps.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, ps); err != nil {
-			return nil, "failed to add finalizer to instance", errorUtil.Wrapf(err, "failed to add finalizer to instance")
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, ps, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// get postgres config
@@ -142,7 +120,7 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
 			p.Logger.Info("Found postgres deployment")
 			return &providers.PostgresInstance{
-				DeploymentDetails: &OpenShiftPostgresDeploymentDetails{
+				DeploymentDetails: &providers.PostgresDeploymentDetails{
 					Username: string(sec.Data["user"]),
 					Password: string(sec.Data["password"]),
 					Database: string(sec.Data["database"]),

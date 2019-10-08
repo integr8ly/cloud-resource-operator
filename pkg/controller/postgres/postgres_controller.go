@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -43,7 +44,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	ctx := context.TODO()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger)}
+	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger), aws.NewAWSPostgresProvider(client, logger)}
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
 	return &ReconcilePostgres{client: client, scheme: mgr.GetScheme(), logger: logger, ctx: ctx, providerList: providerList, cfgMgr: cfgMgr}
 }
@@ -127,15 +128,15 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if instance.DeletionTimestamp != nil {
 			msg, err := p.DeletePostgres(r.ctx, instance)
 			if err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return reconcile.Result{}, err
+				if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); errUpdate != nil {
+					return reconcile.Result{}, errUpdate
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on Postgres to successfully delete")
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
-				return reconcile.Result{}, err
+			if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); errUpdate != nil {
+				return reconcile.Result{}, errUpdate
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
 		}

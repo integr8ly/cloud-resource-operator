@@ -89,12 +89,8 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("creating blob storage instance %s via aws s3", bs.Name)
 
 	// handle provider-specific finalizer
-	p.Logger.Infof("adding finalizer to blob storage instance %s", bs.Name)
-	if bs.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&bs.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, bs); err != nil {
-			return nil, "failed to add finalizer to blob storage cr", errorUtil.Wrapf(err, "failed to add finalizer to blob storage instance %s", bs.Name)
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, bs, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// info about the bucket to be created
@@ -292,7 +288,7 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 
 	// delete the s3 bucket created by the provider
 	s3cbi := &s3.CreateBucketInput{}
-	if err = json.Unmarshal(stratCfg.RawStrategy, s3cbi); err != nil {
+	if err = json.Unmarshal(stratCfg.CreateStrategy, s3cbi); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
 	return s3cbi, stratCfg, nil
