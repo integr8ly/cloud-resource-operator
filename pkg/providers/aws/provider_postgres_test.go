@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	v12 "github.com/openshift/api/config/v1"
@@ -79,9 +80,9 @@ func builtTestCredSecret() *v1.Secret {
 			Name:      "test-aws-rds-credentials",
 			Namespace: "test",
 		},
-		StringData: map[string]string{
-			"user":     "postgres",
-			"password": "test",
+		Data: map[string][]byte{
+			"user":     []byte("postgres"),
+			"password": []byte("test"),
 		},
 	}
 }
@@ -195,7 +196,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			},
 			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: defaultAwsPostgresUser,
-				Password: "password",
+				Password: "test",
 				Host:     "blob",
 				Database: defaultAwsEngine,
 				Port:     defaultAwsPostgresPort,
@@ -254,7 +255,9 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			fmt.Println(got)
+			fmt.Println(tt.want)
+			if tt.want != nil && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("createRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
 			}
 		})
@@ -318,7 +321,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage("postgres instance deletion in progress"),
+			want:    v1alpha1.StatusMessage("rds instance deletion in progress"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres",
@@ -334,7 +337,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage("postgres instance deletion in progress"),
+			want:    v1alpha1.StatusMessage("deletion started"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres and deletion protection",

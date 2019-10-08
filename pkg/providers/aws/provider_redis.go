@@ -262,7 +262,7 @@ func (p *AWSRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis
 
 	// unmarshal the redis cluster config
 	redisConfig := &elasticache.CreateReplicationGroupInput{}
-	if err := json.Unmarshal(stratCfg.RawStrategy, redisConfig); err != nil {
+	if err := json.Unmarshal(stratCfg.CreateStrategy, redisConfig); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws redis cluster configuration")
 	}
 	return redisConfig, stratCfg, nil

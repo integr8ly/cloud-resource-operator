@@ -5,10 +5,10 @@ metadata:
   namespace: kube-system
 data:
   blobstorage: |
-    {"development": { "region": "eu-west-1", "strategy": {} }}
+    {"development": { "region": "eu-west-1", "createStrategy": {} }}
   smtpcredentials: |
-    {"development": { "region": "eu-west-1", "strategy": {} }}
+    {"development": { "region": "eu-west-1", "createStrategy": {} }}
   redis: |
-    {"development": { "region": "eu-west-1", "strategy": {} }}
+    {"development": { "region": "eu-west-1", "createStrategy": {} }}
   postgres: |
-    {"development": { "region": "eu-west-1", "strategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "eu-west-1", "createStrategy": {}, "deleteStrategy": {} }}

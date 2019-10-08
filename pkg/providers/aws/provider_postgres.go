@@ -182,7 +182,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 
 	// rds instance creation in progress
 	if *foundInstance.DBInstanceStatus != "available" {
-		return nil, v1alpha1.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", foundInstance.DBInstanceStatus)), nil
+		return nil, v1alpha1.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
 	// check if found instance and user strategy differs, and modify instance
@@ -327,7 +327,7 @@ func (p *AWSPostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Post
 	}
 
 	rdsCreateConfig := &rds.CreateDBInstanceInput{}
-	if err := json.Unmarshal(stratCfg.RawStrategy, rdsCreateConfig); err != nil {
+	if err := json.Unmarshal(stratCfg.CreateStrategy, rdsCreateConfig); err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws rds cluster configuration")
 	}
 

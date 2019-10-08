@@ -288,7 +288,7 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 
 	// delete the s3 bucket created by the provider
 	s3cbi := &s3.CreateBucketInput{}
-	if err = json.Unmarshal(stratCfg.RawStrategy, s3cbi); err != nil {
+	if err = json.Unmarshal(stratCfg.CreateStrategy, s3cbi); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
 	}
 	return s3cbi, stratCfg, nil

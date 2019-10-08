@@ -306,8 +306,8 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					},
 					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
 						return &StrategyConfig{
-							Region:      regionEUWest1,
-							RawStrategy: []byte("{}"),
+							Region:         regionEUWest1,
+							CreateStrategy: []byte("{}"),
 						}, nil
 					},
 				},
@@ -347,8 +347,8 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					},
 					ReadSMTPCredentialSetStrategyFunc: func(ctx context.Context, tier string) (config *StrategyConfig, e error) {
 						return &StrategyConfig{
-							Region:      "unsupported-region",
-							RawStrategy: []byte("{}"),
+							Region:         "unsupported-region",
+							CreateStrategy: []byte("{}"),
 						}, nil
 					},
 				},

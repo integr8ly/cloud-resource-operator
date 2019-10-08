@@ -62,8 +62,8 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	sc := &StrategyConfig{
-		Region:      "eu-west-1",
-		RawStrategy: json.RawMessage("{\"bucket\":\"testbucket\"}"),
+		Region:         "eu-west-1",
+		CreateStrategy: json.RawMessage("{\"bucket\":\"testbucket\"}"),
 	}
 	rawStratCfg, err := json.Marshal(sc)
 	if err != nil {
@@ -84,7 +84,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			cmNamespace:         "test",
 			tier:                "test",
 			expectedRegion:      "eu-west-1",
-			expectedRawStrategy: string(sc.RawStrategy),
+			expectedRawStrategy: string(sc.CreateStrategy),
 			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
@@ -106,8 +106,8 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			if sc.Region != tc.expectedRegion {
 				t.Fatalf("unexpected region, expected %s but got %s", tc.expectedRegion, sc.Region)
 			}
-			if string(sc.RawStrategy) != tc.expectedRawStrategy {
-				t.Fatalf("unexpected raw strategy, expected %s but got %s", tc.expectedRawStrategy, sc.RawStrategy)
+			if string(sc.CreateStrategy) != tc.expectedRawStrategy {
+				t.Fatalf("unexpected raw strategy, expected %s but got %s", tc.expectedRawStrategy, sc.CreateStrategy)
 			}
 		})
 	}
