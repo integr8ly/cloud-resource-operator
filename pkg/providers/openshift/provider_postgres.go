@@ -74,11 +74,8 @@ func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
 
 func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
-	if ps.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&ps.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, ps); err != nil {
-			return nil, "failed to add finalizer to instance", errorUtil.Wrapf(err, "failed to add finalizer to instance")
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, ps, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// get postgres config

@@ -66,12 +66,8 @@ func (p *OpenShiftRedisProvider) SupportsStrategy(d string) bool {
 
 func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
-	if r.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&r.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, r); err != nil {
-			msg := "failed to add finalizer to instance"
-			return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// get redis config

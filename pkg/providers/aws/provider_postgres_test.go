@@ -195,7 +195,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			},
 			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: defaultAwsPostgresUser,
-				Password: defaultAwsPostgresPassword,
+				Password: "password",
 				Host:     "blob",
 				Database: defaultAwsEngine,
 				Port:     defaultAwsPostgresPort,
@@ -249,13 +249,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createPostgresInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.postgresCfg)
+			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.postgresCfg)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("createPostgresInstance() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("createPostgresInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
+				t.Errorf("createRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
 			}
 		})
 	}
@@ -362,13 +362,13 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deletePostgresInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("deletePostgresInstance() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("deletePostgresInstance() got = %v, want %v", got, tt.want)
+				t.Errorf("deleteRDSInstance() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

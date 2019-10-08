@@ -44,6 +44,7 @@ const (
 	defaultAwsPostgresPort               = 5432
 	defaultAwsPostgresUser               = "postgres"
 	defaultAwsAllocatedStorage           = 20
+	defaultAwsMaxAllocatedStorage        = 100
 	defaultAwsPostgresDatabase           = "postgres"
 	defaultAwsBackupRetentionPeriod      = 31
 	defaultAwsDBInstanceClass            = "db.t2.small"
@@ -61,7 +62,6 @@ const (
 
 var (
 	defaultSupportedEngineVersions = []string{"10.6", "9.6", "9.5"}
-	defaultAwsPostgresPassword     = ""
 )
 
 type AWSPostgresProvider struct {
@@ -89,44 +89,44 @@ func (p *AWSPostgresProvider) SupportsStrategy(d string) bool {
 }
 
 // CreatePostgres creates an RDS Instance from strategy config
-func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, r *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
-	if r.GetDeletionTimestamp() == nil {
-		resources.AddFinalizer(&r.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, r); err != nil {
-			msg := "failed to add finalizer to instance"
-			return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-		}
+	if err := resources.CreateFinalizer(ctx, p.Client, pg, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
 	}
 
 	// info about the RDS instance to be created
-	postgresCfg, _, stratCfg, err := p.getPostgresConfig(ctx, r)
+	rdsCfg, _, stratCfg, err := p.getRDSConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve aws RDS cluster config for instance"
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
-	provoiderCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
+	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, pg.Namespace)
 	if err != nil {
 		msg := "failed to reconcile RDS credentials"
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// create credentials secret
-	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(r)); err != nil {
-		msg := "failed to create or update postgres secret"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	sec := buildDefaultRDSSecret(pg)
+	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func(existing runtime.Object) error {
+		return nil
+	})
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to create or update secret %s, action was %s", sec.Name, or)
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// setup aws RDS instance sdk session
-	cacheSvc := createPostgresService(stratCfg, provoiderCreds)
+	cacheSvc := createRDSSession(stratCfg, providerCreds)
 
 	// create the aws RDS instance
-	return p.createPostgresInstance(ctx, r, cacheSvc, postgresCfg)
+	return p.createRDSInstance(ctx, pg, cacheSvc, rdsCfg)
 }
 
-func createPostgresService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) rdsiface.RDSAPI {
+func createRDSSession(stratCfg *StrategyConfig, providerCreds *AWSCredentials) rdsiface.RDSAPI {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
@@ -134,77 +134,82 @@ func createPostgresService(stratCfg *StrategyConfig, providerCreds *AWSCredentia
 	return rds.New(sess)
 }
 
-func (p *AWSPostgresProvider) createPostgresInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, postgresCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
-	pi, err := getPostgresInstances(rdsSvc)
+	pi, err := getRDSInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
-		logrus.Info("error getting replication groups : ", err)
-		return nil, "error getting replication groups", err
-	}
-
-	// verify postgresConfig
-	if err := p.verifyPostgresCreateConfig(ctx, cr, postgresCfg); err != nil {
-		msg := "failed to verify aws postgres cluster configuration"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		msg := "error getting replication groups"
+		logrus.Info(msg, err)
+		return nil, v1alpha1.StatusMessage(msg), err
 	}
 
 	credSec := &v1.Secret{}
 	if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredSecSuffix, Namespace: cr.Namespace}, credSec); err != nil {
-		msg := "failed to retrieve postgres credential secret"
+		msg := "failed to retrieve rds credential secret"
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	for k, p := range credSec.Data {
-		if k == defaultPostgresPasswordKey {
-			defaultAwsPostgresPassword = string(p)
-		}
+	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
+	if postgresPass == "" {
+		msg := "unable to retrieve rds password"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	// verify rdsConfig
+	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
+		msg := "failed to verify aws rds instance configuration"
+		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// check if the cluster has already been created
 	var foundInstance *rds.DBInstance
 	for _, i := range pi {
-		if *i.DBInstanceIdentifier == *postgresCfg.DBInstanceIdentifier {
+		if *i.DBInstanceIdentifier == *rdsCfg.DBInstanceIdentifier {
 			foundInstance = i
 			break
 		}
 	}
-	if foundInstance != nil {
-		if *foundInstance.DBInstanceStatus == "available" {
-			logrus.Info("found existing rds instance")
-			mi := verifyPostgresChange(postgresCfg, foundInstance)
-			if mi != nil {
-				_, err = rdsSvc.ModifyDBInstance(mi)
-				if err != nil {
-					return nil, "failed to modify instance", err
-				}
-				return nil, "modify instance in progress", nil
-			}
-			return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
-				Username: *foundInstance.MasterUsername,
-				Password: defaultAwsPostgresPassword,
-				Host:     *foundInstance.Endpoint.Address,
-				Database: *foundInstance.DBName,
-				Port:     int(*foundInstance.Endpoint.Port),
-			}}, "creation successful", nil
+
+	// create rds instance
+	if foundInstance == nil {
+		logrus.Info("creating rds instance")
+		if _, err = rdsSvc.CreateDBInstance(rdsCfg); err != nil {
+			return nil, v1alpha1.StatusMessage(fmt.Sprintf("error creating rds instance %s", err)), err
 		}
-		return nil, "creation in progress", nil
+		return nil, "started rds provision", nil
 	}
 
-	logrus.Info("creating rds instance")
-	_, err = rdsSvc.CreateDBInstance(postgresCfg)
-	if err != nil {
-		return nil, "error creating postgres instance", err
+	// rds instance creation in progress
+	if *foundInstance.DBInstanceStatus != "available" {
+		return nil, v1alpha1.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", foundInstance.DBInstanceStatus)), nil
 	}
-	return nil, "", nil
+
+	// check if found instance and user strategy differs, and modify instance
+	logrus.Info("found existing rds instance")
+	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+	if mi != nil {
+		if _, err = rdsSvc.ModifyDBInstance(mi); err != nil {
+			return nil, "failed to modify instance", err
+		}
+		return nil, "modify instance in progress", nil
+	}
+
+	// return secret information
+	return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
+		Username: *foundInstance.MasterUsername,
+		Password: postgresPass,
+		Host:     *foundInstance.Endpoint.Address,
+		Database: *foundInstance.DBName,
+		Port:     int(*foundInstance.Endpoint.Port),
+	}}, "creation successful", nil
 }
 
 func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
 	// resolve postgres information for postgres created by provider
-	postgresCreateConfig, postgresDeleteConfig, stratCfg, err := p.getPostgresConfig(ctx, r)
+	rdsCreateConfig, rdsDeleteConfig, stratCfg, err := p.getRDSConfig(ctx, r)
 	if err != nil {
-		msg := "failed to retrieve aws postgres config"
-		return v1alpha1.StatusMessage(msg), err
+		return "failed to retrieve aws rds config", err
 	}
 
 	// get provider aws creds so the postgres instance can be deleted
@@ -215,28 +220,28 @@ func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Po
 	}
 
 	// setup aws postgres instance sdk session
-	instanceSvc := createPostgresService(stratCfg, providerCreds)
+	instanceSvc := createRDSSession(stratCfg, providerCreds)
 
-	return p.deletePostgresInstance(ctx, r, instanceSvc, postgresCreateConfig, postgresDeleteConfig)
+	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
 
-func (p *AWSPostgresProvider) deletePostgresInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, postgresCreateConfig *rds.CreateDBInstanceInput, postgresDeleteConfig *rds.DeleteDBInstanceInput) (v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (v1alpha1.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
-	pgs, err := getPostgresInstances(instanceSvc)
+	pgs, err := getRDSInstances(instanceSvc)
 	if err != nil {
 		return "error getting aws rds instances", err
 	}
 
 	// check and verify delete config
-	if err := p.verifyPostgresDeleteConfig(ctx, pg, postgresCreateConfig, postgresDeleteConfig); err != nil {
-		msg := "failed to verify aws postgres cluster configuration"
+	if err := p.buildRDSDeleteConfig(ctx, pg, rdsCreateConfig, rdsDeleteConfig); err != nil {
+		msg := "failed to verify aws rds instance configuration"
 		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// check if the instance has already been deleted
 	var foundInstance *rds.DBInstance
 	for _, i := range pgs {
-		if *i.DBInstanceIdentifier == *postgresDeleteConfig.DBInstanceIdentifier {
+		if *i.DBInstanceIdentifier == *rdsDeleteConfig.DBInstanceIdentifier {
 			foundInstance = i
 			break
 		}
@@ -245,7 +250,7 @@ func (p *AWSPostgresProvider) deletePostgresInstance(ctx context.Context, pg *v1
 	// check if instance does not exist, delete finalizer and credential secret
 	if foundInstance == nil {
 		// delete credential secret
-		p.Logger.Info("Deleting postgres secret")
+		p.Logger.Info("Deleting rds secret")
 		sec := &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pg.Name + defaultCredSecSuffix,
@@ -254,7 +259,7 @@ func (p *AWSPostgresProvider) deletePostgresInstance(ctx context.Context, pg *v1
 		}
 		err = p.Client.Delete(ctx, sec)
 		if err != nil && !k8serr.IsNotFound(err) {
-			msg := "failed to deleted postgres secrets"
+			msg := "failed to deleted rds secrets"
 			return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
@@ -266,37 +271,37 @@ func (p *AWSPostgresProvider) deletePostgresInstance(ctx context.Context, pg *v1
 		return "", nil
 	}
 
-	// check if instance db exists and is available
-	if *foundInstance.DBInstanceStatus == "available" {
-		if *foundInstance.DeletionProtection {
-			_, err = instanceSvc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
-				DBInstanceIdentifier: postgresDeleteConfig.DBInstanceIdentifier,
-				DeletionProtection:   aws.Bool(false),
-			})
-			if err != nil {
-				msg := "waiting on AWS ModifyDBInstance permission"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
-			}
-			return "turning off deletion protection", nil
-		}
-		_, err = instanceSvc.DeleteDBInstance(postgresDeleteConfig)
-		postgresErr, isAwsErr := err.(awserr.Error)
-		if err != nil && !isAwsErr {
+	// return if rds instance is not available
+	if *foundInstance.DBInstanceStatus != "available" {
+		return "rds instance deletion in progress", nil
+
+	}
+
+	// delete rds instance if deletion protection is false
+	if !*foundInstance.DeletionProtection {
+		_, err = instanceSvc.DeleteDBInstance(rdsDeleteConfig)
+		rdsErr, isAwsErr := err.(awserr.Error)
+		if err != nil && (!isAwsErr || rdsErr.Code() != rds.ErrCodeDBInstanceNotFoundFault) {
 			msg := fmt.Sprintf("failed to delete rds instance : %s", err)
 			return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
-		if err != nil && isAwsErr {
-			if postgresErr.Code() != rds.ErrCodeDBInstanceNotFoundFault {
-				msg := fmt.Sprintf("failed to delete rds instance : %s", err)
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-			}
-		}
+		return "deletion started", nil
 	}
-	return "postgres instance deletion in progress", nil
+
+	// modify rds instance to turn off deletion protection
+	_, err = instanceSvc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
+		DBInstanceIdentifier: rdsDeleteConfig.DBInstanceIdentifier,
+		DeletionProtection:   aws.Bool(false),
+	})
+	if err != nil {
+		msg := "failed to remove deletion protection"
+		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+	return "turning off deletion protection", nil
 }
 
 // function to get rds instances, used to check/wait on AWS credentials
-func getPostgresInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
+func getRDSInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	var pi []*rds.DBInstance
 	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
@@ -312,7 +317,7 @@ func getPostgresInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	return pi, nil
 }
 
-func (p *AWSPostgresProvider) getPostgresConfig(ctx context.Context, r *v1alpha1.Postgres) (*rds.CreateDBInstanceInput, *rds.DeleteDBInstanceInput, *StrategyConfig, error) {
+func (p *AWSPostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgres) (*rds.CreateDBInstanceInput, *rds.DeleteDBInstanceInput, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, r.Spec.Tier)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
@@ -321,51 +326,51 @@ func (p *AWSPostgresProvider) getPostgresConfig(ctx context.Context, r *v1alpha1
 		stratCfg.Region = DefaultRegion
 	}
 
-	postgresCreateConfig := &rds.CreateDBInstanceInput{}
-	if err := json.Unmarshal(stratCfg.RawStrategy, postgresCreateConfig); err != nil {
-		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws postgres cluster configuration")
+	rdsCreateConfig := &rds.CreateDBInstanceInput{}
+	if err := json.Unmarshal(stratCfg.RawStrategy, rdsCreateConfig); err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws rds cluster configuration")
 	}
 
-	postgresDeleteConfig := &rds.DeleteDBInstanceInput{}
-	if err := json.Unmarshal(stratCfg.DeleteStrategy, postgresDeleteConfig); err != nil {
-		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws postgres cluster configuration")
+	rdsDeleteConfig := &rds.DeleteDBInstanceInput{}
+	if err := json.Unmarshal(stratCfg.DeleteStrategy, rdsDeleteConfig); err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws rds cluster configuration")
 	}
-	return postgresCreateConfig, postgresDeleteConfig, stratCfg, nil
+	return rdsCreateConfig, rdsDeleteConfig, stratCfg, nil
 }
 
 // verifies if there is a change between a found instance and the configuration from the instance strat
-func verifyPostgresChange(postgresConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput {
+func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput {
 	updateFound := false
 
 	mi := &rds.ModifyDBInstanceInput{}
-	mi.DBInstanceIdentifier = postgresConfig.DBInstanceIdentifier
+	mi.DBInstanceIdentifier = rdsConfig.DBInstanceIdentifier
 
-	if *postgresConfig.DeletionProtection != *foundConfig.DeletionProtection {
-		mi.DeletionProtection = postgresConfig.DeletionProtection
+	if *rdsConfig.DeletionProtection != *foundConfig.DeletionProtection {
+		mi.DeletionProtection = rdsConfig.DeletionProtection
 		updateFound = true
 	}
-	if *postgresConfig.Port != *foundConfig.Endpoint.Port {
-		mi.DBPortNumber = postgresConfig.Port
+	if *rdsConfig.Port != *foundConfig.Endpoint.Port {
+		mi.DBPortNumber = rdsConfig.Port
 		updateFound = true
 	}
-	if *postgresConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod {
-		mi.BackupRetentionPeriod = postgresConfig.BackupRetentionPeriod
+	if *rdsConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod {
+		mi.BackupRetentionPeriod = rdsConfig.BackupRetentionPeriod
 		updateFound = true
 	}
-	if *postgresConfig.DBInstanceClass != *foundConfig.DBInstanceClass {
-		mi.DBInstanceClass = postgresConfig.DBInstanceClass
+	if *rdsConfig.DBInstanceClass != *foundConfig.DBInstanceClass {
+		mi.DBInstanceClass = rdsConfig.DBInstanceClass
 		updateFound = true
 	}
-	if *postgresConfig.PubliclyAccessible != *foundConfig.PubliclyAccessible {
-		mi.PubliclyAccessible = postgresConfig.PubliclyAccessible
+	if *rdsConfig.PubliclyAccessible != *foundConfig.PubliclyAccessible {
+		mi.PubliclyAccessible = rdsConfig.PubliclyAccessible
 		updateFound = true
 	}
-	if *postgresConfig.AllocatedStorage != *foundConfig.AllocatedStorage {
-		mi.AllocatedStorage = postgresConfig.AllocatedStorage
+	if *rdsConfig.AllocatedStorage != *foundConfig.AllocatedStorage {
+		mi.AllocatedStorage = rdsConfig.AllocatedStorage
 		updateFound = true
 	}
-	if *postgresConfig.EngineVersion != *foundConfig.EngineVersion {
-		mi.EngineVersion = postgresConfig.EngineVersion
+	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion {
+		mi.EngineVersion = rdsConfig.EngineVersion
 		updateFound = true
 	}
 	if !updateFound {
@@ -375,73 +380,76 @@ func verifyPostgresChange(postgresConfig *rds.CreateDBInstanceInput, foundConfig
 }
 
 // verify postgres create config
-func (p *AWSPostgresProvider) verifyPostgresCreateConfig(ctx context.Context, pg *v1alpha1.Postgres, postgresCreateConfig *rds.CreateDBInstanceInput) error {
-	if postgresCreateConfig.DeletionProtection == nil {
-		postgresCreateConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
+func (p *AWSPostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, postgresPassword string) error {
+	if rdsCreateConfig.DeletionProtection == nil {
+		rdsCreateConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
 	}
-	if postgresCreateConfig.MasterUsername == nil {
-		postgresCreateConfig.MasterUsername = aws.String(defaultAwsPostgresUser)
+	if rdsCreateConfig.MasterUsername == nil {
+		rdsCreateConfig.MasterUsername = aws.String(defaultAwsPostgresUser)
 	}
-	if postgresCreateConfig.MasterUserPassword == nil {
-		postgresCreateConfig.MasterUserPassword = aws.String(defaultAwsPostgresPassword)
+	if rdsCreateConfig.MasterUserPassword == nil {
+		rdsCreateConfig.MasterUserPassword = aws.String(postgresPassword)
 	}
-	if postgresCreateConfig.Port == nil {
-		postgresCreateConfig.Port = aws.Int64(defaultAwsPostgresPort)
+	if rdsCreateConfig.Port == nil {
+		rdsCreateConfig.Port = aws.Int64(defaultAwsPostgresPort)
 	}
-	if postgresCreateConfig.DBName == nil {
-		postgresCreateConfig.DBName = aws.String(defaultAwsPostgresDatabase)
+	if rdsCreateConfig.DBName == nil {
+		rdsCreateConfig.DBName = aws.String(defaultAwsPostgresDatabase)
 	}
-	if postgresCreateConfig.BackupRetentionPeriod == nil {
-		postgresCreateConfig.BackupRetentionPeriod = aws.Int64(defaultAwsBackupRetentionPeriod)
+	if rdsCreateConfig.BackupRetentionPeriod == nil {
+		rdsCreateConfig.BackupRetentionPeriod = aws.Int64(defaultAwsBackupRetentionPeriod)
 	}
-	if postgresCreateConfig.DBInstanceClass == nil {
-		postgresCreateConfig.DBInstanceClass = aws.String(defaultAwsDBInstanceClass)
+	if rdsCreateConfig.DBInstanceClass == nil {
+		rdsCreateConfig.DBInstanceClass = aws.String(defaultAwsDBInstanceClass)
 	}
-	if postgresCreateConfig.PubliclyAccessible == nil {
-		postgresCreateConfig.PubliclyAccessible = aws.Bool(defaultAwsPubliclyAccessible)
+	if rdsCreateConfig.PubliclyAccessible == nil {
+		rdsCreateConfig.PubliclyAccessible = aws.Bool(defaultAwsPubliclyAccessible)
 	}
-	if postgresCreateConfig.AllocatedStorage == nil {
-		postgresCreateConfig.AllocatedStorage = aws.Int64(defaultAwsAllocatedStorage)
+	if rdsCreateConfig.AllocatedStorage == nil {
+		rdsCreateConfig.AllocatedStorage = aws.Int64(defaultAwsAllocatedStorage)
 	}
-	if postgresCreateConfig.EngineVersion == nil {
-		postgresCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+	if rdsCreateConfig.MaxAllocatedStorage == nil {
+		rdsCreateConfig.MaxAllocatedStorage = aws.Int64(defaultAwsMaxAllocatedStorage)
 	}
-	if postgresCreateConfig.EngineVersion != nil {
-		if !resources.Contains(defaultSupportedEngineVersions, *postgresCreateConfig.EngineVersion) {
-			postgresCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+	if rdsCreateConfig.EngineVersion == nil {
+		rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+	}
+	if rdsCreateConfig.EngineVersion != nil {
+		if !resources.Contains(defaultSupportedEngineVersions, *rdsCreateConfig.EngineVersion) {
+			rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 		}
 	}
 	instanceName, err := buildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to retrieve postgres config")
+		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
-	if postgresCreateConfig.DBInstanceIdentifier == nil {
-		postgresCreateConfig.DBInstanceIdentifier = aws.String(instanceName)
+	if rdsCreateConfig.DBInstanceIdentifier == nil {
+		rdsCreateConfig.DBInstanceIdentifier = aws.String(instanceName)
 	}
-	postgresCreateConfig.Engine = aws.String(defaultAwsEngine)
+	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
 	return nil
 }
 
 // verify postgres delete config
-func (p *AWSPostgresProvider) verifyPostgresDeleteConfig(ctx context.Context, pg *v1alpha1.Postgres, postgresCreateConfig *rds.CreateDBInstanceInput, postgresDeleteConfig *rds.DeleteDBInstanceInput) error {
+func (p *AWSPostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) error {
 	instanceIdentifier, err := buildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to retrieve postgres config")
+		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
-	if postgresDeleteConfig.DBInstanceIdentifier == nil {
-		if postgresCreateConfig.DBInstanceIdentifier == nil {
-			postgresCreateConfig.DBInstanceIdentifier = aws.String(instanceIdentifier)
+	if rdsDeleteConfig.DBInstanceIdentifier == nil {
+		if rdsCreateConfig.DBInstanceIdentifier == nil {
+			rdsCreateConfig.DBInstanceIdentifier = aws.String(instanceIdentifier)
 		}
-		postgresDeleteConfig.DBInstanceIdentifier = postgresCreateConfig.DBInstanceIdentifier
+		rdsDeleteConfig.DBInstanceIdentifier = rdsCreateConfig.DBInstanceIdentifier
 	}
-	if postgresDeleteConfig.DeleteAutomatedBackups == nil {
-		postgresDeleteConfig.DeleteAutomatedBackups = aws.Bool(defaultAwsDeleteAutomatedBackups)
+	if rdsDeleteConfig.DeleteAutomatedBackups == nil {
+		rdsDeleteConfig.DeleteAutomatedBackups = aws.Bool(defaultAwsDeleteAutomatedBackups)
 	}
-	if postgresDeleteConfig.SkipFinalSnapshot == nil {
-		postgresDeleteConfig.SkipFinalSnapshot = aws.Bool(defaultAwsSkipFinalSnapshot)
+	if rdsDeleteConfig.SkipFinalSnapshot == nil {
+		rdsDeleteConfig.SkipFinalSnapshot = aws.Bool(defaultAwsSkipFinalSnapshot)
 	}
-	if postgresDeleteConfig.FinalDBSnapshotIdentifier == nil && !*postgresDeleteConfig.SkipFinalSnapshot {
-		postgresDeleteConfig.FinalDBSnapshotIdentifier = aws.String(instanceIdentifier)
+	if rdsDeleteConfig.FinalDBSnapshotIdentifier == nil && !*rdsDeleteConfig.SkipFinalSnapshot {
+		rdsDeleteConfig.FinalDBSnapshotIdentifier = aws.String(instanceIdentifier)
 	}
 	return nil
 }
@@ -454,17 +462,7 @@ func GeneratePassword() (string, error) {
 	return strings.Replace(generatedPassword.String(), "-", "", 10), nil
 }
 
-func (p *AWSPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secret) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
-		return nil
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to create or update secret %s, action was %s", s.Name, or)
-	}
-	return nil
-}
-
-func buildDefaultPostgresSecret(ps *v1alpha1.Postgres) *v1.Secret {
+func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	password, err := GeneratePassword()
 	if err != nil {
 		return nil
