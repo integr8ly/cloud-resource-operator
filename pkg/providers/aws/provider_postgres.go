@@ -157,9 +157,9 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	// verify rdsConfig
+	// verify and build rds create config
 	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
-		msg := "failed to verify aws rds instance configuration"
+		msg := "failed to build and verify aws rds instance configuration"
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
@@ -344,7 +344,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 	updateFound := false
 
 	mi := &rds.ModifyDBInstanceInput{}
-	mi.DBInstanceIdentifier = rdsConfig.DBInstanceIdentifier
+	mi.DBInstanceIdentifier = foundConfig.DBInstanceIdentifier
 
 	if *rdsConfig.DeletionProtection != *foundConfig.DeletionProtection {
 		mi.DeletionProtection = rdsConfig.DeletionProtection

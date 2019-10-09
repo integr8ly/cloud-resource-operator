@@ -81,5 +81,6 @@ tags
 coverage.out.bak
 ### macOS ###
 .DS_Store
+cover.html
 ./cover.html
 ./cover.out
