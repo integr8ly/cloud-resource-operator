@@ -88,7 +88,7 @@ image/push: image/build
 
 .PHONY: manifest/push
 manifest/push:
-	operator-courier --verbose push deploy/olm-catalog/cloud-resources/ $(IMAGE_ORG) $(MANIFEST_NAME) $(VERSION) "$(AUTH_TOKEN)"
+	@operator-courier --verbose push deploy/olm-catalog/cloud-resources/ $(IMAGE_ORG) $(MANIFEST_NAME) $(VERSION) "$(AUTH_TOKEN)"
 
 .PHONY: setup/travis
 setup/travis:

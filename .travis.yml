@@ -25,7 +25,7 @@ stages:
   - name: push
     if: fork = false
   - name: manifest
-    if: fork = false
+    if: fork = false AND tag IS present
 
 before_install:
   - go get github.com/mattn/goveralls

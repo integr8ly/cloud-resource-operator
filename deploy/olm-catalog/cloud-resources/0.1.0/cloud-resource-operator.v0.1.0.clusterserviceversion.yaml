@@ -2,15 +2,15 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: '[{"apiVersion":"integreatly.org/v1alpha1","kind":"Redis","metadata":{"name":"example-redis"},"spec":{"secretRef":{"name":"redis-test","namespace":"cloud-resource-operator"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"SMTPCredentialSet","metadata":{"name":"example-smtpcredentialset"},"spec":{"secretRef":{"name":"smtp-test"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"BlobStorage","metadata":{"name":"example-blobstorage"},"spec":{"secretRef":{"name":"blob-test"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"Postgres","metadata":{"name":"example-postgres"},"spec":{"secretRef":{"name":"postgres-test","namespace":"cloud-resource-operator"},"tier":"development","type":"workshop"}}]'
+    alm-examples: '[{"apiVersion":"integreatly.org/v1alpha1","kind":"Redis","metadata":{"name":"example-redis"},"spec":{"secretRef":{"name":"redis-test","namespace":"cloud-resources"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"SMTPCredentialSet","metadata":{"name":"example-smtpcredentialset"},"spec":{"secretRef":{"name":"smtp-test"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"BlobStorage","metadata":{"name":"example-blobstorage"},"spec":{"secretRef":{"name":"blob-test"},"tier":"development","type":"managed"}},{"apiVersion":"integreatly.org/v1alpha1","kind":"Postgres","metadata":{"name":"example-postgres"},"spec":{"secretRef":{"name":"postgres-test","namespace":"cloud-resources"},"tier":"development","type":"workshop"}}]'
     capabilities: Basic Install
     categories: Integration & Delivery
     description: Operator to provision cloud provider resources in an abstracted manner
-    containerImage: quay.io/integreatly/cloud-resource-operator:v0.1.0
+    containerImage: quay.io/integreatly/cloud-resource-operator:0.1.0
     support: Integreatly
     createdAt: 2019-10-07 12:34:56
     certified: 'false'
-  name: cloud-resource-operator.v0.1.0
+  name: cloud-resources.v0.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -76,7 +76,7 @@ spec:
       - description: The secret which the resource information should be outputted to
         displayName: Secret Reference
         path: secretRef
-  description: Placeholder description
+  description: Provision and manage in-cluster and cloud provider resources (Blob Storage, Postgres, Redis, SMTP Details)
   displayName: Cloud Resource Operator
   maintainers:
   - name: Integreatly
@@ -115,11 +115,29 @@ spec:
                       fieldPath: metadata.name
                 - name: OPERATOR_NAME
                   value: cloud-resource-operator
-                image: quay.io/integreatly/cloud-resource-operator:v0.1.0
+                image: quay.io/integreatly/cloud-resource-operator:0.1.0
                 imagePullPolicy: Always
                 name: cloud-resource-operator
                 resources: {}
               serviceAccountName: cloud-resource-operator
+      clusterPermissions:
+      - serviceAccountName: cloud-resource-operator
+        rules:
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - infrastructures
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
       permissions:
       - rules:
         - apiGroups:
@@ -154,7 +172,7 @@ spec:
         - apiGroups:
           - apps
           resourceNames:
-          - cloud-resource-operator
+          - cloud-resources
           resources:
           - deployments/finalizers
           verbs:
@@ -184,8 +202,25 @@ spec:
           - smtpcredentialset
           - redis
           - postgres
+          - blobstorages
           verbs:
           - '*'
+        - apiGroups:
+          - cloudcredential.openshift.io
+          verbs:
+          - '*'
+          resources:
+          - credentialsrequests
+        - apiGroups:
+          - config.openshift.io
+          verbs:
+          - '*'
+          resources:
+          - '*'
+          - infrastructures
+          - schedulers
+          - featuregates
+          - networks
         serviceAccountName: cloud-resource-operator
     strategy: deployment
   installModes:
