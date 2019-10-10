@@ -229,7 +229,7 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 }
 
 func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 		if redisCfg.RedisDeploymentSpec == nil {
 			e.Spec = d.Spec
@@ -246,11 +246,13 @@ func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1
 }
 
 func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*apiv1.Service)
 
 		if redisCfg.RedisServiceSpec == nil {
+			clusterIP := e.Spec.ClusterIP
 			e.Spec = s.Spec
+			e.Spec.ClusterIP = clusterIP
 			return nil
 		}
 
@@ -264,7 +266,7 @@ func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Ser
 }
 
 func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
 		e := existing.(*apiv1.ConfigMap)
 
 		if redisCfg.RedisConfigMapData == nil {
@@ -282,15 +284,17 @@ func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.
 }
 
 func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*apiv1.PersistentVolumeClaim)
-
-		if redisCfg.RedisPVCSpec == nil {
-			e.Spec = pvc.Spec
+		// resources.requests is only mutable on bound claims
+		if e.Status.Phase != "Bound" {
 			return nil
 		}
-
-		e.Spec = *redisCfg.RedisPVCSpec
+		if redisCfg.RedisPVCSpec == nil {
+			e.Spec.Resources.Requests = pvc.Spec.Resources.Requests
+			return nil
+		}
+		e.Spec.Resources.Requests = redisCfg.RedisPVCSpec.Resources.Requests
 		return nil
 	})
 	if err != nil {
@@ -534,3 +538,8 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 }
 
 func int32Ptr(i int32) *int32 { return &i }
+
+// controllerutil.CreateOrUpdate without mutating the original runtime.Object provided
+func immutableCreateOrUpdate(ctx context.Context, c client.Client, o runtime.Object, cb func(existing runtime.Object) error) (controllerutil.OperationResult, error) {
+	return controllerutil.CreateOrUpdate(ctx, c, o.DeepCopyObject(), cb)
+}
