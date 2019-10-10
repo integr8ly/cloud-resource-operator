@@ -231,7 +231,6 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
 	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
-
 		if redisCfg.RedisDeploymentSpec == nil {
 			e.Spec = d.Spec
 			return nil

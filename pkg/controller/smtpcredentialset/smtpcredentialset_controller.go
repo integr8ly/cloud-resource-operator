@@ -80,11 +80,6 @@ type ReconcileSMTPCredentialSet struct {
 
 // Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
 // and what is in the SMTPCredentials.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling SMTPCredentials")
 
@@ -104,8 +99,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
-		if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); err != nil {
-			return reconcile.Result{}, err
+		if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
@@ -121,8 +116,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			r.logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
 			msg, err := p.DeleteSMTPCredentials(r.ctx, instance)
 			if err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return reconcile.Result{}, err
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
@@ -136,8 +131,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(r.ctx, instance)
 		if err != nil {
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
 		}
@@ -151,8 +146,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*v1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return err
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+					return updateErr
 				}
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
@@ -161,8 +156,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			return nil
 		})
 		if err != nil {
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile blob storage instance secret %s", sec.Name)
 		}
