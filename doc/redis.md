@@ -8,7 +8,7 @@ $ make cluster/seed/redis
 ```
 
 ### AWS Strategy
-A JSON object containing two keys: `region`, which is the [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region), and `strategy`, which is a JSON representation of [this struct](https://docs.aws.amazon.com/sdk-for-go/api/service/elasticache/#CreateReplicationGroupInput)
+A JSON object containing two keys: `region`, which is the [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region), and `createStrategy`, which is a JSON representation of [this struct](https://docs.aws.amazon.com/sdk-for-go/api/service/elasticache/#CreateReplicationGroupInput)
 ### Kubernetes/Openshift Strategy
 For Kubernetes/Openshift the JSON object contains a single key, `strategy`. The `strategy` object can contain the  following keys, which are used to overwrite specific object configuration: 
 - [RedisDeploymentSpec](https://godoc.org/k8s.io/api/apps/v1#DeploymentSpec)

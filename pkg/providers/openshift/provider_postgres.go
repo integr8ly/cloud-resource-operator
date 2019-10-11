@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -313,7 +314,7 @@ func (p *OpenShiftPostgresProvider) CreatePVC(ctx context.Context, pvc *v1.Persi
 	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*v1.PersistentVolumeClaim)
 
-		if e.Status.Phase != "Bound" {
+		if strings.ToLower(string(e.Status.Phase)) != "bound" {
 			return nil
 		}
 		if postgresCfg.PostgresPVCSpec == nil {

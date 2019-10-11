@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -287,7 +288,7 @@ func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.Persi
 	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*apiv1.PersistentVolumeClaim)
 		// resources.requests is only mutable on bound claims
-		if e.Status.Phase != "Bound" {
+		if strings.ToLower(string(e.Status.Phase)) != "bound" {
 			return nil
 		}
 		if redisCfg.RedisPVCSpec == nil {

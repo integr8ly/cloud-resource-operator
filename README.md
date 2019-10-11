@@ -16,7 +16,7 @@ Operator is running.
 |:--------------:	|:---------:	|:---------:	|
 |  [Blob Storage](./doc/blobstorage.md)  	|     :x:     	| :heavy_check_mark: 	|
 |     [Redis](./doc/redis.md)  	|     :heavy_check_mark:     	|  :heavy_check_mark: 	|
-|   [PostgreSQL](./doc/postgresql.md) 	|     :heavy_check_mark:     	|  :x:  	|
+|   [PostgreSQL](./doc/postgresql.md) 	|     :heavy_check_mark:     	|  :heavy_check_mark:  	|
 |      [SMTP](./doc/smtp.md)     	|     :x:     	|  :heavy_check_mark:  	|
 
 ## Running the Cloud Resource Operator

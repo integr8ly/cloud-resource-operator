@@ -1,3 +1,4 @@
+
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
 
@@ -7,7 +8,7 @@ build:
 
 .PHONY: run
 run:
-	operator-sdk up local --namespace=""
+	RECTIME=30 operator-sdk up local --namespace=""
 
 .PHONY: code/gen
 code/gen:
