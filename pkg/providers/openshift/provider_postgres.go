@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -150,7 +150,7 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 	err := p.Client.Get(ctx, types.NamespacedName{Name: ps.Name, Namespace: ps.Namespace}, dpl)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
-			return "deletion successful", nil
+			return v1alpha1.StatusEmpty, nil
 		}
 		errMsg := "failed to get postgres deployment"
 		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -254,7 +254,7 @@ func (p *OpenShiftPostgresProvider) getPostgresConfig(ctx context.Context, ps *v
 }
 
 func (p *OpenShiftPostgresProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, postgresCfg *PostgresStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 
 		if postgresCfg.PostgresDeploymentSpec == nil {
@@ -272,11 +272,13 @@ func (p *OpenShiftPostgresProvider) CreateDeployment(ctx context.Context, d *app
 }
 
 func (p *OpenShiftPostgresProvider) CreateService(ctx context.Context, s *v1.Service, postgresCfg *PostgresStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*v1.Service)
 
 		if postgresCfg.PostgresServiceSpec == nil {
+			clusterIP := e.Spec.ClusterIP
 			e.Spec = s.Spec
+			e.Spec.ClusterIP = clusterIP
 			return nil
 		}
 
@@ -308,15 +310,18 @@ func (p *OpenShiftPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secr
 }
 
 func (p *OpenShiftPostgresProvider) CreatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim, postgresCfg *PostgresStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*v1.PersistentVolumeClaim)
 
+		if e.Status.Phase != "Bound" {
+			return nil
+		}
 		if postgresCfg.PostgresPVCSpec == nil {
-			e.Spec = pvc.Spec
+			e.Spec.Resources.Requests = pvc.Spec.Resources.Requests
 			return nil
 		}
 
-		e.Spec = *postgresCfg.PostgresPVCSpec
+		e.Spec.Resources.Requests = postgresCfg.PostgresPVCSpec.Resources.Requests
 		return nil
 	})
 	if err != nil {
