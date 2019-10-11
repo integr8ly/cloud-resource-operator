@@ -123,8 +123,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			}
 
 			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
@@ -161,7 +161,6 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile smtp credential set instance secret %s", sec.Name)
 		}
-
 		instance.Status.Phase = v1alpha1.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
@@ -174,8 +173,8 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
-		return reconcile.Result{}, err
+	if updatePhaseErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); updatePhaseErr != nil {
+		return reconcile.Result{}, updatePhaseErr
 	}
 	return reconcile.Result{Requeue: true}, nil
 }

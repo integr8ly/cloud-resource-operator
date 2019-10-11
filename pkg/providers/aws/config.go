@@ -120,7 +120,7 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 		},
 		Data: map[string]string{
 			"blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
-			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
 			"redis":           "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
 			"postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
 		},

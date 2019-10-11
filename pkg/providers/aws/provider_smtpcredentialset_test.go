@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	v13 "github.com/openshift/api/config/v1"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	apis2 "github.com/integr8ly/cloud-resource-operator/pkg/apis"
@@ -52,6 +54,17 @@ func buildTestCredentialsRequest() *v1.CredentialsRequest {
 			ProviderStatus: &runtime.RawExtension{
 				Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
 			},
+		},
+	}
+}
+
+func buildTestInfrastructure() *v13.Infrastructure {
+	return &v13.Infrastructure{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name: "cluster",
+		},
+		Status: v13.InfrastructureStatus{
+			InfrastructureName: "test",
 		},
 	}
 }
@@ -291,7 +304,7 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 		{
 			name: "test smtp credential set details are retrieved successfully",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet(), buildTestInfrastructure()),
 				Logger: testLogger,
 				CredentialManager: &CredentialManagerMock{
 					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *AWSCredentials, e error) {
