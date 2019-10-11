@@ -159,10 +159,14 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		}
 
 		// create the secret with the redis cluster connection details
+		secNs := instance.Namespace
+		if instance.Spec.SecretRef.Namespace != "" {
+			secNs = instance.Spec.SecretRef.Namespace
+		}
 		sec := &corev1.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
 				Name:      instance.Spec.SecretRef.Name,
-				Namespace: instance.Spec.SecretRef.Namespace,
+				Namespace: secNs,
 			},
 		}
 		r.logger.Info("creating or updating client secret")

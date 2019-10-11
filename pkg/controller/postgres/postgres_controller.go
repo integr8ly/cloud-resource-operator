@@ -160,10 +160,14 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		}
 
 		// return the connection secret
+		secNs := instance.Namespace
+		if instance.Spec.SecretRef.Namespace != "" {
+			secNs = instance.Spec.SecretRef.Namespace
+		}
 		sec := &corev1.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
 				Name:      instance.Spec.SecretRef.Name,
-				Namespace: instance.Namespace,
+				Namespace: secNs,
 			},
 		}
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
