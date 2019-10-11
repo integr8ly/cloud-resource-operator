@@ -168,10 +168,11 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		CacheSvc          elasticacheiface.ElastiCacheAPI
 	}
 	type args struct {
-		cacheSvc    elasticacheiface.ElastiCacheAPI
-		redisConfig *elasticache.CreateReplicationGroupInput
-		ctx         context.Context
-		redis       *v1alpha1.Redis
+		cacheSvc          elasticacheiface.ElastiCacheAPI
+		redisCreateConfig *elasticache.CreateReplicationGroupInput
+		redisDeleteConfig *elasticache.DeleteReplicationGroupInput
+		ctx               context.Context
+		redis             *v1alpha1.Redis
 	}
 	tests := []struct {
 		name    string
@@ -182,11 +183,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with no redis",
 			args: args{
-				redisConfig: &elasticache.CreateReplicationGroupInput{},
-				redis:       buildTestRedisCR(),
+				redisCreateConfig: &elasticache.CreateReplicationGroupInput{},
+				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{},
+				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -198,11 +200,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "test successful delete with existing unavailable redis",
 			args: args{
 
-				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redis:       buildTestRedisCR(),
+				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -214,11 +217,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "test successful delete with existing available redis",
 			args: args{
 
-				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redis:       buildTestRedisCR(),
+				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -236,7 +240,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if _, err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
+			if _, err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

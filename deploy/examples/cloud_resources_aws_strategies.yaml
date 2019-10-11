@@ -9,6 +9,6 @@ data:
   smtpcredentials: |
     {"development": { "region": "eu-west-1", "createStrategy": {} }}
   redis: |
-    {"development": { "region": "eu-west-1", "createStrategy": {} }}
+    {"development": { "region": "eu-west-1", "createStrategy": {}, "deleteStrategy": {} }}
   postgres: |
     {"development": { "region": "eu-west-1", "createStrategy": {}, "deleteStrategy": {} }}
