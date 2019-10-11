@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -31,7 +32,7 @@ import (
 
 const (
 	redisProviderName = "openshift-redis-template"
-
+	// default create options
 	redisObjectMetaName   = "redis"
 	redisDCSelectorName   = redisObjectMetaName
 	redisConfigVolumeName = "redis-config"
@@ -73,46 +74,51 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	// get redis config
 	redisConfig, _, err := p.getRedisConfig(ctx, r)
 	if err != nil {
-		return nil, "failed to retrieve openshift redis cluster config", errorUtil.Wrapf(err, "failed to retrieve openshift redis cluster config for instance %s", r.Name)
+		errMsg := fmt.Sprintf("failed to retrieve openshift redis cluster config for instance %s", r.Name)
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// deploy pvc
 	if err := p.CreatePVC(ctx, buildDefaultRedisPVC(r), redisConfig); err != nil {
-		msg := "failed to create or update redis PVC"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to create or update redis PVC"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy configmap
 	if err := p.CreateConfigMap(ctx, buildDefaultRedisConfigMap(r), redisConfig); err != nil {
-		msg := "failed to create or update redis config map"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to create or update redis config map"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy deployment
 	if err := p.CreateDeployment(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
-		msg := "failed to create or update redis deployment"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to create or update redis deployment"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy service
 	if err := p.CreateService(ctx, buildDefaultRedisService(r), redisConfig); err != nil {
-		msg := "failed to create or update redis service"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to create or update redis service"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check deployment status
 	dpl := &appsv1.Deployment{}
 	err = p.Client.Get(ctx, types.NamespacedName{Name: r.Name, Namespace: r.Namespace}, dpl)
 	if err != nil {
-		msg := "failed to get Deployment"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to get redis deployment"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
+	// check if deployment is ready and return connection details
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
 			p.Logger.Info("found redis deployment")
 			return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
 				URI:  fmt.Sprintf("%s.%s.svc.cluster.local", r.Name, r.Namespace),
-				Port: redisPort}}, "deployment available", nil
+				Port: redisPort}}, "redis deployment available", nil
 		}
 	}
+
+	// deployment is in progress
+	p.Logger.Info("redis deployment is not ready")
 	return nil, "creation in progress", nil
 }
 
@@ -124,8 +130,8 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 		if k8serr.IsNotFound(err) {
 			return "deletion successful", nil
 		}
-		msg := "failed to get deployment"
-		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		errMsg := "failed to get deployment"
+		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
@@ -139,8 +145,8 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			}
 			err = p.Client.Delete(ctx, svc)
 			if err != nil && !k8serr.IsNotFound(err) {
-				msg := "failed to delete service"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to delete service"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// delete pv
@@ -153,8 +159,8 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			}
 			err = p.Client.Delete(ctx, pv)
 			if err != nil && !k8serr.IsNotFound(err) {
-				msg := "failed to delete persistent volume"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to delete persistent volume"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// delete pvc
@@ -167,8 +173,8 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			}
 			err = p.Client.Delete(ctx, pvc)
 			if err != nil && !k8serr.IsNotFound(err) {
-				msg := "failed to delete persistent volume claim"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to delete persistent volume claim"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// delete config map
@@ -181,24 +187,24 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			}
 			err = p.Client.Delete(ctx, cm)
 			if err != nil && !k8serr.IsNotFound(err) {
-				msg := "failed to delete configmap"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to delete configmap"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// clean up objects
 			p.Logger.Info("Deleting redis deployment")
 			err = p.Client.Delete(ctx, dpl)
 			if err != nil && !k8serr.IsNotFound(err) {
-				msg := "failed to delete deployment"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to delete deployment"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// remove the finalizer added by the provider
 			p.Logger.Info("Removing finalizer")
 			resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 			if err := p.Client.Update(ctx, r); err != nil {
-				msg := "failed to update instance as part of finalizer reconcile"
-				return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+				errMsg := "failed to update instance as part of finalizer reconcile"
+				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			p.Logger.Infof("deletion handler for redis %s in namespace %s finished successfully", r.Name, r.Namespace)
@@ -221,6 +227,81 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal openshift redis cluster configuration")
 	}
 	return redisConfig, stratCfg, nil
+}
+
+func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
+		e := existing.(*appsv1.Deployment)
+		if redisCfg.RedisDeploymentSpec == nil {
+			e.Spec = d.Spec
+			return nil
+		}
+
+		e.Spec = *redisCfg.RedisDeploymentSpec
+		return nil
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to create or update deployment %s, action was %s", d.Name, or)
+	}
+	return nil
+}
+
+func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
+		e := existing.(*apiv1.Service)
+
+		if redisCfg.RedisServiceSpec == nil {
+			clusterIP := e.Spec.ClusterIP
+			e.Spec = s.Spec
+			e.Spec.ClusterIP = clusterIP
+			return nil
+		}
+
+		e.Spec = *redisCfg.RedisServiceSpec
+		return nil
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to create or update service %s, action was %s", s.Name, or)
+	}
+	return nil
+}
+
+func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
+		e := existing.(*apiv1.ConfigMap)
+
+		if redisCfg.RedisConfigMapData == nil {
+			e.Data = cm.Data
+			return nil
+		}
+
+		e.Data = redisCfg.RedisConfigMapData
+		return nil
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to create or update config map %s, action was %s", cm.Name, or)
+	}
+	return nil
+}
+
+func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
+		e := existing.(*apiv1.PersistentVolumeClaim)
+		// resources.requests is only mutable on bound claims
+		if strings.ToLower(string(e.Status.Phase)) != "bound" {
+			return nil
+		}
+		if redisCfg.RedisPVCSpec == nil {
+			e.Spec.Resources.Requests = pvc.Spec.Resources.Requests
+			return nil
+		}
+		e.Spec.Resources.Requests = redisCfg.RedisPVCSpec.Resources.Requests
+		return nil
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to create or update persistent volume claim %s, action was %s", pvc.Name, or)
+	}
+	return nil
 }
 
 // RedisStrat to be used to unmarshal strat map
@@ -457,76 +538,9 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 	}
 }
 
-func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
-		e := existing.(*appsv1.Deployment)
-
-		if redisCfg.RedisDeploymentSpec == nil {
-			e.Spec = d.Spec
-			return nil
-		}
-
-		e.Spec = *redisCfg.RedisDeploymentSpec
-		return nil
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to create or update deployment %s, action was %s", d.Name, or)
-	}
-	return nil
-}
-
-func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
-		e := existing.(*apiv1.Service)
-
-		if redisCfg.RedisServiceSpec == nil {
-			e.Spec = s.Spec
-			return nil
-		}
-
-		e.Spec = *redisCfg.RedisServiceSpec
-		return nil
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to create or update service %s, action was %s", s.Name, or)
-	}
-	return nil
-}
-
-func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
-		e := existing.(*apiv1.ConfigMap)
-
-		if redisCfg.RedisConfigMapData == nil {
-			e.Data = cm.Data
-			return nil
-		}
-
-		e.Data = redisCfg.RedisConfigMapData
-		return nil
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to create or update config map %s, action was %s", cm.Name, or)
-	}
-	return nil
-}
-
-func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
-		e := existing.(*apiv1.PersistentVolumeClaim)
-
-		if redisCfg.RedisPVCSpec == nil {
-			e.Spec = pvc.Spec
-			return nil
-		}
-
-		e.Spec = *redisCfg.RedisPVCSpec
-		return nil
-	})
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to create or update persistent volume claim %s, action was %s", pvc.Name, or)
-	}
-	return nil
-}
-
 func int32Ptr(i int32) *int32 { return &i }
+
+// controllerutil.CreateOrUpdate without mutating the original runtime.Object provided
+func immutableCreateOrUpdate(ctx context.Context, c client.Client, o runtime.Object, cb func(existing runtime.Object) error) (controllerutil.OperationResult, error) {
+	return controllerutil.CreateOrUpdate(ctx, c, o.DeepCopyObject(), cb)
+}

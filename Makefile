@@ -1,3 +1,4 @@
+
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
 
@@ -7,7 +8,7 @@ build:
 
 .PHONY: run
 run:
-	operator-sdk up local --namespace=""
+	RECTIME=30 operator-sdk up local --namespace=""
 
 .PHONY: code/gen
 code/gen:
@@ -64,7 +65,7 @@ cluster/clean:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/...
+	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
 
 .PHONY: test/unit/ci
 test/unit/ci:

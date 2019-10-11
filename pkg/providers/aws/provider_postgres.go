@@ -52,7 +52,7 @@ const (
 	defaultAwsEngineVersion              = "10.6"
 	defaultAwsPubliclyAccessible         = false
 	// default delete options
-	defaultAwsSkipFinalSnapshot      = true
+	defaultAwsSkipFinalSnapshot      = false
 	defaultAwsDeleteAutomatedBackups = true
 	// defaults for DB user credentials
 	defaultCredSecSuffix       = "-aws-rds-credentials"
@@ -157,9 +157,9 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	// verify rdsConfig
+	// verify and build rds create config
 	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
-		msg := "failed to verify aws rds instance configuration"
+		msg := "failed to build and verify aws rds instance configuration"
 		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
@@ -344,7 +344,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 	updateFound := false
 
 	mi := &rds.ModifyDBInstanceInput{}
-	mi.DBInstanceIdentifier = rdsConfig.DBInstanceIdentifier
+	mi.DBInstanceIdentifier = foundConfig.DBInstanceIdentifier
 
 	if *rdsConfig.DeletionProtection != *foundConfig.DeletionProtection {
 		mi.DeletionProtection = rdsConfig.DeletionProtection
@@ -449,8 +449,12 @@ func (p *AWSPostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1al
 	if rdsDeleteConfig.SkipFinalSnapshot == nil {
 		rdsDeleteConfig.SkipFinalSnapshot = aws.Bool(defaultAwsSkipFinalSnapshot)
 	}
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to retrieve timestamped rds config")
+	}
 	if rdsDeleteConfig.FinalDBSnapshotIdentifier == nil && !*rdsDeleteConfig.SkipFinalSnapshot {
-		rdsDeleteConfig.FinalDBSnapshotIdentifier = aws.String(instanceIdentifier)
+		rdsDeleteConfig.FinalDBSnapshotIdentifier = aws.String(snapshotIdentifier)
 	}
 	return nil
 }

@@ -99,8 +99,8 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 
 	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
-		if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); err != nil {
-			return reconcile.Result{}, err
+		if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
@@ -113,8 +113,8 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		if instance.GetDeletionTimestamp() != nil {
 			msg, err := p.DeleteStorage(r.ctx, instance)
 			if err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return reconcile.Result{}, err
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
@@ -123,14 +123,14 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		bsi, msg, err := p.CreateStorage(r.ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
 		}
@@ -140,7 +140,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		sec := &corev1.Secret{
@@ -152,8 +152,8 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*corev1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-					return err
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+					return updateErr
 				}
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
@@ -162,8 +162,8 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			return nil
 		})
 		if err != nil {
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile blob storage instance secret %s", sec.Name)
 		}
@@ -176,7 +176,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		if err = r.client.Status().Update(r.ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 	}
 
 	// unsupported strategy

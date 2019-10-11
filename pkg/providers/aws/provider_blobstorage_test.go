@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -54,11 +59,13 @@ func (s *mockS3Svc) DeleteBucket(dbi *s3.DeleteBucketInput) (*s3.DeleteBucketOut
 	return &s3.DeleteBucketOutput{}, nil
 }
 
-func (s *mockS3Svc) WaitUntilBucketNotExists(hbi *s3.HeadBucketInput) error {
-	if s.wantErrWaitDelete {
-		return errors.New("mock aws s3 client error")
+func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
+	return &v1alpha1.BlobStorage{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
 	}
-	return nil
 }
 
 func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
@@ -126,7 +133,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if err := p.reconcileBucketCreate(tt.args.ctx, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
+			if _, err := p.reconcileBucketCreate(tt.args.ctx, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -134,6 +141,11 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 }
 
 func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build test scheme", err)
+
+	}
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -144,6 +156,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		ctx       context.Context
 		s3svc     s3iface.S3API
 		bucketCfg *s3.CreateBucketInput
+		bs        *v1alpha1.BlobStorage
 	}
 	tests := []struct {
 		name    string
@@ -154,7 +167,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		{
 			name: "test successful delete",
 			fields: fields{
-				Client:            nil,
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -165,13 +178,14 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
+				bs: buildTestBlobStorageCR(),
 			},
 			wantErr: false,
 		},
 		{
 			name: "test error on failed bucket delete",
 			fields: fields{
-				Client:            nil,
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -180,29 +194,12 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				ctx: context.TODO(),
 				s3svc: &mockS3Svc{
 					wantErrDelete: true,
+					bucketNames:   []string{"test"},
 				},
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "test error on wait for bucket delete",
-			fields: fields{
-				Client:            nil,
-				Logger:            logrus.WithFields(logrus.Fields{}),
-				CredentialManager: &CredentialManagerMock{},
-				ConfigManager:     &ConfigManagerMock{},
-			},
-			args: args{
-				ctx: context.TODO(),
-				s3svc: &mockS3Svc{
-					wantErrWaitDelete: true,
-				},
-				bucketCfg: &s3.CreateBucketInput{
-					Bucket: aws.String("test"),
-				},
+				bs: buildTestBlobStorageCR(),
 			},
 			wantErr: true,
 		},
@@ -215,7 +212,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if err := p.reconcileBucketDelete(tt.args.ctx, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
+			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucketDelete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -113,8 +113,8 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
 	if err != nil {
-		if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); err != nil {
-			return reconcile.Result{}, err
+		if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
@@ -128,25 +128,25 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if instance.DeletionTimestamp != nil {
 			msg, err := p.DeletePostgres(r.ctx, instance)
 			if err != nil {
-				if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); errUpdate != nil {
-					return reconcile.Result{}, errUpdate
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on Postgres to successfully delete")
-			if errUpdate := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); errUpdate != nil {
-				return reconcile.Result{}, errUpdate
+			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		// create the postgres instance
 		ps, msg, err := p.CreatePostgres(r.ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
 		}
@@ -156,7 +156,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		// return the connection secret
@@ -169,8 +169,8 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
 			e := existing.(*corev1.Secret)
 			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to set owner on secret"); err != nil {
-					return err
+				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to set owner on secret"); updateErr != nil {
+					return updateErr
 				}
 				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
 			}
@@ -179,8 +179,8 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return nil
 		})
 		if err != nil {
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile postgres instance secret %s", sec.Name)
 		}
@@ -193,7 +193,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if err = r.client.Status().Update(r.ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 30}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 	}
 
 	// unsupported strategy

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -135,7 +137,7 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 			want: struct {
 				Requeue      bool
 				RequeueAfter time.Duration
-			}{Requeue: true, RequeueAfter: 30 * time.Second},
+			}{Requeue: true, RequeueAfter: resources.GetReconcileTime() * time.Second},
 			wantErr: false,
 		},
 	}

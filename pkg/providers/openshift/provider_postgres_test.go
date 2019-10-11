@@ -39,6 +39,27 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 	}
 }
 
+func buildTestPostgresPVC() *v1.PersistentVolumeClaim {
+	return &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testPostgresName,
+			Namespace: testPostgresNamespace,
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+			Resources: v1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					"storage": resource.MustParse("5Gi"),
+				},
+			},
+		},
+		Status: v1.PersistentVolumeClaimStatus{
+			Phase: "bound",
+		},
+	}
+
+}
+
 func buildTestPostgresDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -277,7 +298,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override pvc defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresPVC()),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(pvcSpec),
 			},
