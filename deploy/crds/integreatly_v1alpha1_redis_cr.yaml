@@ -6,9 +6,8 @@ metadata:
 spec:
   # i want my redis storage information output in a Secret named test in the Namespace cloud-resource-operator
   secretRef:
-    name: redis-test
-    namespace: cloud-resource-operator
+    name: example-redis-sec
   # i want a redis storage of a development-level tier
   tier: development
   # i want a redis storage for the type managed
-  type: workshop
+  type: managed
