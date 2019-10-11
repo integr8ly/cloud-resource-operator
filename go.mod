@@ -22,7 +22,7 @@ require (
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/procfs v0.0.4 // indirect
-	github.com/rakyll/gotest v0.0.0-20180125184505-86f0749cd8cc // indirect
+	github.com/rakyll/gotest v0.0.0-20180125184505-86f0749cd8cc
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.4.0 // indirect

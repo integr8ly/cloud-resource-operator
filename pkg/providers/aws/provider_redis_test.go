@@ -312,8 +312,8 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if _, err := p.deleteRedisCluster(tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
-				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
+			if _, err := p.deleteElasticacheCluster(tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
+				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
