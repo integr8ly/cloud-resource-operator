@@ -159,7 +159,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
-			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile blob storage instance secret %s", sec.Name)
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile smtp credential set instance secret %s", sec.Name)
 		}
 
 		instance.Status.Phase = v1alpha1.PhaseComplete
