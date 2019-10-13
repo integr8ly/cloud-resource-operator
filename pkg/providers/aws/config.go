@@ -119,10 +119,10 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.configMapNamespace,
 		},
 		Data: map[string]string{
-			"blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
-			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
-			"redis":           "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
-			"postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"strategy\": {} }}",
+			"blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"redis":           "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
 		},
 	}
 }

@@ -134,10 +134,10 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - persistentvolumes
           - configmaps
           verbs:
-          - get
-          - list
+          - "*"
       permissions:
       - rules:
         - apiGroups:
