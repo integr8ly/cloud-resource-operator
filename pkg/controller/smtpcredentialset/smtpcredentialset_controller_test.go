@@ -144,10 +144,14 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &ReconcileSMTPCredentialSet{
-				client:       tt.fields.client,
-				scheme:       tt.fields.scheme,
-				logger:       tt.fields.logger,
-				ctx:          tt.fields.ctx,
+				client: tt.fields.client,
+				scheme: tt.fields.scheme,
+				logger: tt.fields.logger,
+				genericProvider: &resources.ReconcileGenericProvider{
+					Client: tt.fields.client,
+					Scheme: tt.fields.scheme,
+					Logger: tt.fields.logger,
+				},
 				providerList: tt.fields.providerList,
 				cfgMgr:       tt.fields.cfgMgr,
 			}
