@@ -39,7 +39,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
 	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
 	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileBlobStorage{
 		client:          client,
@@ -47,7 +46,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 		logger:          logger,
 		genericProvider: gp,
 		providerList:    providerList,
-		cfgMgr:          cfgMgr,
 	}
 }
 
@@ -79,12 +77,12 @@ type ReconcileBlobStorage struct {
 	logger          *logrus.Entry
 	genericProvider *resources.ReconcileGenericProvider
 	providerList    []providers.BlobStorageProvider
-	cfgMgr          providers.ConfigManager
 }
 
 func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling BlobStorage")
 	ctx := context.TODO()
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the BlobStorage instance
 	instance := &v1alpha1.BlobStorage{}
@@ -100,7 +98,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
 		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
 			return reconcile.Result{}, updateErr

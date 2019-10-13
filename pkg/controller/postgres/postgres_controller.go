@@ -41,7 +41,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
 	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger), aws.NewAWSPostgresProvider(client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
 	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
 	return &ReconcilePostgres{
 		client:          client,
@@ -49,7 +48,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 		logger:          logger,
 		genericProvider: gp,
 		providerList:    providerList,
-		cfgMgr:          cfgMgr,
 	}
 }
 
@@ -91,7 +89,6 @@ type ReconcilePostgres struct {
 	logger          *logrus.Entry
 	genericProvider *resources.ReconcileGenericProvider
 	providerList    []providers.PostgresProvider
-	cfgMgr          providers.ConfigManager
 }
 
 // Reconcile reads that state of the cluster for a Postgres object and makes changes based on the state read
@@ -101,6 +98,7 @@ type ReconcilePostgres struct {
 func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling Postgres")
 	ctx := context.TODO()
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the Postgres instance
 	instance := &v1alpha1.Postgres{}
@@ -116,7 +114,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
 		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
 			return reconcile.Result{}, updateErr

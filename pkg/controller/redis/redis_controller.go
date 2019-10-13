@@ -39,7 +39,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis"})
 	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(client, logger), openshift.NewOpenShiftRedisProvider(client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
 	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileRedis{
 		client:          mgr.GetClient(),
@@ -47,7 +46,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 		logger:          logger,
 		genericProvider: gp,
 		providerList:    providerList,
-		cfgMgr:          cfgMgr,
 	}
 }
 
@@ -89,7 +87,6 @@ type ReconcileRedis struct {
 	logger          *logrus.Entry
 	genericProvider *resources.ReconcileGenericProvider
 	providerList    []providers.RedisProvider
-	cfgMgr          providers.ConfigManager
 }
 
 // Reconcile reads that state of the cluster for a Redis object and makes changes based on the state read
@@ -99,6 +96,7 @@ type ReconcileRedis struct {
 func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling Redis")
 	ctx := context.TODO()
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the Redis instance
 	instance := &integreatlyv1alpha1.Redis{}
@@ -114,7 +112,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
 		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, "failed to read deployment type config for deployment"); updateErr != nil {
 			return reconcile.Result{}, updateErr
