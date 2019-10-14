@@ -41,13 +41,13 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
 	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger), aws.NewAWSPostgresProvider(client, logger)}
-	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcilePostgres{
-		client:          client,
-		scheme:          mgr.GetScheme(),
-		logger:          logger,
-		genericProvider: gp,
-		providerList:    providerList,
+		client:           client,
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
 	}
 }
 
@@ -84,11 +84,11 @@ var _ reconcile.Reconciler = &ReconcilePostgres{}
 type ReconcilePostgres struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	logger          *logrus.Entry
-	genericProvider *resources.ReconcileGenericProvider
-	providerList    []providers.PostgresProvider
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.PostgresProvider
 }
 
 // Reconcile reads that state of the cluster for a Postgres object and makes changes based on the state read
@@ -163,7 +163,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		}
 
 		// return the connection secret
-		if err := r.genericProvider.ReconcileResultSecret(ctx, instance, ps.DeploymentDetails.Data()); err != nil {
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, ps.DeploymentDetails.Data()); err != nil {
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 

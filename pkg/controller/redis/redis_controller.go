@@ -39,13 +39,13 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis"})
 	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(client, logger), openshift.NewOpenShiftRedisProvider(client, logger)}
-	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileRedis{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		logger:          logger,
-		genericProvider: gp,
-		providerList:    providerList,
+		client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
 	}
 }
 
@@ -82,11 +82,11 @@ var _ reconcile.Reconciler = &ReconcileRedis{}
 type ReconcileRedis struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	logger          *logrus.Entry
-	genericProvider *resources.ReconcileGenericProvider
-	providerList    []providers.RedisProvider
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.RedisProvider
 }
 
 // Reconcile reads that state of the cluster for a Redis object and makes changes based on the state read
@@ -162,7 +162,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		}
 
 		// create the secret with the redis cluster connection details
-		if err := r.genericProvider.ReconcileResultSecret(ctx, instance, redis.DeploymentDetails.Data()); err != nil {
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, redis.DeploymentDetails.Data()); err != nil {
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 

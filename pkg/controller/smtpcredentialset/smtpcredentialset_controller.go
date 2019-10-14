@@ -37,13 +37,13 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_smtpcredentialset"})
 	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(client, logger)}
-	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileSMTPCredentialSet{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		logger:          logger,
-		genericProvider: gp,
-		providerList:    providerList,
+		client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
 	}
 }
 
@@ -71,11 +71,11 @@ var _ reconcile.Reconciler = &ReconcileSMTPCredentialSet{}
 type ReconcileSMTPCredentialSet struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	logger          *logrus.Entry
-	genericProvider *resources.ReconcileGenericProvider
-	providerList    []providers.SMTPCredentialsProvider
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.SMTPCredentialsProvider
 }
 
 // Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
@@ -139,7 +139,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
 		}
 
-		if err := r.genericProvider.ReconcileResultSecret(ctx, instance, smtpCredentialSetInst.DeploymentDetails.Data()); err != nil {
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, smtpCredentialSetInst.DeploymentDetails.Data()); err != nil {
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 		instance.Status.Phase = v1alpha1.PhaseComplete

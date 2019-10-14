@@ -17,21 +17,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type ReconcileGenericProvider struct {
+type ReconcileResourceProvider struct {
 	Client client.Client
 	Scheme *runtime.Scheme
 	Logger *logrus.Entry
 }
 
-func NewGenericProvider(c client.Client, s *runtime.Scheme, l *logrus.Entry) *ReconcileGenericProvider {
-	return &ReconcileGenericProvider{
+func NewResourceProvider(c client.Client, s *runtime.Scheme, l *logrus.Entry) *ReconcileResourceProvider {
+	return &ReconcileResourceProvider{
 		Client: c,
 		Scheme: s,
 		Logger: l,
 	}
 }
 
-func (r *ReconcileGenericProvider) ReconcileResultSecret(ctx context.Context, o runtime.Object, d map[string][]byte) error {
+func (r *ReconcileResourceProvider) ReconcileResultSecret(ctx context.Context, o runtime.Object, d map[string][]byte) error {
 	obj := o.(metav1.Object)
 	secNs := obj.GetNamespace()
 	rts := &v1alpha1.ResourceTypeSpec{}

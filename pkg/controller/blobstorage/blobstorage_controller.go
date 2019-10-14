@@ -39,13 +39,13 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
 	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(client, logger)}
-	gp := resources.NewGenericProvider(client, mgr.GetScheme(), logger)
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileBlobStorage{
-		client:          client,
-		scheme:          mgr.GetScheme(),
-		logger:          logger,
-		genericProvider: gp,
-		providerList:    providerList,
+		client:           client,
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
 	}
 }
 
@@ -72,11 +72,11 @@ var _ reconcile.Reconciler = &ReconcileBlobStorage{}
 type ReconcileBlobStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	logger          *logrus.Entry
-	genericProvider *resources.ReconcileGenericProvider
-	providerList    []providers.BlobStorageProvider
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.BlobStorageProvider
 }
 
 func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -144,7 +144,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
-		if err := r.genericProvider.ReconcileResultSecret(ctx, instance, bsi.DeploymentDetails.Data()); err != nil {
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, bsi.DeploymentDetails.Data()); err != nil {
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 

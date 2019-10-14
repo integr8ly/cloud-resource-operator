@@ -147,7 +147,7 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 				client: tt.fields.client,
 				scheme: tt.fields.scheme,
 				logger: tt.fields.logger,
-				genericProvider: &resources.ReconcileGenericProvider{
+				resourceProvider: &resources.ReconcileResourceProvider{
 					Client: tt.fields.client,
 					Scheme: tt.fields.scheme,
 					Logger: tt.fields.logger,
