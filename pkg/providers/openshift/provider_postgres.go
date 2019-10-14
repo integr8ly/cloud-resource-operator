@@ -173,20 +173,6 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
-			// delete pv
-			p.Logger.Info("Deleting postgres persistent volume")
-			pv := &v1.PersistentVolume{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      ps.Name,
-					Namespace: ps.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, pv)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete postgres persistent volume"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
 			// delete pvc
 			p.Logger.Info("Deleting postgres persistent volume claim")
 			pvc := &v1.PersistentVolumeClaim{

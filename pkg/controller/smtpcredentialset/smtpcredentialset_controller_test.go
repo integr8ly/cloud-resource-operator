@@ -40,7 +40,7 @@ func buildTestScheme() (*runtime.Scheme, error) {
 func buildTestOperatorConfigMap() *v12.ConfigMap {
 	return &v12.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      "test",
+			Name:      "cloud-resource-config",
 			Namespace: "test",
 		},
 		Data: map[string]string{
@@ -144,12 +144,15 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &ReconcileSMTPCredentialSet{
-				client:       tt.fields.client,
-				scheme:       tt.fields.scheme,
-				logger:       tt.fields.logger,
-				ctx:          tt.fields.ctx,
+				client: tt.fields.client,
+				scheme: tt.fields.scheme,
+				logger: tt.fields.logger,
+				resourceProvider: &resources.ReconcileResourceProvider{
+					Client: tt.fields.client,
+					Scheme: tt.fields.scheme,
+					Logger: tt.fields.logger,
+				},
 				providerList: tt.fields.providerList,
-				cfgMgr:       tt.fields.cfgMgr,
 			}
 			got, err := r.Reconcile(tt.args.request)
 			if (err != nil) != tt.wantErr {

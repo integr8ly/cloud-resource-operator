@@ -6,10 +6,6 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	v1 "k8s.io/api/core/v1"
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/sirupsen/logrus"
@@ -39,11 +35,16 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
-	ctx := context.TODO()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_smtpcredentialset"})
 	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
-	return &ReconcileSMTPCredentialSet{client: mgr.GetClient(), scheme: mgr.GetScheme(), logger: logger, ctx: ctx, providerList: providerList, cfgMgr: cfgMgr}
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
+	return &ReconcileSMTPCredentialSet{
+		client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -70,22 +71,23 @@ var _ reconcile.Reconciler = &ReconcileSMTPCredentialSet{}
 type ReconcileSMTPCredentialSet struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client       client.Client
-	scheme       *runtime.Scheme
-	logger       *logrus.Entry
-	ctx          context.Context
-	providerList []providers.SMTPCredentialsProvider
-	cfgMgr       providers.ConfigManager
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.SMTPCredentialsProvider
 }
 
 // Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
 // and what is in the SMTPCredentials.Spec
 func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling SMTPCredentials")
+	ctx := context.TODO()
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the SMTPCredentials instance
 	instance := &v1alpha1.SMTPCredentialSet{}
-	err := r.client.Get(r.ctx, request.NamespacedName, instance)
+	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -97,9 +99,9 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -114,68 +116,46 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 		if instance.GetDeletionTimestamp() != nil {
 			r.logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
-			msg, err := p.DeleteSMTPCredentials(r.ctx, instance)
+			msg, err := p.DeleteSMTPCredentials(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
 
 			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
-				return reconcile.Result{}, err
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); updateErr != nil {
+				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
-		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(r.ctx, instance)
+		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(ctx, instance)
 		if err != nil {
-			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
 		}
 
-		sec := &v1.Secret{
-			ObjectMeta: controllerruntime.ObjectMeta{
-				Name:      instance.Spec.SecretRef.Name,
-				Namespace: instance.Namespace,
-			},
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, smtpCredentialSetInst.DeploymentDetails.Data()); err != nil {
+			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
-		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
-			e := existing.(*v1.Secret)
-			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
-					return updateErr
-				}
-				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
-			}
-			e.Data = smtpCredentialSetInst.DeploymentDetails.Data()
-			e.Type = v1.SecretTypeOpaque
-			return nil
-		})
-		if err != nil {
-			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
-				return reconcile.Result{}, updateErr
-			}
-			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile smtp credential set instance secret %s", sec.Name)
-		}
-
 		instance.Status.Phase = v1alpha1.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.BlobStorage
 		instance.Status.Provider = p.GetName()
-		if err = r.client.Status().Update(r.ctx, instance); err != nil {
+		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
-		return reconcile.Result{}, err
+	if updatePhaseErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); updatePhaseErr != nil {
+		return reconcile.Result{}, updatePhaseErr
 	}
 	return reconcile.Result{Requeue: true}, nil
 }

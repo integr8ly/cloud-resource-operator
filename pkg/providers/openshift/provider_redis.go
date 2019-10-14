@@ -149,20 +149,6 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
-			// delete pv
-			p.Logger.Info("Deleting redis persistent volume")
-			pv := &apiv1.PersistentVolume{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      r.Name,
-					Namespace: r.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, pv)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete persistent volume"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
 			// delete pvc
 			p.Logger.Info("Deleting redis persistent volume claim")
 			pvc := &apiv1.PersistentVolumeClaim{

@@ -1,10 +1,16 @@
-
+IMAGE_REG=quay.io
+IMAGE_ORG=integreatly
+IMAGE_NAME=cloud-resource-operator
+MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
+COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
+
+AUTH_TOKEN=$(shell curl -sH "Content-Type: application/json" -XPOST https://quay.io/cnr/api/v1/users/login -d '{"user": {"username": "$(QUAY_USERNAME)", "password": "${QUAY_PASSWORD}"}}' | jq -r '.token')
 
 .PHONY: build
 build:
-	go build cmd/manager/main.go
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) cmd/manager/main.go
 
 .PHONY: run
 run:
@@ -68,7 +74,23 @@ test/unit:
 	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
 
 .PHONY: test/unit/ci
-test/unit/ci:
+test/unit/ci: test/unit
 	@echo Removing mock file coverage
-	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
 	sed -i.bak '/_moq.go/d' coverage.out
+
+.PHONY: image/build
+image/build: build
+	operator-sdk build $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
+
+.PHONY: image/push
+image/push: image/build
+	docker push $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
+
+.PHONY: manifest/push
+manifest/push:
+	@operator-courier --verbose push deploy/olm-catalog/cloud-resources/ $(IMAGE_ORG) $(MANIFEST_NAME) $(VERSION) "$(AUTH_TOKEN)"
+
+.PHONY: setup/travis
+setup/travis:
+	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.10.0/operator-sdk-v0.10.0-x86_64-linux-gnu && chmod +x operator-sdk && sudo mv operator-sdk /usr/local/bin/
+	pip3 install operator-courier==2.1.7

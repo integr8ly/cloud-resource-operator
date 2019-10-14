@@ -8,9 +8,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -42,11 +39,16 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
-	ctx := context.TODO()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
 	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger), aws.NewAWSPostgresProvider(client, logger)}
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, providers.DefaultConfigNamespace, client)
-	return &ReconcilePostgres{client: client, scheme: mgr.GetScheme(), logger: logger, ctx: ctx, providerList: providerList, cfgMgr: cfgMgr}
+	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
+	return &ReconcilePostgres{
+		client:           client,
+		scheme:           mgr.GetScheme(),
+		logger:           logger,
+		resourceProvider: rp,
+		providerList:     providerList,
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -82,12 +84,11 @@ var _ reconcile.Reconciler = &ReconcilePostgres{}
 type ReconcilePostgres struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client       client.Client
-	scheme       *runtime.Scheme
-	logger       *logrus.Entry
-	ctx          context.Context
-	providerList []providers.PostgresProvider
-	cfgMgr       providers.ConfigManager
+	client           client.Client
+	scheme           *runtime.Scheme
+	logger           *logrus.Entry
+	resourceProvider *resources.ReconcileResourceProvider
+	providerList     []providers.PostgresProvider
 }
 
 // Reconcile reads that state of the cluster for a Postgres object and makes changes based on the state read
@@ -96,6 +97,8 @@ type ReconcilePostgres struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling Postgres")
+	ctx := context.TODO()
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the Postgres instance
 	instance := &v1alpha1.Postgres{}
@@ -111,9 +114,9 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	stratMap, err := r.cfgMgr.GetStrategyMappingForDeploymentType(r.ctx, instance.Spec.Type)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -126,26 +129,26 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 
 		// delete the postgres if the deletion timestamp exists
 		if instance.DeletionTimestamp != nil {
-			msg, err := p.DeletePostgres(r.ctx, instance)
+			msg, err := p.DeletePostgres(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on Postgres to successfully delete")
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		// create the postgres instance
-		ps, msg, err := p.CreatePostgres(r.ctx, instance)
+		ps, msg, err := p.CreatePostgres(ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
@@ -153,36 +156,15 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 		}
 
 		// return the connection secret
-		sec := &corev1.Secret{
-			ObjectMeta: controllerruntime.ObjectMeta{
-				Name:      instance.Spec.SecretRef.Name,
-				Namespace: instance.Namespace,
-			},
-		}
-		_, err = controllerruntime.CreateOrUpdate(r.ctx, r.client, sec, func(existing runtime.Object) error {
-			e := existing.(*corev1.Secret)
-			if err = controllerutil.SetControllerReference(instance, e, r.scheme); err != nil {
-				if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to set owner on secret"); updateErr != nil {
-					return updateErr
-				}
-				return errorUtil.Wrapf(err, "failed to set owner on secret %s", sec.Name)
-			}
-			e.Data = ps.DeploymentDetails.Data()
-			e.Type = corev1.SecretTypeOpaque
-			return nil
-		})
-		if err != nil {
-			if updateErr := resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to reconcile instance secret"); updateErr != nil {
-				return reconcile.Result{}, updateErr
-			}
-			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to reconcile postgres instance secret %s", sec.Name)
+		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, ps.DeploymentDetails.Data()); err != nil {
+			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 
 		instance.Status.Phase = v1alpha1.PhaseComplete
@@ -190,14 +172,14 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Postgres
 		instance.Status.Provider = p.GetName()
-		if err = r.client.Status().Update(r.ctx, instance); err != nil {
+		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(r.ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
+	if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Postgres))

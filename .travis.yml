@@ -1,15 +1,31 @@
 language: go
 
 sudo: required
+dist: bionic
 
 go:
   - 1.13.x
+
+env:
+  - GO111MODULE=on
+
+addons:
+  apt:
+    update: true
+    packages:
+      - "python3"
+      - "python3-pip"
+      - "python3-setuptools"
 
 git:
   depth: 1
 
 stages:
-  - test
+  - name: test
+  - name: push
+    if: fork = false
+  - name: manifest
+    if: fork = false AND tag IS present
 
 before_install:
   - go get github.com/mattn/goveralls
@@ -24,3 +40,16 @@ jobs:
         - make test/unit/ci
         - $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken=$COVERALLS_TOKEN
         - make code/audit
+    - stage: push
+      script:
+        - make setup/travis
+        - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io
+        - export TAG=$(git rev-parse --short ${TRAVIS_COMMIT})
+        - make image/push VERSION=$TAG
+        - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make image/push; fi
+    - stage: manifest
+      script:
+        - make setup/travis
+        - alias python=python3
+        - ls
+        - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make manifest/push; fi

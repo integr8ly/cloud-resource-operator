@@ -20,7 +20,7 @@ const (
 	BlobStorageResourceType    ResourceType = "blobstorage"
 	PostgresResourceType       ResourceType = "postgres"
 	RedisResourceType          ResourceType = "redis"
-	SMTPCredentialResourceType ResourceType = "smtpcredential"
+	SMTPCredentialResourceType ResourceType = "smtpcredentials"
 )
 
 type DeploymentDetails interface {
