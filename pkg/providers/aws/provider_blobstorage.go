@@ -36,6 +36,7 @@ const (
 	defaultAwsBucketNameLength = 40
 	// default create options
 	dataBucketName          = "bucketName"
+	dataBucketRegion        = "bucketRegion"
 	dataCredentialKeyID     = "credentialKeyID"
 	dataCredentialSecretKey = "credentialSecretKey"
 )
@@ -43,6 +44,7 @@ const (
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
 type BlobStorageDeploymentDetails struct {
 	BucketName          string
+	BucketRegion        string
 	CredentialKeyID     string
 	CredentialSecretKey string
 }
@@ -50,6 +52,7 @@ type BlobStorageDeploymentDetails struct {
 func (d *BlobStorageDeploymentDetails) Data() map[string][]byte {
 	return map[string][]byte{
 		dataBucketName:          []byte(d.BucketName),
+		dataBucketRegion:        []byte(d.BucketRegion),
 		dataCredentialKeyID:     []byte(d.CredentialKeyID),
 		dataCredentialSecretKey: []byte(d.CredentialSecretKey),
 	}
@@ -129,6 +132,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	bsi := &providers.BlobStorageInstance{
 		DeploymentDetails: &BlobStorageDeploymentDetails{
 			BucketName:          *bucketCreateCfg.Bucket,
+			BucketRegion:        stratCfg.Region,
 			CredentialKeyID:     endUserCreds.AccessKeyID,
 			CredentialSecretKey: endUserCreds.SecretAccessKey,
 		},
