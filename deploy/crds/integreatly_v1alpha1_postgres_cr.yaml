@@ -11,4 +11,4 @@ spec:
   # i want a postgres storage of a development-level tier
   tier: development
   # i want a postgres storage for the type managed
-  type: managed
+  type: workshop

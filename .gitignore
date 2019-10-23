@@ -85,3 +85,4 @@ tmp/
 cover.html
 ./cover.html
 ./cover.out
+.python-version
