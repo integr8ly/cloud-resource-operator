@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -14,8 +13,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	"github.com/google/uuid"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -459,24 +456,12 @@ func (p *AWSPostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1al
 	return nil
 }
 
-func GeneratePassword() (string, error) {
-	generatedPassword, err := uuid.NewRandom()
-	if err != nil {
-		return "", errorUtil.Wrap(err, "error generating password")
-	}
-	return strings.Replace(generatedPassword.String(), "-", "", 10), nil
-}
-
 func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
-	password, err := GeneratePassword()
+	password, err := resources.GeneratePassword()
 	if err != nil {
 		return nil
 	}
 	return &v1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ps.Name + defaultCredSecSuffix,
 			Namespace: ps.Namespace,

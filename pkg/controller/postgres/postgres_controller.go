@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -33,14 +35,19 @@ var log = logf.Log.WithName("controller_postgres")
 // Add creates a new Postgres Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	clientSet, err := resources.GetK8Client()
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build client set")
+	}
+	return add(mgr, newReconciler(mgr, clientSet))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, cs *kubernetes.Clientset) reconcile.Reconciler {
 	client := mgr.GetClient()
+
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, logger), aws.NewAWSPostgresProvider(client, logger)}
+	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, cs, logger), aws.NewAWSPostgresProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcilePostgres{
 		client:           client,

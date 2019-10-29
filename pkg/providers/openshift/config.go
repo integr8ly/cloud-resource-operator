@@ -82,7 +82,7 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.configMapNamespace,
 		},
 		Data: map[string]string{
-			"postgres": "{\"development\": { \"strategy\": {} }}",
+			"postgres": "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
 			"redis":    "{\"development\": {  \"strategy\": {} }}",
 		},
 	}

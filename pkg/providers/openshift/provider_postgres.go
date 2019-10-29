@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"k8s.io/client-go/kubernetes"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -33,7 +33,7 @@ var (
 	postgresProviderName = "openshift-postgres-template"
 	// default openshift create paramaters
 	defaultPostgresPort        = 5432
-	defaultPostgresUser        = "user"
+	defaultPostgresUser        = "postgresuser"
 	defaultPostgresPassword    = "password"
 	defaultPostgresUserKey     = "user"
 	defaultPostgresPasswordKey = "password"
@@ -55,11 +55,13 @@ type OpenShiftPostgresProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
 	ConfigManager ConfigManager
+	PodCommander  resources.PodCommander
 }
 
-func NewOpenShiftPostgresProvider(client client.Client, logger *logrus.Entry) *OpenShiftPostgresProvider {
+func NewOpenShiftPostgresProvider(client client.Client, cs *kubernetes.Clientset, logger *logrus.Entry) *OpenShiftPostgresProvider {
 	return &OpenShiftPostgresProvider{
 		Client:        client,
+		PodCommander:  &resources.OpenShiftPodCommander{ClientSet: cs},
 		Logger:        logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
@@ -93,7 +95,12 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy credentials secret
-	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(ps), postgresCfg); err != nil {
+	password, err := resources.GeneratePassword()
+	if err != nil {
+		errMsg := "failed to generate potential postgres password"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if err := p.CreateSecret(ctx, buildDefaultPostgresSecret(ps, password), postgresCfg); err != nil {
 		errMsg := fmt.Sprintf("failed to create or update postgres secret for instance %s", ps.Name)
 		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -125,24 +132,37 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 	}
 
 	// check if deployment is ready and return connection details
+	dplAvailable := false
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
-			p.Logger.Info("Found postgres deployment")
-			return &providers.PostgresInstance{
-				DeploymentDetails: &providers.PostgresDeploymentDetails{
-					Username: string(sec.Data["user"]),
-					Password: string(sec.Data["password"]),
-					Database: string(sec.Data["database"]),
-					Host:     fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace),
-					Port:     defaultPostgresPort,
-				},
-			}, "postgres deployment is complete", nil
+			dplAvailable = true
+			break
 		}
 	}
 
 	// deployment is in progress
-	p.Logger.Info("postgres deployment is not ready")
-	return nil, "creation in progress", nil
+	if !dplAvailable {
+		p.Logger.Info("postgres deployment is not ready")
+		return nil, "creation in progress", nil
+	}
+
+	// deployment is complete, give user permissions and complete
+	dbUser := string(sec.Data["user"])
+	if err := p.ReconcileDatabaseUserRoles(ctx, dpl, dbUser); err != nil {
+		errMsg := "failed to reconcile database roles for user"
+		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	p.Logger.Info("Found postgres deployment")
+	return &providers.PostgresInstance{
+		DeploymentDetails: &providers.PostgresDeploymentDetails{
+			Username: dbUser,
+			Password: string(sec.Data["password"]),
+			Database: string(sec.Data["database"]),
+			Host:     fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace),
+			Port:     defaultPostgresPort,
+		},
+	}, "postgres deployment is complete", nil
 }
 
 func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
@@ -230,7 +250,6 @@ func (p *OpenShiftPostgresProvider) getPostgresConfig(ctx context.Context, ps *v
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to read openshift strategy config")
 	}
-
 	// unmarshal the postgres config
 	postgresCfg := &PostgresStrat{}
 	if err := json.Unmarshal(stratCfg.RawStrategy, postgresCfg); err != nil {
@@ -279,11 +298,18 @@ func (p *OpenShiftPostgresProvider) CreateService(ctx context.Context, s *v1.Ser
 }
 
 func (p *OpenShiftPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secret, postgresCfg *PostgresStrat) error {
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
+	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*v1.Secret)
 
 		if postgresCfg.PostgresSecretData == nil {
-			e.Data = s.Data
+			// only update password if it isn't already set, to avoid constant password churn
+			if string(e.Data["password"]) == "" {
+				e.Data["password"] = s.Data["password"]
+			}
+			if string(e.Data["user"]) == "" {
+				e.Data["user"] = s.Data["user"]
+			}
+			e.Data["database"] = s.Data["database"]
 			return nil
 		}
 
@@ -317,12 +343,16 @@ func (p *OpenShiftPostgresProvider) CreatePVC(ctx context.Context, pvc *v1.Persi
 	return nil
 }
 
+func (p *OpenShiftPostgresProvider) ReconcileDatabaseUserRoles(ctx context.Context, d *appsv1.Deployment, u string) error {
+	cmd := "psql -c \"ALTER USER \\\"" + u + "\\\" WITH SUPERUSER;\""
+	if err := p.PodCommander.ExecIntoPod(d, cmd); err != nil {
+		return errorUtil.Wrap(err, "failed to perform exec on database pod")
+	}
+	return nil
+}
+
 func buildDefaultPostgresService(ps *v1alpha1.Postgres) *v1.Service {
 	return &v1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ps.Name,
 			Namespace: ps.Namespace,
@@ -343,10 +373,6 @@ func buildDefaultPostgresService(ps *v1alpha1.Postgres) *v1.Service {
 
 func buildDefaultPostgresPVC(ps *v1alpha1.Postgres) *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PersistentVolumeClaim",
-			APIVersion: "v1",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ps.Name,
 			Namespace: ps.Namespace,
@@ -364,10 +390,6 @@ func buildDefaultPostgresPVC(ps *v1alpha1.Postgres) *v1.PersistentVolumeClaim {
 
 func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
-			APIVersion: "apps/v1",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ps.Name,
 			Namespace: ps.Namespace,
@@ -469,20 +491,19 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 	}
 }
 
-func buildDefaultPostgresSecret(ps *v1alpha1.Postgres) *v1.Secret {
+func buildDefaultPostgresSecret(ps *v1alpha1.Postgres, password string) *v1.Secret {
+	if password == "" {
+		password = defaultPostgresPassword
+	}
 	return &v1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      defaultCredentialsSec,
 			Namespace: ps.Namespace,
 		},
-		StringData: map[string]string{
-			"user":     defaultPostgresUser,
-			"password": defaultPostgresPassword,
-			"database": ps.Name,
+		Data: map[string][]byte{
+			"user":     []byte(defaultPostgresUser),
+			"password": []byte(password),
+			"database": []byte(ps.Name),
 		},
 		Type: v1.SecretTypeOpaque,
 	}

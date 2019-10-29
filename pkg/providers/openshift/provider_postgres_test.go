@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -134,6 +136,14 @@ func buildTestConfigManager(strategy string) *ConfigManagerMock {
 	}
 }
 
+func buildTestPodCommander() resources.PodCommander {
+	return &resources.PodCommanderMock{
+		ExecIntoPodFunc: func(dpl *appsv1.Deployment, cmd string) error {
+			return nil
+		},
+	}
+}
+
 func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -144,6 +154,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		Client        client.Client
 		Logger        *logrus.Entry
 		ConfigManager ConfigManager
+		PodCommander  resources.PodCommander
 	}
 	type args struct {
 		ctx      context.Context
@@ -162,6 +173,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
+				PodCommander:  buildTestPodCommander(),
 			},
 			args: args{
 				ctx:      context.TODO(),
@@ -176,6 +188,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
+				PodCommander:  buildTestPodCommander(),
 			},
 			args: args{
 				ctx:      context.TODO(),
@@ -191,6 +204,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
+				PodCommander:  tt.fields.PodCommander,
 			}
 			got, _, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
 			if (err != nil) != tt.wantErr {
