@@ -76,7 +76,7 @@ test/unit/setup:
 .PHONY: test/e2e
 test/e2e:
 	@echo Running e2e tests:
-	operator-sdk test local ./test/e2e
+	operator-sdk test local ./test/e2e --go-test-flags "-v"
 
 
 .PHONY: test/unit
