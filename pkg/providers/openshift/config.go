@@ -18,7 +18,7 @@ import (
 const (
 	DefaultConfigMapName      = "cloud-resources-openshift-strategies"
 	DefaultConfigMapNamespace = "kube-system"
-	DefaultFinalizer          = "finalizers.openshift.cloud-resources-operator.integreatly.org"
+	DefaultFinalizer          = "finalizers.cloud-resources-operator.integreatly.org"
 )
 
 type StrategyConfig struct {

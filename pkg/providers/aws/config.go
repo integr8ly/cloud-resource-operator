@@ -22,7 +22,7 @@ const (
 	DefaultConfigMapName      = "cloud-resources-aws-strategies"
 	DefaultConfigMapNamespace = "kube-system"
 
-	DefaultFinalizer = "finalizers.aws.cloud-resources-operator.integreatly.org"
+	DefaultFinalizer = "finalizers.cloud-resources-operator.integreatly.org"
 	DefaultRegion    = "eu-west-1"
 
 	regionUSEast1 = "us-east-1"
