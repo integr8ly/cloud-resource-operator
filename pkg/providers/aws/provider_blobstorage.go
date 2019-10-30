@@ -41,7 +41,7 @@ const (
 	dataBucketRegion           = "bucketRegion"
 	dataCredentialKeyID        = "credentialKeyID"
 	dataCredentialSecretKey    = "credentialSecretKey"
-	defaultForceBucketDeletion = true
+	defaultForceBucketDeletion = false
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
