@@ -6,39 +6,40 @@ import (
 	"time"
 )
 
-func TestGetReconcileTime(t *testing.T) {
+func TestGetForcedReconcileTimeOrDefault(t *testing.T) {
 	type args struct {
-		recTime string
+		defaultTo time.Duration
 	}
 	var tests = []struct {
-		name string
-		want time.Duration
-		args args
+		name                  string
+		want                  time.Duration
+		envForceReconcileTime string
+		args                  args
 	}{
 		{
 			name: "test function returns default",
 			args: args{
-				recTime: "",
+				defaultTo: time.Second * 60,
 			},
-			want: time.Duration(DefaulReconcileTime),
+			want: time.Second * 60,
 		},
 		{
 			name: "test accepts env var and returns value",
 			args: args{
-				recTime: "30",
+				defaultTo: time.Second * 60,
 			},
-			want: time.Duration(30),
+			envForceReconcileTime: "30",
+			want:                  time.Nanosecond * 30,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.args.recTime != "" {
-				err := os.Setenv("RECTIME", tt.args.recTime)
-				if err != nil {
-					t.Error(err)
+			if tt.envForceReconcileTime != "" {
+				if err := os.Setenv(EnvForceReconcileTimeout, tt.envForceReconcileTime); err != nil {
+					t.Errorf("GetReconcileTime() err = %v", err)
 				}
 			}
-			if got := GetReconcileTime(); got != tt.want {
+			if got := GetForcedReconcileTimeOrDefault(tt.args.defaultTo); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})

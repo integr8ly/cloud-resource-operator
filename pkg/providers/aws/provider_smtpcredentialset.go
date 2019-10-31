@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -78,6 +79,13 @@ func (p *SMTPCredentialProvider) GetName() string {
 func (p *SMTPCredentialProvider) SupportsStrategy(d string) bool {
 	p.Logger.Infof("checking for support of strategy %s, supported strategies are %s", d, providers.AWSDeploymentStrategy)
 	return providers.AWSDeploymentStrategy == d
+}
+
+func (p *SMTPCredentialProvider) GetReconcileTime(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
+	if smtpCreds.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 30
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {

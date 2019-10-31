@@ -61,6 +61,8 @@ var (
 	defaultSupportedEngineVersions = []string{"10.6", "9.6", "9.5"}
 )
 
+var _ providers.PostgresProvider = (*AWSPostgresProvider)(nil)
+
 type AWSPostgresProvider struct {
 	Client            client.Client
 	Logger            *logrus.Entry
@@ -83,6 +85,13 @@ func (p *AWSPostgresProvider) GetName() string {
 
 func (p *AWSPostgresProvider) SupportsStrategy(d string) bool {
 	return d == providers.AWSDeploymentStrategy
+}
+
+func (p *AWSPostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration {
+	if pg.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 60
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 // CreatePostgres creates an RDS Instance from strategy config

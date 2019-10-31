@@ -2,8 +2,6 @@ package smtpcredentialset
 
 import (
 	"context"
-	"time"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -128,7 +126,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 		}
 
 		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(ctx, instance)
@@ -150,7 +148,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 	}
 
 	// unsupported strategy

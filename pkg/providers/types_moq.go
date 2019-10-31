@@ -7,6 +7,7 @@ import (
 	"context"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"sync"
+	"time"
 )
 
 var (
@@ -74,6 +75,7 @@ var (
 	lockBlobStorageProviderMockCreateStorage    sync.RWMutex
 	lockBlobStorageProviderMockDeleteStorage    sync.RWMutex
 	lockBlobStorageProviderMockGetName          sync.RWMutex
+	lockBlobStorageProviderMockGetReconcileTime sync.RWMutex
 	lockBlobStorageProviderMockSupportsStrategy sync.RWMutex
 )
 
@@ -96,6 +98,9 @@ var _ BlobStorageProvider = &BlobStorageProviderMock{}
 //             GetNameFunc: func() string {
 // 	               panic("mock out the GetName method")
 //             },
+//             GetReconcileTimeFunc: func(bs *v1alpha1.BlobStorage) time.Duration {
+// 	               panic("mock out the GetReconcileTime method")
+//             },
 //             SupportsStrategyFunc: func(s string) bool {
 // 	               panic("mock out the SupportsStrategy method")
 //             },
@@ -114,6 +119,9 @@ type BlobStorageProviderMock struct {
 
 	// GetNameFunc mocks the GetName method.
 	GetNameFunc func() string
+
+	// GetReconcileTimeFunc mocks the GetReconcileTime method.
+	GetReconcileTimeFunc func(bs *v1alpha1.BlobStorage) time.Duration
 
 	// SupportsStrategyFunc mocks the SupportsStrategy method.
 	SupportsStrategyFunc func(s string) bool
@@ -136,6 +144,11 @@ type BlobStorageProviderMock struct {
 		}
 		// GetName holds details about calls to the GetName method.
 		GetName []struct {
+		}
+		// GetReconcileTime holds details about calls to the GetReconcileTime method.
+		GetReconcileTime []struct {
+			// Bs is the bs argument value.
+			Bs *v1alpha1.BlobStorage
 		}
 		// SupportsStrategy holds details about calls to the SupportsStrategy method.
 		SupportsStrategy []struct {
@@ -241,6 +254,37 @@ func (mock *BlobStorageProviderMock) GetNameCalls() []struct {
 	return calls
 }
 
+// GetReconcileTime calls GetReconcileTimeFunc.
+func (mock *BlobStorageProviderMock) GetReconcileTime(bs *v1alpha1.BlobStorage) time.Duration {
+	if mock.GetReconcileTimeFunc == nil {
+		panic("BlobStorageProviderMock.GetReconcileTimeFunc: method is nil but BlobStorageProvider.GetReconcileTime was just called")
+	}
+	callInfo := struct {
+		Bs *v1alpha1.BlobStorage
+	}{
+		Bs: bs,
+	}
+	lockBlobStorageProviderMockGetReconcileTime.Lock()
+	mock.calls.GetReconcileTime = append(mock.calls.GetReconcileTime, callInfo)
+	lockBlobStorageProviderMockGetReconcileTime.Unlock()
+	return mock.GetReconcileTimeFunc(bs)
+}
+
+// GetReconcileTimeCalls gets all the calls that were made to GetReconcileTime.
+// Check the length with:
+//     len(mockedBlobStorageProvider.GetReconcileTimeCalls())
+func (mock *BlobStorageProviderMock) GetReconcileTimeCalls() []struct {
+	Bs *v1alpha1.BlobStorage
+} {
+	var calls []struct {
+		Bs *v1alpha1.BlobStorage
+	}
+	lockBlobStorageProviderMockGetReconcileTime.RLock()
+	calls = mock.calls.GetReconcileTime
+	lockBlobStorageProviderMockGetReconcileTime.RUnlock()
+	return calls
+}
+
 // SupportsStrategy calls SupportsStrategyFunc.
 func (mock *BlobStorageProviderMock) SupportsStrategy(s string) bool {
 	if mock.SupportsStrategyFunc == nil {
@@ -276,6 +320,7 @@ var (
 	lockSMTPCredentialsProviderMockCreateSMTPCredentials sync.RWMutex
 	lockSMTPCredentialsProviderMockDeleteSMTPCredentials sync.RWMutex
 	lockSMTPCredentialsProviderMockGetName               sync.RWMutex
+	lockSMTPCredentialsProviderMockGetReconcileTime      sync.RWMutex
 	lockSMTPCredentialsProviderMockSupportsStrategy      sync.RWMutex
 )
 
@@ -298,6 +343,9 @@ var _ SMTPCredentialsProvider = &SMTPCredentialsProviderMock{}
 //             GetNameFunc: func() string {
 // 	               panic("mock out the GetName method")
 //             },
+//             GetReconcileTimeFunc: func(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
+// 	               panic("mock out the GetReconcileTime method")
+//             },
 //             SupportsStrategyFunc: func(s string) bool {
 // 	               panic("mock out the SupportsStrategy method")
 //             },
@@ -316,6 +364,9 @@ type SMTPCredentialsProviderMock struct {
 
 	// GetNameFunc mocks the GetName method.
 	GetNameFunc func() string
+
+	// GetReconcileTimeFunc mocks the GetReconcileTime method.
+	GetReconcileTimeFunc func(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration
 
 	// SupportsStrategyFunc mocks the SupportsStrategy method.
 	SupportsStrategyFunc func(s string) bool
@@ -338,6 +389,11 @@ type SMTPCredentialsProviderMock struct {
 		}
 		// GetName holds details about calls to the GetName method.
 		GetName []struct {
+		}
+		// GetReconcileTime holds details about calls to the GetReconcileTime method.
+		GetReconcileTime []struct {
+			// SmtpCreds is the smtpCreds argument value.
+			SmtpCreds *v1alpha1.SMTPCredentialSet
 		}
 		// SupportsStrategy holds details about calls to the SupportsStrategy method.
 		SupportsStrategy []struct {
@@ -440,6 +496,37 @@ func (mock *SMTPCredentialsProviderMock) GetNameCalls() []struct {
 	lockSMTPCredentialsProviderMockGetName.RLock()
 	calls = mock.calls.GetName
 	lockSMTPCredentialsProviderMockGetName.RUnlock()
+	return calls
+}
+
+// GetReconcileTime calls GetReconcileTimeFunc.
+func (mock *SMTPCredentialsProviderMock) GetReconcileTime(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
+	if mock.GetReconcileTimeFunc == nil {
+		panic("SMTPCredentialsProviderMock.GetReconcileTimeFunc: method is nil but SMTPCredentialsProvider.GetReconcileTime was just called")
+	}
+	callInfo := struct {
+		SmtpCreds *v1alpha1.SMTPCredentialSet
+	}{
+		SmtpCreds: smtpCreds,
+	}
+	lockSMTPCredentialsProviderMockGetReconcileTime.Lock()
+	mock.calls.GetReconcileTime = append(mock.calls.GetReconcileTime, callInfo)
+	lockSMTPCredentialsProviderMockGetReconcileTime.Unlock()
+	return mock.GetReconcileTimeFunc(smtpCreds)
+}
+
+// GetReconcileTimeCalls gets all the calls that were made to GetReconcileTime.
+// Check the length with:
+//     len(mockedSMTPCredentialsProvider.GetReconcileTimeCalls())
+func (mock *SMTPCredentialsProviderMock) GetReconcileTimeCalls() []struct {
+	SmtpCreds *v1alpha1.SMTPCredentialSet
+} {
+	var calls []struct {
+		SmtpCreds *v1alpha1.SMTPCredentialSet
+	}
+	lockSMTPCredentialsProviderMockGetReconcileTime.RLock()
+	calls = mock.calls.GetReconcileTime
+	lockSMTPCredentialsProviderMockGetReconcileTime.RUnlock()
 	return calls
 }
 

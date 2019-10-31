@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/client-go/kubernetes"
 
@@ -51,6 +52,8 @@ type PostgresStrat struct {
 	PostgresSecretData     map[string]string             `json:"secretData"`
 }
 
+var _ providers.PostgresProvider = (*OpenShiftPostgresProvider)(nil)
+
 type OpenShiftPostgresProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
@@ -73,6 +76,13 @@ func (p *OpenShiftPostgresProvider) GetName() string {
 
 func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
 	return d == providers.OpenShiftDeploymentStrategy
+}
+
+func (p *OpenShiftPostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration {
+	if pg.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 10
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {

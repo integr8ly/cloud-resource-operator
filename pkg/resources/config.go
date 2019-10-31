@@ -11,19 +11,21 @@ import (
 	errorUtil "github.com/pkg/errors"
 )
 
-const DefaulReconcileTime = 300
+const (
+	EnvForceReconcileTimeout = "ENV_FORCE_RECONCILE_TIMEOUT"
+)
 
 // returns envar for reconcile time else returns default time
-func GetReconcileTime() time.Duration {
-	recTime, exist := os.LookupEnv("RECTIME")
+func GetForcedReconcileTimeOrDefault(defaultTo time.Duration) time.Duration {
+	recTime, exist := os.LookupEnv(EnvForceReconcileTimeout)
 	if exist {
 		rt, err := strconv.ParseInt(recTime, 10, 64)
 		if err != nil {
-			return time.Duration(DefaulReconcileTime)
+			return defaultTo
 		}
 		return time.Duration(rt)
 	}
-	return time.Duration(DefaulReconcileTime)
+	return defaultTo
 }
 
 func GeneratePassword() (string, error) {

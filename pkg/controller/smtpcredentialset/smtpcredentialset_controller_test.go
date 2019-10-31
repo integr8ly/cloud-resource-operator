@@ -107,6 +107,9 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 								},
 							}, "", nil
 						},
+						GetReconcileTimeFunc: func(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
+							return time.Second * 10
+						},
 						DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
 							return "", nil
 						},
@@ -137,7 +140,7 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 			want: struct {
 				Requeue      bool
 				RequeueAfter time.Duration
-			}{Requeue: true, RequeueAfter: resources.GetReconcileTime() * time.Second},
+			}{Requeue: true, RequeueAfter: time.Second * 10},
 			wantErr: false,
 		},
 	}

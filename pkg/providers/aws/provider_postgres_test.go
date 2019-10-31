@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	v12 "github.com/openshift/api/config/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -372,6 +373,48 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("deleteRDSInstance() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		p *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: v1alpha1.PostgresStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: v1alpha1.PostgresStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &AWSPostgresProvider{}
+			if got := p.GetReconcileTime(tt.args.p); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

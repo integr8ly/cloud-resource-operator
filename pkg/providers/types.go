@@ -2,9 +2,9 @@ package providers
 
 import (
 	"context"
-	"strconv"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"strconv"
+	"time"
 )
 
 //go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider SMTPCredentialsProvider
@@ -46,6 +46,7 @@ type PostgresInstance struct {
 type BlobStorageProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
+	GetReconcileTime(bs *v1alpha1.BlobStorage) time.Duration
 	CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, v1alpha1.StatusMessage, error)
 	DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (v1alpha1.StatusMessage, error)
 }
@@ -53,6 +54,7 @@ type BlobStorageProvider interface {
 type SMTPCredentialsProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
+	GetReconcileTime(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration
 	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, v1alpha1.StatusMessage, error)
 	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error)
 }
@@ -60,6 +62,7 @@ type SMTPCredentialsProvider interface {
 type RedisProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
+	GetReconcileTime(r *v1alpha1.Redis) time.Duration
 	CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*RedisCluster, v1alpha1.StatusMessage, error)
 	DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error)
 }
@@ -67,6 +70,7 @@ type RedisProvider interface {
 type PostgresProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
+	GetReconcileTime(ps *v1alpha1.Postgres) time.Duration
 	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, v1alpha1.StatusMessage, error)
 	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (v1alpha1.StatusMessage, error)
 }

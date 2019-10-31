@@ -35,6 +35,8 @@ const (
 	NoFinalSnapshotIdentifier = ""
 )
 
+var _ providers.RedisProvider = (*AWSRedisProvider)(nil)
+
 // AWS Redis Provider implementation for AWS Elasticache
 type AWSRedisProvider struct {
 	Client            client.Client
@@ -59,6 +61,13 @@ func (p *AWSRedisProvider) GetName() string {
 
 func (p *AWSRedisProvider) SupportsStrategy(d string) bool {
 	return d == providers.AWSDeploymentStrategy
+}
+
+func (p *AWSRedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
+	if r.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 60
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 // CreateRedis Create an Elasticache Replication Group from strategy config

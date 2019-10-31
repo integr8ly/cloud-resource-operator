@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -225,6 +226,48 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 			}
 			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3svc, tt.args.bucketCfg, tt.args.bucketDeleteCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucketDelete() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		b *v1alpha1.BlobStorage
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				b: &v1alpha1.BlobStorage{
+					Status: v1alpha1.BlobStorageStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				b: &v1alpha1.BlobStorage{
+					Status: v1alpha1.BlobStorageStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &BlobStorageProvider{}
+			if got := p.GetReconcileTime(tt.args.b); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

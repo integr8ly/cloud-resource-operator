@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -19,6 +20,8 @@ const (
 	DefaultConfigMapName      = "cloud-resources-openshift-strategies"
 	DefaultConfigMapNamespace = "kube-system"
 	DefaultFinalizer          = "finalizers.cloud-resources-operator.integreatly.org"
+
+	defaultReconcileTime = time.Second * 30
 )
 
 type StrategyConfig struct {

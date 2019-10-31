@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -43,6 +44,8 @@ const (
 	redisContainerCommand = "/opt/rh/rh-redis32/root/usr/bin/redis-server"
 )
 
+var _ providers.RedisProvider = (*OpenShiftRedisProvider)(nil)
+
 type OpenShiftRedisProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
@@ -63,6 +66,13 @@ func (p *OpenShiftRedisProvider) GetName() string {
 
 func (p *OpenShiftRedisProvider) SupportsStrategy(d string) bool {
 	return d == providers.OpenShiftDeploymentStrategy
+}
+
+func (p *OpenShiftRedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
+	if r.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 10
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
