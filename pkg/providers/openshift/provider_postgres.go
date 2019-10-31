@@ -172,7 +172,7 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 			Host:     fmt.Sprintf("%s.%s.svc.cluster.local", ps.Name, ps.Namespace),
 			Port:     defaultPostgresPort,
 		},
-	}, "postgres deployment is complete", nil
+	}, "creation successful", nil
 }
 
 func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
