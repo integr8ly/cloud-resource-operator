@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -314,6 +315,48 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 			}
 			if _, err := p.deleteElasticacheCluster(tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		r *v1alpha1.Redis
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: v1alpha1.RedisStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: v1alpha1.RedisStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &AWSRedisProvider{}
+			if got := p.GetReconcileTime(tt.args.r); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

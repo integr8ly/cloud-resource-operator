@@ -3,8 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -148,7 +146,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 		}
 
 		// create the postgres instance
@@ -166,7 +164,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 		}
 
 		// return the connection secret
@@ -182,7 +180,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 	}
 
 	// unsupported strategy

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	v13 "github.com/openshift/api/config/v1"
 
@@ -399,6 +400,48 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					t.Error("error during validation", err)
 					return
 				}
+			}
+		})
+	}
+}
+
+func TestSMTPCredentialProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		s *v1alpha1.SMTPCredentialSet
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				s: &v1alpha1.SMTPCredentialSet{
+					Status: v1alpha1.SMTPCredentialSetStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 30,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				s: &v1alpha1.SMTPCredentialSet{
+					Status: v1alpha1.SMTPCredentialSetStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &SMTPCredentialProvider{}
+			if got := p.GetReconcileTime(tt.args.s); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

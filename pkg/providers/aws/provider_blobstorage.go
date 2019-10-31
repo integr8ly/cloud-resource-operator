@@ -88,6 +88,13 @@ func (p *BlobStorageProvider) SupportsStrategy(d string) bool {
 	return d == providers.AWSDeploymentStrategy
 }
 
+func (p *BlobStorageProvider) GetReconcileTime(bs *v1alpha1.BlobStorage) time.Duration {
+	if bs.Status.Phase != v1alpha1.PhaseComplete {
+		return time.Second * 60
+	}
+	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
+}
+
 // custom s3 delete strat
 type S3DeleteStrat struct {
 	_ struct{} `type:"structure"`

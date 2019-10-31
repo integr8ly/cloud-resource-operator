@@ -3,8 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -140,7 +138,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 		}
 
 		// handle creation of redis and apply any finalizers to instance required for deletion
@@ -158,7 +156,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 		}
 
 		// create the secret with the redis cluster connection details
@@ -175,7 +173,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * resources.GetReconcileTime()}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
 	}
 
 	// unsupported strategy

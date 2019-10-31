@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -423,6 +424,48 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("overrideDefaults() \n got = %+v, \n want = %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		p *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: v1alpha1.PostgresStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 10,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: v1alpha1.PostgresStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &OpenShiftPostgresProvider{}
+			if got := p.GetReconcileTime(tt.args.p); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

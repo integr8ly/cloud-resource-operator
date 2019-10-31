@@ -3,6 +3,7 @@ package openshift
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"reflect"
 	"testing"
@@ -252,6 +253,48 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 			}
 			if _, err := p.DeleteRedis(tt.args.ctx, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteRedis() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		r *v1alpha1.Redis
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "test short reconcile when the cr is not complete",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: v1alpha1.RedisStatus{
+						Phase: v1alpha1.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 10,
+		},
+		{
+			name: "test default reconcile time when the cr is complete",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: v1alpha1.RedisStatus{
+						Phase: v1alpha1.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &OpenShiftRedisProvider{}
+			if got := p.GetReconcileTime(tt.args.r); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}
