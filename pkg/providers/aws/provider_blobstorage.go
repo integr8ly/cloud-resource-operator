@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -13,8 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
-
-	"github.com/aws/aws-sdk-go/aws/awserr"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -35,10 +37,11 @@ const (
 	blobstorageProviderName    = "aws-s3"
 	defaultAwsBucketNameLength = 40
 	// default create options
-	dataBucketName          = "bucketName"
-	dataBucketRegion        = "bucketRegion"
-	dataCredentialKeyID     = "credentialKeyID"
-	dataCredentialSecretKey = "credentialSecretKey"
+	dataBucketName             = "bucketName"
+	dataBucketRegion           = "bucketRegion"
+	dataCredentialKeyID        = "credentialKeyID"
+	dataCredentialSecretKey    = "credentialSecretKey"
+	defaultForceBucketDeletion = false
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -85,6 +88,13 @@ func (p *BlobStorageProvider) SupportsStrategy(d string) bool {
 	return d == providers.AWSDeploymentStrategy
 }
 
+// custom s3 delete strat
+type S3DeleteStrat struct {
+	_ struct{} `type:"structure"`
+
+	ForceBucketDeletion *bool `json:"forceBucketDeletion"`
+}
+
 // CreateStorage Create S3 bucket from strategy config and credentials to interact with it
 func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, v1alpha1.StatusMessage, error) {
 	// handle provider-specific finalizer
@@ -94,7 +104,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// info about the bucket to be created
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
-	bucketCreateCfg, stratCfg, err := p.buildS3BucketConfig(ctx, bs)
+	bucketCreateCfg, _, stratCfg, err := p.buildS3BucketConfig(ctx, bs)
 	if err != nil {
 		errMsg := "failed to build s3 bucket config"
 		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -148,7 +158,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// resolve bucket information for bucket created by provider
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
-	bucketCreateCfg, stratCfg, err := p.buildS3BucketConfig(ctx, bs)
+	bucketCreateCfg, bucketDeleteCfg, stratCfg, err := p.buildS3BucketConfig(ctx, bs)
 	if err != nil {
 		errMsg := "failed to build s3 bucket config"
 		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -167,7 +177,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	s3svc := createS3Session(stratCfg, providerCreds)
 
 	// delete the bucket that was created by the provider
-	return p.reconcileBucketDelete(ctx, bs, s3svc, bucketCreateCfg)
+	return p.reconcileBucketDelete(ctx, bs, s3svc, bucketCreateCfg, bucketDeleteCfg)
 }
 
 func createS3Session(stratCfg *StrategyConfig, providerCreds *AWSCredentials) s3iface.S3API {
@@ -178,7 +188,7 @@ func createS3Session(stratCfg *StrategyConfig, providerCreds *AWSCredentials) s3
 	return s3.New(sess)
 }
 
-func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1alpha1.BlobStorage, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (v1alpha1.StatusMessage, error) {
+func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1alpha1.BlobStorage, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) (v1alpha1.StatusMessage, error) {
 	buckets, err := getS3buckets(s3svc)
 	if err != nil {
 		return "error getting s3 buckets", err
@@ -193,18 +203,40 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 		}
 	}
 
-	// check if bucket exists and delete the bucket
-	if foundBucket != nil {
-		_, err = s3svc.DeleteBucket(&s3.DeleteBucketInput{
-			Bucket: bucketCfg.Bucket,
-		})
-		s3err, isAwsErr := err.(awserr.Error)
-		if err != nil && (!isAwsErr || s3err.Code() != s3.ErrCodeNoSuchBucket) {
-			errMsg := fmt.Sprintf("failed to delete s3 bucket: %s", err)
+	if foundBucket == nil {
+		if err := p.removeCredsAndFinalizer(ctx, bs, s3svc, bucketCfg, bucketDeleteCfg); err != nil {
+			errMsg := fmt.Sprintf("unable to remove credential secrets and finalizer for %s", *bucketCfg.Bucket)
 			return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 		}
 	}
 
+	bucketSize, err := getBucketSize(s3svc, bucketCfg)
+	if err != nil {
+		errMsg := fmt.Sprintf("unable to get bucket size : %s", *bucketCfg.Bucket)
+		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
+	if *bucketDeleteCfg.ForceBucketDeletion || bucketSize == 0 {
+		if err := emptyBucket(s3svc, bucketCfg); err != nil {
+			errMsg := fmt.Sprintf("unable to empty bucket : %q", *bucketCfg.Bucket)
+			return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+
+		if err := deleteBucket(s3svc, bucketCfg); err != nil {
+			errMsg := fmt.Sprintf("unable to delete bucket : %s", *bucketCfg.Bucket)
+			return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+	}
+
+	if err := p.removeCredsAndFinalizer(ctx, bs, s3svc, bucketCfg, bucketDeleteCfg); err != nil {
+		errMsg := fmt.Sprintf("unable to remove credential secrets and finalizer for %s", *bucketCfg.Bucket)
+		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
+	return v1alpha1.StatusEmpty, nil
+}
+
+func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v1alpha1.BlobStorage, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) error {
 	// build end user credential name
 	endUserCredsName := buildEndUserCredentialsNameFromBucket(*bucketCfg.Bucket)
 
@@ -219,7 +251,7 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil {
 		if !errors.IsNotFound(err) {
 			errMsg := fmt.Sprintf("failed to delete credential request %s", endUserCredsName)
-			return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return errorUtil.Wrapf(err, errMsg)
 		}
 		p.Logger.Infof("could not find credential request %s, already deleted, continuing", endUserCredsName)
 	}
@@ -228,9 +260,54 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 	resources.RemoveFinalizer(&bs.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, bs); err != nil {
 		errMsg := "failed to update blob storage cr as part of finalizer reconcile"
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return errorUtil.Wrapf(err, errMsg)
 	}
-	return v1alpha1.StatusEmpty, nil
+	return nil
+}
+
+func deleteBucket(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
+	_, err := s3svc.DeleteBucket(&s3.DeleteBucketInput{
+		Bucket: bucketCfg.Bucket,
+	})
+	s3err, isAwsErr := err.(awserr.Error)
+	if err != nil && (!isAwsErr || s3err.Code() != s3.ErrCodeNoSuchBucket) {
+		return errorUtil.Wrapf(err, fmt.Sprintf("failed to delete s3 bucket: %s", err))
+	}
+	return nil
+}
+
+func emptyBucket(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
+	size, err := getBucketSize(s3svc, bucketCfg)
+	if err != nil {
+		return err
+	}
+
+	if size == 0 {
+		return nil
+	}
+
+	// Setup BatchDeleteIterator to iterate through a list of objects.
+	iter := s3manager.NewDeleteListIterator(s3svc, &s3.ListObjectsInput{
+		Bucket: aws.String(*bucketCfg.Bucket),
+	})
+
+	// Traverse iterator deleting each object
+	if err := s3manager.NewBatchDeleteWithClient(s3svc).Delete(aws.BackgroundContext(), iter); err != nil {
+		errMsg := fmt.Sprintf("unable to delete objects from bucket")
+		return errorUtil.Wrapf(err, errMsg)
+	}
+
+	return nil
+}
+
+func getBucketSize(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (int, error) {
+	// get bucket items
+	resp, err := s3svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(*bucketCfg.Bucket)})
+	if err != nil {
+		errMsg := fmt.Sprintf("unable to list items in bucket %q", *bucketCfg.Bucket)
+		return 0, errorUtil.Wrapf(err, errMsg)
+	}
+	return len(resp.Contents), nil
 }
 
 func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (v1alpha1.StatusMessage, error) {
@@ -285,42 +362,54 @@ func getS3buckets(s3svc s3iface.S3API) ([]*s3.Bucket, error) {
 	return existingBuckets, nil
 }
 
-func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *StrategyConfig, error) {
+func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *S3DeleteStrat, *StrategyConfig, error) {
 	// info about the bucket to be created
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
-	bucketCreateCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
+	bucketCreateCfg, bucketDeleteCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	if err != nil {
-		return nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
+		return nil, nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
 	}
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, defaultAwsBucketNameLength)
 	if err != nil {
-		return nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
+		return nil, nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
 	}
 	if bucketCreateCfg.Bucket == nil {
 		bucketCreateCfg.Bucket = aws.String(bucketName)
 	}
-	return bucketCreateCfg, stratCfg, nil
+
+	if bucketDeleteCfg.ForceBucketDeletion == nil {
+		bucketDeleteCfg.ForceBucketDeletion = aws.Bool(defaultForceBucketDeletion)
+	}
+
+	return bucketCreateCfg, bucketDeleteCfg, stratCfg, nil
 }
 
-func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *StrategyConfig, error) {
+func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *S3DeleteStrat, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.BlobStorageResourceType, bs.Spec.Tier)
 	if err != nil {
-		return nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
 	if stratCfg.Region == "" {
 		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", DefaultRegion)
 		stratCfg.Region = DefaultRegion
 	}
 
-	// delete the s3 bucket created by the provider
-	s3cbi := &s3.CreateBucketInput{}
-	if err = json.Unmarshal(stratCfg.CreateStrategy, s3cbi); err != nil {
-		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 configuration")
+	// create s3 bucket config created by the provider
+	s3createConfig := &s3.CreateBucketInput{}
+	if err = json.Unmarshal(stratCfg.CreateStrategy, s3createConfig); err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 create strat configuration")
 	}
-	return s3cbi, stratCfg, nil
+
+	// delete s3 bucket config created by the provider
+	s3deleteConfig := &S3DeleteStrat{}
+	if err = json.Unmarshal(stratCfg.DeleteStrategy, s3deleteConfig); err != nil {
+		return nil, nil, nil, errorUtil.Wrapf(err, "failed to unmarshal aws s3 delete strat configuration")
+	}
+
+	return s3createConfig, s3deleteConfig, stratCfg, nil
 }
 
 func buildEndUserCredentialsNameFromBucket(b string) string {

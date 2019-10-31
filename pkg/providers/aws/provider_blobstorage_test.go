@@ -59,6 +59,10 @@ func (s *mockS3Svc) DeleteBucket(dbi *s3.DeleteBucketInput) (*s3.DeleteBucketOut
 	return &s3.DeleteBucketOutput{}, nil
 }
 
+func (s *mockS3Svc) ListObjectsV2(*s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, nil
+}
+
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
 		ObjectMeta: v1.ObjectMeta{
@@ -153,10 +157,11 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx       context.Context
-		s3svc     s3iface.S3API
-		bucketCfg *s3.CreateBucketInput
-		bs        *v1alpha1.BlobStorage
+		ctx             context.Context
+		s3svc           s3iface.S3API
+		bucketCfg       *s3.CreateBucketInput
+		bucketDeleteCfg *S3DeleteStrat
+		bs              *v1alpha1.BlobStorage
 	}
 	tests := []struct {
 		name    string
@@ -177,6 +182,9 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				s3svc: &mockS3Svc{},
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
+				},
+				bucketDeleteCfg: &S3DeleteStrat{
+					ForceBucketDeletion: aws.Bool(false),
 				},
 				bs: buildTestBlobStorageCR(),
 			},
@@ -199,6 +207,9 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
+				bucketDeleteCfg: &S3DeleteStrat{
+					ForceBucketDeletion: aws.Bool(false),
+				},
 				bs: buildTestBlobStorageCR(),
 			},
 			wantErr: true,
@@ -212,7 +223,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
+			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3svc, tt.args.bucketCfg, tt.args.bucketDeleteCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucketDelete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

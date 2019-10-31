@@ -39,6 +39,7 @@ var (
 				"s3:ListBucket",
 				"s3:ListAllMyBuckets",
 				"s3:GetObject",
+				"s3:DeleteObject",
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",
