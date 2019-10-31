@@ -30,7 +30,7 @@ const (
 
 var (
 	retryInterval = time.Second * 20
-	timeout       = time.Second * 160
+	timeout       = time.Minute * 5
 )
 
 func TestCRO(t *testing.T) {
@@ -77,6 +77,11 @@ func CROCluster(t *testing.T) {
 	if err = postgresBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
+
+	// run redis test
+	if err = redisBasicTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // basic test, creates postgres resource, checks deployment has been created, the status has been updated.
@@ -107,15 +112,9 @@ func postgresBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestC
 	}
 	t.Logf("created %s resource", examplePostgres.Name)
 
-	// wait for postgres deployment
-	if err := e2eutil.WaitForDeployment(t, f.KubeClient, namespace, postgresName, 1, retryInterval, timeout); err != nil {
-		return errorUtil.Wrapf(err, "could not get deployment")
-	}
-	t.Logf("%s deployment created", postgresName)
-
 	// poll cr for complete status phase
 	pcr := &v1alpha1.Postgres{}
-	err = wait.Poll(retryInterval, time.Minute*6, func() (done bool, err error) {
+	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
 		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get postgres cr")
 		}
@@ -210,12 +209,6 @@ func redisBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx)
 		return errorUtil.Wrapf(err, "could not create example redis")
 	}
 	t.Logf("created %s resource", exampleRedis.Name)
-
-	// wait for redis deployment
-	if err := e2eutil.WaitForDeployment(t, f.KubeClient, namespace, redisName, 1, retryInterval, timeout); err != nil {
-		return errorUtil.Wrapf(err, "could not get deployment")
-	}
-	t.Logf("%s deployment created", redisName)
 
 	// poll cr for complete status phase
 	rcr := &v1alpha1.Redis{}
