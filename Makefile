@@ -68,10 +68,15 @@ cluster/clean:
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
 	oc delete project $(NAMESPACE)
 
+.PHONY: test/unit/setup
+test/unit/setup:
+	@echo Installing gotest
+	go get -u github.com/rakyll/gotest
+
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	go test -v -covermode=count -coverprofile=coverage.out ./pkg/...
+	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/...
 
 .PHONY: test/unit/ci
 test/unit/ci: test/unit
