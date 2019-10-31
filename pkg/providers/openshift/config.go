@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -17,12 +18,13 @@ import (
 )
 
 const (
-	DefaultConfigMapName      = "cloud-resources-openshift-strategies"
-	DefaultConfigMapNamespace = "kube-system"
-	DefaultFinalizer          = "finalizers.cloud-resources-operator.integreatly.org"
-
+	DefaultConfigMapName = "cloud-resources-openshift-strategies"
+	DefaultFinalizer     = "finalizers.cloud-resources-operator.integreatly.org"
 	defaultReconcileTime = time.Second * 30
 )
+
+//get default namespace
+var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
 type StrategyConfig struct {
 	RawStrategy json.RawMessage `json:"strategy"`

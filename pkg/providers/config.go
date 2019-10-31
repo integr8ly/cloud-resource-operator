@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -16,9 +17,11 @@ import (
 )
 
 const (
-	DefaultConfigNamespace       = "kube-system"
 	DefaultProviderConfigMapName = "cloud-resource-config"
 )
+
+//get default namespace
+var DefaultConfigNamespace, _ = k8sutil.GetWatchNamespace()
 
 type DeploymentStrategyMapping struct {
 	BlobStorage     string `json:"blobstorage"`

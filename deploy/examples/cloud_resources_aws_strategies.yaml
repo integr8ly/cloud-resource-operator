@@ -2,7 +2,6 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: cloud-resources-aws-strategies
-  namespace: kube-system
 data:
   blobstorage: |
     {"development": { "region": "eu-west-1", "createStrategy": {}, "deleteStrategy": {} }}
