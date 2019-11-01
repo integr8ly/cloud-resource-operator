@@ -73,6 +73,12 @@ test/unit/setup:
 	@echo Installing gotest
 	go get -u github.com/rakyll/gotest
 
+.PHONY: test/e2e
+test/e2e:
+	@echo Running e2e tests:
+	operator-sdk test local ./test/e2e --go-test-flags "-v"
+
+
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
