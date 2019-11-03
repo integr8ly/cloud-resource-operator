@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -112,6 +111,9 @@ func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context,
 	if err = json.Unmarshal([]byte(rawStrategyMapping), &strategyMapping); err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
+	if strategyMapping[tier] == nil {
+		return nil, errorUtil.New(fmt.Sprintf("no strategy found for deployment type %s and deployment tier %s", rt, tier))
+	}
 	return strategyMapping[tier], nil
 }
 
@@ -135,8 +137,7 @@ func buildInfraNameFromObject(ctx context.Context, c client.Client, om controlle
 	if err != nil {
 		return "", errorUtil.Wrap(err, "failed to retrieve cluster identifier")
 	}
-	str := resources.ShortenString(fmt.Sprintf("%s-%s-%s", clusterId, om.Namespace, om.Name), n)
-	return strings.Replace(str, "_", "", -1), nil
+	return resources.ShortenString(fmt.Sprintf("%s-%s-%s", clusterId, om.Namespace, om.Name), n), nil
 }
 
 func buildTimestampedInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta, n int) (string, error) {

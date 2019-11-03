@@ -2,15 +2,22 @@ package resources
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
+	"encoding/base32"
 	"fmt"
+	"github.com/pkg/errors"
+	"regexp"
 	"strings"
 )
 
 // Cut string size, but maintain a reference to the original string using a hash of the full string in the result
 func ShortenString(s string, n int) string {
 	hashLen := 4
+	anReg, err := buildAlphanumRegexp()
+	if err != nil {
+		return ""
+	}
 
+	s = anReg.ReplaceAllString(s, "")
 	if len(s) < n {
 		return s
 	}
@@ -28,7 +35,16 @@ func ShortenString(s string, n int) string {
 	if _, err := hasher.Write([]byte(s)); err != nil {
 		return ""
 	}
-	hashedStr := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+	hashedStr := base32.StdEncoding.EncodeToString(hasher.Sum(nil))
 
 	return strings.ToLower(fmt.Sprintf("%s-%s", cutStr, hashedStr[0:hashLen]))
+}
+
+func buildAlphanumRegexp() (*regexp.Regexp, error) {
+	regexpStr := "[^a-zA-Z0-9]+"
+	anReg, err := regexp.Compile(regexpStr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to compile regexp %s", regexpStr)
+	}
+	return anReg, nil
 }

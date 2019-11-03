@@ -19,7 +19,7 @@ func TestShortenString(t *testing.T) {
 				s: "my-super-long-test-name",
 				n: 12,
 			},
-			want:    "my-supe-d07q",
+			want:    "mysuper-nm7v",
 			wantLen: 12,
 		},
 		{
@@ -28,7 +28,7 @@ func TestShortenString(t *testing.T) {
 				s: "23",
 				n: -1,
 			},
-			want:    "23-u1-j",
+			want:    "23-knp2",
 			wantLen: 7,
 		},
 		{
@@ -39,6 +39,15 @@ func TestShortenString(t *testing.T) {
 			},
 			want:    "testtest",
 			wantLen: 8,
+		},
+		{
+			name: "test hyphens are ignored in strings",
+			args: args{
+				s: "dimitra-qvxxg-integreatly-operator-some-other-text",
+				n: 40,
+			},
+			want:    "dimitraqvxxgintegreatlyoperatorsome-44q7",
+			wantLen: 40,
 		},
 	}
 	for _, tt := range tests {
