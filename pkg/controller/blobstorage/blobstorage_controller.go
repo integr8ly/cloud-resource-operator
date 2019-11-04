@@ -98,10 +98,10 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 
 	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "failed to read deployment type config for deployment"); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
+		return reconcile.Result{}, err
 	}
 
 	for _, p := range r.providerList {
@@ -112,14 +112,14 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		if instance.GetDeletionTimestamp() != nil {
 			msg, err := p.DeleteStorage(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on blob storage to successfully delete")
-			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg.WrapError(err)); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -128,7 +128,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		bsi, msg, err := p.CreateStorage(ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg); updateErr != nil {
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
@@ -158,7 +158,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, "unsupported deployment strategy"); err != nil {
+	if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusUnsupportedType.WrapError(err)); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.BlobStorage))

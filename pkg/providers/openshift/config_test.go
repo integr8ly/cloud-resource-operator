@@ -67,12 +67,22 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to marshal strategy config", err)
 	}
+	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Data: map[string]string{
+			"blobstorage": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
+		},
+	})
 	cases := []struct {
 		name                string
 		cmName              string
 		cmNamespace         string
 		tier                string
 		expectedRawStrategy string
+		expectErr           bool
 		client              client.Client
 	}{
 		{
@@ -81,15 +91,15 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			cmNamespace:         "test",
 			tier:                "test",
 			expectedRawStrategy: string(sc.RawStrategy),
-			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-				},
-				Data: map[string]string{
-					"blobstorage": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
-				},
-			}),
+			client:              fakeClient,
+		},
+		{
+			name:        "test error returned when tier does not exist",
+			cmName:      "test",
+			cmNamespace: "test",
+			tier:        "doesnotexist",
+			expectErr:   true,
+			client:      fakeClient,
 		},
 	}
 	for _, tc := range cases {
@@ -97,6 +107,9 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			cm := NewConfigMapConfigManager(tc.cmName, tc.cmNamespace, tc.client)
 			sc, err := cm.ReadStorageStrategy(context.TODO(), providers.BlobStorageResourceType, tc.tier)
 			if err != nil {
+				if tc.expectErr {
+					return
+				}
 				t.Fatal("unexpected error", err)
 			}
 			if string(sc.RawStrategy) != tc.expectedRawStrategy {

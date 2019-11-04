@@ -82,6 +82,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 		name           string
 		cmName         string
 		cmNamespace    string
+		deployType     string
 		client         client.Client
 		expectError    bool
 		validateConfig func(dtc *DeploymentStrategyMapping) error
@@ -91,6 +92,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 			cmName:      "test",
 			cmNamespace: "test",
 			client:      fakeClient,
+			deployType:  ManagedDeploymentType,
 			validateConfig: func(dtc *DeploymentStrategyMapping) error {
 				if dtc.BlobStorage != AWSDeploymentStrategy {
 					return errors.New("strategy mapping has incorrect structure")
@@ -98,11 +100,19 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name:        "test error when strategy isn't found for tier",
+			cmName:      "test",
+			cmNamespace: "test",
+			deployType:  "test",
+			client:      fakeClient,
+			expectError: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cm := NewConfigManager(tc.cmName, tc.cmNamespace, tc.client)
-			dtc, err := cm.GetStrategyMappingForDeploymentType(context.TODO(), ManagedDeploymentType)
+			dtc, err := cm.GetStrategyMappingForDeploymentType(context.TODO(), tc.deployType)
 			if err != nil {
 				if tc.expectError {
 					return

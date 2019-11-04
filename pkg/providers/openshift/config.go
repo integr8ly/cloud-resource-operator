@@ -73,9 +73,10 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 	if err = json.Unmarshal([]byte(rawStrategyCfg), &strategies); err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for resource type %s", rt)
 	}
-	tierStrat := strategies[tier]
-
-	return tierStrat, nil
+	if strategies[tier] == nil {
+		return nil, errorUtil.New(fmt.Sprintf("no strategy found for deployment type %s and deployment tier %s", rt, tier))
+	}
+	return strategies[tier], nil
 }
 
 func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
