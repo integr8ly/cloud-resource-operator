@@ -212,16 +212,6 @@ spec:
           - '*'
           resources:
           - credentialsrequests
-        - apiGroups:
-          - config.openshift.io
-          verbs:
-          - '*'
-          resources:
-          - '*'
-          - infrastructures
-          - schedulers
-          - featuregates
-          - networks
         serviceAccountName: cloud-resource-operator
     strategy: deployment
   installModes:
