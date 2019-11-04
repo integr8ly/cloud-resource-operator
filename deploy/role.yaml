@@ -16,7 +16,6 @@ rules:
   - events
   - configmaps
   - secrets
-  - ingresses
   verbs:
   - '*'
 - apiGroups:
@@ -70,3 +69,21 @@ rules:
   - postgres
   verbs:
   - '*'
+- apiGroups:
+  - config.openshift.io
+  verbs:
+  - '*'
+  resources:
+  - '*'
+  - infrastructures
+  - schedulers
+  - featuregates
+  - networks
+  - ingresses
+  - clusteroperators
+- apiGroups:
+  - cloudcredential.openshift.io
+  verbs:
+  - '*'
+  resources:
+  - credentialsrequests
