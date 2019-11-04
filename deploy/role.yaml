@@ -69,3 +69,23 @@ rules:
   - postgres
   verbs:
   - '*'
+- apiGroups:
+  - config.openshift.io
+  verbs:
+  - '*'
+  resources:
+  - '*'
+  - infrastructures
+  - schedulers
+  - featuregates
+  - networks
+  - ingresses
+  - clusteroperators
+  - authentications
+  - builds
+- apiGroups:
+  - cloudcredential.openshift.io
+  verbs:
+  - '*'
+  resources:
+  - credentialsrequests
