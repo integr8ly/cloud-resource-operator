@@ -66,6 +66,7 @@ cluster/clean:
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
+	oc delete -f ./deploy/examples/
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit/setup
