@@ -2,7 +2,6 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: cloud-resources-openshift-strategies
-  namespace: kube-system
 data:
   blobstorage: |
     {"development": { "strategy": {} }}

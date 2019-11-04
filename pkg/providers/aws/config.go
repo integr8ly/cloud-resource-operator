@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -18,8 +19,7 @@ import (
 )
 
 const (
-	DefaultConfigMapName      = "cloud-resources-aws-strategies"
-	DefaultConfigMapNamespace = "kube-system"
+	DefaultConfigMapName = "cloud-resources-aws-strategies"
 
 	DefaultFinalizer = "finalizers.cloud-resources-operator.integreatly.org"
 	DefaultRegion    = "eu-west-1"
@@ -34,6 +34,9 @@ const (
 	sesSMTPEndpointUSWest2 = "email-smtp.us-west-2.amazonaws.com"
 	sesSMTPEndpointEUWest1 = "email-smtp.eu-west-1.amazonaws.com"
 )
+
+//get default namespace
+var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
 //go:generate moq -out config_moq.go . ConfigManager
 type ConfigManager interface {

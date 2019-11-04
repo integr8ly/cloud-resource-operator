@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -13,6 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+var configMapNameSpace, _ = k8sutil.GetWatchNamespace()
 
 func TestNewConfigManager(t *testing.T) {
 	cases := []struct {
@@ -28,7 +31,7 @@ func TestNewConfigManager(t *testing.T) {
 			cmName:            "",
 			cmNamespace:       "",
 			expectedName:      "cloud-resources-openshift-strategies",
-			expectedNamespace: "kube-system",
+			expectedNamespace: configMapNameSpace,
 			client:            nil,
 		},
 		{
