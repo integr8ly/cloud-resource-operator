@@ -35,7 +35,7 @@ var (
 	// default openshift create paramaters
 	defaultPostgresPort        = 5432
 	defaultPostgresUser        = "postgresuser"
-	defaultPostgresPassword    = "password"
+	defaultPostgresPassword, _ = resources.GeneratePassword()
 	defaultPostgresUserKey     = "user"
 	defaultPostgresPasswordKey = "password"
 	defaultPostgresDatabaseKey = "database"

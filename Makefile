@@ -60,6 +60,13 @@ cluster/seed/redis:
 cluster/seed/postgres:
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_cr.yaml -n $(NAMESPACE)
 
+.PHONY: cluster/seed/all
+cluster/seed/all:
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_cr.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_cr.yaml -n $(NAMESPACE)
+
 .PHONY: cluster/clean
 cluster/clean:
 	oc project $(NAMESPACE)
