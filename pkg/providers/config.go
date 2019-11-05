@@ -23,6 +23,7 @@ const (
 //get default namespace
 var DefaultConfigNamespace, _ = k8sutil.GetWatchNamespace()
 
+// Deployment Strategy Map
 type DeploymentStrategyMapping struct {
 	BlobStorage     string `json:"blobstorage"`
 	SMTPCredentials string `json:"smtpCredentials"`

@@ -88,7 +88,7 @@ test/e2e/image:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/...
+	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/controller/... ./pkg/providers/... ./pkg/resources/... ./pkg/apis/... -run=^Test.+
 
 .PHONY: test/unit/ci
 test/unit/ci: test/unit
