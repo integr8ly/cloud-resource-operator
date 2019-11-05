@@ -6,8 +6,6 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"github.com/operator-framework/operator-sdk/pkg/test/e2eutil"
-
 	framework "github.com/operator-framework/operator-sdk/pkg/test"
 )
 
@@ -49,17 +47,9 @@ func CROCluster(t *testing.T) {
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
 	t.Log("initialized cluster resources")
-	namespace, err := ctx.GetNamespace()
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	// get global framework variables
 	f := framework.Global
-	// wait for cloud-resource-operator to be ready
-	err = e2eutil.WaitForDeployment(t, f.KubeClient, namespace, "cloud-resource-operator", 1, retryInterval, timeout)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// run postgres test
 	if err = PostgresBasicTest(t, f, *ctx); err != nil {
