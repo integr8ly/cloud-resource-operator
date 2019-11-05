@@ -74,10 +74,10 @@ test/unit/setup:
 	go get -u github.com/rakyll/gotest
 
 .PHONY: test/e2e
-test/e2e:
+test/e2e: cluster/prepare
 	@echo Running e2e tests:
-	operator-sdk test local ./test/e2e --go-test-flags "-v"
-
+	operator-sdk --verbose test local ./test/e2e --namespace $(NAMESPACE) --up-local --go-test-flags "-timeout=60m" --debug
+	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit
 test/unit:
