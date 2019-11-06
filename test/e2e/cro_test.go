@@ -33,12 +33,13 @@ func TestCRO(t *testing.T) {
 	}
 
 	// run subtests
-	t.Run("cro-group", func(t *testing.T) {
-		t.Run("Cluster", CROCluster)
+	t.Run("cro-test", func(t *testing.T) {
+		t.Run("Cluster", BasicTestCluster)
 	})
+
 }
 
-func CROCluster(t *testing.T) {
+func BasicTestCluster(t *testing.T) {
 	t.Parallel()
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup()
@@ -52,12 +53,37 @@ func CROCluster(t *testing.T) {
 	f := framework.Global
 
 	// run postgres test
-	if err = PostgresBasicTest(t, f, *ctx); err != nil {
+	if err = OpenshiftPostgresBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	// run redis test
-	if err = RedisBasicTest(t, f, *ctx); err != nil {
+	if err = OpenshiftRedisBasicTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres permission test
+	if err = OpenshiftVerifyPostgresTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres deployment recover test
+	if err = OpenshiftVerifyPostgresDeploymentRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres service recover test
+	if err = OpenshiftVerifyPostgresServiceRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres pvc recover test
+	if err = OpenshiftVerifyPostgresPVCRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres deployment update recover test
+	if err = OpenshiftVerifyPostgresDeploymentUpdate(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 }

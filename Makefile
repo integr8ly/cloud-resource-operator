@@ -76,7 +76,7 @@ test/unit/setup:
 .PHONY: test/e2e
 test/e2e: cluster/prepare
 	@echo Running e2e tests:
-	operator-sdk --verbose test local ./test/e2e --namespace $(NAMESPACE) --up-local --go-test-flags "-timeout=60m" --debug
+	operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit

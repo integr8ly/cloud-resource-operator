@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func RedisBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftRedisBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
 	namespace, err := ctx.GetNamespace()
 	if err != nil {
 		return errorUtil.Wrapf(err, "could not get namespace")
