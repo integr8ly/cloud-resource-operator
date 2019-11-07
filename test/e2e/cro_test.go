@@ -33,13 +33,18 @@ func TestCRO(t *testing.T) {
 	}
 
 	// run subtests
-	t.Run("cro-test", func(t *testing.T) {
-		t.Run("Cluster", BasicTestCluster)
+	t.Run("cro-openshift-postgres-test", func(t *testing.T) {
+		t.Run("Cluster", OpenshiftPostgresTestCluster)
+	})
+
+	t.Run("cro-openshift-redis-test", func(t *testing.T) {
+		t.Run("Cluster", OpenshiftRedisTestCluster)
 	})
 
 }
 
-func BasicTestCluster(t *testing.T) {
+// setup openshift postgres test env and executes subtests
+func OpenshiftPostgresTestCluster(t *testing.T) {
 	t.Parallel()
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup()
@@ -57,13 +62,18 @@ func BasicTestCluster(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// run redis test
-	if err = OpenshiftRedisBasicTest(t, f, *ctx); err != nil {
+	// run postgres valid secret test
+	if err = OpenshiftVerifyPostgresSecretTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres connection test
+	if err = OpenshiftVerifyPostgresConnection(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	// run postgres permission test
-	if err = OpenshiftVerifyPostgresTest(t, f, *ctx); err != nil {
+	if err = OpenshiftVerifyPostgresPermission(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,6 +94,26 @@ func BasicTestCluster(t *testing.T) {
 
 	// run postgres deployment update recover test
 	if err = OpenshiftVerifyPostgresDeploymentUpdate(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// setup openshift redis environment and executes sub tests
+func OpenshiftRedisTestCluster(t *testing.T) {
+	t.Parallel()
+	ctx := framework.NewTestCtx(t)
+	defer ctx.Cleanup()
+	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	if err != nil {
+		t.Fatalf("failed to initialize cluster resources: %v", err)
+	}
+	t.Log("initialized cluster resources")
+
+	// get global framework variables
+	f := framework.Global
+
+	// run redis test
+	if err = OpenshiftRedisBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 }

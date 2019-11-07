@@ -1,6 +1,7 @@
 IMAGE_REG=quay.io
 IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
+IMAGE=quay.io/integreatly/cloud-resource-operator:0.1.0
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
@@ -73,11 +74,16 @@ test/unit/setup:
 	@echo Installing gotest
 	go get -u github.com/rakyll/gotest
 
-.PHONY: test/e2e
-test/e2e: cluster/prepare
+.PHONY: test/e2e/local
+test/e2e/local: cluster/prepare
 	@echo Running e2e tests:
 	operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
+
+.PHONY: test/e2e/image
+test/e2e/image:
+	@echo Running e2e tests:
+	operator-sdk test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE)
 
 .PHONY: test/unit
 test/unit:

@@ -48,7 +48,7 @@ func OpenshiftPostgresBasicTest(t *testing.T, f *framework.Framework, ctx framew
 }
 
 // tests to verify the postgres string created from secret is valid
-func OpenshiftVerifyPostgresTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresSecretTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -60,7 +60,7 @@ func OpenshiftVerifyPostgresTest(t *testing.T, f *framework.Framework, ctx frame
 	}
 
 	// verify postgres permission
-	if err := VerifyPostgresPermissionsTest(t, f, ctx, *testPostgres, namespace); err != nil {
+	if err := VerifyPostgresSecretTest(t, f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "verify postgres permissions failure")
 	}
 
@@ -75,6 +75,67 @@ func OpenshiftVerifyPostgresTest(t *testing.T, f *framework.Framework, ctx frame
 	}
 
 	return nil
+}
+
+// verifies a connection can be made to a postgres resource
+func OpenshiftVerifyPostgresConnection(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+	testPostgres, namespace, err := getBasicTestPostgres(ctx)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to get postgres")
+	}
+
+	// setup postgres
+	if err := postgresCreateTest(t, f, testPostgres, namespace); err != nil {
+		return errorUtil.Wrapf(err, "create postgres test failure")
+	}
+
+	// verify postgres connection
+	if err := VerifyPostgresConnectionTest(t, f, namespace); err != nil {
+		return errorUtil.Wrapf(err, "failed to verify connection")
+	}
+
+	// verify deployment is available
+	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+		return errorUtil.Wrapf(err, "unable to verify successful status")
+	}
+
+	// cleanup postgres
+	if err := postgresDeleteTest(t, f, testPostgres, namespace); err != nil {
+		return errorUtil.Wrapf(err, "delete postgres test failure")
+	}
+
+	return nil
+}
+
+// verifies postgres user has permissions
+func OpenshiftVerifyPostgresPermission(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+	testPostgres, namespace, err := getBasicTestPostgres(ctx)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to get postgres")
+	}
+
+	// setup postgres
+	if err := postgresCreateTest(t, f, testPostgres, namespace); err != nil {
+		return errorUtil.Wrapf(err, "create postgres test failure")
+	}
+
+	// verify postgres permissions
+	if err := VerifyPostgresPermissionTest(t, f, namespace); err != nil {
+		return errorUtil.Wrapf(err, "failed to verify permissions")
+	}
+
+	// verify deployment is available
+	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+		return errorUtil.Wrapf(err, "unable to verify successful status")
+	}
+
+	// cleanup postgres
+	if err := postgresDeleteTest(t, f, testPostgres, namespace); err != nil {
+		return errorUtil.Wrapf(err, "delete postgres test failure")
+	}
+
+	return nil
+
 }
 
 // tests deployment recovery on manual delete of deployment
