@@ -35,7 +35,7 @@ func OpenshiftPostgresBasicTest(t *testing.T, f *framework.Framework, ctx framew
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -65,7 +65,7 @@ func OpenshiftVerifyPostgresSecretTest(t *testing.T, f *framework.Framework, ctx
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -95,7 +95,7 @@ func OpenshiftVerifyPostgresConnection(t *testing.T, f *framework.Framework, ctx
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -125,7 +125,7 @@ func OpenshiftVerifyPostgresPermission(t *testing.T, f *framework.Framework, ctx
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -151,7 +151,7 @@ func OpenshiftVerifyPostgresDeploymentRecovery(t *testing.T, f *framework.Framew
 	}
 
 	// delete postgres deployment
-	if err := f.Client.Delete(goctx.TODO(), getPostgresTestDeployment(namespace)); err != nil {
+	if err := f.Client.Delete(goctx.TODO(), GetTestDeployment(postgresName, namespace)); err != nil {
 		return errorUtil.Wrapf(err, "failed to delete postgres deployment")
 	}
 
@@ -161,7 +161,7 @@ func OpenshiftVerifyPostgresDeploymentRecovery(t *testing.T, f *framework.Framew
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -186,7 +186,7 @@ func OpenshiftVerifyPostgresServiceRecovery(t *testing.T, f *framework.Framework
 	}
 
 	// delete postgres service
-	if err := f.Client.Delete(goctx.TODO(), getPostgresTestService(namespace)); err != nil {
+	if err := f.Client.Delete(goctx.TODO(), GetTestService(postgresName, namespace)); err != nil {
 		return errorUtil.Wrapf(err, "failed to delete postgres service")
 	}
 
@@ -196,7 +196,7 @@ func OpenshiftVerifyPostgresServiceRecovery(t *testing.T, f *framework.Framework
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -221,7 +221,7 @@ func OpenshiftVerifyPostgresPVCRecovery(t *testing.T, f *framework.Framework, ct
 	}
 
 	// delete postgres service
-	if err := f.Client.Delete(goctx.TODO(), getPostgresTestPVC(namespace)); err != nil {
+	if err := f.Client.Delete(goctx.TODO(), GetTestPVC(postgresName, namespace)); err != nil {
 		return errorUtil.Wrapf(err, "failed to delete postgres service")
 	}
 
@@ -231,7 +231,7 @@ func OpenshiftVerifyPostgresPVCRecovery(t *testing.T, f *framework.Framework, ct
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -272,7 +272,7 @@ func OpenshiftVerifyPostgresDeploymentUpdate(t *testing.T, f *framework.Framewor
 		return errorUtil.Wrapf(err, "failed to update postgres service")
 	}
 
-	// wait for postgres deployment to return to 1 replica
+	// wait for postgres deployment
 	if err := e2eutil.WaitForDeployment(t, f.KubeClient, namespace, postgresName, 1, retryInterval, timeout); err != nil {
 		return errorUtil.Wrapf(err, "could not get postgres re-deployment")
 	}
@@ -284,11 +284,11 @@ func OpenshiftVerifyPostgresDeploymentUpdate(t *testing.T, f *framework.Framewor
 
 	// verify the image is what we want
 	if upd.Spec.Template.Spec.Containers[0].Image != wantedContainer {
-		return errorUtil.New("postgres failed to reconcile to wanted container")
+		return errorUtil.New("postgres failed to reconcile to wanted image")
 	}
 
 	// verify deployment is available
-	if err := verifySuccessfulStatus(t, f, namespace); err != nil {
+	if err := verifySuccessfulPostgresDeploymentStatus(f, namespace); err != nil {
 		return errorUtil.Wrapf(err, "unable to verify successful status")
 	}
 
@@ -350,15 +350,15 @@ func postgresDeleteTest(t *testing.T, f *framework.Framework, testPostgres *v1al
 	t.Logf("%s custom resource deleted", testPostgres.Name)
 
 	// check resources have been cleaned up
-	if err := e2eutil.WaitForDeletion(t, f.Client.Client, getPostgresTestDeployment(namespace), retryInterval, timeout); err != nil {
+	if err := e2eutil.WaitForDeletion(t, f.Client.Client, GetTestDeployment(postgresName, namespace), retryInterval, timeout); err != nil {
 		return errorUtil.Wrapf(err, "could not get deployment deletion")
 	}
 
-	if err := e2eutil.WaitForDeletion(t, f.Client.Client, getPostgresTestPVC(namespace), retryInterval, timeout); err != nil {
+	if err := e2eutil.WaitForDeletion(t, f.Client.Client, GetTestPVC(postgresName, namespace), retryInterval, timeout); err != nil {
 		return errorUtil.Wrapf(err, "could not get persistent volume claim deletion")
 	}
 
-	if err := e2eutil.WaitForDeletion(t, f.Client.Client, getPostgresTestService(namespace), retryInterval, timeout); err != nil {
+	if err := e2eutil.WaitForDeletion(t, f.Client.Client, GetTestService(postgresName, namespace), retryInterval, timeout); err != nil {
 		return errorUtil.Wrapf(err, "could not get service deletion")
 	}
 	t.Logf("all postgres resources have been cleaned")
@@ -367,7 +367,7 @@ func postgresDeleteTest(t *testing.T, f *framework.Framework, testPostgres *v1al
 }
 
 // verify that the deployment status is available
-func verifySuccessfulStatus(t *testing.T, f *framework.Framework, namespace string) error {
+func verifySuccessfulPostgresDeploymentStatus(f *framework.Framework, namespace string) error {
 	// get postgres deployment
 	upd := &appsv1.Deployment{}
 	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
@@ -382,37 +382,10 @@ func verifySuccessfulStatus(t *testing.T, f *framework.Framework, namespace stri
 		return false, nil
 	})
 	if err != nil {
-		return err
+		return errorUtil.Wrapf(err, "failed to poll postgres deployment")
 	}
 
 	return nil
-}
-
-func getPostgresTestDeployment(namespace string) *appsv1.Deployment {
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      postgresName,
-			Namespace: namespace,
-		},
-	}
-}
-
-func getPostgresTestPVC(namespace string) *v1.PersistentVolumeClaim {
-	return &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      postgresName,
-			Namespace: namespace,
-		},
-	}
-}
-
-func getPostgresTestService(namespace string) *v1.Service {
-	return &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      postgresName,
-			Namespace: namespace,
-		},
-	}
 }
 
 func getBasicTestPostgres(ctx framework.TestCtx) (*v1alpha1.Postgres, string, error) {

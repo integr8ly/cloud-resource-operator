@@ -116,6 +116,31 @@ func OpenshiftRedisTestCluster(t *testing.T) {
 	if err = OpenshiftRedisBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
+
+	// run verify redis connection test
+	if err = OpenshiftVerifyRedisConnection(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis deployment recover test
+	if err = OpenshiftVerifyRedisDeploymentRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis service recover test
+	if err = OpenshiftVerifyRedisServiceRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis pvc recover test
+	if err = OpenshiftVerifyRedisPVCRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis deployment update recover test
+	if err = OpenshiftVerifyRedisDeploymentUpdate(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // returns cleanup options
