@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"time"
 
@@ -334,7 +335,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: v1alpha1.RedisStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types.PhaseInProgress,
 					},
 				},
 			},
@@ -345,7 +346,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: v1alpha1.RedisStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types.PhaseComplete,
 					},
 				},
 			},

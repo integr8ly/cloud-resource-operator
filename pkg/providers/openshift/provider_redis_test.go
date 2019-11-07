@@ -3,6 +3,7 @@ package openshift
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
 
 	"reflect"
@@ -272,7 +273,7 @@ func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: v1alpha1.RedisStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types.PhaseInProgress,
 					},
 				},
 			},
@@ -283,7 +284,7 @@ func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: v1alpha1.RedisStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types.PhaseComplete,
 					},
 				},
 			},

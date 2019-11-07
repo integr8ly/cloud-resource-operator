@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -121,7 +122,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -136,14 +137,14 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		if instance.DeletionTimestamp != nil {
 			msg, err := p.DeletePostgres(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
 			r.logger.Info("Waiting on Postgres to successfully delete")
-			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -152,16 +153,16 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		// create the postgres instance
 		ps, msg, err := p.CreatePostgres(ctx, instance)
 		if err != nil {
-			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+			instance.Status.SecretRef = &types.SecretRef{}
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
 			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
-			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
+			instance.Status.SecretRef = &types.SecretRef{}
+			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -172,7 +173,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
 
-		instance.Status.Phase = v1alpha1.PhaseComplete
+		instance.Status.Phase = types.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Postgres
@@ -184,7 +185,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusUnsupportedType.WrapError(err)); err != nil {
+	if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusUnsupportedType.WrapError(err)); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Postgres))

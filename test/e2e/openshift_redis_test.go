@@ -3,6 +3,7 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
 	"time"
 
@@ -251,7 +252,7 @@ func redisCreateTest(t *testing.T, f *framework.Framework, testRedis *v1alpha1.R
 		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, rcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get redis cr")
 		}
-		if rcr.Status.Phase == v1alpha1.StatusPhase("complete") {
+		if rcr.Status.Phase == types2.StatusPhase("complete") {
 			return true, nil
 		}
 		return false, nil
@@ -334,7 +335,7 @@ func getBasicTestRedis(ctx framework.TestCtx) (*v1alpha1.Redis, string, error) {
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.RedisSpec{
-			SecretRef: &v1alpha1.SecretRef{
+			SecretRef: &types2.SecretRef{
 				Name:      "example-redis-sec",
 				Namespace: namespace,
 			},

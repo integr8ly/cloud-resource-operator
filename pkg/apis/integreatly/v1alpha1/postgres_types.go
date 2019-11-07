@@ -1,16 +1,17 @@
 package v1alpha1
 
 import (
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PostgresSpec defines the desired state of Postgres
 // +k8s:openapi-gen=true
-type PostgresSpec ResourceTypeSpec
+type PostgresSpec types.ResourceTypeSpec
 
 // PostgresStatus defines the observed state of Postgres
 // +k8s:openapi-gen=true
-type PostgresStatus ResourceTypeStatus
+type PostgresStatus types.ResourceTypeStatus
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -9,11 +10,11 @@ import (
 
 // SMTPCredentialsSpec defines the desired state of SMTPCredentials
 // +k8s:openapi-gen=true
-type SMTPCredentialSetSpec ResourceTypeSpec
+type SMTPCredentialSetSpec types.ResourceTypeSpec
 
 // SMTPCredentialsStatus defines the observed state of SMTPCredentials
 // +k8s:openapi-gen=true
-type SMTPCredentialSetStatus ResourceTypeStatus
+type SMTPCredentialSetStatus types.ResourceTypeStatus
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

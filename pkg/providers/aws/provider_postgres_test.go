@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"time"
 
@@ -289,7 +290,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    v1alpha1.StatusMessage
+		want    types.StatusMessage
 		wantErr bool
 	}{
 		{
@@ -306,7 +307,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage(""),
+			want:    types.StatusMessage(""),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing unavailable postgres",
@@ -322,7 +323,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage("rds instance deletion in progress"),
+			want:    types.StatusMessage("rds instance deletion in progress"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres",
@@ -338,7 +339,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage("deletion started"),
+			want:    types.StatusMessage("deletion started"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres and deletion protection",
@@ -354,7 +355,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    v1alpha1.StatusMessage("turning off deletion protection"),
+			want:    types.StatusMessage("turning off deletion protection"),
 			wantErr: false,
 		},
 	}
@@ -392,7 +393,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types.PhaseInProgress,
 					},
 				},
 			},
@@ -403,7 +404,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types.PhaseComplete,
 					},
 				},
 			},

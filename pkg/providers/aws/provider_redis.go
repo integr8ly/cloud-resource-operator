@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
@@ -64,14 +65,14 @@ func (p *AWSRedisProvider) SupportsStrategy(d string) bool {
 }
 
 func (p *AWSRedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
-	if r.Status.Phase != v1alpha1.PhaseComplete {
+	if r.Status.Phase != types.PhaseComplete {
 		return time.Second * 60
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 // CreateRedis Create an Elasticache Replication Group from strategy config
-func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
+func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, types.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -81,14 +82,14 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	elasticacheCreateConfig, _, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache cluster config %s", r.Name)
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
 		msg := "failed to reconcile elasticache credentials"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, types.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// setup aws elasticache cluster sdk session
@@ -106,20 +107,20 @@ func createElasticacheService(stratCfg *StrategyConfig, providerCreds *AWSCreden
 	return elasticache.New(sess)
 }
 
-func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheConfig *elasticache.CreateReplicationGroupInput) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
+func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheConfig *elasticache.CreateReplicationGroupInput) (*providers.RedisCluster, types.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
 		// return nil error so this function can be requeueed
 		errMsg := "error getting replication groups"
 		logrus.Info(errMsg, err)
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// verify and build elasticache create config
 	if err := p.buildElasticacheCreateStrategy(ctx, r, elasticacheConfig); err != nil {
 		errMsg := "failed to build and verify aws elasticache create strategy"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check if the cluster has already been created
@@ -136,14 +137,14 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 		logrus.Info("creating elasticache cluster")
 		if _, err = cacheSvc.CreateReplicationGroup(elasticacheConfig); err != nil {
 			errMsg := fmt.Sprintf("error creating elasticache cluster %s", err)
-			return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		return nil, "started elasticache provision", nil
 	}
 
 	// check elasticache phase
 	if *foundCache.Status != "available" {
-		return nil, v1alpha1.StatusMessage(fmt.Sprintf("elasticache creation in progress, current status is %s", *foundCache.Status)), nil
+		return nil, types.StatusMessage(fmt.Sprintf("elasticache creation in progress, current status is %s", *foundCache.Status)), nil
 	}
 
 	// check if found cluster and user strategy differs, and modify instance
@@ -152,7 +153,7 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 	if ec != nil {
 		if _, err = cacheSvc.ModifyReplicationGroup(ec); err != nil {
 			errMsg := "failed to modify elasticache cluster"
-			return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		return nil, "modify elasticache cluster in progress", nil
 	}
@@ -166,20 +167,20 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 }
 
 // DeleteStorage Delete elasticache replication group
-func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
+func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (types.StatusMessage, error) {
 	// resolve elasticache information for elasticache created by provider
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// get provider aws creds so the elasticache cluster can be deleted
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
 		errMsg := "failed to reconcile aws provider credentials"
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup aws elasticache cluster sdk session
@@ -189,7 +190,7 @@ func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (
 	return p.deleteElasticacheCluster(cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, ctx, r)
 }
 
-func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
+func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) (types.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
@@ -199,7 +200,7 @@ func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.El
 	// check and verify delete config
 	if err := p.buildElasticacheDeleteConfig(ctx, *r, elasticacheCreateConfig, elasticacheDeleteConfig); err != nil {
 		errMsg := "failed to verify aws rds instance configuration"
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check if the cluster has already been deleted
@@ -217,9 +218,9 @@ func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.El
 		resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, r); err != nil {
 			errMsg := "failed to update instance as part of finalizer reconcile"
-			return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 		}
-		return v1alpha1.StatusEmpty, nil
+		return types.StatusEmpty, nil
 	}
 
 	// if status is not available return
@@ -232,7 +233,7 @@ func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.El
 	elasticacheErr, isAwsErr := err.(awserr.Error)
 	if err != nil && (!isAwsErr || elasticacheErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault) {
 		errMsg := fmt.Sprintf("failed to delete elasticache cluster : %s", err)
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	return "deletion started", nil
 }

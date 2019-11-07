@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
 	"time"
 
@@ -245,7 +246,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				b: &v1alpha1.BlobStorage{
 					Status: v1alpha1.BlobStorageStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types.PhaseInProgress,
 					},
 				},
 			},
@@ -256,7 +257,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				b: &v1alpha1.BlobStorage{
 					Status: v1alpha1.BlobStorageStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types.PhaseComplete,
 					},
 				},
 			},

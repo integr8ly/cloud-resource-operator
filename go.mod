@@ -3,7 +3,6 @@ module github.com/integr8ly/cloud-resource-operator
 require (
 	github.com/aws/aws-sdk-go v1.23.17
 	github.com/fatih/color v1.7.0 // indirect
-	github.com/go-openapi/spec v0.19.0
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
@@ -40,7 +39,7 @@ require (
 	k8s.io/apimachinery v0.0.0-20191003115452-c31ffd88d5d2
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/klog v1.0.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf
+	k8s.io/kube-openapi v0.0.0-20190816220812-743ec37842bf // indirect
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
 )

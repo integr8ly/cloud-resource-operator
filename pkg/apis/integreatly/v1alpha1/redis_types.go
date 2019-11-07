@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -9,11 +10,11 @@ import (
 
 // RedisSpec defines the desired state of Redis
 // +k8s:openapi-gen=true
-type RedisSpec ResourceTypeSpec
+type RedisSpec types.ResourceTypeSpec
 
 // RedisStatus defines the observed state of Redis
 // +k8s:openapi-gen=true
-type RedisStatus ResourceTypeStatus
+type RedisStatus types.ResourceTypeStatus
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 
@@ -70,7 +71,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				Spec: v1alpha1.BlobStorageSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &v1alpha1.SecretRef{
+					SecretRef: &types.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -107,7 +108,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				Spec: v1alpha1.BlobStorageSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &v1alpha1.SecretRef{
+					SecretRef: &types.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},

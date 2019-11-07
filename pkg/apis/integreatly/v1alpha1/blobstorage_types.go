@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -9,11 +10,11 @@ import (
 
 // BlobStorageSpec defines the desired state of BlobStorage
 // +k8s:openapi-gen=true
-type BlobStorageSpec ResourceTypeSpec
+type BlobStorageSpec types.ResourceTypeSpec
 
 // BlobStorageStatus defines the observed state of BlobStorage
 // +k8s:openapi-gen=true
-type BlobStorageStatus ResourceTypeStatus
+type BlobStorageStatus types.ResourceTypeStatus
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

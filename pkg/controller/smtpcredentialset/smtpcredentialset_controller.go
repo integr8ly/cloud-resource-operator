@@ -2,6 +2,7 @@ package smtpcredentialset
 
 import (
 	"context"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -99,7 +100,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -116,14 +117,14 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 			r.logger.Infof("running deletion handler on smtp credential instance %s", instance.Name)
 			msg, err := p.DeleteSMTPCredentials(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
 
 			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); updateErr != nil {
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -131,7 +132,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 
 		smtpCredentialSetInst, msg, err := p.CreateSMTPCredentials(ctx, instance)
 		if err != nil {
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to create smtp credential set for instance %s", instance.Name)
@@ -140,7 +141,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		if err := r.resourceProvider.ReconcileResultSecret(ctx, instance, smtpCredentialSetInst.DeploymentDetails.Data()); err != nil {
 			return reconcile.Result{}, errorUtil.Wrap(err, "failed to reconcile secret")
 		}
-		instance.Status.Phase = v1alpha1.PhaseComplete
+		instance.Status.Phase = types.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.BlobStorage
@@ -152,7 +153,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 	}
 
 	// unsupported strategy
-	if updatePhaseErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, v1alpha1.StatusUnsupportedType.WrapError(err)); updatePhaseErr != nil {
+	if updatePhaseErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusUnsupportedType.WrapError(err)); updatePhaseErr != nil {
 		return reconcile.Result{}, updatePhaseErr
 	}
 	return reconcile.Result{Requeue: true}, nil

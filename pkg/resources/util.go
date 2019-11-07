@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +39,7 @@ func ReconcileBlobStorage(ctx context.Context, client client.Client, deploymentT
 		c := existing.(*v1alpha1.BlobStorage)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
-		c.Spec.SecretRef = &v1alpha1.SecretRef{
+		c.Spec.SecretRef = &types.SecretRef{
 			Name:      secretName,
 			Namespace: secretNs,
 		}
@@ -74,7 +75,7 @@ func ReconcileSMTPCredentialSet(ctx context.Context, client client.Client, deplo
 		c := existing.(*v1alpha1.SMTPCredentialSet)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
-		c.Spec.SecretRef = &v1alpha1.SecretRef{
+		c.Spec.SecretRef = &types.SecretRef{
 			Name:      secretName,
 			Namespace: secretNs,
 		}
@@ -110,7 +111,7 @@ func ReconcilePostgres(ctx context.Context, client client.Client, deploymentType
 		c := existing.(*v1alpha1.Postgres)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
-		c.Spec.SecretRef = &v1alpha1.SecretRef{
+		c.Spec.SecretRef = &types.SecretRef{
 			Name:      secretName,
 			Namespace: secretNs,
 		}
@@ -146,7 +147,7 @@ func ReconcileRedis(ctx context.Context, client client.Client, deploymentType, t
 		c := existing.(*v1alpha1.Redis)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
-		c.Spec.SecretRef = &v1alpha1.SecretRef{
+		c.Spec.SecretRef = &types.SecretRef{
 			Name:      secretName,
 			Namespace: secretNs,
 		}
