@@ -107,7 +107,7 @@ func ReconcilePostgres(ctx context.Context, client client.Client, deploymentType
 
 	// Create or update the resource
 	_, err := controllerutil.CreateOrUpdate(ctx, client, pg, func(existing runtime.Object) error {
-		c := existing.(*v1alpha1.SMTPCredentialSet)
+		c := existing.(*v1alpha1.Postgres)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
 		c.Spec.SecretRef = &v1alpha1.SecretRef{
@@ -143,7 +143,7 @@ func ReconcileRedis(ctx context.Context, client client.Client, deploymentType, t
 
 	// Create or update the resource
 	_, err := controllerutil.CreateOrUpdate(ctx, client, r, func(existing runtime.Object) error {
-		c := existing.(*v1alpha1.SMTPCredentialSet)
+		c := existing.(*v1alpha1.Redis)
 		c.Spec.Type = deploymentType
 		c.Spec.Tier = tier
 		c.Spec.SecretRef = &v1alpha1.SecretRef{
