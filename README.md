@@ -97,6 +97,20 @@ spec:
 
 ### Contributing
 
+### Testing
+To run e2e tests from a built image:
+```
+$ make test/e2e/image IMAGE=<<built image>>
+```
+To run e2e tests locally:
+```
+$ make test/e2e/local
+```
+To run unit tests:
+```
+$ make test/unit
+```
+
 - Write tests
 - Implement changes
 - Run code fixer, `make code/fix`
