@@ -33,12 +33,18 @@ func TestCRO(t *testing.T) {
 	}
 
 	// run subtests
-	t.Run("cro-group", func(t *testing.T) {
-		t.Run("Cluster", CROCluster)
+	t.Run("cro-openshift-postgres-test", func(t *testing.T) {
+		t.Run("Cluster", OpenshiftPostgresTestCluster)
 	})
+
+	t.Run("cro-openshift-redis-test", func(t *testing.T) {
+		t.Run("Cluster", OpenshiftRedisTestCluster)
+	})
+
 }
 
-func CROCluster(t *testing.T) {
+// setup openshift postgres test env and executes subtests
+func OpenshiftPostgresTestCluster(t *testing.T) {
 	t.Parallel()
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup()
@@ -52,12 +58,87 @@ func CROCluster(t *testing.T) {
 	f := framework.Global
 
 	// run postgres test
-	if err = PostgresBasicTest(t, f, *ctx); err != nil {
+	if err = OpenshiftPostgresBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 
+	// run postgres valid secret test
+	if err = OpenshiftVerifyPostgresSecretTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres connection test
+	if err = OpenshiftVerifyPostgresConnection(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres permission test
+	if err = OpenshiftVerifyPostgresPermission(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres deployment recover test
+	if err = OpenshiftVerifyPostgresDeploymentRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres service recover test
+	if err = OpenshiftVerifyPostgresServiceRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres pvc recover test
+	if err = OpenshiftVerifyPostgresPVCRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run postgres deployment update recover test
+	if err = OpenshiftVerifyPostgresDeploymentUpdate(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// setup openshift redis environment and executes sub tests
+func OpenshiftRedisTestCluster(t *testing.T) {
+	t.Parallel()
+	ctx := framework.NewTestCtx(t)
+	defer ctx.Cleanup()
+	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	if err != nil {
+		t.Fatalf("failed to initialize cluster resources: %v", err)
+	}
+	t.Log("initialized cluster resources")
+
+	// get global framework variables
+	f := framework.Global
+
 	// run redis test
-	if err = RedisBasicTest(t, f, *ctx); err != nil {
+	if err = OpenshiftRedisBasicTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run verify redis connection test
+	if err = OpenshiftVerifyRedisConnection(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis deployment recover test
+	if err = OpenshiftVerifyRedisDeploymentRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis service recover test
+	if err = OpenshiftVerifyRedisServiceRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis pvc recover test
+	if err = OpenshiftVerifyRedisPVCRecovery(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// run redis deployment update recover test
+	if err = OpenshiftVerifyRedisDeploymentUpdate(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 }
