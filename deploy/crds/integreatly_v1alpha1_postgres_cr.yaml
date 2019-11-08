@@ -4,10 +4,10 @@ metadata:
   # name must be between 1-40 characters
   name: example-postgres
 spec:
-  # i want my postgres storage information output in a Secret named test in the Namespace cloud-resource-operator
+  # i want my postgres storage information output in a secret named example-postgres-sec
   secretRef:
     name: example-postgres-sec
   # i want a postgres storage of a development-level tier
   tier: development
-  # i want a postgres storage for the type managed
+  # i want a postgres storage for the type workshop
   type: workshop
