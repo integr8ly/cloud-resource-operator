@@ -34,6 +34,8 @@ $ go version
 go version go1.13 darwin/amd64
 ```
 
+TEST
+
 If not, ensure Go Modules are enabled.
 
 Clone this repository into your working directory, outside of `$GOPATH`. For example:
