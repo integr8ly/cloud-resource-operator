@@ -53,9 +53,18 @@ $ make run
 ```
 
 Clean up the Kubernetes/OpenShift cluster:
-```
+```shell script
 $ make cluster/clean
 ```
+
+## VPC Peering 
+Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
+- In the AWS VPC console, create a new peering connection between the two VPCs. This is a two-way communication channel, so only one needs to be created
+- Select the newly created connection, then click `actions > accept request` to accept the peering request
+- Edit the cluster VPC route table. Create a new route that contains the resource VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
+- Edit the resource VPC's route table. Create a new route that contains the CIDR block of the cluster VPC as the `destination` and the peering connection as the `target`. 
+
+The two VPCs should now be able to communicate with each other. 
 
 ## Via the Operator Catalog
 
@@ -63,12 +72,15 @@ $ make cluster/clean
 
 ## Deployment
 Two config maps are expected by the operator, which will provide configuration needed to outline the deployment methods and strategies available to the Cloud Resources.
+
 ### Provider
 A config map object is expected to exist with a mapping from type name to deployment method, an example of this can be seen [here](deploy/examples/cloud_resource_config.yaml).
+
 ### Strategy 
-A config map object is expected to exist for each provider that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml)
+A config map object is expected to exist for each provider (`AWS` or `Openshift`) that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml).
+
 ### Custom Resources
-With a `Provider` and `Strategy` config map in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
+With `Provider` and `Strategy` configmaps in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
 In the spec of this CR, we outline the secret name where we want the blob storage information to be output. If the provider type were AWS, for example, the output secret would contain connection information to the S3 bucket that was created. The `tier` outlines the `Strategy` we wish to use. The `type` references the deployment to be used.
 ```
 spec:
