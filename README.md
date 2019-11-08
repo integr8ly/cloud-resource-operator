@@ -58,7 +58,7 @@ $ make cluster/clean
 ```
 
 ## VPC Peering 
-Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
+Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC that the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
 - In the AWS VPC console, create a new peering connection between the two VPCs. This is a two-way communication channel, so only one needs to be created
 - Select the newly created connection, then click `actions > accept request` to accept the peering request
 - Edit the cluster VPC route table. Create a new route that contains the resource VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
@@ -71,28 +71,38 @@ The two VPCs should now be able to communicate with each other.
 ***In development***
 
 ## Deployment
-Two config maps are expected by the operator, which will provide configuration needed to outline the deployment methods and strategies available to the Cloud Resources.
+The operator expects two configmaps to exist in the namespace it is watching. These configmaps provide the configuration needed to outline the deployment methods and strategies used when provisioning cloud resources.
 
-### Provider
-A config map object is expected to exist with a mapping from type name to deployment method, an example of this can be seen [here](deploy/examples/cloud_resource_config.yaml).
+### Provider configmap
+The `cloud-resource-config` configmap defines which provider should be used to provision a specific resource type. Different deployment types can contain different `resource type > provider` mappings.
+An example can be seen [here](deploy/examples/cloud_resource_config.yaml).
+For example, a `workshop` deployment type might choose to deploy a Postgres resource type in-cluster (`openshift`), while a `managed` deployment type might choose `AWS` to deploy an RDS instance instead. 
 
-### Strategy 
-A config map object is expected to exist for each provider (`AWS` or `Openshift`) that will be used by the operator. This config map contains provider-specific information about how to deploy a particular resource type, such as blob storage. In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of the AWS strategy can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml).
+### Strategy configmap
+A config map object is expected to exist for each provider (Currently `AWS` or `Openshift`) that will be used by the operator. 
+This config map contains information about how to deploy a particular resource type, such as blob storage, with that provider. 
+In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of an AWS strategy configmap can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml).
 
 ### Custom Resources
-With `Provider` and `Strategy` configmaps in place, resources can be created through a custom resource. An example of a Blob Storage CR can be seen [here](./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml). 
-In the spec of this CR, we outline the secret name where we want the blob storage information to be output. If the provider type were AWS, for example, the output secret would contain connection information to the S3 bucket that was created. The `tier` outlines the `Strategy` we wish to use. The `type` references the deployment to be used.
-```
-spec:
-  # i want my blob storage information output in a Secret named blob-test in the current namespace
-  secretRef:
-    name: blob-test
-  # i want a blob storage of a development-level tier
-  tier: development
-  # i want a blob storage for the type managed
-  type: managed
+With `Provider` and `Strategy` configmaps in place, cloud resources can be provisioned by creating a custom resource object for the desired resource type. 
+An example of a Postgres custom resource can be seen [here](./deploy/crds/integreatly_v1alpha1_postgres_cr.yaml). 
 
+Each custom resource contains:
+- A `secretRef`, containing the name of the secret that will be created by the operator with connection details to the resource
+- A `tier`, in this case `production`, which means a production worthy Postgres instance will be deployed 
+- A `type`, in this case `managed`, which will resolve to a cloud provider specified in the `cloud-resource-config` configmap
+
+```yaml
+spec:
+  # i want my postgres storage information output in a secret named `example-postgres-sec`
+  secretRef:
+    name: example-postgres-sec
+  # i want a postgres storage of a development-level tier
+  tier: production
+  # i want a postgres storage for the type managed
+  type: managed
 ```
+
 ## Development
 
 ### Contributing
@@ -118,9 +128,11 @@ $ make test/unit
 - Make a PR
 
 ### Terminology
-- `Resource type` - Something that can be requested from the operator via a custom resource e.g. `blobstorage`, `redis`
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
+- `Resource type` - Something that can be requested from the operator via a custom resource e.g. `blobstorage`, `redis`
 - `Resource` - The result of a resource type created via a provider e.g. `S3 Bucket`, `Azure Blob`
+- `Deployment type` - Groups mappings of resource types to providers (see [here](deploy/examples/cloud_resource_config.yaml)) e.g. `managed`, `workshop`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
+- `Deployment tier` - Provides a layer of abstraction, which allows the end user to request a resource of a certain level (for example, a `production` worthy Postgres instance), without being concerned with provider-specific deployment details (such as storage capacity, for example). 
 
 ### Design
 There are a few design philosophies for the Cloud Resource Operator:

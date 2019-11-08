@@ -4,7 +4,7 @@ metadata:
   # name must be between 1-40 characters
   name: example-blobstorage
 spec:
-  # i want my blob storage information output in a Secret named test in the Namespace cloud-resource-operator
+  # i want my blob storage information output in a secret named example-blobstorage-sec
   secretRef:
     name: example-blobstorage-sec
   # i want a blob storage of a development-level tier
