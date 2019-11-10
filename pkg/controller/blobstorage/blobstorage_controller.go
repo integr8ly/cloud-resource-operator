@@ -3,7 +3,11 @@ package blobstorage
 import (
 	"context"
 	"fmt"
+<<<<<<< HEAD
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+=======
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
+>>>>>>> add basic blobstorage and smtp providers for openshift
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/sirupsen/logrus"
@@ -37,7 +41,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
-	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(client, logger)}
+	providerList := []providers.BlobStorageProvider{aws.NewAWSBlobStorageProvider(client, logger), openshift.NewBlobStorageProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileBlobStorage{
 		client:           client,

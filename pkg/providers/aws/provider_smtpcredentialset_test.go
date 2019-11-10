@@ -339,11 +339,11 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 				return nil
 			},
 			wantData: map[string][]byte{
-				detailsSMTPUsernameKey: []byte("test"),
-				detailsSMTPPasswordKey: []byte("AsuNxtdhciTpIaQYwF9CtO/nlNX2hCZkD8E+4vZzrjs0"),
-				detailsSMTPPortKey:     []byte("465"),
-				detailsSMTPHostKey:     []byte(sesSMTPEndpointEUWest1),
-				detailsSMTPTLSKey:      []byte("true"),
+				DetailsSMTPUsernameKey: []byte("test"),
+				DetailsSMTPPasswordKey: []byte("AsuNxtdhciTpIaQYwF9CtO/nlNX2hCZkD8E+4vZzrjs0"),
+				DetailsSMTPPortKey:     []byte("587"),
+				DetailsSMTPHostKey:     []byte(sesSMTPEndpointEUWest1),
+				DetailsSMTPTLSKey:      []byte("true"),
 			},
 		},
 		{
