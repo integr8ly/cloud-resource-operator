@@ -1,7 +1,9 @@
 module github.com/integr8ly/cloud-resource-operator
 
 require (
+	github.com/ant31/crd-validation v0.0.0-20180801212718-38f6a293f140 // indirect
 	github.com/aws/aws-sdk-go v1.23.17
+	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
@@ -9,10 +11,12 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
+	github.com/hashicorp/go-version v1.2.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/lib/pq v1.2.0
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
+	github.com/mitchellh/hashstructure v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/openshift/api v3.9.1-0.20191002160657-d92789481b05+incompatible
