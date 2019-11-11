@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strings"
 	"time"
 
@@ -69,13 +70,13 @@ func (p *OpenShiftRedisProvider) SupportsStrategy(d string) bool {
 }
 
 func (p *OpenShiftRedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
-	if r.Status.Phase != v1alpha1.PhaseComplete {
+	if r.Status.Phase != types2.PhaseComplete {
 		return time.Second * 10
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, v1alpha1.StatusMessage, error) {
+func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, types2.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -85,28 +86,28 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	redisConfig, _, err := p.getRedisConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve openshift redis cluster config for instance %s", r.Name)
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// deploy pvc
 	if err := p.CreatePVC(ctx, buildDefaultRedisPVC(r), redisConfig); err != nil {
 		errMsg := "failed to create or update redis PVC"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy configmap
 	if err := p.CreateConfigMap(ctx, buildDefaultRedisConfigMap(r), redisConfig); err != nil {
 		errMsg := "failed to create or update redis config map"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy deployment
 	if err := p.CreateDeployment(ctx, buildDefaultRedisDeployment(r), redisConfig); err != nil {
 		errMsg := "failed to create or update redis deployment"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// deploy service
 	if err := p.CreateService(ctx, buildDefaultRedisService(r), redisConfig); err != nil {
 		errMsg := "failed to create or update redis service"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check deployment status
@@ -114,7 +115,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	err = p.Client.Get(ctx, types.NamespacedName{Name: r.Name, Namespace: r.Namespace}, dpl)
 	if err != nil {
 		errMsg := "failed to get redis deployment"
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check if deployment is ready and return connection details
@@ -132,7 +133,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	return nil, "creation in progress", nil
 }
 
-func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (v1alpha1.StatusMessage, error) {
+func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (types2.StatusMessage, error) {
 	// check deployment status
 	dpl := &appsv1.Deployment{}
 	err := p.Client.Get(ctx, types.NamespacedName{Name: r.Name, Namespace: r.Namespace}, dpl)
@@ -141,7 +142,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			return "deletion successful", nil
 		}
 		errMsg := "failed to get deployment"
-		return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	for _, s := range dpl.Status.Conditions {
 		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
@@ -156,7 +157,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			err = p.Client.Delete(ctx, svc)
 			if err != nil && !k8serr.IsNotFound(err) {
 				errMsg := "failed to delete service"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// delete pvc
@@ -170,7 +171,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			err = p.Client.Delete(ctx, pvc)
 			if err != nil && !k8serr.IsNotFound(err) {
 				errMsg := "failed to delete persistent volume claim"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// delete config map
@@ -184,7 +185,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			err = p.Client.Delete(ctx, cm)
 			if err != nil && !k8serr.IsNotFound(err) {
 				errMsg := "failed to delete configmap"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// clean up objects
@@ -192,7 +193,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			err = p.Client.Delete(ctx, dpl)
 			if err != nil && !k8serr.IsNotFound(err) {
 				errMsg := "failed to delete deployment"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			// remove the finalizer added by the provider
@@ -200,7 +201,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 			resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 			if err := p.Client.Update(ctx, r); err != nil {
 				errMsg := "failed to update instance as part of finalizer reconcile"
-				return v1alpha1.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 			}
 
 			p.Logger.Infof("deletion handler for redis %s in namespace %s finished successfully", r.Name, r.Namespace)

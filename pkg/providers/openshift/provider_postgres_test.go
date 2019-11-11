@@ -3,6 +3,7 @@ package openshift
 import (
 	"context"
 	"fmt"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 	"time"
@@ -443,7 +444,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types2.PhaseInProgress,
 					},
 				},
 			},
@@ -454,7 +455,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types2.PhaseComplete,
 					},
 				},
 			},

@@ -3,6 +3,7 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -314,7 +315,7 @@ func postgresCreateTest(t *testing.T, f *framework.Framework, testPostgres *v1al
 		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get postgres cr")
 		}
-		if pcr.Status.Phase == v1alpha1.StatusPhase("complete") {
+		if pcr.Status.Phase == types2.StatusPhase("complete") {
 			return true, nil
 		}
 		return false, nil
@@ -400,7 +401,7 @@ func getBasicTestPostgres(ctx framework.TestCtx) (*v1alpha1.Postgres, string, er
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.PostgresSpec{
-			SecretRef: &v1alpha1.SecretRef{
+			SecretRef: &types2.SecretRef{
 				Name:      "example-postgres-sec",
 				Namespace: namespace,
 			},

@@ -2,6 +2,7 @@ package smtpcredentialset
 
 import (
 	"context"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ func buildTestSMTPCredentialSet() *v1alpha1.SMTPCredentialSet {
 		Spec: v1alpha1.SMTPCredentialSetSpec{
 			Tier:      "test",
 			Type:      "test",
-			SecretRef: &v1alpha1.SecretRef{Name: "test"},
+			SecretRef: &types2.SecretRef{Name: "test"},
 		},
 	}
 }
@@ -96,7 +97,7 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 				ctx:    context.TODO(),
 				providerList: []providers.SMTPCredentialsProvider{
 					&providers.SMTPCredentialsProviderMock{
-						CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {
+						CreateSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, types2.StatusMessage, error) {
 							return &providers.SMTPCredentialSetInstance{
 								DeploymentDetails: &providers.DeploymentDetailsMock{
 									DataFunc: func() map[string][]byte {
@@ -110,7 +111,7 @@ func TestReconcileSMTPCredentialSet_Reconcile(t *testing.T) {
 						GetReconcileTimeFunc: func(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
 							return time.Second * 10
 						},
-						DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
+						DeleteSMTPCredentialsFunc: func(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (types2.StatusMessage, error) {
 							return "", nil
 						},
 						GetNameFunc: func() string {

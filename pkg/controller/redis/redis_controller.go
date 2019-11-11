@@ -3,9 +3,9 @@ package redis
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -112,7 +112,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 
 	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, integreatlyv1alpha1.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -128,14 +128,14 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		if instance.GetDeletionTimestamp() != nil {
 			msg, err := p.DeleteRedis(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
 			}
 
 			r.logger.Info("Waiting for redis cluster to successfully delete")
-			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseDeleteInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -144,16 +144,16 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		// handle creation of redis and apply any finalizers to instance required for deletion
 		redis, msg, err := p.CreateRedis(ctx, instance)
 		if err != nil {
-			instance.Status.SecretRef = &v1alpha1.SecretRef{}
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+			instance.Status.SecretRef = &types.SecretRef{}
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
 		}
 		if redis == nil {
-			instance.Status.SecretRef = &v1alpha1.SecretRef{}
+			instance.Status.SecretRef = &types.SecretRef{}
 			r.logger.Info("Waiting for redis cluster to become available")
-			if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -165,7 +165,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		}
 
 		// update the redis custom resource
-		instance.Status.Phase = v1alpha1.PhaseComplete
+		instance.Status.Phase = types.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Redis
@@ -177,7 +177,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(ctx, r.client, instance, v1alpha1.PhaseInProgress, integreatlyv1alpha1.StatusUnsupportedType.WrapError(err)); err != nil {
+	if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, types.StatusUnsupportedType.WrapError(err)); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Redis))

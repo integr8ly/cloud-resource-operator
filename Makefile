@@ -88,7 +88,13 @@ test/e2e/image:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/...
+	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/controller/... ./pkg/providers/... ./pkg/resources/... ./pkg/apis/integreatly/v1alpha1/types/...
+
+.PHONY: test/unit/coverage
+test/unit/coverage:
+	@echo Running the coverage cli and html
+	go tool cover -html=coverage.out
+	go tool cover -func=coverage.out
 
 .PHONY: test/unit/ci
 test/unit/ci: test/unit

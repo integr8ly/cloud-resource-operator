@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -88,14 +89,14 @@ func (p *AWSPostgresProvider) SupportsStrategy(d string) bool {
 }
 
 func (p *AWSPostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration {
-	if pg.Status.Phase != v1alpha1.PhaseComplete {
+	if pg.Status.Phase != types2.PhaseComplete {
 		return time.Second * 60
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
 // CreatePostgres creates an RDS Instance from strategy config
-func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Postgres) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Postgres) (*providers.PostgresInstance, types2.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, pg, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -105,14 +106,14 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.P
 	rdsCfg, _, stratCfg, err := p.getRDSConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve aws RDS cluster config for instance"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return nil, types2.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, pg.Namespace)
 	if err != nil {
 		msg := "failed to reconcile RDS credentials"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// create credentials secret
@@ -122,7 +123,7 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.P
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create or update secret %s, action was %s", sec.Name, or)
-		return nil, v1alpha1.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, types2.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// setup aws RDS instance sdk session
@@ -140,33 +141,33 @@ func createRDSSession(stratCfg *StrategyConfig, providerCreds *AWSCredentials) r
 	return rds.New(sess)
 }
 
-func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, types2.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pi, err := getRDSInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
 		msg := "error getting replication groups"
 		logrus.Info(msg, err)
-		return nil, v1alpha1.StatusMessage(msg), err
+		return nil, types2.StatusMessage(msg), err
 	}
 
 	// getting postgres user password from created secret
 	credSec := &v1.Secret{}
 	if err := p.Client.Get(ctx, types.NamespacedName{Name: cr.Name + defaultCredSecSuffix, Namespace: cr.Namespace}, credSec); err != nil {
 		msg := "failed to retrieve rds credential secret"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
 	if postgresPass == "" {
 		msg := "unable to retrieve rds password"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// verify and build rds create config
 	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
 		msg := "failed to build and verify aws rds instance configuration"
-		return nil, v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// check if the cluster has already been created
@@ -182,14 +183,14 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 	if foundInstance == nil {
 		logrus.Info("creating rds instance")
 		if _, err = rdsSvc.CreateDBInstance(rdsCfg); err != nil {
-			return nil, v1alpha1.StatusMessage(fmt.Sprintf("error creating rds instance %s", err)), err
+			return nil, types2.StatusMessage(fmt.Sprintf("error creating rds instance %s", err)), err
 		}
 		return nil, "started rds provision", nil
 	}
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
-		return nil, v1alpha1.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", *foundInstance.DBInstanceStatus)), nil
+		return nil, types2.StatusMessage(fmt.Sprintf("rds instance creation in progress, current status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
 	// rds instance is available
@@ -213,7 +214,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 	}}, "creation successful", nil
 }
 
-func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (types2.StatusMessage, error) {
 	// resolve postgres information for postgres created by provider
 	rdsCreateConfig, rdsDeleteConfig, stratCfg, err := p.getRDSConfig(ctx, r)
 	if err != nil {
@@ -224,7 +225,7 @@ func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Po
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
 	if err != nil {
 		msg := "failed to reconcile aws provider credentials"
-		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// setup aws postgres instance sdk session
@@ -233,7 +234,7 @@ func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Po
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
 
-func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (v1alpha1.StatusMessage, error) {
+func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (types2.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
 	if err != nil {
@@ -243,7 +244,7 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 	// check and verify delete config
 	if err := p.buildRDSDeleteConfig(ctx, pg, rdsCreateConfig, rdsDeleteConfig); err != nil {
 		msg := "failed to verify aws rds instance configuration"
-		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// check if the instance has already been deleted
@@ -268,15 +269,15 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 		err = p.Client.Delete(ctx, sec)
 		if err != nil && !k8serr.IsNotFound(err) {
 			msg := "failed to deleted rds secrets"
-			return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
 		resources.RemoveFinalizer(&pg.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, pg); err != nil {
 			msg := "failed to update instance as part of finalizer reconcile"
-			return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return types2.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
-		return v1alpha1.StatusEmpty, nil
+		return types2.StatusEmpty, nil
 	}
 
 	// return if rds instance is not available
@@ -290,7 +291,7 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 		rdsErr, isAwsErr := err.(awserr.Error)
 		if err != nil && (!isAwsErr || rdsErr.Code() != rds.ErrCodeDBInstanceNotFoundFault) {
 			msg := fmt.Sprintf("failed to delete rds instance : %s", err)
-			return v1alpha1.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return types2.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
 		return "deletion started", nil
 	}
@@ -302,7 +303,7 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 	})
 	if err != nil {
 		msg := "failed to remove deletion protection"
-		return v1alpha1.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 	return "turning off deletion protection", nil
 }

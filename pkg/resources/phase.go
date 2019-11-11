@@ -2,21 +2,21 @@ package resources
 
 import (
 	"context"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	errorUtil "github.com/pkg/errors"
 )
 
-func UpdatePhase(ctx context.Context, client client.Client, inst runtime.Object, phase v1alpha1.StatusPhase, msg v1alpha1.StatusMessage) error {
-	if msg == v1alpha1.StatusEmpty {
+func UpdatePhase(ctx context.Context, client client.Client, inst runtime.Object, phase types.StatusPhase, msg types.StatusMessage) error {
+	if msg == types.StatusEmpty {
 		return nil
 	}
-	rts := &v1alpha1.ResourceTypeStatus{}
+	rts := &types.ResourceTypeStatus{}
 	if err := runtime.Field(reflect.ValueOf(inst).Elem(), "Status", rts); err != nil {
 		return errorUtil.Wrap(err, "failed to retrieve status block from object")
 	}

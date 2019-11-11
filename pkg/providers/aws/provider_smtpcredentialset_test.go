@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
 	"time"
 
@@ -85,7 +86,7 @@ func buildTestSMTPCredentialSet() *v1alpha1.SMTPCredentialSet {
 		Spec: v1alpha1.SMTPCredentialSetSpec{
 			Type:      "test",
 			Tier:      "test",
-			SecretRef: &v1alpha1.SecretRef{Name: "test"},
+			SecretRef: &types.SecretRef{Name: "test"},
 		},
 		Status: v1alpha1.SMTPCredentialSetStatus{},
 	}
@@ -139,7 +140,7 @@ func TestSMTPCredentialProvider_DeleteSMTPCredentials(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.SMTPCredentialSetSpec{
-			SecretRef: &v1alpha1.SecretRef{
+			SecretRef: &types.SecretRef{
 				Name: "test",
 			},
 			Tier: "test",
@@ -419,7 +420,7 @@ func TestSMTPCredentialProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				s: &v1alpha1.SMTPCredentialSet{
 					Status: v1alpha1.SMTPCredentialSetStatus{
-						Phase: v1alpha1.PhaseInProgress,
+						Phase: types.PhaseInProgress,
 					},
 				},
 			},
@@ -430,7 +431,7 @@ func TestSMTPCredentialProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				s: &v1alpha1.SMTPCredentialSet{
 					Status: v1alpha1.SMTPCredentialSetStatus{
-						Phase: v1alpha1.PhaseComplete,
+						Phase: types.PhaseComplete,
 					},
 				},
 			},
