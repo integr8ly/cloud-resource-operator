@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -74,7 +75,7 @@ func blobstorageCreateTest(t *testing.T, f *framework.Framework, testBlobstorage
 		}
 	}
 
-	t.Logf("%s secrete created successfully", bcr.Status.SecretRef.Name)
+	t.Logf("%s secret created successfully", bcr.Status.SecretRef.Name)
 	return nil
 }
 
@@ -83,6 +84,14 @@ func blobstorageDeleteTest(t *testing.T, f *framework.Framework, testBlobstorage
 	// delete blobstorage resource
 	if err := f.Client.Delete(goctx.TODO(), testBlobstorage); err != nil {
 		return errorUtil.Wrapf(err, "failed to delete example blobstorage")
+	}
+
+	sec := v1.Secret{}
+	if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: testBlobstorage.Spec.SecretRef.Name}, &sec); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return errorUtil.Wrapf(err, "could not get secret")
 	}
 	t.Logf("%s custom resource deleted", testBlobstorage.Name)
 

@@ -2,17 +2,19 @@ package openshift
 
 import (
 	"context"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/sirupsen/logrus"
 	v12 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
-	"time"
 )
 
 func TestBlobStorageProvider_CreateStorage(t *testing.T) {
@@ -82,8 +84,8 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Namespace: "test",
 					},
 					Status: v1alpha1.BlobStorageStatus{
-						Phase: v1alpha1.PhaseComplete,
-						SecretRef: &v1alpha1.SecretRef{
+						Phase: types.PhaseComplete,
+						SecretRef: &types.SecretRef{
 							Name:      "test",
 							Namespace: "test",
 						},
@@ -122,8 +124,8 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Namespace: "test",
 					},
 					Status: v1alpha1.BlobStorageStatus{
-						Phase: v1alpha1.PhaseComplete,
-						SecretRef: &v1alpha1.SecretRef{
+						Phase: types.PhaseComplete,
+						SecretRef: &types.SecretRef{
 							Name:      "test",
 							Namespace: "test",
 						},

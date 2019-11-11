@@ -2,15 +2,20 @@ package openshift
 
 import (
 	"context"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+
+	"strconv"
+	"time"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
-	"time"
 )
 
 const (
@@ -44,7 +49,7 @@ func (s SMTPCredentialProvider) GetReconcileTime(smtpCreds *v1alpha1.SMTPCredent
 	return time.Second * 10
 }
 
-func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, v1alpha1.StatusMessage, error) {
+func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, types.StatusMessage, error) {
 	dd := &aws.SMTPCredentialSetDetails{
 		Username: varPlaceholder,
 		Password: varPlaceholder,
@@ -53,7 +58,7 @@ func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpC
 		TLS:      smtpTLSPlaceholder,
 	}
 
-	if smtpCreds.Status.Phase != v1alpha1.PhaseComplete || smtpCreds.Status.SecretRef.Name == "" || smtpCreds.Status.SecretRef.Namespace == "" {
+	if smtpCreds.Status.Phase != types.PhaseComplete || smtpCreds.Status.SecretRef.Name == "" || smtpCreds.Status.SecretRef.Namespace == "" {
 		return &providers.SMTPCredentialSetInstance{
 			DeploymentDetails: dd,
 		}, "reconcile complete", nil
@@ -82,6 +87,6 @@ func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpC
 	}, "reconcile complete", nil
 }
 
-func (s SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (v1alpha1.StatusMessage, error) {
+func (s SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (types.StatusMessage, error) {
 	return "deletion complete", nil
 }

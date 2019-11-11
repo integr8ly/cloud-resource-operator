@@ -75,7 +75,7 @@ func TestStringOrDefault(t *testing.T) {
 	}{
 		{
 			name: "test default is returned",
-			args:args{
+			args: args{
 				str:       "",
 				defaultTo: "def",
 			},
@@ -83,7 +83,7 @@ func TestStringOrDefault(t *testing.T) {
 		},
 		{
 			name: "test value is returned",
-			args:args{
+			args: args{
 				str:       "test",
 				defaultTo: "def",
 			},

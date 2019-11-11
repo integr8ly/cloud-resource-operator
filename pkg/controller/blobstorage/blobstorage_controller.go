@@ -3,11 +3,9 @@ package blobstorage
 import (
 	"context"
 	"fmt"
-<<<<<<< HEAD
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-=======
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
->>>>>>> add basic blobstorage and smtp providers for openshift
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/sirupsen/logrus"
