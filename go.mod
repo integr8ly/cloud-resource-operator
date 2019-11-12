@@ -22,7 +22,7 @@ require (
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/procfs v0.0.4 // indirect
-	github.com/rakyll/gotest v0.0.0-20180125184505-86f0749cd8cc
+	github.com/rakyll/gotest v0.0.0-20191108192113-45d501058f2a
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.4.0 // indirect
@@ -31,6 +31,7 @@ require (
 	golang.org/x/crypto v0.0.0-20190923035154-9ee001bba392 // indirect
 	golang.org/x/net v0.0.0-20191003171128-d98b1b443823 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
+	golang.org/x/sys v0.0.0-20191110163157-d32e6e3b99c4 // indirect
 	golang.org/x/tools v0.0.0-20190924052046-3ac2a5bbd98a // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/grpc v1.22.0 // indirect

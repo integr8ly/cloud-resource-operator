@@ -48,3 +48,10 @@ func buildAlphanumRegexp() (*regexp.Regexp, error) {
 	}
 	return anReg, nil
 }
+
+func StringOrDefault(str, defaultTo string) string {
+	if str == "" {
+		return defaultTo
+	}
+	return str
+}

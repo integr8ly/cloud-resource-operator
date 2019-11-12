@@ -29,11 +29,11 @@ import (
 const (
 	smtpCredentialProviderName = "aws-ses"
 	// default create options
-	detailsSMTPUsernameKey = "username"
-	detailsSMTPPasswordKey = "password"
-	detailsSMTPPortKey     = "port"
-	detailsSMTPHostKey     = "host"
-	detailsSMTPTLSKey      = "tls"
+	DetailsSMTPUsernameKey = "username"
+	DetailsSMTPPasswordKey = "password"
+	DetailsSMTPPortKey     = "port"
+	DetailsSMTPHostKey     = "host"
+	DetailsSMTPTLSKey      = "tls"
 )
 
 // SMTPCredentialSetDetails Provider-specific details about SMTP credentials derived from an AWS IAM role
@@ -47,11 +47,11 @@ type SMTPCredentialSetDetails struct {
 
 func (d *SMTPCredentialSetDetails) Data() map[string][]byte {
 	return map[string][]byte{
-		detailsSMTPUsernameKey: []byte(d.Username),
-		detailsSMTPPasswordKey: []byte(d.Password),
-		detailsSMTPPortKey:     []byte(strconv.Itoa(d.Port)),
-		detailsSMTPHostKey:     []byte(d.Host),
-		detailsSMTPTLSKey:      []byte(strconv.FormatBool(d.TLS)),
+		DetailsSMTPUsernameKey: []byte(d.Username),
+		DetailsSMTPPasswordKey: []byte(d.Password),
+		DetailsSMTPPortKey:     []byte(strconv.Itoa(d.Port)),
+		DetailsSMTPHostKey:     []byte(d.Host),
+		DetailsSMTPTLSKey:      []byte(strconv.FormatBool(d.TLS)),
 	}
 }
 
@@ -139,7 +139,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 		DeploymentDetails: &SMTPCredentialSetDetails{
 			Username: sendMailCreds.AccessKeyID,
 			Password: smtpPass,
-			Port:     465,
+			Port:     587,
 			Host:     sesSMTPHost,
 			TLS:      true,
 		},

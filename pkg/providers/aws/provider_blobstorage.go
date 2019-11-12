@@ -38,11 +38,11 @@ const (
 	blobstorageProviderName    = "aws-s3"
 	defaultAwsBucketNameLength = 40
 	// default create options
-	dataBucketName             = "bucketName"
-	dataBucketRegion           = "bucketRegion"
-	dataCredentialKeyID        = "credentialKeyID"
-	dataCredentialSecretKey    = "credentialSecretKey"
-	defaultForceBucketDeletion = false
+	DetailsBlobStorageBucketName          = "bucketName"
+	DetailsBlobStorageBucketRegion        = "bucketRegion"
+	DetailsBlobStorageCredentialKeyID     = "credentialKeyID"
+	DetailsBlobStorageCredentialSecretKey = "credentialSecretKey"
+	defaultForceBucketDeletion            = false
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -55,10 +55,10 @@ type BlobStorageDeploymentDetails struct {
 
 func (d *BlobStorageDeploymentDetails) Data() map[string][]byte {
 	return map[string][]byte{
-		dataBucketName:          []byte(d.BucketName),
-		dataBucketRegion:        []byte(d.BucketRegion),
-		dataCredentialKeyID:     []byte(d.CredentialKeyID),
-		dataCredentialSecretKey: []byte(d.CredentialSecretKey),
+		DetailsBlobStorageBucketName:          []byte(d.BucketName),
+		DetailsBlobStorageBucketRegion:        []byte(d.BucketRegion),
+		DetailsBlobStorageCredentialKeyID:     []byte(d.CredentialKeyID),
+		DetailsBlobStorageCredentialSecretKey: []byte(d.CredentialSecretKey),
 	}
 }
 

@@ -2,7 +2,9 @@ package smtpcredentialset
 
 import (
 	"context"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -35,7 +37,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	client := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_smtpcredentialset"})
-	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(client, logger)}
+	providerList := []providers.SMTPCredentialsProvider{aws.NewAWSSMTPCredentialProvider(client, logger), openshift.NewSMTPCredentialSetProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &ReconcileSMTPCredentialSet{
 		client:           mgr.GetClient(),

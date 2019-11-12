@@ -62,3 +62,39 @@ func TestShortenString(t *testing.T) {
 		})
 	}
 }
+
+func TestStringOrDefault(t *testing.T) {
+	type args struct {
+		str       string
+		defaultTo string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "test default is returned",
+			args: args{
+				str:       "",
+				defaultTo: "def",
+			},
+			want: "def",
+		},
+		{
+			name: "test value is returned",
+			args: args{
+				str:       "test",
+				defaultTo: "def",
+			},
+			want: "test",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StringOrDefault(tt.args.str, tt.args.defaultTo); got != tt.want {
+				t.Errorf("StringOrDefault() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
