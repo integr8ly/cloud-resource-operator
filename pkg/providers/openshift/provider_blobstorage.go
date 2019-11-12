@@ -54,15 +54,21 @@ func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Blo
 		CredentialSecretKey: varPlaceholder,
 	}
 
+	if bs.Spec.SecretRef.Namespace == "" {
+		bs.Spec.SecretRef.Namespace = bs.Namespace
+	}
+
 	if bs.Status.Phase != types.PhaseComplete || bs.Status.SecretRef.Name == "" || bs.Status.SecretRef.Namespace == "" {
 		return &providers.BlobStorageInstance{
 			DeploymentDetails: dd,
 		}, "reconcile complete", nil
 	}
+
 	sec := &v1.Secret{}
 	if err := b.Client.Get(ctx, client.ObjectKey{Name: bs.Status.SecretRef.Name, Namespace: bs.Status.SecretRef.Namespace}, sec); err != nil {
 		return nil, "failed to reconcile", err
 	}
+
 	dd.BucketName = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageBucketName]), varPlaceholder)
 	dd.BucketRegion = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageBucketRegion]), varPlaceholder)
 	dd.CredentialKeyID = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageCredentialKeyID]), varPlaceholder)

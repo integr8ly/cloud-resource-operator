@@ -58,6 +58,10 @@ func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpC
 		TLS:      smtpTLSPlaceholder,
 	}
 
+	if smtpCreds.Spec.SecretRef.Namespace == "" {
+		smtpCreds.Spec.SecretRef.Namespace = smtpCreds.Namespace
+	}
+
 	if smtpCreds.Status.Phase != types.PhaseComplete || smtpCreds.Status.SecretRef.Name == "" || smtpCreds.Status.SecretRef.Namespace == "" {
 		return &providers.SMTPCredentialSetInstance{
 			DeploymentDetails: dd,
