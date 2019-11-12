@@ -46,6 +46,12 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
+					Spec: v1alpha1.SMTPCredentialSetSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
+					},
 				},
 			},
 			want: &providers.SMTPCredentialSetInstance{
@@ -83,6 +89,12 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
+					},
+					Spec: v1alpha1.SMTPCredentialSetSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
 					},
 					Status: v1alpha1.SMTPCredentialSetStatus{
 						Phase: types.PhaseComplete,
@@ -123,6 +135,12 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
+					},
+					Spec: v1alpha1.SMTPCredentialSetSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
 					},
 					Status: v1alpha1.SMTPCredentialSetStatus{
 						Phase: types.PhaseComplete,

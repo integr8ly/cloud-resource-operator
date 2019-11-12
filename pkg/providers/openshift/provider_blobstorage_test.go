@@ -46,6 +46,12 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
+					Spec: v1alpha1.BlobStorageSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
+					},
 					Status: v1alpha1.BlobStorageStatus{},
 				},
 			},
@@ -82,6 +88,12 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
+					},
+					Spec: v1alpha1.BlobStorageSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
 					},
 					Status: v1alpha1.BlobStorageStatus{
 						Phase: types.PhaseComplete,
@@ -122,6 +134,12 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
+					},
+					Spec: v1alpha1.BlobStorageSpec{
+						SecretRef: &types.SecretRef{
+							Name:      "test-sec",
+							Namespace: "",
+						},
 					},
 					Status: v1alpha1.BlobStorageStatus{
 						Phase: types.PhaseComplete,
