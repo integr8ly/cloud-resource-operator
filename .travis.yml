@@ -51,7 +51,7 @@ jobs:
     - stage: manifest
       script:
         - make setup/travis
+        - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io
         - alias python=python3
-        - ls
         - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make image/push; fi
         - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make manifest/push; fi
