@@ -6,6 +6,7 @@ MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
+OPERATOR_SDK_VERSION=0.10.0
 
 AUTH_TOKEN=$(shell curl -sH "Content-Type: application/json" -XPOST https://quay.io/cnr/api/v1/users/login -d '{"user": {"username": "$(QUAY_USERNAME)", "password": "${QUAY_PASSWORD}"}}' | jq -r '.token')
 
@@ -79,6 +80,11 @@ test/e2e/local: cluster/prepare
 	@echo Running e2e tests:
 	operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
+
+.PHONY: setup/prow
+setup/prow:
+	@echo Installing Operator SDK
+	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu && chmod +x operator-sdk && sudo mv operator-sdk /usr/local/bin/
 
 .PHONY: test/e2e/image
 test/e2e/image:
