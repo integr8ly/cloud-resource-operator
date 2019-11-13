@@ -84,7 +84,7 @@ setup/prow:
 .PHONY: test/e2e/prow
 test/e2e/prow: setup/prow cluster/prepare
 	@echo Running e2e tests:
-	./operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
+	GO111MODULE=on ./operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/e2e/local
