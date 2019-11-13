@@ -75,16 +75,23 @@ test/unit/setup:
 	@echo Installing gotest
 	go get -u github.com/rakyll/gotest
 
+
+.PHONY: setup/prow
+setup/prow:
+	@echo Installing Operator SDK
+	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu && chmod +x operator-sdk
+
+.PHONY: test/e2e/prow
+test/e2e/prow: setup/prow cluster/prepare
+	@echo Running e2e tests:
+	./operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
+	oc delete project $(NAMESPACE)
+
 .PHONY: test/e2e/local
 test/e2e/local: cluster/prepare
 	@echo Running e2e tests:
 	operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
-
-.PHONY: setup/prow
-setup/prow:
-	@echo Installing Operator SDK
-	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu && chmod +x operator-sdk && mv operator-sdk /usr/local/bin/
 
 .PHONY: test/e2e/image
 test/e2e/image:
