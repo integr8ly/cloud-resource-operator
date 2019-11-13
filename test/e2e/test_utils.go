@@ -1,12 +1,24 @@
 package e2e
 
 import (
+	framework "github.com/operator-framework/operator-sdk/pkg/test"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	t1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	errorUtil "github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	_ "github.com/lib/pq"
+)
+
+const (
+	blobstorageName = "example-blobstorage"
+	postgresName    = "example-postgres"
+	redisName       = "example-redis"
+	smtpName        = "example-smtp"
 )
 
 // returns job template
@@ -32,6 +44,28 @@ func ConnectionJob(container []v1.Container, jobName string, namespace string) *
 			},
 		},
 	}
+}
+
+func GetBasicBlobstorage(ctx framework.TestCtx, t string) (*v1alpha1.BlobStorage, string, error) {
+	namespace, err := ctx.GetNamespace()
+	if err != nil {
+		return nil, "", errorUtil.Wrapf(err, "could not get namespace")
+	}
+
+	return &v1alpha1.BlobStorage{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      blobstorageName,
+			Namespace: namespace,
+		},
+		Spec: v1alpha1.BlobStorageSpec{
+			SecretRef: &t1.SecretRef{
+				Name:      "example-postgres-sec",
+				Namespace: namespace,
+			},
+			Tier: "development",
+			Type: t,
+		},
+	}, namespace, nil
 }
 
 func GetTestDeployment(name string, namespace string) *appsv1.Deployment {

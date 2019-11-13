@@ -3,8 +3,9 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
+
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 

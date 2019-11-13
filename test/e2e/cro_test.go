@@ -9,13 +9,6 @@ import (
 	framework "github.com/operator-framework/operator-sdk/pkg/test"
 )
 
-const (
-	postgresName    = "example-postgres"
-	redisName       = "example-redis"
-	blobstorageName = "example-blobstorage"
-	smtpName        = "example-smtp"
-)
-
 var (
 	retryInterval = time.Second * 20
 	timeout       = time.Minute * 5
@@ -46,37 +39,35 @@ func TestCRO(t *testing.T) {
 		t.Fatalf("failed to add SMTP custom resource scheme to framework: %v", err)
 	}
 
-	// run subtests
-	t.Run("cro-openshift-postgres-test", func(t *testing.T) {
-		t.Run("Cluster", OpenshiftPostgresTestCluster)
-	})
+	//// run subtests
+	//t.Run("cro-openshift-postgres-test", func(t *testing.T) {
+	//	t.Run("Cluster", OpenshiftPostgresTestCluster)
+	//})
+	//
+	//t.Run("cro-openshift-redis-test", func(t *testing.T) {
+	//	t.Run("Cluster", OpenshiftRedisTestCluster)
+	//})
+	//
+	//t.Run("cro-openshift-blobstorage-test", func(t *testing.T) {
+	//	t.Run("Cluster", OpenshiftBlobstorageTestCluster)
+	//})
+	//
+	//t.Run("cro-openshift-smtp-test", func(t *testing.T) {
+	//	t.Run("Cluster", OpenshiftSMTPTestCluster)
+	//})
 
-	t.Run("cro-openshift-redis-test", func(t *testing.T) {
-		t.Run("Cluster", OpenshiftRedisTestCluster)
-	})
-
-	t.Run("cro-openshift-blobstorage-test", func(t *testing.T) {
-		t.Run("Cluster", OpenshiftBlobstorageTestCluster)
-	})
-
-	t.Run("cro-openshift-smtp-test", func(t *testing.T) {
-		t.Run("Cluster", OpenshiftSMTPTestCluster)
+	t.Run("cro-aws-blobstorage-test", func(t *testing.T) {
+		t.Run("Cluster", AWSBlobstorageTestCluster)
 	})
 
 }
 
 // setup openshift postgres test env and executes subtests
 func OpenshiftPostgresTestCluster(t *testing.T) {
-	t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	ctx, err := setupCluster(t)
 	if err != nil {
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
-	t.Log("initialized cluster resources")
-
-	// get global framework variables
 	f := framework.Global
 
 	// run postgres test
@@ -122,16 +113,10 @@ func OpenshiftPostgresTestCluster(t *testing.T) {
 
 // setup openshift redis environment and executes sub tests
 func OpenshiftRedisTestCluster(t *testing.T) {
-	t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	ctx, err := setupCluster(t)
 	if err != nil {
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
-	t.Log("initialized cluster resources")
-
-	// get global framework variables
 	f := framework.Global
 
 	// run redis test
@@ -166,15 +151,10 @@ func OpenshiftRedisTestCluster(t *testing.T) {
 }
 
 func OpenshiftBlobstorageTestCluster(t *testing.T) {
-	t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	ctx, err := setupCluster(t)
 	if err != nil {
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
-	t.Log("initialized cluster resources")
-
 	f := framework.Global
 
 	// run blobstorage test
@@ -183,16 +163,24 @@ func OpenshiftBlobstorageTestCluster(t *testing.T) {
 	}
 }
 
-func OpenshiftSMTPTestCluster(t *testing.T) {
-	t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+func AWSBlobstorageTestCluster(t *testing.T) {
+	ctx, err := setupCluster(t)
 	if err != nil {
 		t.Fatalf("failed to initialize cluster resources: %v", err)
 	}
-	t.Log("initialized cluster resources")
+	f := framework.Global
 
+	// run blobstorage test
+	if err = AwsBlobstorageBasicTest(t, f, *ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func OpenshiftSMTPTestCluster(t *testing.T) {
+	ctx, err := setupCluster(t)
+	if err != nil {
+		t.Fatalf("failed to initialize cluster resources: %v", err)
+	}
 	f := framework.Global
 
 	// run smtp test
@@ -208,4 +196,17 @@ func getCleanupOptions(t *testing.T) *framework.CleanupOptions {
 		Timeout:       timeout,
 		RetryInterval: retryInterval,
 	}
+}
+
+// common setup for test clusters
+func setupCluster(t *testing.T) (*framework.TestCtx, error) {
+	t.Parallel()
+	ctx := framework.NewTestCtx(t)
+	defer ctx.Cleanup()
+	err := ctx.InitializeClusterResources(getCleanupOptions(t))
+	if err != nil {
+		return ctx, err
+	}
+	t.Log("initialized cluster resources")
+	return ctx, err
 }
