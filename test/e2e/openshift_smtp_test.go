@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	t1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 
 	v1 "k8s.io/api/core/v1"
@@ -53,7 +55,7 @@ func smtpCreateTest(t *testing.T, f *framework.Framework, testSMTP *v1alpha1.SMT
 		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: smtpName}, scr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get smtp cr")
 		}
-		if scr.Status.Phase == v1alpha1.StatusPhase("complete") {
+		if scr.Status.Phase == t1.StatusPhase("complete") {
 			return true, nil
 		}
 		return false, nil
@@ -111,7 +113,7 @@ func getBasicSMTP(ctx framework.TestCtx) (*v1alpha1.SMTPCredentialSet, string, e
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.SMTPCredentialSetSpec{
-			SecretRef: &v1alpha1.SecretRef{
+			SecretRef: &t1.SecretRef{
 				Name:      "example-smtp-sec",
 				Namespace: namespace,
 			},

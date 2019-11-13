@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	t1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +54,7 @@ func blobstorageCreateTest(t *testing.T, f *framework.Framework, testBlobstorage
 		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: blobstorageName}, bcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get blobstorage cr")
 		}
-		if bcr.Status.Phase == v1alpha1.StatusPhase("complete") {
+		if bcr.Status.Phase == t1.StatusPhase("complete") {
 			return true, nil
 		}
 		return false, nil
@@ -110,7 +112,7 @@ func getBasicBlobstorage(ctx framework.TestCtx) (*v1alpha1.BlobStorage, string, 
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.BlobStorageSpec{
-			SecretRef: &v1alpha1.SecretRef{
+			SecretRef: &t1.SecretRef{
 				Name:      "example-blobstorage-sec",
 				Namespace: namespace,
 			},
