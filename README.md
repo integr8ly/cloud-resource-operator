@@ -63,6 +63,7 @@ Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC)
 - Select the newly created connection, then click `actions > accept request` to accept the peering request
 - Edit the cluster VPC route table. Create a new route that contains the resource VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
 - Edit the resource VPC's route table. Create a new route that contains the CIDR block of the cluster VPC as the `destination` and the peering connection as the `target`. 
+- Edit the Security Groups associated with each VPC to ensure database and cache traffic can pass between the two VPCs.
 
 The two VPCs should now be able to communicate with each other. 
 
