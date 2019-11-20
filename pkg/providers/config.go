@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -78,8 +79,8 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.providerConfigMapNamespace,
 		},
 		Data: map[string]string{
-			"managed":  "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\", \"redis\":\"aws\", \"postgres\":\"aws\"}",
-			"workshop": "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
+			"managed":  "{\"blobstorage\":\"openshift\", \"smtpcredentials\": \"openshift\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
+			"workshop": "{\"blobstorage\":\"openshift\", \"smtpcredentials\": \"openshift\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
 		},
 	}
 }
