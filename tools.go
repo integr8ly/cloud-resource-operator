@@ -1,8 +1,5 @@
 // +build tools
 
+// Place any runtime dependencies as imports in this file.
+// Go modules will be forced to download and install them.
 package tools
-
-import (
-	"github.com/rakyll/gotest"
-	_ "sigs.k8s.io/controller-tools/pkg/crd/generator"
-)

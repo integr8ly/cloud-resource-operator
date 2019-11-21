@@ -40,10 +40,10 @@ code/audit:
 .PHONY: cluster/prepare
 cluster/prepare:
 	oc new-project $(NAMESPACE) || true
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml
+	oc apply -f ./deploy/crds/integreatly.org_blobstorages_crd.yaml
+	oc apply -f ./deploy/crds/integreatly.org_smtpcredentialsets_crd.yaml
+	oc apply -f ./deploy/crds/integreatly.org_redis_crd.yaml
+	oc apply -f ./deploy/crds/integreatly.or__postgres_crd.yaml
 	oc apply -f ./deploy/examples/
 
 .PHONY: cluster/seed/smtp
@@ -65,9 +65,9 @@ cluster/seed/postgres:
 .PHONY: cluster/clean
 cluster/clean:
 	oc project $(NAMESPACE)
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
+	oc delete -f ./deploy/crds/integreatly.org_blobstorages_crd.yaml
+	oc delete -f ./deploy/crds/integreatly.org_smtpcredentialsets_crd.yaml
+	oc delete -f ./deploy/crds/integreatly.org_redis_crd.yaml
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit/setup

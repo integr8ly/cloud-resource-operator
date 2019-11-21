@@ -5,9 +5,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // BlobStorageSpec defines the desired state of BlobStorage
 // +k8s:openapi-gen=true
 type BlobStorageSpec types.ResourceTypeSpec
@@ -21,6 +18,7 @@ type BlobStorageStatus types.ResourceTypeStatus
 // BlobStorage is the Schema for the blobstorages API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:path=blobstorages,scope=Namespaced
 type BlobStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

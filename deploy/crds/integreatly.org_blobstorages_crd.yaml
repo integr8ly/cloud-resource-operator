@@ -14,6 +14,7 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
+      description: BlobStorage is the Schema for the blobstorages API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -28,41 +29,12 @@ spec:
         metadata:
           type: object
         spec:
-          properties:
-            secretRef:
-              properties:
-                name:
-                  type: string
-                namespace:
-                  type: string
-              type: object
-            tier:
-              type: string
-            type:
-              type: string
-          required:
-          - type
-          - tier
-          - secretRef
-          type: object
+          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeSpec'
+          description: BlobStorageSpec defines the desired state of BlobStorage
         status:
-          properties:
-            message:
-              type: string
-            phase:
-              type: string
-            provider:
-              type: string
-            secretRef:
-              properties:
-                name:
-                  type: string
-                namespace:
-                  type: string
-              type: object
-            strategy:
-              type: string
-          type: object
+          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeStatus'
+          description: BlobStorageStatus defines the observed state of BlobStorage
+      type: object
   version: v1alpha1
   versions:
   - name: v1alpha1

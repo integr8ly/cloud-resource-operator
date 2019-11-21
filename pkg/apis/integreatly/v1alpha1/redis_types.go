@@ -5,9 +5,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // RedisSpec defines the desired state of Redis
 // +k8s:openapi-gen=true
 type RedisSpec types.ResourceTypeSpec
@@ -21,6 +18,7 @@ type RedisStatus types.ResourceTypeStatus
 // Redis is the Schema for the redis API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:path=redis,scope=Namespaced
 type Redis struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
