@@ -14,7 +14,6 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: Postgres is the Schema for the postgres API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -29,12 +28,45 @@ spec:
         metadata:
           type: object
         spec:
-          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeSpec'
-          description: PostgresSpec defines the desired state of Postgres
+          properties:
+            secretRef:
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+              required:
+              - name
+              type: object
+            tier:
+              type: string
+            type:
+              type: string
+          required:
+          - type
+          - tier
+          - secretRef
+          type: object
         status:
-          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeStatus'
-          description: PostgresStatus defines the observed state of Postgres
-      type: object
+          properties:
+            message:
+              type: string
+            phase:
+              type: string
+            provider:
+              type: string
+            secretRef:
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+              required:
+              - name
+              type: object
+            strategy:
+              type: string
+          type: object
   version: v1alpha1
   versions:
   - name: v1alpha1

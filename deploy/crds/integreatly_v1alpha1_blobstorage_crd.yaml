@@ -1,20 +1,19 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: smtpcredentialsets.integreatly.org
+  name: blobstorages.integreatly.org
 spec:
   group: integreatly.org
   names:
-    kind: SMTPCredentialSet
-    listKind: SMTPCredentialSetList
-    plural: smtpcredentialsets
-    singular: smtpcredentialset
+    kind: BlobStorage
+    listKind: BlobStorageList
+    plural: blobstorages
+    singular: blobstorage
   scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
-      description: SMTPCredentials is the Schema for the smtpcredentialset API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -29,12 +28,45 @@ spec:
         metadata:
           type: object
         spec:
-          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeSpec'
-          description: SMTPCredentialsSpec defines the desired state of SMTPCredentials
+          properties:
+            secretRef:
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+              required:
+              - name
+              type: object
+            tier:
+              type: string
+            type:
+              type: string
+          required:
+          - type
+          - tier
+          - secretRef
+          type: object
         status:
-          $ref: '#/definitions/github.com~1integr8ly~1cloud-resource-operator~1pkg~1apis~1integreatly~1v1alpha1~1types~0ResourceTypeStatus'
-          description: SMTPCredentialsStatus defines the observed state of SMTPCredentials
-      type: object
+          properties:
+            message:
+              type: string
+            phase:
+              type: string
+            provider:
+              type: string
+            secretRef:
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+              required:
+              - name
+              type: object
+            strategy:
+              type: string
+          type: object
   version: v1alpha1
   versions:
   - name: v1alpha1

@@ -18,7 +18,6 @@ type SMTPCredentialSetStatus types.ResourceTypeStatus
 // SMTPCredentials is the Schema for the smtpcredentialset API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=smtpcredentialsets,scope=Namespaced
 type SMTPCredentialSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

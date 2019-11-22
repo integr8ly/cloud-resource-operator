@@ -31,7 +31,6 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorage(ref common.ReferenceCallba
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "BlobStorage is the Schema for the blobstorages API",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -75,7 +74,6 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageSpec(ref common.ReferenceCa
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "BlobStorageSpec defines the desired state of BlobStorage",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -108,7 +106,6 @@ func schema_pkg_apis_integreatly_v1alpha1_BlobStorageStatus(ref common.Reference
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "BlobStorageStatus defines the observed state of BlobStorage",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"strategy": {
 						SchemaProps: spec.SchemaProps{
@@ -152,7 +149,6 @@ func schema_pkg_apis_integreatly_v1alpha1_Postgres(ref common.ReferenceCallback)
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Postgres is the Schema for the postgres API",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -196,7 +192,6 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresSpec(ref common.ReferenceCallb
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "PostgresSpec defines the desired state of Postgres",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -229,7 +224,6 @@ func schema_pkg_apis_integreatly_v1alpha1_PostgresStatus(ref common.ReferenceCal
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "PostgresStatus defines the observed state of Postgres",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"strategy": {
 						SchemaProps: spec.SchemaProps{
@@ -273,7 +267,6 @@ func schema_pkg_apis_integreatly_v1alpha1_Redis(ref common.ReferenceCallback) co
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "Redis is the Schema for the redis API",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -317,7 +310,6 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisSpec(ref common.ReferenceCallback
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "RedisSpec defines the desired state of Redis",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -350,7 +342,6 @@ func schema_pkg_apis_integreatly_v1alpha1_RedisStatus(ref common.ReferenceCallba
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "RedisStatus defines the observed state of Redis",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"strategy": {
 						SchemaProps: spec.SchemaProps{
@@ -394,7 +385,6 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSet(ref common.Reference
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "SMTPCredentials is the Schema for the smtpcredentialset API",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -438,7 +428,6 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetSpec(ref common.Refer
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "SMTPCredentialsSpec defines the desired state of SMTPCredentials",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
@@ -471,7 +460,6 @@ func schema_pkg_apis_integreatly_v1alpha1_SMTPCredentialSetStatus(ref common.Ref
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "SMTPCredentialsStatus defines the observed state of SMTPCredentials",
-				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"strategy": {
 						SchemaProps: spec.SchemaProps{

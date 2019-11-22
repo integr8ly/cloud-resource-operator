@@ -18,7 +18,6 @@ type BlobStorageStatus types.ResourceTypeStatus
 // BlobStorage is the Schema for the blobstorages API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=blobstorages,scope=Namespaced
 type BlobStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
