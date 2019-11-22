@@ -49,12 +49,16 @@ code/audit:
 
 .PHONY: cluster/prepare
 cluster/prepare:
-	oc new-project $(NAMESPACE) || true
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml
-	oc apply -f ./deploy/examples/
+	-oc new-project $(NAMESPACE) || true
+	-oc label namespace $(NAMESPACE) monitoring-key=middleware
+	oc create -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/service_account.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/role.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/role_binding.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/examples/ -n $(NAMESPACE)
 
 .PHONY: cluster/seed/smtp
 cluster/seed/smtp:
@@ -74,10 +78,14 @@ cluster/seed/postgres:
 
 .PHONY: cluster/clean
 cluster/clean:
-	oc project $(NAMESPACE)
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/service_account.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/role.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/role_binding.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/examples/ -n $(NAMESPACE)
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/unit/setup
