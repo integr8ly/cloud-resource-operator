@@ -17,6 +17,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/controller"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -138,7 +139,7 @@ func main() {
 	// CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
 	// necessary to configure Prometheus to scrape metrics from this operator.
 	services := []*v1.Service{service}
-	_, err = metrics.CreateServiceMonitors(cfg, namespace, services)
+	_, err = metrics.CreateServiceMonitors(cfg, namespace, services, addMonitoringKeyLabelToOperatorServiceMonitor)
 	if err != nil {
 		log.Info("Could not create ServiceMonitor object", "error", err.Error())
 		// If this operator is deployed to a cluster without the prometheus-operator running, it will return
@@ -178,5 +179,15 @@ func serveCRMetrics(cfg *rest.Config) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func addMonitoringKeyLabelToOperatorServiceMonitor(serviceMonitor *monitoringv1.ServiceMonitor) error {
+	updatedLabels := map[string]string{"monitoring-key": "middleware"}
+	for k, v := range serviceMonitor.ObjectMeta.Labels {
+		updatedLabels[k] = v
+	}
+	serviceMonitor.SetLabels(updatedLabels)
+
 	return nil
 }
