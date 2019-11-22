@@ -35,6 +35,8 @@ spec:
                   type: string
                 namespace:
                   type: string
+              required:
+              - name
               type: object
             tier:
               type: string
@@ -59,6 +61,8 @@ spec:
                   type: string
                 namespace:
                   type: string
+              required:
+              - name
               type: object
             strategy:
               type: string

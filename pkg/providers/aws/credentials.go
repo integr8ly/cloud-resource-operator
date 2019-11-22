@@ -16,7 +16,6 @@ import (
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	errorUtil "github.com/pkg/errors"
 	v12 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -194,10 +193,9 @@ func (m *CredentialMinterCredentialManager) reconcileCredentialRequest(ctx conte
 			Namespace: ns,
 		},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, m.Client, cr, func(existing runtime.Object) error {
-		r := existing.(*v1.CredentialsRequest)
-		r.Spec.ProviderSpec = providerSpec
-		r.Spec.SecretRef = v12.ObjectReference{
+	_, err = controllerutil.CreateOrUpdate(ctx, m.Client, cr, func() error {
+		cr.Spec.ProviderSpec = providerSpec
+		cr.Spec.SecretRef = v12.ObjectReference{
 			Name:      name,
 			Namespace: ns,
 		}

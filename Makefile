@@ -6,9 +6,17 @@ MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
 VERSION=0.1.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
-OPERATOR_SDK_VERSION=0.10.0
+OPERATOR_SDK_VERSION=0.12.0
 
 AUTH_TOKEN=$(shell curl -sH "Content-Type: application/json" -XPOST https://quay.io/cnr/api/v1/users/login -d '{"user": {"username": "$(QUAY_USERNAME)", "password": "${QUAY_PASSWORD}"}}' | jq -r '.token')
+
+OS := $(shell uname)
+ifeq ($(OS),Darwin)
+	OPERATOR_SDK_OS := apple-darwin
+else
+	OPERATOR_SDK_OS := linux-gnu
+endif
+
 
 .PHONY: build
 build:
@@ -20,8 +28,10 @@ run:
 
 .PHONY: code/gen
 code/gen:
-	operator-sdk generate k8s
-	operator-sdk generate openapi
+	@echo $(OPERATOR_SDK_OS)
+	@curl -Lo operator-sdk-v0.10 https://github.com/operator-framework/operator-sdk/releases/download/v0.10.1/operator-sdk-v0.10.1-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk-v0.10 && sudo mv operator-sdk-v0.10 /usr/local/bin/
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate k8s
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate openapi
 	@go generate ./...
 
 .PHONY: code/fix
@@ -75,11 +85,10 @@ test/unit/setup:
 	@echo Installing gotest
 	go get -u github.com/rakyll/gotest
 
-
 .PHONY: setup/prow
-setup/prow:
+setup/prow: 
 	@echo Installing Operator SDK
-	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu && chmod +x operator-sdk
+	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk
 
 .PHONY: test/e2e/prow
 test/e2e/prow: setup/prow cluster/prepare

@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
+
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
 	"k8s.io/apimachinery/pkg/types"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -118,7 +118,7 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.P
 
 	// create credentials secret
 	sec := buildDefaultRDSSecret(pg)
-	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func(existing runtime.Object) error {
+	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func() error {
 		return nil
 	})
 	if err != nil {
