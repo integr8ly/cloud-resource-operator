@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"time"
+
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	errorUtil "github.com/pkg/errors"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,8 +89,10 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.configMapNamespace,
 		},
 		Data: map[string]string{
-			"postgres": "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
-			"redis":    "{\"development\": {  \"strategy\": {} }}",
+			"postgres":        "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"redis":           "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"smtpcredentials": "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"blobstorage":     "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
 		},
 	}
 }
