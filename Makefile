@@ -1,10 +1,10 @@
 IMAGE_REG=quay.io
 IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
-IMAGE=quay.io/integreatly/cloud-resource-operator:0.1.0
+IMAGE=quay.io/integreatly/cloud-resource-operator:0.2.0
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-VERSION=0.1.0
+VERSION=0.2.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 OPERATOR_SDK_VERSION=0.12.0
 
