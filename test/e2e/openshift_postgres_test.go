@@ -407,6 +407,13 @@ func getBasicTestPostgres(ctx framework.TestCtx) (*v1alpha1.Postgres, string, er
 			},
 			Tier: "development",
 			Type: "workshop",
+			Env: &types2.Env{
+				Name:  "TEST",
+				Value: "test",
+			},
+			Labels: &types2.Labels{
+				ProductName: "testproduct",
+			},
 		},
 	}, namespace, nil
 }

@@ -118,6 +118,13 @@ func getBasicBlobstorage(ctx framework.TestCtx) (*v1alpha1.BlobStorage, string, 
 			},
 			Tier: "development",
 			Type: "workshop",
+			Env: &t1.Env{
+				Name:  "TEST",
+				Value: "test",
+			},
+			Labels: &t1.Labels{
+				ProductName: "testproduct",
+			},
 		},
 	}, namespace, nil
 }

@@ -11,3 +11,9 @@ spec:
   tier: development
   # i want a blob storage for the type managed
   type: managed
+  labels:
+    # label for the product we are installing , subject to change
+    productname: productNameHere
+  env:
+    name: DEFAULT_ORGANIZATION_TAG
+    value: integreatly.org/
