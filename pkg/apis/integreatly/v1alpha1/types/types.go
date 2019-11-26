@@ -1,6 +1,8 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+)
 
 var (
 	PhaseInProgress                StatusPhase   = "in progress"
@@ -18,12 +20,23 @@ type SecretRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+type Env struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type Labels struct {
+	ProductName string `json:"productname"`
+}
+
 // ResourceTypeSpec Represents the basic information required to provision a resource type
 // +k8s:openapi-gen=true
 type ResourceTypeSpec struct {
 	Type      string     `json:"type"`
 	Tier      string     `json:"tier"`
 	SecretRef *SecretRef `json:"secretRef"`
+	Env       *Env       `json:"env"`
+	Labels    *Labels    `json:"labels"`
 }
 
 type StatusPhase string

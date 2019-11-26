@@ -29,6 +29,23 @@ spec:
           type: object
         spec:
           properties:
+            env:
+              properties:
+                name:
+                  type: string
+                value:
+                  type: string
+              required:
+              - name
+              - value
+              type: object
+            labels:
+              properties:
+                productname:
+                  type: string
+              required:
+              - productname
+              type: object
             secretRef:
               properties:
                 name:
@@ -46,6 +63,8 @@ spec:
           - type
           - tier
           - secretRef
+          - env
+          - labels
           type: object
         status:
           properties:

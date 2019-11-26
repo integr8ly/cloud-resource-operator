@@ -78,6 +78,16 @@ func (in *BlobStorageSpec) DeepCopyInto(out *BlobStorageSpec) {
 		*out = new(types.SecretRef)
 		**out = **in
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = new(types.Env)
+		**out = **in
+	}
+	if in.Labels != nil {
+		in, out := &in.Labels, &out.Labels
+		*out = new(types.Labels)
+		**out = **in
+	}
 	return
 }
 
@@ -179,6 +189,16 @@ func (in *PostgresSpec) DeepCopyInto(out *PostgresSpec) {
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
 		*out = new(types.SecretRef)
+		**out = **in
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = new(types.Env)
+		**out = **in
+	}
+	if in.Labels != nil {
+		in, out := &in.Labels, &out.Labels
+		*out = new(types.Labels)
 		**out = **in
 	}
 	return
@@ -284,6 +304,16 @@ func (in *RedisSpec) DeepCopyInto(out *RedisSpec) {
 		*out = new(types.SecretRef)
 		**out = **in
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = new(types.Env)
+		**out = **in
+	}
+	if in.Labels != nil {
+		in, out := &in.Labels, &out.Labels
+		*out = new(types.Labels)
+		**out = **in
+	}
 	return
 }
 
@@ -385,6 +415,16 @@ func (in *SMTPCredentialSetSpec) DeepCopyInto(out *SMTPCredentialSetSpec) {
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
 		*out = new(types.SecretRef)
+		**out = **in
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = new(types.Env)
+		**out = **in
+	}
+	if in.Labels != nil {
+		in, out := &in.Labels, &out.Labels
+		*out = new(types.Labels)
 		**out = **in
 	}
 	return

@@ -156,6 +156,49 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 
+	// Adding tags to s3
+	p.Logger.Infof("bucket %s found, Adding tags to bucket", *bucketCreateCfg.Bucket)
+
+	// get the environment from the CR
+	defaultOrganizationTag := bs.Spec.Env.Value
+
+	// new session but don't need credentials
+	s3svctag := s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(stratCfg.Region)})))
+
+	//get Cluster Id
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	// Tagging input
+	bucketTaggingInput := &s3.PutBucketTaggingInput{
+		Bucket: aws.String(*bucketCreateCfg.Bucket),
+		Tagging: &s3.Tagging{
+			TagSet: []*s3.Tag{
+				{
+					Key:   aws.String(defaultOrganizationTag + "clusterId"),
+					Value: aws.String(clusterId),
+				},
+				{
+					Key:   aws.String(defaultOrganizationTag + "resource-type"),
+					Value: aws.String(bs.Spec.Type),
+				},
+				{
+					Key:   aws.String(defaultOrganizationTag + "resource-name"),
+					Value: aws.String(bs.Name),
+				},
+				{
+					Key:   aws.String(defaultOrganizationTag + "product-name"),
+					Value: aws.String(bs.Spec.Labels.ProductName),
+				},
+			},
+		},
+	}
+
+	// adding the tags to S3
+	_, err = s3svctag.PutBucketTagging(bucketTaggingInput)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to add Tags to S3: %s", err)
+		return nil, msg, errorUtil.Wrapf(err, errMsg)
+	}
+
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
 	return bsi, msg, nil
 }
