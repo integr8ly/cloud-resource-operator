@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -43,6 +44,7 @@ const (
 	DetailsBlobStorageCredentialKeyID     = "credentialKeyID"
 	DetailsBlobStorageCredentialSecretKey = "credentialSecretKey"
 	defaultForceBucketDeletion            = false
+	TagKeyPrefex                          = "integreatly.org/"
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -156,8 +158,65 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 
+	// Adding tags to s3
+	_, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region)
+	if err != nil {
+		return nil, msg, errorUtil.Wrapf(err, string(msg))
+	}
+
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
 	return bsi, msg, nil
+}
+
+func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string) (croType.StatusMessage, error) {
+	p.Logger.Infof("bucket %s found, Adding tags to bucket", bucketName)
+
+	// get the environment from the CR ,
+	defaultOrganizationTag, exists := os.LookupEnv("TAG_KEY_PREFIX")
+	if !exists {
+		defaultOrganizationTag = TagKeyPrefex
+	}
+
+	// new session but don't need credentials
+	s3svctag := s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(stratCfgRegion)})))
+
+	//get Cluster Id
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	// Tagging input
+	if bs.ObjectMeta.Labels["productName"] != "" {
+		bucketTaggingInput := &s3.PutBucketTaggingInput{
+			Bucket: aws.String(bucketName),
+			Tagging: &s3.Tagging{
+				TagSet: []*s3.Tag{
+					{
+						Key:   aws.String(defaultOrganizationTag + "clusterId"),
+						Value: aws.String(clusterId),
+					},
+					{
+						Key:   aws.String(defaultOrganizationTag + "resource-type"),
+						Value: aws.String(bs.Spec.Type),
+					},
+					{
+						Key:   aws.String(defaultOrganizationTag + "resource-name"),
+						Value: aws.String(bs.Name),
+					},
+					{
+						Key:   aws.String(defaultOrganizationTag + "product-name"),
+						Value: aws.String(bs.ObjectMeta.Labels["productName"]),
+					},
+				},
+			},
+		}
+
+		// adding the tags to S3
+		_, err := s3svctag.PutBucketTagging(bucketTaggingInput)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to add Tags to S3: %s", err)
+			logrus.Error(errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+	}
+	return croType.StatusEmpty, nil
 }
 
 // DeleteStorage Delete S3 bucket and credentials to add objects to it

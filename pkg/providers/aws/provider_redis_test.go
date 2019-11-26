@@ -120,6 +120,7 @@ func Test_createRedisCluster(t *testing.T) {
 		r           *v1alpha1.Redis
 		cacheSvc    elasticacheiface.ElastiCacheAPI
 		redisConfig *elasticache.CreateReplicationGroupInput
+		stratCfg    *StrategyConfig
 	}
 	type fields struct {
 		Client            client.Client
@@ -141,6 +142,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -158,6 +160,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -175,6 +178,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -196,6 +200,7 @@ func Test_createRedisCluster(t *testing.T) {
 					CacheNodeType:          aws.String("test"),
 					SnapshotRetentionLimit: aws.Int64(20),
 				},
+				stratCfg: &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -215,7 +220,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.redisConfig)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -358,6 +363,72 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			p := &AWSRedisProvider{}
 			if got := p.GetReconcileTime(tt.args.r); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAWSRedisProvider_TagElasticache(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		CacheSvc          elasticacheiface.ElastiCacheAPI
+	}
+	type args struct {
+		ctx                       context.Context
+		r                         *v1alpha1.Redis
+		stratCfg                  StrategyConfig
+		cacheClusterId            string
+		preferredAvailabilityZone string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "test tags reconcile completes successfully",
+			args: args{
+				ctx:                       context.TODO(),
+				r:                         buildTestRedisCR(),
+				stratCfg:                  StrategyConfig{Region: "test"},
+				cacheClusterId:            "test",
+				preferredAvailabilityZone: "test",
+			},
+			fields: fields{
+				ConfigManager:     &ConfigManagerMock{},
+				CredentialManager: &CredentialManagerMock{},
+				Logger:            testLogger,
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &AWSRedisProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				CacheSvc:          tt.fields.CacheSvc,
+			}
+			got, err := p.TagElasticache(tt.args.ctx, tt.args.r, tt.args.stratCfg, tt.args.cacheClusterId, tt.args.preferredAvailabilityZone)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("TagElasticache() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

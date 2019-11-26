@@ -1,6 +1,8 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+)
 
 var (
 	PhaseInProgress                StatusPhase   = "in progress"

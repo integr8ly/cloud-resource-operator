@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
@@ -193,7 +194,6 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	// rds instance is available
 	// check if found instance and user strategy differs, and modify instance
 	logrus.Info("found existing rds instance")
 	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
@@ -202,6 +202,11 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 			return nil, "failed to modify instance", err
 		}
 		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
+	}
+	// Add Tags to Aws Postgres resources
+	_, err = p.TagRDSPostgres(ctx, cr, foundInstance)
+	if err != nil {
+		return nil, "Failed to add tags to RDS resources", err
 	}
 
 	// return secret information
@@ -212,6 +217,87 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		Database: *foundInstance.DBName,
 		Port:     int(*foundInstance.Endpoint.Port),
 	}}, croType.StatusMessage(fmt.Sprintf("creation successful, aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
+}
+
+// Tags RDS resources
+func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
+	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	// get the environment from the CR
+	defaultOrganizationTag, exists := os.LookupEnv("TAG_KEY_PREFIX")
+	if !exists {
+		defaultOrganizationTag = TagKeyPrefex
+	}
+
+	// new session but don't need credentials
+	// Get the region from AvailabilityZone
+	rdsRegion := *foundInstance.AvailabilityZone
+	rdsRegion = rdsRegion[:(len(rdsRegion))-1]
+	// get provider aws creds so the postgres instance can be deleted
+	rdsSvc := rds.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(rdsRegion),
+	})))
+	//get Cluster Id
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	// Set the Tag values
+	if cr.ObjectMeta.Labels["productName"] != "" {
+		rdsTag := []*rds.Tag{
+			{
+				Key:   aws.String(defaultOrganizationTag + "clusterId"),
+				Value: aws.String(clusterId),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "resource-type"),
+				Value: aws.String(cr.Spec.Type),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "resource-name"),
+				Value: aws.String(cr.Name),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "product-name"),
+				Value: aws.String(cr.ObjectMeta.Labels["productName"]),
+			},
+		}
+
+		inputRdsInstance := &rds.AddTagsToResourceInput{
+			ResourceName: aws.String(*foundInstance.DBInstanceArn),
+			Tags:         rdsTag,
+		}
+
+		// adding tags to rds postgres instance
+		_, err := rdsSvc.AddTagsToResource(inputRdsInstance)
+		if err != nil {
+			msg := "Failed to add Tags to RDS instance"
+			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+
+		}
+
+		// Get a list of Snapshot objects for the DB instance
+		rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
+			DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
+		}
+		rdsSnapshotList, err := rdsSvc.DescribeDBSnapshots(rdsSnapshotAttributeInput)
+		if err != nil {
+			msg := "Can't get Snapshot info"
+			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		}
+		// Adding tags to each DB Snapshots from list on AWS
+		for _, snapshotList := range rdsSnapshotList.DBSnapshots {
+			inputRdsSnapshot := &rds.AddTagsToResourceInput{
+				ResourceName: aws.String(*snapshotList.DBSnapshotArn),
+				Tags:         rdsTag,
+			}
+			// Adding Tags to RDS Snapshot
+			_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
+			if err != nil {
+				msg := "Failed to add Tags to RDS Snapshot"
+				return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			}
+		}
+	}
+
+	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	return croType.StatusEmpty, nil
 }
 
 func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {
