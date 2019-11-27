@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strings"
 	"time"
+
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"k8s.io/client-go/kubernetes"
 
@@ -443,7 +444,7 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 	return []v1.Container{
 		{
 			Name:  ps.Name,
-			Image: "registry.redhat.io/rhscl/postgresql-96-rhel7",
+			Image: "registry.redhat.io/rhscl/postgresql-10-rhel7",
 			Ports: []v1.ContainerPort{
 				{
 					ContainerPort: int32(defaultPostgresPort),
