@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strings"
 	"time"
+
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -329,7 +330,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"deployment": redisDCSelectorName,
+						"deployment": r.Name,
 					},
 				},
 			},
@@ -338,7 +339,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"deployment": redisDCSelectorName,
+					"deployment": r.Name,
 				},
 			},
 			Replicas: int32Ptr(1),
@@ -457,7 +458,7 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"deployment": redisDCSelectorName,
+				"deployment": r.Name,
 			},
 		},
 	}
