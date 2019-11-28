@@ -203,6 +203,9 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		}
 		return nil, "modify instance in progress", nil
 	}
+	// Add Tags to Aws Postgres resources
+	TagAwsPostgresResources(p, ctx, cr, foundInstance)
+	logrus.Infof("Postgres on AWS has reconciled successfully")
 
 	// return secret information
 	return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
@@ -232,6 +235,81 @@ func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Po
 	instanceSvc := createRDSSession(stratCfg, providerCreds)
 
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
+}
+
+func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1alpha1.Postgres, foundInstance *rds.DBInstance) (types2.StatusMessage, error) {
+	// Add Tags to RDS
+	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	// get the environment from the CR
+	defaultOrganizationTag := cr.Spec.Env.Value
+
+	// new session but don't need credentials
+	// Get the region from AvailabilityZone
+	rdsRegion := *foundInstance.AvailabilityZone
+	regionlen := len(rdsRegion)
+	rdsRegion = rdsRegion[:regionlen-1]
+	rdsSvcTag := rds.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(rdsRegion)})))
+	//get Cluster Id
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	// Set the Tag values
+	rdsTag := []*rds.Tag{
+		{
+			Key:   aws.String(defaultOrganizationTag + "clusterId"),
+			Value: aws.String(clusterId),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-type"),
+			Value: aws.String(cr.Spec.Type),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-name"),
+			Value: aws.String(cr.Name),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "product-name"),
+			Value: aws.String(cr.Spec.Labels.ProductName),
+		},
+	}
+
+	inputRdsInstance := &rds.AddTagsToResourceInput{
+		ResourceName: aws.String(*foundInstance.DBInstanceArn),
+		Tags:         rdsTag,
+	}
+
+	// adding tags to rds postgres instance
+	_, err := rdsSvcTag.AddTagsToResource(inputRdsInstance)
+	if err != nil {
+		msg := "Failed to add Tags to RDS instance"
+		return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	// Get a list of Snapshot objects for the DB instance
+	rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
+		DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
+	}
+	rdsSnapshotList, err := rdsSvcTag.DescribeDBSnapshots(rdsSnapshotAttributeInput)
+	if err != nil {
+		logrus.Infof("Can't get Snapshot info : ", err)
+	}
+	// Adding tags to each DB Snapshots from list on AWS
+	for _, snapshotList := range rdsSnapshotList.DBSnapshots {
+		logrus.Infof("Applying Tags to Snapshot ARN : ", *snapshotList.DBSnapshotArn)
+
+		inputRdsSnapshot := &rds.AddTagsToResourceInput{
+			ResourceName: aws.String(*snapshotList.DBSnapshotArn),
+			Tags:         rdsTag,
+		}
+		// Adding Tags to RDS Snapshot
+		_, err = rdsSvcTag.AddTagsToResource(inputRdsSnapshot)
+		if err != nil {
+			msg := "Failed to add Tags to RDS Snapshot"
+			return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+	}
+
+	logrus.Infof("Tags were added successfully to the RDS instance ", *foundInstance.DBInstanceIdentifier)
+	msg := "Tags were added successfully to the RDS instance"
+	return types2.StatusMessage(msg), nil
 }
 
 func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (types2.StatusMessage, error) {
