@@ -61,7 +61,7 @@ $ make cluster/clean
 Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC that the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
 - In the AWS VPC console, create a new peering connection between the two VPCs. This is a two-way communication channel, so only one needs to be created
 - Select the newly created connection, then click `actions > accept request` to accept the peering request
-- Edit the cluster VPC route table. Create a new route that contains the resource VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
+- Edit the cluster VPC route table. Create a new route that contains the resource/default VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
 - Edit the resource VPC's route table. Create a new route that contains the CIDR block of the cluster VPC as the `destination` and the peering connection as the `target`. 
 - Edit the Security Groups associated with each VPC to ensure database and cache traffic can pass between the two VPCs.
 
@@ -127,6 +127,23 @@ $ make test/unit
 - Run code fixer, `make code/fix`
 - Run tests, `make test/unit`
 - Make a PR
+
+
+### Releasing
+
+
+Update the operator version in the following files:
+
+* Update [version/version.go](version/version.go) (`Version = "<version>"`)
+
+* Update `VERSION` and `PREV_VERSION` (the previous version) in the [Makefile](Makefile) 
+
+* Generate a new cluster service version:
+```sh
+make gen/csv
+```
+
+Commit changes and open pull request. When the PR is accepted, create a new release tag.
 
 ### Terminology
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
