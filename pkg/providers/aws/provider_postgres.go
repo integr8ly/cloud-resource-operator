@@ -204,7 +204,10 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, "modify instance in progress", nil
 	}
 	// Add Tags to Aws Postgres resources
-	TagAwsPostgresResources(p, ctx, cr, foundInstance)
+	_, err = TagAwsPostgresResources(p, ctx, cr, foundInstance)
+	if err != nil {
+		return nil, "Failed to add tags to AWS Postgres resources", err
+	}
 	logrus.Infof("Postgres on AWS has reconciled successfully")
 
 	// return secret information
@@ -289,11 +292,11 @@ func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1
 	}
 	rdsSnapshotList, err := rdsSvcTag.DescribeDBSnapshots(rdsSnapshotAttributeInput)
 	if err != nil {
-		logrus.Infof("Can't get Snapshot info : ", err)
+		logrus.Infof("Can't get Snapshot info : %s", err)
 	}
 	// Adding tags to each DB Snapshots from list on AWS
 	for _, snapshotList := range rdsSnapshotList.DBSnapshots {
-		logrus.Infof("Applying Tags to Snapshot ARN : ", *snapshotList.DBSnapshotArn)
+		logrus.Infof("Applying Tags to Snapshot ARN : %s", *snapshotList.DBSnapshotArn)
 
 		inputRdsSnapshot := &rds.AddTagsToResourceInput{
 			ResourceName: aws.String(*snapshotList.DBSnapshotArn),
@@ -307,7 +310,7 @@ func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1
 		}
 	}
 
-	logrus.Infof("Tags were added successfully to the RDS instance ", *foundInstance.DBInstanceIdentifier)
+	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	msg := "Tags were added successfully to the RDS instance"
 	return types2.StatusMessage(msg), nil
 }
