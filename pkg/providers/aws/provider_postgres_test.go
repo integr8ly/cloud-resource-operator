@@ -3,27 +3,23 @@ package aws
 import (
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"reflect"
+	"testing"
 	"time"
 
-	v12 "github.com/openshift/api/config/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/aws/aws-sdk-go/aws"
-
-	v1 "k8s.io/api/core/v1"
-
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"testing"
-
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	//"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	v12 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type mockRdsClient struct {
@@ -56,11 +52,28 @@ func (m *mockRdsClient) DeleteDBInstance(*rds.DeleteDBInstanceInput) (*rds.Delet
 	return &rds.DeleteDBInstanceOutput{}, nil
 }
 
+func (m *mockRdsClient) AddTagsToResource(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+	return &rds.AddTagsToResourceOutput{}, nil
+}
+
+func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+	return &rds.DescribeDBSnapshotsOutput{}, nil
+}
+
 func buildTestPostgresCR() *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
+		},
+		Spec: v1alpha1.PostgresSpec{
+			Env: &types2.Env{
+				Name:  "test",
+				Value: "test",
+			},
+			Labels: &types2.Labels{
+				ProductName: "test",
+			},
 		},
 	}
 }
@@ -93,6 +106,7 @@ func buildDbInstanceGroupPending() []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
 			DBInstanceIdentifier: aws.String("test-id"),
+			AvailabilityZone:     aws.String("test-availabilityZone"),
 			DBInstanceStatus:     aws.String("pending"),
 		},
 	}
@@ -103,6 +117,7 @@ func buildDbInstanceGroupAvailable() []*rds.DBInstance {
 		{
 			DBInstanceIdentifier: aws.String("test-id"),
 			DBInstanceStatus:     aws.String("available"),
+			AvailabilityZone:     aws.String("test-availabilityZone"),
 			DeletionProtection:   aws.Bool(false),
 		},
 	}
@@ -113,6 +128,7 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 		{
 			DBInstanceIdentifier: aws.String("test-id"),
 			DBInstanceStatus:     aws.String("available"),
+			AvailabilityZone:     aws.String("test-availabilityZone"),
 			DeletionProtection:   aws.Bool(true),
 		},
 	}
@@ -168,6 +184,8 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					{
 						DBInstanceIdentifier:  aws.String(testIdentifier),
 						DBInstanceStatus:      aws.String("available"),
+						AvailabilityZone:      aws.String("test-availabilityZone"),
+						DBInstanceArn:         aws.String("arn-test"),
 						DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
 						MasterUsername:        aws.String(defaultAwsPostgresUser),
 						DBName:                aws.String(defaultAwsPostgresDatabase),
@@ -290,7 +308,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    types.StatusMessage
+		want    types2.StatusMessage
 		wantErr bool
 	}{
 		{
@@ -307,7 +325,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage(""),
+			want:    types2.StatusMessage(""),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing unavailable postgres",
@@ -323,7 +341,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("rds instance deletion in progress"),
+			want:    types2.StatusMessage("rds instance deletion in progress"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres",
@@ -339,7 +357,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("deletion started"),
+			want:    types2.StatusMessage("deletion started"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres and deletion protection",
@@ -355,7 +373,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("turning off deletion protection"),
+			want:    types2.StatusMessage("turning off deletion protection"),
 			wantErr: false,
 		},
 	}
@@ -393,7 +411,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: types.PhaseInProgress,
+						Phase: types2.PhaseInProgress,
 					},
 				},
 			},
@@ -404,7 +422,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: v1alpha1.PostgresStatus{
-						Phase: types.PhaseComplete,
+						Phase: types2.PhaseComplete,
 					},
 				},
 			},
@@ -416,6 +434,99 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			p := &AWSPostgresProvider{}
 			if got := p.GetReconcileTime(tt.args.p); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTagAwsPostgresResources(t *testing.T) {
+	scheme, _ := buildTestScheme()
+	type args struct {
+		p      *AWSPostgresProvider
+		ctx    context.Context
+		cr     *v1alpha1.Postgres
+		rdsSvc rdsiface.RDSAPI
+		rdsCfg *rds.CreateDBInstanceInput
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	tests := []struct {
+		name    string
+		args    args
+		fields  fields
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "Test failure to create tags",
+			args: args{
+				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
+					{
+						AvailabilityZone:     aws.String("test-availabilityZone1"),
+						DBInstanceArn:        aws.String("test-arn"),
+						DBInstanceIdentifier: aws.String("testIdentifier"),
+					},
+				},
+				},
+				cr: buildTestPostgresCR(),
+				rdsCfg: &rds.CreateDBInstanceInput{
+					DBInstanceIdentifier: aws.String("testIden"),
+				},
+				//&rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String("testIdentifier")},
+			},
+			wantErr: true,
+			want:    "Failed to add Tags to RDS instance",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+		},
+		{
+			name: "Test create tags",
+			args: args{
+				rdsSvc: &mockRdsClient{
+					dbInstances: []*rds.DBInstance{
+						{
+							AvailabilityZone:     aws.String("test-availabilityZone"),
+							DBInstanceArn:        aws.String("arn-test"),
+							DBInstanceIdentifier: aws.String("testIdentifier"),
+						},
+					},
+				},
+				cr:     buildTestPostgresCR(),
+				rdsCfg: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String("testIdentifier")},
+			},
+			wantErr: false,
+			want:    "Tags were added successfully to the RDS instance",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &AWSPostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := p.TagAwsPostgresResources(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.rdsCfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TagAwsPostgresResources() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("TagAwsPostgresResources() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

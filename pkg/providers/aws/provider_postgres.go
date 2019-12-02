@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -204,11 +205,11 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, "modify instance in progress", nil
 	}
 	// Add Tags to Aws Postgres resources
-	_, err = TagAwsPostgresResources(p, ctx, cr, foundInstance)
+	addedTags, err := p.TagAwsPostgresResources(ctx, cr, rdsSvc, rdsCfg)
 	if err != nil {
-		return nil, "Failed to add tags to AWS Postgres resources", err
+		logrus.Infof("Failed to add tags to AWS Postgres resources %s", err)
 	}
-	logrus.Infof("Postgres on AWS has reconciled successfully")
+	logrus.Infof("Postgres on AWS has reconciled successfully %s", addedTags)
 
 	// return secret information
 	return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
@@ -240,8 +241,28 @@ func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Po
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
 
-func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1alpha1.Postgres, foundInstance *rds.DBInstance) (types2.StatusMessage, error) {
+func (p *AWSPostgresProvider) TagAwsPostgresResources(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (string, error) {
+	// the aws access key can sometimes still not be registered in aws on first try, so loop
+	pi, err := getRDSInstances(rdsSvc)
+	if err != nil {
+		// return nil error so this function can be requeued
+		msg := "error getting replication groups"
+		logrus.Info(msg, err)
+		return msg, err
+	}
+	var foundInstance *rds.DBInstance
+	for _, i := range pi {
+		if *i.DBInstanceIdentifier == *rdsCfg.DBInstanceIdentifier {
+			foundInstance = i
+			break
+		}
+	}
 	// Add Tags to RDS
+	if foundInstance == nil {
+		msg := "Failed to add Tags to RDS instance"
+		err := errors.New("Postgres DB Instance not found")
+		return msg, errorUtil.Wrap(err, msg)
+	}
 	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
 	defaultOrganizationTag := cr.Spec.Env.Value
@@ -251,7 +272,7 @@ func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1
 	rdsRegion := *foundInstance.AvailabilityZone
 	regionlen := len(rdsRegion)
 	rdsRegion = rdsRegion[:regionlen-1]
-	rdsSvcTag := rds.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(rdsRegion)})))
+	//rdsSvcTag := rds.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(rdsRegion)})))
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
 	// Set the Tag values
@@ -280,17 +301,17 @@ func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1
 	}
 
 	// adding tags to rds postgres instance
-	_, err := rdsSvcTag.AddTagsToResource(inputRdsInstance)
+	_, err = rdsSvc.AddTagsToResource(inputRdsInstance)
 	if err != nil {
 		msg := "Failed to add Tags to RDS instance"
-		return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return msg, err
 	}
 
 	// Get a list of Snapshot objects for the DB instance
 	rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
 		DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
 	}
-	rdsSnapshotList, err := rdsSvcTag.DescribeDBSnapshots(rdsSnapshotAttributeInput)
+	rdsSnapshotList, err := rdsSvc.DescribeDBSnapshots(rdsSnapshotAttributeInput)
 	if err != nil {
 		logrus.Infof("Can't get Snapshot info : %s", err)
 	}
@@ -303,16 +324,16 @@ func TagAwsPostgresResources(p *AWSPostgresProvider, ctx context.Context, cr *v1
 			Tags:         rdsTag,
 		}
 		// Adding Tags to RDS Snapshot
-		_, err = rdsSvcTag.AddTagsToResource(inputRdsSnapshot)
+		_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
 		if err != nil {
 			msg := "Failed to add Tags to RDS Snapshot"
-			return types2.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			return msg, err
 		}
 	}
 
 	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	msg := "Tags were added successfully to the RDS instance"
-	return types2.StatusMessage(msg), nil
+	return msg, nil
 }
 
 func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (types2.StatusMessage, error) {
