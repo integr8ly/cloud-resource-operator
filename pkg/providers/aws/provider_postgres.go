@@ -272,7 +272,10 @@ func (p *AWSPostgresProvider) TagAwsPostgresResources(ctx context.Context, cr *v
 	rdsRegion := *foundInstance.AvailabilityZone
 	regionlen := len(rdsRegion)
 	rdsRegion = rdsRegion[:regionlen-1]
-	//rdsSvcTag := rds.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(rdsRegion)})))
+	// get provider aws creds so the postgres instance can be deleted
+	rdsSvc = rds.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(rdsRegion),
+	})))
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
 	// Set the Tag values

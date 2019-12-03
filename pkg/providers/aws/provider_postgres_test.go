@@ -462,7 +462,7 @@ func TestTagAwsPostgresResources(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "Test failure to create tags",
+			name: "Test failure find instance and create Tags",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
 					{
@@ -474,9 +474,8 @@ func TestTagAwsPostgresResources(t *testing.T) {
 				},
 				cr: buildTestPostgresCR(),
 				rdsCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String("testIden"),
+					DBInstanceIdentifier: aws.String("none-existing-instance"),
 				},
-				//&rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String("testIdentifier")},
 			},
 			wantErr: true,
 			want:    "Failed to add Tags to RDS instance",
