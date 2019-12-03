@@ -137,7 +137,8 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 
 	// get the cred secret
 	sec := &v1.Secret{}
-	err = p.Client.Get(ctx, types.NamespacedName{Name: defaultCredentialsSec, Namespace: ps.Namespace}, sec)
+	credentialsSec := fmt.Sprintf("%s-%s", ps.Name, defaultCredentialsSec)
+	err = p.Client.Get(ctx, types.NamespacedName{Name: credentialsSec, Namespace: ps.Namespace}, sec)
 	if err != nil {
 		errMsg := "failed to get postgres creds"
 		return nil, types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -441,6 +442,8 @@ func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 }
 
 func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
+	credentialsSec := fmt.Sprintf("%s-%s", ps.Name, defaultCredentialsSec)
+
 	return []v1.Container{
 		{
 			Name:  ps.Name,
@@ -452,9 +455,9 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 				},
 			},
 			Env: []v1.EnvVar{
-				envVarFromSecret("POSTGRESQL_USER", defaultCredentialsSec, defaultPostgresUserKey),
-				envVarFromSecret("POSTGRESQL_PASSWORD", defaultCredentialsSec, defaultPostgresPasswordKey),
-				envVarFromSecret("POSTGRESQL_DATABASE", defaultCredentialsSec, defaultPostgresDatabaseKey),
+				envVarFromSecret("POSTGRESQL_USER", credentialsSec, defaultPostgresUserKey),
+				envVarFromSecret("POSTGRESQL_PASSWORD", credentialsSec, defaultPostgresPasswordKey),
+				envVarFromSecret("POSTGRESQL_DATABASE", credentialsSec, defaultPostgresDatabaseKey),
 			},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
@@ -504,12 +507,14 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 }
 
 func buildDefaultPostgresSecret(ps *v1alpha1.Postgres, password string) *v1.Secret {
+	credentialsSec := fmt.Sprintf("%s-%s", ps.Name, defaultCredentialsSec)
+
 	if password == "" {
 		password = defaultPostgresPassword
 	}
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultCredentialsSec,
+			Name:      credentialsSec,
 			Namespace: ps.Namespace,
 		},
 		Data: map[string][]byte{
