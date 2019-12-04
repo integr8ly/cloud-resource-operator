@@ -15,7 +15,7 @@ spec:
       serviceAccountName: cloud-resource-operator
       containers:
         - name: cloud-resource-operator
-          image: quay.io/integreatly/cloud-resource-operator:0.3.0
+          image: quay.io/integreatly/cloud-resource-operator:0.4.0
           command:
           - cloud-resource-operator
           imagePullPolicy: Always
