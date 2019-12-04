@@ -3,10 +3,11 @@ package openshift
 import (
 	"context"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 	"time"
+
+	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -105,7 +106,7 @@ func buildTestCredsSecret() *v1.Secret {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      defaultCredentialsSec,
+			Name:      fmt.Sprintf("%s-%s", testPostgresName, defaultCredentialsSec),
 			Namespace: testPostgresNamespace,
 		},
 		Data: map[string][]byte{
@@ -354,7 +355,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 			},
 			getTestableSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
 				sec := &v1.Secret{}
-				err := c.Get(ctx, types.NamespacedName{Name: defaultCredentialsSec, Namespace: testPostgresNamespace}, sec)
+				err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", testPostgresName, defaultCredentialsSec), Namespace: testPostgresNamespace}, sec)
 				return sec.StringData, err
 			},
 			wantErr: false,
