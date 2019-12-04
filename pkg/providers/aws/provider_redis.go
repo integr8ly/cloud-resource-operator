@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
 
@@ -158,6 +159,56 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 		return nil, "modify elasticache cluster in progress", nil
 	}
 
+	// Add Tags to AWS Elasticache
+	logrus.Infof("Found Cache: %s", foundCache)
+	_, _, stratCfg, err := p.getElasticacheConfig(ctx, r)
+	cacheSvcTag := elasticache.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(stratCfg.Region)})))
+	// need to loop through each redis instance
+	cacheInstance := *foundCache.NodeGroups[0]
+	for _, cache := range cacheInstance.NodeGroupMembers {
+
+		cacheRegion := *cache.PreferredAvailabilityZone
+		regionlen := len(cacheRegion)
+		cacheRegion = cacheRegion[:regionlen-1]
+		cacheClusterId := *cache.CacheClusterId
+		// get the account number
+		svc := sts.New(session.New())
+		inputSts := &sts.GetCallerIdentityInput{}
+		id, err := svc.GetCallerIdentity(inputSts)
+		accountId := *id.Account
+		// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
+		arn := "arn:aws:elasticache:" + cacheRegion + ":" + accountId + ":cluster:" + cacheClusterId
+
+		// Set the Tag values
+		defaultOrganizationTag := r.Spec.Env.Value
+		clusterId, _ := resources.GetClusterId(ctx, p.Client)
+		cacheTag := []*elasticache.Tag{
+			{
+				Key:   aws.String(defaultOrganizationTag + "clusterId"),
+				Value: aws.String(clusterId),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "resource-type"),
+				Value: aws.String(r.Spec.Type),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "resource-name"),
+				Value: aws.String(r.Name),
+			},
+			{
+				Key:   aws.String(defaultOrganizationTag + "product-name"),
+				Value: aws.String(r.Spec.Labels.ProductName),
+			},
+		}
+		input := &elasticache.AddTagsToResourceInput{
+			ResourceName: aws.String(arn),
+			Tags:         cacheTag,
+		}
+		_, err = cacheSvcTag.AddTagsToResource(input)
+		if err != nil {
+			logrus.Errorf("Failed to add tags to AWS Elasticache : %s", err)
+		}
+	}
 	// return secret information
 	primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
 	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
