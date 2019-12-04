@@ -135,80 +135,71 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 }
 
 func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (types2.StatusMessage, error) {
-	// check deployment status
-	dpl := &appsv1.Deployment{}
-	err := p.Client.Get(ctx, types.NamespacedName{Name: r.Name, Namespace: r.Namespace}, dpl)
-	if err != nil {
-		if k8serr.IsNotFound(err) {
-			return "deletion successful", nil
-		}
-		errMsg := "failed to get deployment"
+	// delete service
+	p.Logger.Info("Deleting redis service")
+	svc := &apiv1.Service{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      r.Name,
+			Namespace: r.Namespace,
+		},
+	}
+	err := p.Client.Delete(ctx, svc)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete service"
 		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	for _, s := range dpl.Status.Conditions {
-		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
-			// delete service
-			p.Logger.Info("Deleting redis service")
-			svc := &apiv1.Service{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      r.Name,
-					Namespace: r.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, svc)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete service"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
 
-			// delete pvc
-			p.Logger.Info("Deleting redis persistent volume claim")
-			pvc := &apiv1.PersistentVolumeClaim{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      r.Name,
-					Namespace: r.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, pvc)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete persistent volume claim"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// delete config map
-			p.Logger.Info("Deleting redis configmap")
-			cm := &apiv1.ConfigMap{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      redisConfigMapName,
-					Namespace: r.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, cm)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete configmap"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// clean up objects
-			p.Logger.Info("Deleting redis deployment")
-			err = p.Client.Delete(ctx, dpl)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete deployment"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// remove the finalizer added by the provider
-			p.Logger.Info("Removing finalizer")
-			resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
-			if err := p.Client.Update(ctx, r); err != nil {
-				errMsg := "failed to update instance as part of finalizer reconcile"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			p.Logger.Infof("deletion handler for redis %s in namespace %s finished successfully", r.Name, r.Namespace)
-		}
+	// delete pvc
+	p.Logger.Info("Deleting redis persistent volume claim")
+	pvc := &apiv1.PersistentVolumeClaim{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      r.Name,
+			Namespace: r.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, pvc)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete persistent volume claim"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
+	// delete config map
+	p.Logger.Info("Deleting redis configmap")
+	cm := &apiv1.ConfigMap{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      redisConfigMapName,
+			Namespace: r.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, cm)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete configmap"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// clean up objects
+	p.Logger.Info("Deleting redis deployment")
+	dpl := &appsv1.Deployment{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      r.Name,
+			Namespace: r.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, dpl)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete deployment"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// remove the finalizer added by the provider
+	p.Logger.Info("Removing finalizer")
+	resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
+	if err := p.Client.Update(ctx, r); err != nil {
+		errMsg := "failed to update instance as part of finalizer reconcile"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	p.Logger.Infof("deletion handler for redis %s in namespace %s finished successfully", r.Name, r.Namespace)
 	return "deletion in progress", nil
 }
 
