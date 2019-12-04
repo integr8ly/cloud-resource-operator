@@ -178,81 +178,71 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 }
 
 func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (types2.StatusMessage, error) {
-	// check deployment status
-	dpl := &appsv1.Deployment{}
-	err := p.Client.Get(ctx, types.NamespacedName{Name: ps.Name, Namespace: ps.Namespace}, dpl)
-	if err != nil {
-		if k8serr.IsNotFound(err) {
-			return types2.StatusEmpty, nil
-		}
-		errMsg := "failed to get postgres deployment"
+	// delete service
+	p.Logger.Info("Deleting postgres service")
+	svc := &v1.Service{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      ps.Name,
+			Namespace: ps.Namespace,
+		},
+	}
+	err := p.Client.Delete(ctx, svc)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete postgres service"
 		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	for _, s := range dpl.Status.Conditions {
-		if s.Type == appsv1.DeploymentAvailable && s.Status == "True" {
-			// delete service
-			p.Logger.Info("Deleting postgres service")
-			svc := &v1.Service{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      ps.Name,
-					Namespace: ps.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, svc)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete postgres service"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// delete pvc
-			p.Logger.Info("Deleting postgres persistent volume claim")
-			pvc := &v1.PersistentVolumeClaim{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      ps.Name,
-					Namespace: ps.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, pvc)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete postgres persistent volume claim"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// delete secret
-			p.Logger.Info("Deleting postgres secret")
-			sec := &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      defaultCredentialsSec,
-					Namespace: ps.Namespace,
-				},
-			}
-			err = p.Client.Delete(ctx, sec)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to deleted postgres secrets"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// clean up objects
-			p.Logger.Info("Deleting postgres deployment")
-			err = p.Client.Delete(ctx, dpl)
-			if err != nil && !k8serr.IsNotFound(err) {
-				errMsg := "failed to delete postgres deployment"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			// remove the finalizer added by the provider
-			p.Logger.Info("Removing postgres finalizer")
-			resources.RemoveFinalizer(&ps.ObjectMeta, DefaultFinalizer)
-			if err := p.Client.Update(ctx, ps); err != nil {
-				errMsg := "failed to update instance as part of the postgres finalizer reconcile"
-				return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-
-			p.Logger.Infof("deletion handler for postgres %s in namespace %s finished successfully", ps.Name, ps.Namespace)
-		}
+	// delete pvc
+	p.Logger.Info("Deleting postgres persistent volume claim")
+	pvc := &v1.PersistentVolumeClaim{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      ps.Name,
+			Namespace: ps.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, pvc)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete postgres persistent volume claim"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
+	// delete secret
+	p.Logger.Info("Deleting postgres secret")
+	sec := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultCredentialsSec,
+			Namespace: ps.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, sec)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to deleted postgres secrets"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// clean up objects
+	p.Logger.Info("Deleting postgres deployment")
+	dpl := &appsv1.Deployment{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      ps.Name,
+			Namespace: ps.Namespace,
+		},
+	}
+	err = p.Client.Delete(ctx, dpl)
+	if err != nil && !k8serr.IsNotFound(err) {
+		errMsg := "failed to delete postgres deployment"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// remove the finalizer added by the provider
+	p.Logger.Info("Removing postgres finalizer")
+	resources.RemoveFinalizer(&ps.ObjectMeta, DefaultFinalizer)
+	if err := p.Client.Update(ctx, ps); err != nil {
+		errMsg := "failed to update instance as part of the postgres finalizer reconcile"
+		return types2.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	p.Logger.Infof("deletion handler for postgres %s in namespace %s finished successfully", ps.Name, ps.Namespace)
 	return "deletion in progress", nil
 }
 
