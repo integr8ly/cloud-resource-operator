@@ -341,6 +341,13 @@ func getBasicTestRedis(ctx framework.TestCtx) (*v1alpha1.Redis, string, error) {
 			},
 			Tier: "development",
 			Type: "workshop",
+			Env: &types2.Env{
+				Name:  "DEFAULT_ORGANIZATION_TAG",
+				Value: "integreatly.org/",
+			},
+			Labels: &types2.Labels{
+				ProductName: "productname",
+			},
 		},
 	}, namespace, nil
 }

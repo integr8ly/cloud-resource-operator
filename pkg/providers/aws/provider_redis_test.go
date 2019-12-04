@@ -69,6 +69,16 @@ func buildTestRedisCR() *v1alpha1.Redis {
 			Name:      "test",
 			Namespace: "test",
 		},
+		Spec: v1alpha1.RedisSpec{
+			Tier: "test",
+			Env: &types.Env{
+				Name:  "test",
+				Value: "test",
+			},
+			Labels: &types.Labels{
+				ProductName: "test",
+			},
+		},
 	}
 }
 
@@ -120,6 +130,7 @@ func Test_createRedisCluster(t *testing.T) {
 		r           *v1alpha1.Redis
 		cacheSvc    elasticacheiface.ElastiCacheAPI
 		redisConfig *elasticache.CreateReplicationGroupInput
+		stratCfg    *StrategyConfig
 	}
 	type fields struct {
 		Client            client.Client
@@ -141,6 +152,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -158,6 +170,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -175,6 +188,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:    &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -196,6 +210,7 @@ func Test_createRedisCluster(t *testing.T) {
 					CacheNodeType:          aws.String("test"),
 					SnapshotRetentionLimit: aws.Int64(20),
 				},
+				stratCfg: &StrategyConfig{Region: "test"},
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -215,7 +230,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.redisConfig)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

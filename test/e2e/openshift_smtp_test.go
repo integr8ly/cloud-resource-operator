@@ -119,6 +119,13 @@ func getBasicSMTP(ctx framework.TestCtx) (*v1alpha1.SMTPCredentialSet, string, e
 			},
 			Tier: "development",
 			Type: "workshop",
+			Env: &t1.Env{
+				Name:  "DEFAULT_ORGANIZATION_TAG",
+				Value: "integreatly.org/",
+			},
+			Labels: &t1.Labels{
+				ProductName: "productname",
+			},
 		},
 	}, namespace, nil
 }

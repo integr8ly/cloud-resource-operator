@@ -104,6 +104,22 @@ spec:
   type: managed
 ```
 
+## Resource tagging
+Postgres, Redis and Blobstorage resources are tagged with the following key value pairs
+
+```bash
+integreatly.org/clusterId: #clusterid
+integreatly.org/product-name: #rhmi component product name
+integreatly.org/resource-type: #managed/workshop 
+integreatly.org/resource-name: #postgres/redis/blobsorage
+```
+
+AWS resources can be queried via the aws cli with the cluster id as in the following example
+```bash
+# clusterid aucunnin-ch5dc
+aws resourcegroupstaggingapi get-resources --tag-filters Key=integreatly.org/clusterId,Values=aucunnin-ch5dc | jq
+```
+
 ## Development
 
 ### Contributing

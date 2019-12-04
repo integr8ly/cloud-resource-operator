@@ -10,4 +10,10 @@ spec:
   # i want a redis storage of a development-level tier
   tier: development
   # i want a redis storage for the type workshop
-  type: workshop
+  type: managed
+  labels:
+    # label for the product we are installing , subject to change
+    productname: productNameHere
+  env:
+    name: DEFAULT_ORGANIZATION_TAG
+    value: integreatly.org/
