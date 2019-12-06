@@ -28,6 +28,7 @@ Prerequisites:
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
 
+major change
 Ensure you are running at least `Go 1.13`.
 ```shell script
 $ go version
