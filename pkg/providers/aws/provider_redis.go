@@ -208,13 +208,24 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 		// add tags
 		_, err = cacheSvcTag.AddTagsToResource(input)
 
-		//TODO when snapshots are created add tags to them
-		//inputDescirbe := &elasticache.DescribeSnapshotsInput{
-		//	CacheClusterId:      aws.String(cacheClusterId),
-		//}
-		//snapshotList, err := cacheSvcTag.DescribeSnapshots(inputDescirbe)
-		//logrus.Infof("Snapshots List : %s", snapshotList)
+		//When snapshots are created add tags to them
+		inputDescirbe := &elasticache.DescribeSnapshotsInput{
+			CacheClusterId: aws.String(cacheClusterId),
+		}
+		snapshotList, err := cacheSvcTag.DescribeSnapshots(inputDescirbe)
+		if snapshotList.Snapshots != nil {
+			for _, snapshot := range snapshotList.Snapshots {
+				snapshotArn := "arn:aws:elasticache:" + cacheRegion + ":" + accountId + ":snapshot:" + *snapshot.SnapshotName
+				logrus.Infof("Snapshots name : %s", *snapshot.SnapshotName)
+				snapshotInput := &elasticache.AddTagsToResourceInput{
+					ResourceName: aws.String(snapshotArn),
+					Tags:         cacheTag,
+				}
+				// add tags
+				_, err = cacheSvcTag.AddTagsToResource(snapshotInput)
 
+			}
+		}
 		if err != nil {
 			logrus.Errorf("Failed to add tags to AWS Elasticache : %s", err)
 		}
@@ -410,7 +421,7 @@ func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
-	if elasticacheDeleteConfig.FinalSnapshotIdentifier != nil && *elasticacheDeleteConfig.FinalSnapshotIdentifier == "" {
+	if elasticacheDeleteConfig.FinalSnapshotIdentifier == nil {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
 	}
 	return nil
