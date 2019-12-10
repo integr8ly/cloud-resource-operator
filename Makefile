@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.2.0
-VERSION=0.3.0
+PREV_VERSION=0.3.0
+VERSION=0.4.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 OPERATOR_SDK_VERSION=0.12.0
 
@@ -37,7 +37,7 @@ code/gen:
 .PHONY: gen/csv
 gen/csv:
 	sed -i 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:$(VERSION)/g' deploy/operator.yaml
-	@operator-sdk olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel 
+	@operator-sdk olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel
 	@sed -i 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml
 	
 .PHONY: code/fix
