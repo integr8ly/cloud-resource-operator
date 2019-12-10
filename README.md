@@ -59,11 +59,34 @@ $ make cluster/clean
 
 ## VPC Peering 
 Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC that the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
-- In the AWS VPC console, create a new peering connection between the two VPCs. This is a two-way communication channel, so only one needs to be created
-- Select the newly created connection, then click `actions > accept request` to accept the peering request
-- Edit the cluster VPC route table. Create a new route that contains the resource/default VPC's CIDR block as the `destination` and the newly created peering connection as the `target`
-- Edit the resource VPC's route table. Create a new route that contains the CIDR block of the cluster VPC as the `destination` and the peering connection as the `target`. 
-- Edit the Security Groups associated with each VPC to ensure database and cache traffic can pass between the two VPCs.
+1. Create a new peering connection between the two VPCs.
+  - Go to `VPC` > `Peering Connections`
+  - Click on `Create Peering Connection`
+    - **NOTE**: This is a two-way communication channel so only one needs to be created.
+  - Select the newly created connection, then click `Actions` > `Accept Request` to accept the peering request.
+2. Edit your cluster's VPC route table
+  - Go to `VPC` > `Your VPCs`
+  - Find the VPC your cluster is using and click on its route table under the heading `Main Route Table`
+    - Your cluster VPC name is usually in a format of `<cluster-name>-<uid>-vpc`
+  - Select the cluster route table and click on `Action` > `Edit routes`
+  - Add a new route with the following details:
+    ```
+    Destination: <resource VPC CIDR block>
+    Target: <newly created peering connection>
+    ```
+  - Click on `Save routes`
+3. Edit the resource VPC route table
+  - Go to `VPC` > `Your VPCs`
+  - Find the VPC where the AWS resources are provisioned in and click on its route table under the heading `Main Route Table`
+    - The name of this VPC is usually empty or named as `default`
+  - Select the cluster route table and click on `Action` > `Edit routes`
+  - Add a new route with the following details:
+    ```
+    Destination: <your cluster's VPC CIDR block>
+    Target: <newly created peering connection>
+    ```
+  - Click on `Save routes`
+4. Edit the Security Groups associated with the resource VPC to ensure database and cache traffic can pass between the two VPCs.
 
 The two VPCs should now be able to communicate with each other. 
 
