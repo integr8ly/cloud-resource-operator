@@ -26,6 +26,19 @@ build:
 run:
 	RECTIME=30 operator-sdk up local --namespace=""
 
+.PHONY: setup/service_account
+setup/service_account:
+	@oc replace --force -f deploy/role.yaml -n $(NAMESPACE)
+	@oc replace --force -f deploy/cluster_role.yaml -n $(NAMESPACE)
+	@oc replace --force -f deploy/service_account.yaml -n $(NAMESPACE)
+	@oc replace --force -f deploy/role_binding.yaml -n $(NAMESPACE)
+	@cat deploy/role_binding.yaml | sed "s/namespace: cloud-resource/namespace: $(NAMESPACE)/g" | oc replace --force -f -
+
+.PHONY: code/run/service_account
+code/run/service_account: setup/service_account
+	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE})
+	@operator-sdk up local --namespace=$(NAMESPACE)
+
 .PHONY: code/gen
 code/gen:
 	@echo $(OPERATOR_SDK_OS)
