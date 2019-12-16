@@ -90,6 +90,11 @@ Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC)
 
 The two VPCs should now be able to communicate with each other. 
 
+## Skip Create
+The cloud resource operator continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  
+
+There can be circumstances where a provisioned resource would need to be altered. If this is the case, add `skipCreate: true` to the resources CR `spec`. This will cause the operator to skip creating or updating the resource. 
+
 ## Via the Operator Catalog
 
 ***In development***
