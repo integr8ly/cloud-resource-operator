@@ -81,7 +81,7 @@ type ReconcileBlobStorage struct {
 }
 
 func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling BlobStorage")
+	r.logger.Info("reconciling BlobStorage")
 	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
@@ -121,7 +121,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
-			r.logger.Info("Waiting on blob storage to successfully delete")
+			r.logger.Info("waiting on blob storage to successfully delete")
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg.WrapError(err)); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -137,7 +137,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 			return reconcile.Result{}, err
 		}
 		if bsi == nil {
-			r.logger.Info("Secret data is still reconciling, blob storage is nil")
+			r.logger.Info("secret data is still reconciling, blob storage is nil")
 			instance.Status.SecretRef = &types.SecretRef{}
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err

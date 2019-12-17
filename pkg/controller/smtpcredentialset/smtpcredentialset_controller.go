@@ -82,7 +82,7 @@ type ReconcileSMTPCredentialSet struct {
 // Reconcile reads that state of the cluster for a SMTPCredentials object and makes changes based on the state read
 // and what is in the SMTPCredentials.Spec
 func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling SMTPCredentials")
+	r.logger.Info("reconciling SMTPCredentials")
 	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
@@ -125,7 +125,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to run delete handler for smtp credentials instance %s", instance.Name)
 			}
 
-			r.logger.Infof("Waiting for SMTP credentials to successfully delete")
+			r.logger.Infof("waiting for SMTP credentials to successfully delete")
 			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}

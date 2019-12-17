@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/sirupsen/logrus"
@@ -28,12 +29,11 @@ import (
 const (
 	redisProviderName = "aws-elasticache"
 	// default create params
-	defaultCacheNodeType      = "cache.t2.micro"
-	defaultEngineVersion      = "3.2.10"
-	defaultDescription        = "A Redis replication group"
-	defaultNumCacheClusters   = 2
-	defaultSnapshotRetention  = 30
-	NoFinalSnapshotIdentifier = ""
+	defaultCacheNodeType     = "cache.t2.micro"
+	defaultEngineVersion     = "3.2.10"
+	defaultDescription       = "A Redis replication group"
+	defaultNumCacheClusters  = 2
+	defaultSnapshotRetention = 30
 )
 
 var _ providers.RedisProvider = (*AWSRedisProvider)(nil)

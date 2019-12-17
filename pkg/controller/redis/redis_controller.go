@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -92,7 +93,7 @@ type ReconcileRedis struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling Redis")
+	r.logger.Info("reconciling Redis")
 	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
@@ -134,8 +135,17 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
 			}
 
-			r.logger.Info("Waiting for redis cluster to successfully delete")
+			r.logger.Info("waiting for redis cluster to successfully delete")
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
+		}
+
+		// handle skip create
+		if instance.Spec.SkipCreate {
+			r.logger.Info("skipCreate found, skipping redis reconcile")
+			if err := resources.UpdatePhase(ctx, r.client, instance, types.PhasePaused, types.StatusSkipCreate); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -152,7 +162,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		}
 		if redis == nil {
 			instance.Status.SecretRef = &types.SecretRef{}
-			r.logger.Info("Waiting for redis cluster to become available")
+			r.logger.Info("waiting for redis cluster to become available")
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}

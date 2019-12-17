@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -102,7 +103,7 @@ type ReconcilePostgres struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling Postgres")
+	r.logger.Info("reconciling Postgres")
 	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
@@ -143,8 +144,17 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider-specific storage deletion")
 			}
 
-			r.logger.Info("Waiting on Postgres to successfully delete")
+			r.logger.Info("waiting on Postgres to successfully delete")
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
+		}
+
+		// handle skip create
+		if instance.Spec.SkipCreate {
+			r.logger.Info("skipCreate found, skipping postgres reconcile")
+			if err := resources.UpdatePhase(ctx, r.client, instance, types.PhasePaused, types.StatusSkipCreate); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -160,7 +170,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, err
 		}
 		if ps == nil {
-			r.logger.Info("Secret data is still reconciling, postgres instance is nil")
+			r.logger.Info("secret data is still reconciling, postgres instance is nil")
 			instance.Status.SecretRef = &types.SecretRef{}
 			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
