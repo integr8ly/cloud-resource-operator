@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -44,7 +44,7 @@ func (b BlobStorageProvider) GetReconcileTime(bs *v1alpha1.BlobStorage) time.Dur
 	return time.Second * 10
 }
 
-func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, types.StatusMessage, error) {
+func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, croType.StatusMessage, error) {
 	// default to an empty s3 set of credentials for now. in the future. this should determine the cloud provider being
 	// used by checking the infrastructure cr.
 	dd := &aws.BlobStorageDeploymentDetails{
@@ -58,7 +58,7 @@ func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Blo
 		bs.Spec.SecretRef.Namespace = bs.Namespace
 	}
 
-	if bs.Status.Phase != types.PhaseComplete || bs.Status.SecretRef.Name == "" || bs.Status.SecretRef.Namespace == "" {
+	if bs.Status.Phase != croType.PhaseComplete || bs.Status.SecretRef.Name == "" || bs.Status.SecretRef.Namespace == "" {
 		return &providers.BlobStorageInstance{
 			DeploymentDetails: dd,
 		}, "reconcile complete", nil
@@ -78,6 +78,6 @@ func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Blo
 	}, "reconcile complete", nil
 }
 
-func (b BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (types.StatusMessage, error) {
+func (b BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (croType.StatusMessage, error) {
 	return "deletion complete", nil
 }

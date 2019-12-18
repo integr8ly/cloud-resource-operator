@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
@@ -57,7 +57,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource Redis
-	err = c.Watch(&source.Kind{Type: &integreatlyv1alpha1.Redis{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1alpha1.Redis{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner Redis
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &integreatlyv1alpha1.Redis{},
+		OwnerType:    &v1alpha1.Redis{},
 	})
 	if err != nil {
 		return err
@@ -98,7 +98,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.client)
 
 	// Fetch the Redis instance
-	instance := &integreatlyv1alpha1.Redis{}
+	instance := &v1alpha1.Redis{}
 	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -113,7 +113,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 
 	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, instance.Spec.Type)
 	if err != nil {
-		if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, types.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
@@ -129,14 +129,14 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		if instance.GetDeletionTimestamp() != nil {
 			msg, err := p.DeleteRedis(ctx, instance)
 			if err != nil {
-				if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+				if updateErr := resources.UpdatePhase(ctx, r.client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 					return reconcile.Result{}, updateErr
 				}
 				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to perform provider specific cluster deletion")
 			}
 
 			r.logger.Info("waiting for redis cluster to successfully delete")
-			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseDeleteInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, croType.PhaseDeleteInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -145,7 +145,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		// handle skip create
 		if instance.Spec.SkipCreate {
 			r.logger.Info("skipCreate found, skipping redis reconcile")
-			if err := resources.UpdatePhase(ctx, r.client, instance, types.PhasePaused, types.StatusSkipCreate); err != nil {
+			if err := resources.UpdatePhase(ctx, r.client, instance, croType.PhasePaused, croType.StatusSkipCreate); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -154,16 +154,16 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		// handle creation of redis and apply any finalizers to instance required for deletion
 		redis, msg, err := p.CreateRedis(ctx, instance)
 		if err != nil {
-			instance.Status.SecretRef = &types.SecretRef{}
-			if updateErr := resources.UpdatePhase(ctx, r.client, instance, types.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+			instance.Status.SecretRef = &croType.SecretRef{}
+			if updateErr := resources.UpdatePhase(ctx, r.client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
 				return reconcile.Result{}, updateErr
 			}
 			return reconcile.Result{}, err
 		}
 		if redis == nil {
-			instance.Status.SecretRef = &types.SecretRef{}
+			instance.Status.SecretRef = &croType.SecretRef{}
 			r.logger.Info("waiting for redis cluster to become available")
-			if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, msg); err != nil {
+			if err = resources.UpdatePhase(ctx, r.client, instance, croType.PhaseInProgress, msg); err != nil {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
@@ -175,7 +175,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 		}
 
 		// update the redis custom resource
-		instance.Status.Phase = types.PhaseComplete
+		instance.Status.Phase = croType.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
 		instance.Status.Strategy = stratMap.Redis
@@ -187,7 +187,7 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 	}
 
 	// unsupported strategy
-	if err = resources.UpdatePhase(ctx, r.client, instance, types.PhaseInProgress, types.StatusUnsupportedType.WrapError(err)); err != nil {
+	if err = resources.UpdatePhase(ctx, r.client, instance, croType.PhaseInProgress, croType.StatusUnsupportedType.WrapError(err)); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Redis))

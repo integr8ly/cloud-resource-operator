@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strconv"
 	"time"
 
@@ -83,19 +83,19 @@ func (p *SMTPCredentialProvider) SupportsStrategy(d string) bool {
 }
 
 func (p *SMTPCredentialProvider) GetReconcileTime(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration {
-	if smtpCreds.Status.Phase != types.PhaseComplete {
+	if smtpCreds.Status.Phase != croType.PhaseComplete {
 		return time.Second * 30
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, types.StatusMessage, error) {
+func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, croType.StatusMessage, error) {
 	p.Logger.Infof("creating smtp credential instance %s via aws ses", smtpCreds.Name)
 
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, smtpCreds, DefaultFinalizer); err != nil {
 		errMsg := "failed to set finalizer"
-		return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// retrieve deployment strategy for provided tier
@@ -103,7 +103,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	stratCfg, err := p.ConfigManager.ReadSMTPCredentialSetStrategy(ctx, smtpCreds.Spec.Tier)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to read deployment strategy for smtp credential instance %s", smtpCreds.Name)
-		return nil, types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	awsRegion := stratCfg.Region
 	if awsRegion == "" {
@@ -112,7 +112,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	sesSMTPHost := p.ConfigManager.GetDefaultRegionSMTPServerMapping()[awsRegion]
 	if sesSMTPHost == "" {
 		errMsg := fmt.Sprintf("unsupported aws ses smtp region %s", sesSMTPHost)
-		return nil, types.StatusMessage(errMsg), errorUtil.New(errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 	}
 
 	// create smtp credentials from generated iam role
@@ -120,19 +120,19 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	credSecName, err := buildInfraNameFromObject(ctx, p.Client, smtpCreds.ObjectMeta, 40)
 	if err != nil {
 		msg := "failed to generate smtp credentials secret name"
-		return nil, types.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 	sendMailCreds, err := p.CredentialManager.ReconcileSESCredentials(ctx, credSecName, smtpCreds.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create aws ses credentials request for smtp credentials instance %s", smtpCreds.Name)
-		return nil, types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	p.Logger.Info("creating smtp credentials from created iam role")
 	smtpPass, err := getSMTPPasswordFromAWSSecret(sendMailCreds.SecretAccessKey)
 	if err != nil {
 		errMsg := "failed to create smtp credentials from aws iam role"
-		return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	// hardcoded settings based on https://docs.aws.amazon.com/ses/latest/DeveloperGuide/configure-email-client.html
 	smtpCredsInst := &providers.SMTPCredentialSetInstance{
@@ -149,7 +149,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	return smtpCredsInst, "creation successful", nil
 }
 
-func (p *SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (types.StatusMessage, error) {
+func (p *SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (croType.StatusMessage, error) {
 	// remove the credentials request created by the provider
 	endUserCredsReq := &v1.CredentialsRequest{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -159,7 +159,7 @@ func (p *SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtp
 	}
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil && !errors.IsNotFound(err) {
 		errMsg := fmt.Sprintf("failed to delete credential request %s", smtpCreds.Name)
-		return types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// remove the finalizer added by the provider
@@ -167,7 +167,7 @@ func (p *SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtp
 	resources.RemoveFinalizer(&smtpCreds.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, smtpCreds); err != nil {
 		errMsg := fmt.Sprintf("failed to update instance %s as part of finalizer reconcile", smtpCreds.Name)
-		return types.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	p.Logger.Infof("deletion handler for smtp credentials %s in namespace %s finished successfully", smtpCreds.Name, smtpCreds.Namespace)
 	return "deletion complete", nil
