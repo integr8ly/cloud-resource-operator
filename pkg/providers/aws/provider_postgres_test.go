@@ -323,7 +323,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("rds instance deletion in progress"),
+			want:    types.StatusMessage("delete detected, deleteDBInstance() in progress, current aws rds status is pending"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres",
@@ -339,7 +339,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("deletion started"),
+			want:    types.StatusMessage("delete detected, deleteDBInstance() started"),
 			wantErr: false,
 		}, {
 			name: "test successful delete with existing available postgres and deletion protection",
@@ -355,7 +355,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    types.StatusMessage("turning off deletion protection"),
+			want:    types.StatusMessage("deletion protection detected, modifyDBInstance() in progress, current aws rds status is available"),
 			wantErr: false,
 		},
 	}

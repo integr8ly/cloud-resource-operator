@@ -9,5 +9,5 @@ spec:
     name: example-blobstorage-sec
   # i want a blob storage of a development-level tier
   tier: development
-  # i want a blob storage for the type managed
-  type: managed
+  # the type i want for blob storage
+  type: REPLACE_ME

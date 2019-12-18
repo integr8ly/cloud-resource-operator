@@ -3,7 +3,7 @@ package openshift
 import (
 	"context"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 
@@ -49,7 +49,7 @@ func (s SMTPCredentialProvider) GetReconcileTime(smtpCreds *v1alpha1.SMTPCredent
 	return time.Second * 10
 }
 
-func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, types.StatusMessage, error) {
+func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*providers.SMTPCredentialSetInstance, croType.StatusMessage, error) {
 	dd := &aws.SMTPCredentialSetDetails{
 		Username: varPlaceholder,
 		Password: varPlaceholder,
@@ -62,7 +62,7 @@ func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpC
 		smtpCreds.Spec.SecretRef.Namespace = smtpCreds.Namespace
 	}
 
-	if smtpCreds.Status.Phase != types.PhaseComplete || smtpCreds.Status.SecretRef.Name == "" || smtpCreds.Status.SecretRef.Namespace == "" {
+	if smtpCreds.Status.Phase != croType.PhaseComplete || smtpCreds.Status.SecretRef.Name == "" || smtpCreds.Status.SecretRef.Namespace == "" {
 		return &providers.SMTPCredentialSetInstance{
 			DeploymentDetails: dd,
 		}, "reconcile complete", nil
@@ -91,6 +91,6 @@ func (s SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtpC
 	}, "reconcile complete", nil
 }
 
-func (s SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (types.StatusMessage, error) {
+func (s SMTPCredentialProvider) DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (croType.StatusMessage, error) {
 	return "deletion complete", nil
 }
