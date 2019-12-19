@@ -9,5 +9,5 @@ spec:
     name: example-redis-sec
   # i want a redis storage of a development-level tier
   tier: development
-  # i want a redis storage for the type workshop
-  type: workshop
+  # the type i want for a redis storage
+  type: REPLACE_ME
