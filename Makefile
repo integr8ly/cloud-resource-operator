@@ -79,21 +79,38 @@ cluster/prepare:
 	oc create -f ./deploy/role_binding.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/examples/ -n $(NAMESPACE)
 
-.PHONY: cluster/seed/smtp
-cluster/seed/smtp:
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml -n $(NAMESPACE)
+.PHONY: cluster/seed/workshop/smtp
+cluster/seed/workshop/smtp:
+	@cat deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/blobstorage
-cluster/seed/blobstorage:
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml -n $(NAMESPACE)
+.PHONY: cluster/seed/managed/smtp
+cluster/seed/managed/smtp:
+	@cat deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/redis
-cluster/seed/redis:
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_cr.yaml -n $(NAMESPACE)
+.PHONY: cluster/seed/workshop/blobstorage
+cluster/seed/workshop/blobstorage:
+	@cat deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/postgres
-cluster/seed/postgres:
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_cr.yaml -n $(NAMESPACE)
+.PHONY: cluster/seed/managed/blobstorage
+cluster/seed/managed/blobstorage:
+	@cat deploy/crds/integreatly_v1alpha1_blobstorage_cr.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+
+.PHONY: cluster/seed/workshop/redis
+cluster/seed/workshop/redis:
+	@cat deploy/crds/integreatly_v1alpha1_redis_cr.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
+
+.PHONY: cluster/seed/managed/redis
+cluster/seed/managed/redis:
+	@cat deploy/crds/integreatly_v1alpha1_redis_cr.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+
+.PHONY: cluster/seed/workshop/postgres
+cluster/seed/workshop/postgres:
+	@cat deploy/crds/integreatly_v1alpha1_postgres_cr.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
+
+.PHONY: cluster/seed/managed/postgres
+cluster/seed/managed/postgres:
+	@cat deploy/crds/integreatly_v1alpha1_postgres_cr.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+
 
 .PHONY: cluster/clean
 cluster/clean:

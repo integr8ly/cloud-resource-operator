@@ -9,5 +9,5 @@ spec:
     name: example-postgres-sec
   # i want a postgres storage of a development-level tier
   tier: development
-  # i want a postgres storage for the type workshop
-  type: workshop
+  # the type i want for a postgres storage
+  type: REPLACE_ME
