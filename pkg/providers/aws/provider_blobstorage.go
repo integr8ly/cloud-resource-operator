@@ -158,9 +158,10 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// Adding tags to s3
-	_, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3svc)
+	msg, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3svc)
 	if err != nil {
-		return nil, msg, errorUtil.Wrapf(err, string(msg))
+		errMsg := fmt.Sprintf("failed to add tags to bucket: %s", msg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
@@ -214,7 +215,7 @@ func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName str
 	}
 
 	logrus.Infof("successfully created or updated tags to s3 bucket %s", bucketName)
-	return croType.StatusEmpty, nil
+	return "successfully created and tagged", nil
 }
 
 // DeleteStorage Delete S3 bucket and credentials to add objects to it

@@ -203,9 +203,10 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 	// Add Tags to Aws Postgres resources
-	_, err = p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
+	msg, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
 	if err != nil {
-		return nil, "Failed to add tags to RDS resources", err
+		errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// return secret information
@@ -215,7 +216,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		Host:     *foundInstance.Endpoint.Address,
 		Database: *foundInstance.DBName,
 		Port:     int(*foundInstance.Endpoint.Port),
-	}}, croType.StatusMessage(fmt.Sprintf("creation successful, aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
+	}}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
 }
 
 // Tags RDS resources
@@ -286,7 +287,7 @@ func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.P
 	}
 
 	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
-	return croType.StatusEmpty, nil
+	return "successfully created and tagged", nil
 }
 
 func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {

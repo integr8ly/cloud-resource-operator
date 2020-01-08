@@ -165,9 +165,9 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
 	for _, cache := range cacheInstance.NodeGroupMembers {
-		_, err = p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
+		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
 		if err != nil {
-			errMsg := "failed to add tags to elasticache"
+			errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
 			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
@@ -177,7 +177,7 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
 		URI:  *primaryEndpoint.Address,
 		Port: *primaryEndpoint.Port,
-	}}, croType.StatusMessage(fmt.Sprintf("creation successful, aws elasticache status is %s", *foundCache.Status)), nil
+	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s",*foundCache.Status)), nil
 }
 
 // Add Tags to AWS Elasticache
@@ -264,7 +264,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 	}
 
 	logrus.Infof("successfully created or updated tags to elasticache node %s", *cache.CacheClusterId)
-	return types.StatusEmpty, nil
+	return "successfully created and tagged", nil
 }
 
 // DeleteStorage Delete elasticache replication group

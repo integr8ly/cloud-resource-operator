@@ -473,6 +473,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 			},
+			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 	}

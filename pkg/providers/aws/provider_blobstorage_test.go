@@ -320,6 +320,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 					bucketNames: []string{"test"},
 				},
 			},
+			want:    types.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 	}

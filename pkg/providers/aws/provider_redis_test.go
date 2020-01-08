@@ -444,6 +444,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
+			want:    types.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 	}
