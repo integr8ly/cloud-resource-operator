@@ -2,8 +2,6 @@ package resources
 
 import (
 	"context"
-	"os"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/pkg/errors"
@@ -154,12 +152,4 @@ func ReconcileRedis(ctx context.Context, client client.Client, deploymentType, t
 	}
 
 	return r, nil
-}
-
-// checks to see if env var exists
-func EnvOrDefault(key string, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
 }

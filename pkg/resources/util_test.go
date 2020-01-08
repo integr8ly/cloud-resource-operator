@@ -148,31 +148,3 @@ func TestReconcileBlobStorage(t *testing.T) {
 		})
 	}
 }
-
-func TestEnvOrDefault(t *testing.T) {
-	type args struct {
-		key      string
-		fallback string
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
-	}{
-		{
-			name: "test env var does not exist return default",
-			args: args{
-				key:      "test",
-				fallback: "default",
-			},
-			want: "default",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := EnvOrDefault(tt.args.key, tt.args.fallback); got != tt.want {
-				t.Errorf("EnvOrDefault() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}

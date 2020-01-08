@@ -45,3 +45,22 @@ func TestGetForcedReconcileTimeOrDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestGetOrganizationTag(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{
+			name: "test env var does not exist return default",
+			want: DefaultTagKeyPrefix,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetOrganizationTag(); got != tt.want {
+				t.Errorf("GetOrganizationTag() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
