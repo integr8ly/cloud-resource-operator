@@ -30,3 +30,5 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "cloud-resource-operator"
+            - name: TAG_KEY_PREFIX
+              value: integreatly.org/

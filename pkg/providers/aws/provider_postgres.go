@@ -193,7 +193,6 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	// rds instance is available
 	// check if found instance and user strategy differs, and modify instance
 	logrus.Info("found existing rds instance")
 	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
@@ -203,6 +202,12 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		}
 		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
+	// Add Tags to Aws Postgres resources
+	msg, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 
 	// return secret information
 	return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
@@ -211,7 +216,78 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		Host:     *foundInstance.Endpoint.Address,
 		Database: *foundInstance.DBName,
 		Port:     int(*foundInstance.Endpoint.Port),
-	}}, croType.StatusMessage(fmt.Sprintf("creation successful, aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
+	}}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
+}
+
+// Tags RDS resources
+func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
+	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	// get the environment from the CR
+	// set the tag values that will always be added
+	defaultOrganizationTag := resources.GetOrganizationTag()
+
+	//get Cluster Id
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	// Set the Tag values
+
+	rdsTag := []*rds.Tag{
+		{
+			Key:   aws.String(defaultOrganizationTag + "clusterId"),
+			Value: aws.String(clusterId),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-type"),
+			Value: aws.String(cr.Spec.Type),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-name"),
+			Value: aws.String(cr.Name),
+		},
+	}
+	if cr.ObjectMeta.Labels["productName"] != "" {
+		productTag := &rds.Tag{
+			Key:   aws.String(defaultOrganizationTag + "product-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["productName"]),
+		}
+		rdsTag = append(rdsTag, productTag)
+	}
+
+	// adding tags to rds postgres instance
+	_, err := rdsSvc.AddTagsToResource(&rds.AddTagsToResourceInput{
+		ResourceName: aws.String(*foundInstance.DBInstanceArn),
+		Tags:         rdsTag,
+	})
+	if err != nil {
+		msg := "Failed to add Tags to RDS instance"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+
+	}
+
+	// Get a list of Snapshot objects for the DB instance
+	rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
+		DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
+	}
+	rdsSnapshotList, err := rdsSvc.DescribeDBSnapshots(rdsSnapshotAttributeInput)
+	if err != nil {
+		msg := "Can't get Snapshot info"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+	}
+	// Adding tags to each DB Snapshots from list on AWS
+	for _, snapshotList := range rdsSnapshotList.DBSnapshots {
+		inputRdsSnapshot := &rds.AddTagsToResourceInput{
+			ResourceName: aws.String(*snapshotList.DBSnapshotArn),
+			Tags:         rdsTag,
+		}
+		// Adding Tags to RDS Snapshot
+		_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
+		if err != nil {
+			msg := "Failed to add Tags to RDS Snapshot"
+			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		}
+	}
+
+	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	return "successfully created and tagged", nil
 }
 
 func (p *AWSPostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {

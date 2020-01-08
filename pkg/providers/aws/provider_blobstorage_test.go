@@ -65,6 +65,10 @@ func (s *mockS3Svc) ListObjectsV2(*s3.ListObjectsV2Input) (*s3.ListObjectsV2Outp
 	return &s3.ListObjectsV2Output{}, nil
 }
 
+func (s *mockS3Svc) PutBucketTagging(*s3.PutBucketTaggingInput) (*s3.PutBucketTaggingOutput, error) {
+	return &s3.PutBucketTaggingOutput{}, nil
+}
+
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
 		ObjectMeta: v1.ObjectMeta{
@@ -269,6 +273,72 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			p := &BlobStorageProvider{}
 			if got := p.GetReconcileTime(tt.args.b); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build test scheme", err)
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx            context.Context
+		bs             *v1alpha1.BlobStorage
+		s3svc          s3iface.S3API
+		stratCfgRegion string
+		bucketName     string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "test tagging completes",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()),
+				Logger:            logrus.WithFields(logrus.Fields{}),
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			args: args{
+				ctx:            context.TODO(),
+				bucketName:     "test",
+				bs:             buildTestBlobStorageCR(),
+				stratCfgRegion: "test",
+				s3svc: &mockS3Svc{
+					bucketNames: []string{"test"},
+				},
+			},
+			want:    types.StatusMessage("successfully created and tagged"),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &BlobStorageProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := p.TagBlobStorage(tt.args.ctx, tt.args.bucketName, tt.args.bs, tt.args.stratCfgRegion, tt.args.s3svc)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TagBlobStorage() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("TagBlobStorage() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

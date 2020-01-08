@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -156,8 +157,65 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		},
 	}
 
+	// Adding tags to s3
+	msg, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3svc)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to add tags to bucket: %s", msg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	p.Logger.Infof("creation handler for blob storage instance %s in namespace %s finished successfully", bs.Name, bs.Namespace)
 	return bsi, msg, nil
+}
+
+func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string, s3svc s3iface.S3API) (croType.StatusMessage, error) {
+	p.Logger.Infof("bucket %s found, Adding tags to bucket", bucketName)
+
+	// set tag values that will always be added
+	defaultOrganizationTag := resources.GetOrganizationTag()
+	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	if err != nil {
+		errMsg := "failed to get cluster id"
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+	bucketTags := []*s3.Tag{
+		{
+			Key:   aws.String(defaultOrganizationTag + "clusterId"),
+			Value: aws.String(clusterId),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-type"),
+			Value: aws.String(bs.Spec.Type),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-name"),
+			Value: aws.String(bs.Name),
+		},
+	}
+
+	// check if product name exists and append label
+	if bs.ObjectMeta.Labels["productName"] != "" {
+		productTag := &s3.Tag{
+			Key:   aws.String(defaultOrganizationTag + "product-name"),
+			Value: aws.String(bs.ObjectMeta.Labels["productName"]),
+		}
+		bucketTags = append(bucketTags, productTag)
+	}
+
+	// adding the tags to S3
+	_, err = s3svc.PutBucketTagging(&s3.PutBucketTaggingInput{
+		Bucket: aws.String(bucketName),
+		Tagging: &s3.Tagging{
+			TagSet: bucketTags,
+		},
+	})
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to add tags to S3 bucket: %s", err)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
+	logrus.Infof("successfully created or updated tags to s3 bucket %s", bucketName)
+	return "successfully created and tagged", nil
 }
 
 // DeleteStorage Delete S3 bucket and credentials to add objects to it

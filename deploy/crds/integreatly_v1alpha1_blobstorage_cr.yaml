@@ -3,6 +3,8 @@ kind: BlobStorage
 metadata:
   # name must be between 1-40 characters
   name: example-blobstorage
+  labels:
+    productName: ProductName
 spec:
   # i want my blob storage information output in a secret named example-blobstorage-sec
   secretRef:
