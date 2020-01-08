@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
@@ -204,7 +203,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 	// Add Tags to Aws Postgres resources
-	_, err = p.TagRDSPostgres(ctx, cr, foundInstance)
+	_, err = p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
 	if err != nil {
 		return nil, "Failed to add tags to RDS resources", err
 	}
@@ -220,22 +219,11 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 }
 
 // Tags RDS resources
-func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
+func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
-	defaultOrganizationTag, exists := os.LookupEnv("TAG_KEY_PREFIX")
-	if !exists {
-		defaultOrganizationTag = TagKeyPrefex
-	}
+	defaultOrganizationTag := resources.EnvOrDefault("TAG_KEY_PREFIX", TagKeyPrefix)
 
-	// new session but don't need credentials
-	// Get the region from AvailabilityZone
-	rdsRegion := *foundInstance.AvailabilityZone
-	rdsRegion = rdsRegion[:(len(rdsRegion))-1]
-	// get provider aws creds so the postgres instance can be deleted
-	rdsSvc := rds.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(rdsRegion),
-	})))
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
 	// Set the Tag values

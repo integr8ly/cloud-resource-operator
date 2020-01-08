@@ -385,8 +385,10 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		ctx                       context.Context
 		r                         *v1alpha1.Redis
 		stratCfg                  StrategyConfig
+		cacheSvc                  elasticacheiface.ElastiCacheAPI
 		cacheClusterId            string
 		preferredAvailabilityZone string
+		redisConfig               *elasticache.CreateReplicationGroupInput
 	}
 	tests := []struct {
 		name    string
@@ -401,14 +403,20 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ctx:                       context.TODO(),
 				r:                         buildTestRedisCR(),
 				stratCfg:                  StrategyConfig{Region: "test"},
+				cacheSvc:                  &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				cacheClusterId:            "test",
 				preferredAvailabilityZone: "test",
+				redisConfig:               &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 			},
 			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
-				Logger:            testLogger,
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				//CredentialManager: &CredentialManagerMock{
+				//	ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (credentials *AWSCredentials, e error) {
+				//		return credentials, e
+				//	},
+				//},
 			},
 			wantErr: false,
 		},
@@ -422,7 +430,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			got, err := p.TagElasticache(tt.args.ctx, tt.args.r, tt.args.stratCfg, tt.args.cacheClusterId, tt.args.preferredAvailabilityZone)
+			got, err := p.TagElasticache(tt.args.ctx, tt.args.r, tt.args.stratCfg, tt.args.cacheSvc, tt.args.cacheClusterId, tt.args.preferredAvailabilityZone)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -446,6 +446,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 	type args struct {
 		ctx           context.Context
 		cr            *v1alpha1.Postgres
+		rdsSvc        rdsiface.RDSAPI
 		foundInstance *rds.DBInstance
 	}
 	tests := []struct {
@@ -458,8 +459,9 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 		{
 			name: "test tagging is successful",
 			args: args{
-				ctx: context.TODO(),
-				cr:  buildTestPostgresCR(),
+				ctx:    context.TODO(),
+				cr:     buildTestPostgresCR(),
+				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{}},
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
@@ -482,7 +484,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.TagRDSPostgres(tt.args.ctx, tt.args.cr, tt.args.foundInstance)
+			got, err := p.TagRDSPostgres(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagRDSPostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return

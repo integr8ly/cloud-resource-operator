@@ -291,6 +291,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 		bucketName     string
 		bs             *v1alpha1.BlobStorage
 		stratCfgRegion string
+		s3svc          s3iface.S3API
 	}
 	tests := []struct {
 		name    string
@@ -312,6 +313,9 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 				bucketName:     "test",
 				bs:             buildTestBlobStorageCR(),
 				stratCfgRegion: "test",
+				s3svc: &mockS3Svc{
+					bucketNames: []string{"test"},
+				},
 			},
 			wantErr: false,
 		},
@@ -324,7 +328,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.TagBlobStorage(tt.args.ctx, tt.args.bucketName, tt.args.bs, tt.args.stratCfgRegion)
+			got, err := p.TagBlobStorage(tt.args.ctx, tt.args.bucketName, tt.args.bs, tt.args.stratCfgRegion, tt.args.s3svc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagBlobStorage() error = %v, wantErr %v", err, tt.wantErr)
 				return

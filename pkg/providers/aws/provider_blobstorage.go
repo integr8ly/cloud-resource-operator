@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	"os"
+
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -44,7 +44,7 @@ const (
 	DetailsBlobStorageCredentialKeyID     = "credentialKeyID"
 	DetailsBlobStorageCredentialSecretKey = "credentialSecretKey"
 	defaultForceBucketDeletion            = false
-	TagKeyPrefex                          = "integreatly.org/"
+	TagKeyPrefix                          = "integreatly.org/"
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -159,7 +159,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// Adding tags to s3
-	_, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region)
+	_, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3svc)
 	if err != nil {
 		return nil, msg, errorUtil.Wrapf(err, string(msg))
 	}
@@ -168,17 +168,11 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	return bsi, msg, nil
 }
 
-func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string) (croType.StatusMessage, error) {
+func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string, s3svc s3iface.S3API) (croType.StatusMessage, error) {
 	p.Logger.Infof("bucket %s found, Adding tags to bucket", bucketName)
 
 	// get the environment from the CR ,
-	defaultOrganizationTag, exists := os.LookupEnv("TAG_KEY_PREFIX")
-	if !exists {
-		defaultOrganizationTag = TagKeyPrefex
-	}
-
-	// new session but don't need credentials
-	s3svctag := s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(stratCfgRegion)})))
+	defaultOrganizationTag := resources.EnvOrDefault("TAG_KEY_PREFIX", TagKeyPrefix)
 
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
@@ -209,7 +203,7 @@ func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName str
 		}
 
 		// adding the tags to S3
-		_, err := s3svctag.PutBucketTagging(bucketTaggingInput)
+		_, err := s3svc.PutBucketTagging(bucketTaggingInput)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to add Tags to S3: %s", err)
 			logrus.Error(errMsg)
