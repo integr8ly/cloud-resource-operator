@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
@@ -95,21 +97,21 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc := createElasticacheService(stratCfg, providerCreds)
+	cacheSvc, stsSvc := createAWSService(stratCfg, providerCreds)
 
 	// create the aws elasticache cluster
-	return p.createElasticacheCluster(ctx, r, cacheSvc, elasticacheCreateConfig, stratCfg)
+	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, elasticacheCreateConfig, stratCfg)
 }
 
-func createElasticacheService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) elasticacheiface.ElastiCacheAPI {
+func createAWSService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	}))
-	return elasticache.New(sess)
+	return elasticache.New(sess), sts.New(sess)
 }
 
-func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
+func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
@@ -160,12 +162,12 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
 
-	// Add Tags to AWS Elasticache
+	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
 	for _, cache := range cacheInstance.NodeGroupMembers {
-		_, err = p.TagElasticache(ctx, r, *stratCfg, cacheSvc, *cache.CacheClusterId, *cache.PreferredAvailabilityZone)
+		_, err = p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
 		if err != nil {
-			errMsg := "Failed to add Tags to Elasticache"
+			errMsg := "failed to add tags to elasticache"
 			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
@@ -179,88 +181,88 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 }
 
 // Add Tags to AWS Elasticache
-func (p *AWSRedisProvider) TagElasticache(ctx context.Context, r *v1alpha1.Redis, stratCfg StrategyConfig, cacheSvc elasticacheiface.ElastiCacheAPI, cacheClusterId string, preferredAvailabilityZone string) (types.StatusMessage, error) {
-	cacheRegion := preferredAvailabilityZone
-	cacheRegion = cacheRegion[:(len(preferredAvailabilityZone))-1]
-	// create the credentials to be used by the aws resource providers, not to be used by end-user
-	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, r.Namespace)
+func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
+	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
+
+	// get account identity
+	identityInput := &sts.GetCallerIdentityInput{}
+	id, err := stsSvc.GetCallerIdentity(identityInput)
 	if err != nil {
-		msg := "failed to reconcile elasticache credentials"
+		errMsg := "failed to get account identity"
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// trim availability zone to return cache region
+	region := (*cache.PreferredAvailabilityZone)[:len(*cache.PreferredAvailabilityZone)-1]
+
+	// build cluster arn
+	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
+	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *cache.CacheClusterId)
+
+	// set the tag values that will always be added
+	organizationTag := resources.GetOrganizationTag()
+	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	cacheTags := []*elasticache.Tag{
+		{
+			Key:   aws.String(organizationTag + "clusterId"),
+			Value: aws.String(clusterId),
+		},
+		{
+			Key:   aws.String(organizationTag + "resource-type"),
+			Value: aws.String(r.Spec.Type),
+		},
+		{
+			Key:   aws.String(organizationTag + "resource-name"),
+			Value: aws.String(r.Name),
+		},
+	}
+
+	// check is product name exists on cr
+	if r.ObjectMeta.Labels["productName"] != "" {
+		productTag := &elasticache.Tag{
+			Key:   aws.String(organizationTag + "product-name"),
+			Value: aws.String(r.ObjectMeta.Labels["productName"]),
+		}
+		cacheTags = append(cacheTags, productTag)
+	}
+
+	// create tag input
+	input := &elasticache.AddTagsToResourceInput{
+		ResourceName: aws.String(arn),
+		Tags:         cacheTags,
+	}
+
+	// add tags
+	_, err = cacheSvc.AddTagsToResource(input)
+	if err != nil {
+		msg := "failed to add tags to aws elasticache :"
 		return types.StatusMessage(msg), err
 	}
-	// get the account number
 
-	svc := sts.New(session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	})))
-	//svc := sts.New(session.New())
-	inputSts := &sts.GetCallerIdentityInput{}
-	id, err := svc.GetCallerIdentity(inputSts)
-	if err != nil {
-		msg := "Error GetCallerIdentity returned an error : "
-		id.Account = aws.String("")
-		logrus.Info(msg, err)
+	// if snapshots exist add tags to them
+	inputDescribe := &elasticache.DescribeSnapshotsInput{
+		CacheClusterId: aws.String(*cache.CacheClusterId),
 	}
-	accountId := *id.Account
-	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
-	arn := "arn:aws:elasticache:" + cacheRegion + ":" + accountId + ":cluster:" + cacheClusterId
 
-	// Set the Tag values
-	defaultOrganizationTag := resources.EnvOrDefault("TAG_KEY_PREFIX", TagKeyPrefix)
-
-	if r.ObjectMeta.Labels["productName"] != "" {
-		clusterId, _ := resources.GetClusterId(ctx, p.Client)
-		cacheTag := []*elasticache.Tag{
-			{
-				Key:   aws.String(defaultOrganizationTag + "clusterId"),
-				Value: aws.String(clusterId),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "resource-type"),
-				Value: aws.String(r.Spec.Type),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "resource-name"),
-				Value: aws.String(r.Name),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "product-name"),
-				Value: aws.String(r.ObjectMeta.Labels["productName"]),
-			},
-		}
-		input := &elasticache.AddTagsToResourceInput{
-			ResourceName: aws.String(arn),
-			Tags:         cacheTag,
-		}
-		// add tags
-		_, err = cacheSvc.AddTagsToResource(input)
-		if err != nil {
-			msg := "Failed to add tags to AWS Elasticache :"
-			return types.StatusMessage(msg), err
-		}
-		//When snapshots are created add tags to them
-		inputDescribe := &elasticache.DescribeSnapshotsInput{
-			CacheClusterId: aws.String(cacheClusterId),
-		}
-		snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
-		if snapshotList.Snapshots != nil {
-			for _, snapshot := range snapshotList.Snapshots {
-				snapshotArn := "arn:aws:elasticache:" + cacheRegion + ":" + accountId + ":snapshot:" + *snapshot.SnapshotName
-				logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
-				snapshotInput := &elasticache.AddTagsToResourceInput{
-					ResourceName: aws.String(snapshotArn),
-					Tags:         cacheTag,
-				}
-				// add tags
-				_, err = cacheSvc.AddTagsToResource(snapshotInput)
-				if err != nil {
-					msg := "Failed to add tags to AWS Elasticache Snapshot:"
-					return types.StatusMessage(msg), err
-				}
+	// loop snapshots adding tags per found snapshot
+	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
+	if snapshotList.Snapshots != nil {
+		for _, snapshot := range snapshotList.Snapshots {
+			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
+			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
+			snapshotInput := &elasticache.AddTagsToResourceInput{
+				ResourceName: aws.String(snapshotArn),
+				Tags:         cacheTags,
+			}
+			_, err = cacheSvc.AddTagsToResource(snapshotInput)
+			if err != nil {
+				msg := "Failed to add tags to AWS Elasticache Snapshot:"
+				return types.StatusMessage(msg), err
 			}
 		}
 	}
+
+	logrus.Infof("successfully created or updated tags to elasticache node %s", *cache.CacheClusterId)
 	return types.StatusEmpty, nil
 }
 
@@ -282,7 +284,7 @@ func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc := createElasticacheService(stratCfg, providerCreds)
+	cacheSvc, _ := createAWSService(stratCfg, providerCreds)
 
 	// delete the elasticache cluster
 	return p.deleteElasticacheCluster(cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, ctx, r)

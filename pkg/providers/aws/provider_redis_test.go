@@ -2,9 +2,12 @@ package aws
 
 import (
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -38,6 +41,10 @@ type mockElasticacheClient struct {
 	replicationGroups []*elasticache.ReplicationGroup
 }
 
+type mockStsClient struct {
+	stsiface.STSAPI
+}
+
 // mock elasticache DescribeReplicationGroups output
 func (m *mockElasticacheClient) DescribeReplicationGroups(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 	if m.wantEmpty {
@@ -61,6 +68,23 @@ func (m *mockElasticacheClient) DeleteReplicationGroup(*elasticache.DeleteReplic
 // mock elasticache ModifyReplicationGroup output
 func (m *mockElasticacheClient) ModifyReplicationGroup(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
 	return &elasticache.ModifyReplicationGroupOutput{}, nil
+}
+
+// mock elasticache AddTagsToResource output
+func (m *mockElasticacheClient) AddTagsToResource(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+	return &elasticache.TagListMessage{}, nil
+}
+
+// mock elasticache DescribeSnapshots
+func (m *mockElasticacheClient) DescribeSnapshots(*elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
+	return &elasticache.DescribeSnapshotsOutput{}, nil
+}
+
+// mock sts get caller identity
+func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
+	return &sts.GetCallerIdentityOutput{
+		Account: aws.String("test"),
+	}, nil
 }
 
 func buildTestRedisCR() *v1alpha1.Redis {
@@ -118,6 +142,7 @@ func Test_createRedisCluster(t *testing.T) {
 	type args struct {
 		ctx         context.Context
 		r           *v1alpha1.Redis
+		stsSvc      stsiface.STSAPI
 		cacheSvc    elasticacheiface.ElastiCacheAPI
 		redisConfig *elasticache.CreateReplicationGroupInput
 		stratCfg    *StrategyConfig
@@ -141,6 +166,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
 				r:           buildTestRedisCR(),
+				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -159,6 +185,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
 				r:           buildTestRedisCR(),
+				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -177,6 +204,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
+				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -195,6 +223,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ctx:      context.TODO(),
 				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:        buildTestRedisCR(),
+				stsSvc:   &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
@@ -220,7 +249,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.redisConfig, tt.args.stratCfg)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -382,13 +411,12 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		CacheSvc          elasticacheiface.ElastiCacheAPI
 	}
 	type args struct {
-		ctx                       context.Context
-		r                         *v1alpha1.Redis
-		stratCfg                  StrategyConfig
-		cacheSvc                  elasticacheiface.ElastiCacheAPI
-		cacheClusterId            string
-		preferredAvailabilityZone string
-		redisConfig               *elasticache.CreateReplicationGroupInput
+		ctx      context.Context
+		cacheSvc elasticacheiface.ElastiCacheAPI
+		stsSvc   stsiface.STSAPI
+		r        *v1alpha1.Redis
+		stratCfg StrategyConfig
+		cache    *elasticache.NodeGroupMember
 	}
 	tests := []struct {
 		name    string
@@ -400,23 +428,21 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		{
 			name: "test tags reconcile completes successfully",
 			args: args{
-				ctx:                       context.TODO(),
-				r:                         buildTestRedisCR(),
-				stratCfg:                  StrategyConfig{Region: "test"},
-				cacheSvc:                  &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
-				cacheClusterId:            "test",
-				preferredAvailabilityZone: "test",
-				redisConfig:               &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				ctx:      context.TODO(),
+				r:        buildTestRedisCR(),
+				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				stsSvc:   &mockStsClient{},
+				stratCfg: StrategyConfig{Region: "test"},
+				cache: &elasticache.NodeGroupMember{
+					CacheClusterId:            aws.String("test"),
+					CacheNodeId:               aws.String("test"),
+					PreferredAvailabilityZone: aws.String("test"),
+				},
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
-				//CredentialManager: &CredentialManagerMock{
-				//	ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (credentials *AWSCredentials, e error) {
-				//		return credentials, e
-				//	},
-				//},
 			},
 			wantErr: false,
 		},
@@ -430,7 +456,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			got, err := p.TagElasticache(tt.args.ctx, tt.args.r, tt.args.stratCfg, tt.args.cacheSvc, tt.args.cacheClusterId, tt.args.preferredAvailabilityZone)
+			got, err := p.TagElasticacheNode(tt.args.ctx, tt.args.cacheSvc, tt.args.stsSvc, tt.args.r, tt.args.stratCfg, tt.args.cache)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
 				return
