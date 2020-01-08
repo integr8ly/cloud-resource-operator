@@ -65,6 +65,10 @@ func (s *mockS3Svc) ListObjectsV2(*s3.ListObjectsV2Input) (*s3.ListObjectsV2Outp
 	return &s3.ListObjectsV2Output{}, nil
 }
 
+func (s *mockS3Svc) PutBucketTagging(*s3.PutBucketTaggingInput) (*s3.PutBucketTaggingOutput, error) {
+	return &s3.PutBucketTaggingOutput{}, nil
+}
+
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
 		ObjectMeta: v1.ObjectMeta{
@@ -278,7 +282,6 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build test scheme", err)
-
 	}
 	type fields struct {
 		Client            client.Client
@@ -288,10 +291,10 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 	}
 	type args struct {
 		ctx            context.Context
-		bucketName     string
 		bs             *v1alpha1.BlobStorage
-		stratCfgRegion string
 		s3svc          s3iface.S3API
+		stratCfgRegion string
+		bucketName     string
 	}
 	tests := []struct {
 		name    string
@@ -303,7 +306,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 		{
 			name: "test tagging completes",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
