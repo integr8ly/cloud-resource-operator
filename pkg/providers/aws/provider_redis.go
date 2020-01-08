@@ -177,7 +177,7 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
 		URI:  *primaryEndpoint.Address,
 		Port: *primaryEndpoint.Port,
-	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s",*foundCache.Status)), nil
+	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
 // Add Tags to AWS Elasticache
@@ -197,7 +197,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 
 	// build cluster arn
 	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
-	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *cache.CacheClusterId)
+	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:cluster:%s", region, *id.Account, *cache.CacheClusterId)
 
 	// set the tag values that will always be added
 	organizationTag := resources.GetOrganizationTag()
