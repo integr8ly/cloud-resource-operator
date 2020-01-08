@@ -465,6 +465,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
+					DBInstanceArn:        aws.String("arn:test"),
 				},
 			},
 			fields: fields{

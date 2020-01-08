@@ -222,65 +222,68 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
-	defaultOrganizationTag := resources.EnvOrDefault("TAG_KEY_PREFIX", TagKeyPrefix)
+	// set the tag values that will always be added
+	defaultOrganizationTag := resources.GetOrganizationTag()
 
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
 	// Set the Tag values
-	if cr.ObjectMeta.Labels["productName"] != "" {
-		rdsTag := []*rds.Tag{
-			{
-				Key:   aws.String(defaultOrganizationTag + "clusterId"),
-				Value: aws.String(clusterId),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "resource-type"),
-				Value: aws.String(cr.Spec.Type),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "resource-name"),
-				Value: aws.String(cr.Name),
-			},
-			{
-				Key:   aws.String(defaultOrganizationTag + "product-name"),
-				Value: aws.String(cr.ObjectMeta.Labels["productName"]),
-			},
-		}
 
-		inputRdsInstance := &rds.AddTagsToResourceInput{
-			ResourceName: aws.String(*foundInstance.DBInstanceArn),
+	rdsTag := []*rds.Tag{
+		{
+			Key:   aws.String(defaultOrganizationTag + "clusterId"),
+			Value: aws.String(clusterId),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-type"),
+			Value: aws.String(cr.Spec.Type),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-name"),
+			Value: aws.String(cr.Name),
+		},
+	}
+	if cr.ObjectMeta.Labels["productName"] != "" {
+		productTag := &rds.Tag{
+			Key:   aws.String(defaultOrganizationTag + "product-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["productName"]),
+		}
+		rdsTag = append(rdsTag, productTag)
+	}
+
+	inputRdsInstance := &rds.AddTagsToResourceInput{
+		ResourceName: aws.String(*foundInstance.DBInstanceArn),
+		Tags:         rdsTag,
+	}
+
+	// adding tags to rds postgres instance
+	_, err := rdsSvc.AddTagsToResource(inputRdsInstance)
+	if err != nil {
+		msg := "Failed to add Tags to RDS instance"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+
+	}
+
+	// Get a list of Snapshot objects for the DB instance
+	rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
+		DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
+	}
+	rdsSnapshotList, err := rdsSvc.DescribeDBSnapshots(rdsSnapshotAttributeInput)
+	if err != nil {
+		msg := "Can't get Snapshot info"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+	}
+	// Adding tags to each DB Snapshots from list on AWS
+	for _, snapshotList := range rdsSnapshotList.DBSnapshots {
+		inputRdsSnapshot := &rds.AddTagsToResourceInput{
+			ResourceName: aws.String(*snapshotList.DBSnapshotArn),
 			Tags:         rdsTag,
 		}
-
-		// adding tags to rds postgres instance
-		_, err := rdsSvc.AddTagsToResource(inputRdsInstance)
+		// Adding Tags to RDS Snapshot
+		_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
 		if err != nil {
-			msg := "Failed to add Tags to RDS instance"
+			msg := "Failed to add Tags to RDS Snapshot"
 			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-
-		}
-
-		// Get a list of Snapshot objects for the DB instance
-		rdsSnapshotAttributeInput := &rds.DescribeDBSnapshotsInput{
-			DBInstanceIdentifier: aws.String(*foundInstance.DBInstanceIdentifier),
-		}
-		rdsSnapshotList, err := rdsSvc.DescribeDBSnapshots(rdsSnapshotAttributeInput)
-		if err != nil {
-			msg := "Can't get Snapshot info"
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-		}
-		// Adding tags to each DB Snapshots from list on AWS
-		for _, snapshotList := range rdsSnapshotList.DBSnapshots {
-			inputRdsSnapshot := &rds.AddTagsToResourceInput{
-				ResourceName: aws.String(*snapshotList.DBSnapshotArn),
-				Tags:         rdsTag,
-			}
-			// Adding Tags to RDS Snapshot
-			_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
-			if err != nil {
-				msg := "Failed to add Tags to RDS Snapshot"
-				return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-			}
 		}
 	}
 
