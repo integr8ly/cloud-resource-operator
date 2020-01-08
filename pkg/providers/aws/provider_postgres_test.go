@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	//"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	v12 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"

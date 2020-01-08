@@ -251,13 +251,11 @@ func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.P
 		rdsTag = append(rdsTag, productTag)
 	}
 
-	inputRdsInstance := &rds.AddTagsToResourceInput{
+	// adding tags to rds postgres instance
+	_, err := rdsSvc.AddTagsToResource(&rds.AddTagsToResourceInput{
 		ResourceName: aws.String(*foundInstance.DBInstanceArn),
 		Tags:         rdsTag,
-	}
-
-	// adding tags to rds postgres instance
-	_, err := rdsSvc.AddTagsToResource(inputRdsInstance)
+	})
 	if err != nil {
 		msg := "Failed to add Tags to RDS instance"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
