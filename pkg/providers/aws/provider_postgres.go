@@ -222,7 +222,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
-	defaultOrganizationTag := resources.EnvOrDefault("TAG_KEY_PREFIX", TagKeyPrefix)
+	defaultOrganizationTag := resources.GetOrganizationTag()
 
 	//get Cluster Id
 	clusterId, _ := resources.GetClusterId(ctx, p.Client)
