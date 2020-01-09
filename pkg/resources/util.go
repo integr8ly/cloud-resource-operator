@@ -20,6 +20,9 @@ func ReconcileBlobStorage(ctx context.Context, client client.Client, deploymentT
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels: map[string]string{
+				"productName": name,
+			},
 		},
 	}
 
@@ -55,6 +58,9 @@ func ReconcileSMTPCredentialSet(ctx context.Context, client client.Client, deplo
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels: map[string]string{
+				"productName": name,
+			},
 		},
 	}
 
@@ -90,6 +96,9 @@ func ReconcilePostgres(ctx context.Context, client client.Client, deploymentType
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels: map[string]string{
+				"productName": name,
+			},
 		},
 	}
 
@@ -125,6 +134,9 @@ func ReconcileRedis(ctx context.Context, client client.Client, deploymentType, t
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels: map[string]string{
+				"productName": name,
+			},
 		},
 	}
 
