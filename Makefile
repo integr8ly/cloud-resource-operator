@@ -17,11 +17,6 @@ else
 	OPERATOR_SDK_OS := linux-gnu
 endif
 
-
-.PHONY: build
-build:
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) cmd/manager/main.go
-
 .PHONY: run
 run:
 	RECTIME=30 operator-sdk up local --namespace=""
@@ -38,6 +33,10 @@ setup/service_account:
 code/run/service_account: setup/service_account
 	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE})
 	@operator-sdk up local --namespace=$(NAMESPACE)
+
+.PHONY: code/compile
+code/compile:
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./cmd/manager
 
 .PHONY: code/gen
 code/gen:
@@ -60,7 +59,7 @@ code/fix:
 
 .PHONY: code/check
 code/check:
-	bash -c "diff -u <(echo -n) <(gofmt -d ./)"
+	go fmt `go list ./... | grep -v /vendor/`
 
 .PHONY: code/audit
 code/audit:
@@ -154,7 +153,7 @@ test/e2e/image:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	go get -u github.com/rakyll/gotest
+	GO111MODULE=off go get -u github.com/rakyll/gotest
 	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/controller/... ./pkg/providers/... ./pkg/resources/... ./pkg/apis/integreatly/v1alpha1/types/...
 
 .PHONY: test/unit/coverage
@@ -184,3 +183,12 @@ manifest/push:
 setup/travis:
 	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.10.0/operator-sdk-v0.10.0-x86_64-linux-gnu && chmod +x operator-sdk && sudo mv operator-sdk /usr/local/bin/
 	pip3 install operator-courier==2.1.7
+
+.PHONY: vendor/check
+vendor/check: vendor/fix
+	git diff --exit-code vendor/
+
+.PHONY: vendor/fix
+vendor/fix:
+	go mod tidy
+	go mod vendor
