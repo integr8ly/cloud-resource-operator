@@ -36,7 +36,7 @@ import (
 
 const (
 	postgresProviderName       = "aws-rds"
-	defaultAwsIdentifierLength = 40
+	DefaultAwsIdentifierLength = 40
 	// default create options
 	defaultAwsPostgresDeletionProtection = true
 	defaultAwsPostgresPort               = 5432
@@ -503,7 +503,7 @@ func (p *AWSPostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1
 			rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 		}
 	}
-	instanceName, err := buildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
+	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
@@ -516,7 +516,7 @@ func (p *AWSPostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1
 
 // verify postgres delete config
 func (p *AWSPostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) error {
-	instanceIdentifier, err := buildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
+	instanceIdentifier, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
@@ -532,7 +532,7 @@ func (p *AWSPostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1al
 	if rdsDeleteConfig.SkipFinalSnapshot == nil {
 		rdsDeleteConfig.SkipFinalSnapshot = aws.Bool(defaultAwsSkipFinalSnapshot)
 	}
-	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to retrieve timestamped rds config")
 	}

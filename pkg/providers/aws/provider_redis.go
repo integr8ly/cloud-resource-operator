@@ -164,6 +164,10 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 
 	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
+	if *cacheInstance.Status != "available" {
+		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
+	}
+
 	for _, cache := range cacheInstance.NodeGroupMembers {
 		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
 		if err != nil {
@@ -257,7 +261,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 			}
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
-				msg := "Failed to add tags to AWS Elasticache Snapshot:"
+				msg := "Failed to add tags to aws elasticache snapshot:"
 				return types.StatusMessage(msg), err
 			}
 		}
@@ -421,7 +425,7 @@ func (p *AWSRedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r
 	if elasticacheConfig.SnapshotRetentionLimit == nil {
 		elasticacheConfig.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
 	}
-	cacheName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
@@ -433,7 +437,7 @@ func (p *AWSRedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r
 
 // buildElasticacheDeleteConfig checks redis config, if none exists sets values to defaults
 func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput) error {
-	cacheName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
@@ -446,7 +450,7 @@ func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v
 	if elasticacheDeleteConfig.RetainPrimaryCluster == nil {
 		elasticacheDeleteConfig.RetainPrimaryCluster = aws.Bool(false)
 	}
-	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}

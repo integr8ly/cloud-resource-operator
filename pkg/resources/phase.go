@@ -30,3 +30,22 @@ func UpdatePhase(ctx context.Context, client client.Client, inst runtime.Object,
 	}
 	return nil
 }
+
+func UpdateSnapshotPhase(ctx context.Context, client client.Client, inst runtime.Object, phase croType.StatusPhase, msg croType.StatusMessage) error {
+	if msg == croType.StatusEmpty {
+		return nil
+	}
+	rts := &croType.ResourceTypeSnapshotStatus{}
+	if err := runtime.Field(reflect.ValueOf(inst).Elem(), "Status", rts); err != nil {
+		return errorUtil.Wrap(err, "failed to retrieve status block from object")
+	}
+	rts.Message = msg
+	rts.Phase = phase
+	if err := runtime.SetField(*rts, reflect.ValueOf(inst).Elem(), "Status"); err != nil {
+		return errorUtil.Wrap(err, "failed to set status block of object")
+	}
+	if err := client.Status().Update(ctx, inst); err != nil {
+		return errorUtil.Wrap(err, "failed to update resource status phase and message")
+	}
+	return nil
+}

@@ -117,7 +117,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 
 	// create smtp credentials from generated iam role
 	p.Logger.Info("creating iam role required to send mail through aws ses")
-	credSecName, err := buildInfraNameFromObject(ctx, p.Client, smtpCreds.ObjectMeta, 40)
+	credSecName, err := BuildInfraNameFromObject(ctx, p.Client, smtpCreds.ObjectMeta, 40)
 	if err != nil {
 		msg := "failed to generate smtp credentials secret name"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)

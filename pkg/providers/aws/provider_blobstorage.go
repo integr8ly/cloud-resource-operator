@@ -438,7 +438,7 @@ func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alp
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
-	bucketName, err := buildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, defaultAwsBucketNameLength)
+	bucketName, err := BuildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, defaultAwsBucketNameLength)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
 	}

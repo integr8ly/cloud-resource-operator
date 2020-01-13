@@ -67,12 +67,11 @@ rules:
   - smtpcredentialset
   - redis
   - postgres
+  - redissnapshots
   verbs:
   - '*'
 - apiGroups:
   - config.openshift.io
-  verbs:
-  - '*'
   resources:
   - '*'
   - infrastructures
@@ -83,9 +82,11 @@ rules:
   - clusteroperators
   - authentications
   - builds
-- apiGroups:
-  - cloudcredential.openshift.io
   verbs:
   - '*'
+- apiGroups:
+  - cloudcredential.openshift.io
   resources:
   - credentialsrequests
+  verbs:
+  - '*'
