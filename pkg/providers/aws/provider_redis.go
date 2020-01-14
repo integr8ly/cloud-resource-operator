@@ -191,7 +191,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 	// check the node to make sure it is available before applying the tag
 	// this is needed as the cluster may be available while a node is not
 	cacheClusterOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
-		CacheClusterId: aws.String(*cache.CacheClusterId),
+		CacheClusterId: cache.CacheClusterId,
 	})
 	if err != nil {
 		errMsg := "failed to get cache cluster output"

@@ -3,6 +3,8 @@ package redissnapshot
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -13,7 +15,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
@@ -204,7 +205,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 
 	// ensure replication group is available
 	if *cacheOutput.ReplicationGroups[0].Status != "available" {
-		errMsg := fmt.Sprintf("current replication group status is %s", cacheOutput.ReplicationGroups[0].Status)
+		errMsg := fmt.Sprintf("current replication group status is %s", *cacheOutput.ReplicationGroups[0].Status)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}

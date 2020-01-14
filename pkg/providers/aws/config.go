@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"time"
+
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -157,5 +158,5 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 	if err != nil {
 		return "", errorUtil.Wrap(err, "failed to retrieve timestamped cluster identifier")
 	}
-	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%d", clusterId, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
+	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterId, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
 }
