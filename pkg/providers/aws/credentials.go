@@ -46,6 +46,7 @@ var (
 				"elasticache:AddTagsToResource",
 				"elasticache:DescribeSnapshots",
 				"elasticache:CreateSnapshot",
+				"elasticache:DescribeCacheClusters",
 				"rds:DescribeDBInstances",
 				"rds:CreateDBInstance",
 				"rds:DeleteDBInstance",

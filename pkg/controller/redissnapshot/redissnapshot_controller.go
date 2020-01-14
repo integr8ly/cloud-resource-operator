@@ -242,9 +242,10 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, "snapshot created"); updateErr != nil {
 			return reconcile.Result{}, err
 		}
+		return reconcile.Result{}, err
 	}
 
-	msg := fmt.Sprintf("current snapshot status :  %s", *foundSnapshot.SnapshotStatus)
+	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.SnapshotStatus)
 	r.logger.Info(msg)
 	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, croType.StatusMessage(msg)); updateErr != nil {
 		return reconcile.Result{}, updateErr

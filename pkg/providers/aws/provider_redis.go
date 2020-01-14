@@ -188,6 +188,21 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
 	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
 
+	// check the node to make sure it is available before applying the tag
+	// this is needed as the cluster may be available while a node is not
+	cacheClusterOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
+		CacheClusterId: aws.String(*cache.CacheClusterId),
+	})
+	if err != nil {
+		errMsg := "failed to get cache cluster output"
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	clusterStatus := *cacheClusterOutput.CacheClusters[0].CacheClusterStatus
+	if clusterStatus != "available" {
+		errMsg := fmt.Sprintf("%s status is %s, skipping adding tags", *cache.CacheClusterId, clusterStatus)
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// get account identity
 	identityInput := &sts.GetCallerIdentityInput{}
 	id, err := stsSvc.GetCallerIdentity(identityInput)
