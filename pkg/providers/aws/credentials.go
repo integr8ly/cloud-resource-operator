@@ -53,6 +53,7 @@ var (
 				"rds:ModifyDBInstance",
 				"rds:AddTagsToResource",
 				"rds:DescribeDBSnapshots",
+				"rds:CreateDBSnapshot",
 				"sts:GetCallerIdentity",
 			},
 			Resource: "*",
