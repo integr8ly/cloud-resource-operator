@@ -8,6 +8,9 @@ metadata:
           "apiVersion": "integreatly.org/v1alpha1",
           "kind": "Redis",
           "metadata": {
+            "labels": {
+              "productName": "productName"
+            },
             "name": "example-redis"
           },
           "spec": {
@@ -15,13 +18,16 @@ metadata:
               "name": "example-redis-sec"
             },
             "tier": "development",
-            "type": "workshop"
+            "type": "REPLACE_ME"
           }
         },
         {
           "apiVersion": "integreatly.org/v1alpha1",
           "kind": "SMTPCredentialSet",
           "metadata": {
+            "labels": {
+              "productName": "productName"
+            },
             "name": "example-smtpcredentialset"
           },
           "spec": {
@@ -29,13 +35,16 @@ metadata:
               "name": "example-smtpcredentialset-sec"
             },
             "tier": "development",
-            "type": "managed"
+            "type": "REPLACE_ME"
           }
         },
         {
           "apiVersion": "integreatly.org/v1alpha1",
           "kind": "BlobStorage",
           "metadata": {
+            "labels": {
+              "productName": "ProductName"
+            },
             "name": "example-blobstorage"
           },
           "spec": {
@@ -43,13 +52,16 @@ metadata:
               "name": "example-blobstorage-sec"
             },
             "tier": "development",
-            "type": "managed"
+            "type": "REPLACE_ME"
           }
         },
         {
           "apiVersion": "integreatly.org/v1alpha1",
           "kind": "Postgres",
           "metadata": {
+            "labels": {
+              "productName": "productName"
+            },
             "name": "example-postgres"
           },
           "spec": {
@@ -57,14 +69,14 @@ metadata:
               "name": "example-postgres-sec"
             },
             "tier": "development",
-            "type": "workshop"
+            "type": "REPLACE_ME"
           }
         }
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
     certified: "false"
-    containerImage: quay.io/integreatly/cloud-resource-operator:0.5.0
+    containerImage: quay.io/integreatly/cloud-resource-operator:0.4.0
     createdAt: "2019-10-07 12:34:56"
     description: Operator to provision cloud provider resources in an abstracted manner
     support: Integreatly
@@ -199,6 +211,8 @@ spec:
                       fieldPath: metadata.name
                 - name: OPERATOR_NAME
                   value: cloud-resource-operator
+                - name: TAG_KEY_PREFIX
+                  value: integreatly.org/
                 image: quay.io/integreatly/cloud-resource-operator:0.5.0
                 imagePullPolicy: Always
                 name: cloud-resource-operator
