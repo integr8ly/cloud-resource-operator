@@ -48,9 +48,9 @@ code/gen:
 
 .PHONY: gen/csv
 gen/csv:
-	sed -i 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:$(VERSION)/g' deploy/operator.yaml
+	sed -i.bak 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:$(VERSION)/g' deploy/operator.yaml && rm deploy/operator.yaml.bak
 	@operator-sdk olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel
-	@sed -i 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml
+	@sed -i.bak 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml && rm deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml.bak
 	
 .PHONY: code/fix
 code/fix:
