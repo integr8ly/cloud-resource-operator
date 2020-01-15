@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -168,24 +170,30 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	})))
 
+	// create the snapshot and return the phase
+	phase, msg, err := r.createSnapshot(ctx, rdsSvc, instance, postgresCr)
+	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, phase, msg); updateErr != nil {
+		return reconcile.Result{}, updateErr
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+}
+
+func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc rdsiface.RDSAPI, snapshot *integreatlyv1alpha1.PostgresSnapshot, postgres *integreatlyv1alpha1.Postgres) (croType.StatusPhase, croType.StatusMessage, error) {
 	// generate snapshot name
-	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, instance.ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, snapshot.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		errMsg := "failed to generate snapshot name"
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// get instance name
-	instanceName, err := croAws.BuildInfraNameFromObject(ctx, r.client, postgresCr.ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	instanceName, err := croAws.BuildInfraNameFromObject(ctx, r.client, postgres.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		errMsg := "failed to get cluster name"
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check snapshot exists
@@ -201,40 +209,23 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	}
 
 	// create snapshot of the rds instance
-	if foundSnapshot == nil {
-		r.logger.Info("creating rds snapshot")
-		_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
-			DBInstanceIdentifier: aws.String(instanceName),
-			DBSnapshotIdentifier: aws.String(snapshotName),
-		})
-		if err != nil {
-			errMsg := fmt.Sprintf("error creating rds snapshot %s", err)
-			if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-				return reconcile.Result{}, updateErr
-			}
-			return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+	if foundSnapshot != nil {
+		// if snapshot status complete update status
+		if *foundSnapshot.Status == "available" {
+			return croType.PhaseComplete, "snapshot created", nil
 		}
-
-		// creation in progress
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, "snapshot creation in progress"); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
 	}
 
-	// if snapshot status complete update status
-	if *foundSnapshot.Status == "available" {
-		// update complete snapshot phase
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, "snapshot created"); updateErr != nil {
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, err
+	r.logger.Info("creating rds snapshot")
+	_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
+		DBInstanceIdentifier: aws.String(instanceName),
+		DBSnapshotIdentifier: aws.String(snapshotName),
+	})
+	if err != nil {
+		errMsg := "error creating rds snapshot"
+		return croType.PhaseFailed, croType.StatusMessage(fmt.Sprintf("error creating rds snapshot %s", errMsg)), errorUtil.Wrap(err, errMsg)
 	}
 
-	msg := fmt.Sprintf("current postgres snapshot status is: %s", *foundSnapshot.Status)
-	r.logger.Info(msg)
-	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, croType.StatusMessage(msg)); updateErr != nil {
-		return reconcile.Result{}, updateErr
-	}
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+	// creation in progress
+	return croType.PhaseInProgress, "snapshot creation in progress", nil
 }
