@@ -102,6 +102,7 @@ spec:
   resourceName: my-redis-resource
 
 ```  
+*Note* You may experience some downtime in the resource during the creation of the Snapshot
 
 ## Skip Create
 The cloud resource operator continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  

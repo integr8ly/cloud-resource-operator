@@ -64,7 +64,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner PostgresSnapshot
 	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
@@ -93,11 +92,6 @@ type ReconcilePostgresSnapshot struct {
 
 // Reconcile reads that state of the cluster for a PostgresSnapshot object and makes changes based on the state read
 // and what is in the PostgresSnapshot.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("reconciling postgres snapshot")
 	ctx := context.TODO()
@@ -209,21 +203,22 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	}
 
 	// create snapshot of the rds instance
-	if foundSnapshot != nil {
-		// if snapshot status complete update status
-		if *foundSnapshot.Status == "available" {
-			return croType.PhaseComplete, "snapshot created", nil
+	if foundSnapshot == nil {
+		r.logger.Info("creating rds snapshot")
+		_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
+			DBInstanceIdentifier: aws.String(instanceName),
+			DBSnapshotIdentifier: aws.String(snapshotName),
+		})
+		if err != nil {
+			errMsg := "error creating rds snapshot"
+			return croType.PhaseFailed, croType.StatusMessage(fmt.Sprintf("error creating rds snapshot %s", errMsg)), errorUtil.Wrap(err, errMsg)
 		}
+		return croType.PhaseInProgress, "snapshot started", nil
 	}
 
-	r.logger.Info("creating rds snapshot")
-	_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
-		DBInstanceIdentifier: aws.String(instanceName),
-		DBSnapshotIdentifier: aws.String(snapshotName),
-	})
-	if err != nil {
-		errMsg := "error creating rds snapshot"
-		return croType.PhaseFailed, croType.StatusMessage(fmt.Sprintf("error creating rds snapshot %s", errMsg)), errorUtil.Wrap(err, errMsg)
+	// if snapshot status complete update status
+	if *foundSnapshot.Status == "available" {
+		return croType.PhaseComplete, "snapshot created", nil
 	}
 
 	// creation in progress

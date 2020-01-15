@@ -3,6 +3,7 @@ package redissnapshot
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -27,11 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-var log = logf.Log.WithName("controller_redissnapshot")
 
 // Add creates a new RedisSnapshot Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -166,24 +164,30 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	})))
 
+	// create snapshot of primary node
+	phase, msg, err := r.createSnapshot(ctx, cacheSvc, instance, redisCr)
+	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, phase, msg); updateErr != nil {
+		return reconcile.Result{}, updateErr
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+}
+
+func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, snapshot *integreatlyv1alpha1.RedisSnapshot, redis *integreatlyv1alpha1.Redis) (croType.StatusPhase, croType.StatusMessage, error) {
 	// generate snapshot name
-	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, instance.ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, snapshot.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		errMsg := "failed to generate snapshot name"
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// generate cluster name
-	clusterName, err := croAws.BuildInfraNameFromObject(ctx, r.client, redisCr.ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	clusterName, err := croAws.BuildInfraNameFromObject(ctx, r.client, redis.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		errMsg := "failed to get cluster name"
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{}, errorUtil.Wrap(err, "failed to get cluster name")
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check snapshot exists
@@ -206,10 +210,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	// ensure replication group is available
 	if *cacheOutput.ReplicationGroups[0].Status != "available" {
 		errMsg := fmt.Sprintf("current replication group status is %s", *cacheOutput.ReplicationGroups[0].Status)
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, errorUtil.Wrap(err, "failed to get cluster name")
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// find primary cache node
@@ -229,27 +230,17 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 			SnapshotName:   aws.String(snapshotName),
 		}); err != nil {
 			errMsg := fmt.Sprintf("error creating elasticache snapshot %s", err)
-			return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+			return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, "snapshot creation in progress"); updateErr != nil {
-			return reconcile.Result{}, updateErr
-		}
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+		return croType.PhaseInProgress, "snapshot started", nil
 	}
 
 	// if snapshot status complete update status
 	if *foundSnapshot.SnapshotStatus == "available" {
-		// update complete snapshot phase
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, "snapshot created"); updateErr != nil {
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, err
+		return croType.PhaseComplete, "snapshot created", nil
 	}
 
 	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.SnapshotStatus)
 	r.logger.Info(msg)
-	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, croType.StatusMessage(msg)); updateErr != nil {
-		return reconcile.Result{}, updateErr
-	}
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+	return croType.PhaseInProgress, "snapshot creation in progress", nil
 }
