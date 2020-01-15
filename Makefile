@@ -17,6 +17,10 @@ else
 	OPERATOR_SDK_OS := linux-gnu
 endif
 
+.PHONY: build
+build:
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) cmd/manager/main.go
+
 .PHONY: run
 run:
 	RECTIME=30 operator-sdk up local --namespace=""
@@ -33,10 +37,6 @@ setup/service_account:
 code/run/service_account: setup/service_account
 	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE})
 	@operator-sdk up local --namespace=$(NAMESPACE)
-
-.PHONY: code/compile
-code/compile:
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./cmd/manager
 
 .PHONY: code/gen
 code/gen:
