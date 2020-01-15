@@ -183,6 +183,13 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
+	// update cr with snapshot name
+	snapshot.Status.SnapshotID = snapshotName
+	if err = r.client.Status().Update(ctx, snapshot); err != nil {
+		errMsg := fmt.Sprintf("failed to update instance %s in namespace %s", snapshot.Name, snapshot.Namespace)
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// get instance name
 	instanceName, err := croAws.BuildInfraNameFromObject(ctx, r.client, postgres.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {

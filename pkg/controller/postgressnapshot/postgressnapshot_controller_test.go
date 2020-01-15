@@ -46,6 +46,15 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
+func buildSnapshot() *integreatlyv1alpha1.PostgresSnapshot{
+	return &integreatlyv1alpha1.PostgresSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+}
+
 func buildTestInfrastructure() *v12.Infrastructure {
 	return &v12.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -103,12 +112,7 @@ func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
 				rdsSvc: &mockRdsClient{dbSnapshot: &rds.DBSnapshot{
 					DBInstanceIdentifier: aws.String("rds-db"),
 				}},
-				snapshot: &integreatlyv1alpha1.PostgresSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "test",
-					},
-				},
+				snapshot: buildSnapshot(),
 				postgres: &integreatlyv1alpha1.Postgres{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -117,7 +121,7 @@ func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
 				},
 			},
 			fields: fields{
-				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure()),
+				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
 				scheme:            scheme,
 				logger:            testLogger,
 				CredentialManager: nil,

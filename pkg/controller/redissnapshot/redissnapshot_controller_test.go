@@ -56,9 +56,12 @@ func buildTestInfrastructure() *v12.Infrastructure {
 	}
 }
 
-func buildSnapshot() *elasticache.Snapshot {
-	return &elasticache.Snapshot{
-		SnapshotName: aws.String("test"),
+func buildSnapshot() *integreatlyv1alpha1.RedisSnapshot {
+	return &integreatlyv1alpha1.RedisSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
 	}
 }
 
@@ -132,12 +135,7 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 			args: args{
 				ctx:      context.TODO(),
 				cacheSvc: &mockElasticacheClient{repGroups: buildReplicationGroups()},
-				snapshot: &integreatlyv1alpha1.RedisSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "test",
-					},
-				},
+				snapshot: buildSnapshot(),
 				redis: &integreatlyv1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -146,7 +144,7 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 				},
 			},
 			fields: fields{
-				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure()),
+				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
 				scheme:            scheme,
 				logger:            testLogger,
 				ConfigManager:     nil,
