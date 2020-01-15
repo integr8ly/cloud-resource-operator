@@ -172,7 +172,8 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+
+return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
 }
 
 func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, snapshot *integreatlyv1alpha1.RedisSnapshot, redis *integreatlyv1alpha1.Redis) (croType.StatusPhase, croType.StatusMessage, error) {
@@ -180,6 +181,13 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, snapshot.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		errMsg := "failed to generate snapshot name"
+		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// update cr with snapshot name
+	snapshot.Status.SnapshotID = snapshotName
+	if err = r.client.Status().Update(ctx, snapshot); err != nil {
+		errMsg := fmt.Sprintf("failed to update instance %s in namespace %s", snapshot.Name, snapshot.Namespace)
 		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
