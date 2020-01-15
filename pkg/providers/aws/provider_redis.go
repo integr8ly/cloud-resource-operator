@@ -276,7 +276,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 			}
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
-				msg := "Failed to add tags to aws elasticache snapshot:"
+				msg := "failed to add tags to aws elasticache snapshot"
 				return types.StatusMessage(msg), err
 			}
 		}

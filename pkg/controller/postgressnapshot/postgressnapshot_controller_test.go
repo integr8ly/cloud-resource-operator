@@ -38,8 +38,6 @@ type mockRdsClient struct {
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
-	//err := apis2.AddToScheme(scheme)
-	//err = confv1.AddToScheme(scheme)
 	err := v1.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {
@@ -72,10 +70,6 @@ func (m *mockRdsClient) CreateDBSnapshot(*rds.CreateDBSnapshotInput) (*rds.Creat
 }
 
 func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
-	//ctx := context.TODO()
-	//snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, snapshot.ObjectMeta, croAws.DefaultAwsIdentifierLength)
-	//
-	//instanceName, err := croAws.BuildInfraNameFromObject(ctx, r.client, postgres.ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	scheme, err := buildTestScheme()
 	if err != nil {
 		logrus.Fatal(err)

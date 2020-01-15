@@ -98,7 +98,7 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 
 	// Fetch the PostgresSnapshot instance
 	instance := &integreatlyv1alpha1.PostgresSnapshot{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -112,13 +112,13 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
-		r.logger.Infof("found existing rds snapshot for %s", instance.Name)
+		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
 	// get postgres cr
 	postgresCr := &integreatlyv1alpha1.Postgres{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, postgresCr)
+	err = r.client.Get(ctx, types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, postgresCr)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get postgres resource: %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
@@ -129,7 +129,7 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 
 	// check postgres deployment strategy is aws
 	if postgresCr.Status.Strategy != providers.AWSDeploymentStrategy {
-		errMsg := fmt.Sprintf("deployment strategy '%s' is not supported", postgresCr.Status.Strategy)
+		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, postgresCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
@@ -222,5 +222,7 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	}
 
 	// creation in progress
-	return croType.PhaseInProgress, "snapshot creation in progress", nil
+	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.Status)
+	r.logger.Info(msg)
+	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }

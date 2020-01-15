@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/aws/aws-sdk-go v1.23.17
 	github.com/coreos/prometheus-operator v0.29.0
-	github.com/fatih/color v1.9.0 // indirect
 	github.com/go-openapi/spec v0.19.0
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
@@ -22,7 +21,6 @@ require (
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/procfs v0.0.4 // indirect
-	github.com/rakyll/gotest v0.0.0-20191108192113-45d501058f2a // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.4.0 // indirect

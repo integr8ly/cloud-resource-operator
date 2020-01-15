@@ -99,7 +99,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 
 	// Fetch the RedisSnapshot instance
 	instance := &integreatlyv1alpha1.RedisSnapshot{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -113,13 +113,13 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
-		r.logger.Infof("snapshot for %s exists", instance.Name)
+		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
 		return reconcile.Result{}, nil
 	}
 
 	// get redis cr
 	redisCr := &integreatlyv1alpha1.Redis{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, redisCr)
+	err = r.client.Get(ctx, types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, redisCr)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get redis cr : %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
@@ -129,7 +129,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 
 	// check redis cr deployment type is aws
 	if redisCr.Status.Strategy != providers.AWSDeploymentStrategy {
-		errMsg := "none supported deployment strategy"
+		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, redisCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
 			return reconcile.Result{}, updateErr
 		}
@@ -207,6 +207,10 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 		ReplicationGroupId: aws.String(clusterName),
 	})
 
+	if cacheOutput == nil {
+		return croType.PhaseFailed, "snapshot failed, no replication group found", nil
+	}
+
 	// ensure replication group is available
 	if *cacheOutput.ReplicationGroups[0].Status != "available" {
 		errMsg := fmt.Sprintf("current replication group status is %s", *cacheOutput.ReplicationGroups[0].Status)
@@ -242,5 +246,5 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 
 	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.SnapshotStatus)
 	r.logger.Info(msg)
-	return croType.PhaseInProgress, "snapshot creation in progress", nil
+	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
