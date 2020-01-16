@@ -270,7 +270,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 // DeleteStorage Delete elasticache replication group
 func (p *AWSRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// resolve elasticache information for elasticache created by provider
-	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
+	p.Logger.Info("getting cluster id from infrastructure for redis naming")
 	elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
