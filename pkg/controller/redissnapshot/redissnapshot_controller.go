@@ -3,13 +3,11 @@ package redissnapshot
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
-	"time"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	croAws "github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -114,7 +112,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
 		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
-		return reconcile.Result{}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
 	}
 
 	// get redis cr
@@ -123,26 +121,27 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get redis cr : %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
 	}
 
 	// check redis cr deployment type is aws
 	if redisCr.Status.Strategy != providers.AWSDeploymentStrategy {
 		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, redisCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.New(errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
 	}
 
 	// get resource region
 	stratCfg, err := r.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, redisCr.Spec.Tier)
 	if err != nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(err.Error())); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
 	if stratCfg.Region == "" {
 		stratCfg.Region = croAws.DefaultRegion
@@ -153,9 +152,9 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	if err != nil {
 		errMsg := "failed to reconcile elasticache credentials"
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup aws elasticache cluster sdk session
@@ -167,13 +166,13 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	// create snapshot of primary node
 	phase, msg, err := r.createSnapshot(ctx, cacheSvc, instance, redisCr)
 	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, phase, msg); updateErr != nil {
-		return reconcile.Result{}, updateErr
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 	}
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
 
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
 }
 
 func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, snapshot *integreatlyv1alpha1.RedisSnapshot, redis *integreatlyv1alpha1.Redis) (croType.StatusPhase, croType.StatusMessage, error) {

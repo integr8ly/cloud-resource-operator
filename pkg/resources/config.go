@@ -14,6 +14,8 @@ import (
 const (
 	EnvForceReconcileTimeout = "ENV_FORCE_RECONCILE_TIMEOUT"
 	DefaultTagKeyPrefix      = "integreatly.org/"
+	ErrorReconcileTime 		 = time.Second * 30
+	SuccessReconcileTime	 = time.Second * 60
 )
 
 // returns envar for reconcile time else returns default time

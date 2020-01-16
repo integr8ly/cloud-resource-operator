@@ -174,7 +174,7 @@ func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
 			name: "test successful snapshot in progress",
 			args: args{
 				ctx:      ctx,
-				rdsSvc:   &mockRdsClient{dbSnapshot: buildSnapshot(), dbSnapshots: buildSnapshots(snapshotName, "creatring")},
+				rdsSvc:   &mockRdsClient{dbSnapshot: buildSnapshot(), dbSnapshots: buildSnapshots(snapshotName, "creating")},
 				snapshot: buildPostgresSnapshot(),
 				postgres: buildPostgres(),
 			},

@@ -3,8 +3,6 @@ package postgressnapshot
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -113,7 +111,7 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
 		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
-		return reconcile.Result{}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
 	}
 
 	// get postgres cr
@@ -122,27 +120,27 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get postgres resource: %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.New(errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
 	}
 
 	// check postgres deployment strategy is aws
 	if postgresCr.Status.Strategy != providers.AWSDeploymentStrategy {
 		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, postgresCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.New(errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
 	}
 
 	// get resource region
 	stratCfg, err := r.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, postgresCr.Spec.Tier)
 	if err != nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(err.Error())); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
 	if stratCfg.Region == "" {
 		stratCfg.Region = croAws.DefaultRegion
@@ -153,9 +151,9 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	if err != nil {
 		errMsg := "failed to reconcile rds credentials"
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 		}
-		return reconcile.Result{}, errorUtil.Wrap(err, errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup aws rds session
@@ -167,12 +165,12 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	// create the snapshot and return the phase
 	phase, msg, err := r.createSnapshot(ctx, rdsSvc, instance, postgresCr)
 	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, phase, msg); updateErr != nil {
-		return reconcile.Result{}, updateErr
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
 	}
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
 }
 
 func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc rdsiface.RDSAPI, snapshot *integreatlyv1alpha1.PostgresSnapshot, postgres *integreatlyv1alpha1.Postgres) (croType.StatusPhase, croType.StatusMessage, error) {
