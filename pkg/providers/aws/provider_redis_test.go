@@ -80,6 +80,20 @@ func (m *mockElasticacheClient) DescribeSnapshots(*elasticache.DescribeSnapshots
 	return &elasticache.DescribeSnapshotsOutput{}, nil
 }
 
+// mock elasticache DescribeReplicationGroups output
+func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+	if m.wantEmpty {
+		return &elasticache.DescribeCacheClustersOutput{}, nil
+	}
+	return &elasticache.DescribeCacheClustersOutput{
+		CacheClusters: []*elasticache.CacheCluster{
+			{
+				CacheClusterStatus: aws.String("available"),
+			},
+		},
+	}, nil
+}
+
 // mock sts get caller identity
 func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
 	return &sts.GetCallerIdentityOutput{
@@ -120,6 +134,7 @@ func buildReplicationGroupReady() []*elasticache.ReplicationGroup {
 						Address: testAddress,
 						Port:    testPort,
 					},
+					Status: aws.String("available"),
 				},
 			},
 		},

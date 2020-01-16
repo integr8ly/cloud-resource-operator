@@ -51,3 +51,11 @@ type ResourceTypeStatus struct {
 	Phase     StatusPhase   `json:"phase,omitempty"`
 	Message   StatusMessage `json:"message,omitempty"`
 }
+
+// ResourceTypeSnapshotStatus Represents the basic status information provided by snapshot controller
+// +k8s:openapi-gen=true
+type ResourceTypeSnapshotStatus struct {
+	SnapshotID string        `json:"snapshotId,omitempty"`
+	Phase      StatusPhase   `json:"phase,omitempty"`
+	Message    StatusMessage `json:"message,omitempty"`
+}

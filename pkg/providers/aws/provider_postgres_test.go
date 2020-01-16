@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"reflect"
 	"testing"
@@ -265,8 +264,6 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			fmt.Println(got)
-			fmt.Println(tt.want)
 			if tt.want != nil && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("createRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
 			}

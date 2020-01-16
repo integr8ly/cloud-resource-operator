@@ -90,6 +90,20 @@ Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC)
 
 The two VPCs should now be able to communicate with each other. 
 
+## Snapshots
+The cloud resource operator supports the taking of arbitrary snapshots in the AWS provider for both `Postgres` and `Redis`. To take a snapshot you must create a `RedisSnapshot` or `PostgresSnapshot` resource, which should reference the `Redis` or `Postgres` resource you wish to create a snapshot of. The snapshot resource must also exist in the same namespace.
+```
+apiVersion: integreatly.org/v1alpha1
+kind: RedisSnapshot
+metadata:
+  name: my-redis-snapshot
+spec:
+  # The redis resource name for the snapshot you want to take
+  resourceName: my-redis-resource
+
+```  
+*Note* You may experience some downtime in the resource during the creation of the Snapshot
+
 ## Skip Create
 The cloud resource operator continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  
 

@@ -1,0 +1,7 @@
+apiVersion: integreatly.org/v1alpha1
+kind: RedisSnapshot
+metadata:
+  name: example-redissnapshot
+spec:
+  # The redis resource name for the snapshot you want to take
+  resourceName: REPLACE_ME

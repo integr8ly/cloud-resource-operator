@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.4.0
-VERSION=0.5.0
+PREV_VERSION=0.5.0
+VERSION=0.6.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 OPERATOR_SDK_VERSION=0.12.0
 
@@ -73,6 +73,8 @@ cluster/prepare:
 	oc create -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
+	oc create -f ./deploy/crds/integreatly_v1alpha1_postgressnapshot_crd.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/service_account.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/role.yaml -n $(NAMESPACE)
 	oc create -f ./deploy/role_binding.yaml -n $(NAMESPACE)
@@ -117,6 +119,8 @@ cluster/clean:
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
+	oc delete -f ./deploy/crds/integreatly_v1alpha1_postgressnapshot_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/service_account.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/role.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/role_binding.yaml -n $(NAMESPACE)

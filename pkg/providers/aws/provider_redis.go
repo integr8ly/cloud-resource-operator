@@ -164,6 +164,10 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 
 	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
+	if *cacheInstance.Status != "available" {
+		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
+	}
+
 	for _, cache := range cacheInstance.NodeGroupMembers {
 		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
 		if err != nil {
@@ -183,6 +187,21 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 // Add Tags to AWS Elasticache
 func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
 	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
+
+	// check the node to make sure it is available before applying the tag
+	// this is needed as the cluster may be available while a node is not
+	cacheClusterOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
+		CacheClusterId: cache.CacheClusterId,
+	})
+	if err != nil {
+		errMsg := "failed to get cache cluster output"
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	clusterStatus := *cacheClusterOutput.CacheClusters[0].CacheClusterStatus
+	if clusterStatus != "available" {
+		errMsg := fmt.Sprintf("%s status is %s, skipping adding tags", *cache.CacheClusterId, clusterStatus)
+		return types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 
 	// get account identity
 	identityInput := &sts.GetCallerIdentityInput{}
@@ -257,7 +276,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 			}
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
-				msg := "Failed to add tags to AWS Elasticache Snapshot:"
+				msg := "failed to add tags to aws elasticache snapshot"
 				return types.StatusMessage(msg), err
 			}
 		}
@@ -421,7 +440,7 @@ func (p *AWSRedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r
 	if elasticacheConfig.SnapshotRetentionLimit == nil {
 		elasticacheConfig.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
 	}
-	cacheName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
@@ -433,7 +452,7 @@ func (p *AWSRedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r
 
 // buildElasticacheDeleteConfig checks redis config, if none exists sets values to defaults
 func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput) error {
-	cacheName, err := buildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
@@ -446,7 +465,7 @@ func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v
 	if elasticacheDeleteConfig.RetainPrimaryCluster == nil {
 		elasticacheDeleteConfig.RetainPrimaryCluster = aws.Bool(false)
 	}
-	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
