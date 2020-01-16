@@ -46,8 +46,17 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildSnapshot() *integreatlyv1alpha1.PostgresSnapshot{
+func buildPostgresSnapshot() *integreatlyv1alpha1.PostgresSnapshot {
 	return &integreatlyv1alpha1.PostgresSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+}
+
+func buildPostgres() *integreatlyv1alpha1.Postgres {
+	return &integreatlyv1alpha1.Postgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -66,6 +75,21 @@ func buildTestInfrastructure() *v12.Infrastructure {
 	}
 }
 
+func buildSnapshot() *rds.DBSnapshot {
+	return &rds.DBSnapshot{
+		DBInstanceIdentifier: aws.String("rds-db"),
+	}
+}
+
+func buildSnapshots(snapshotName string, snapshotStatus string) []*rds.DBSnapshot {
+	return []*rds.DBSnapshot{
+		{
+			DBSnapshotIdentifier: aws.String(snapshotName),
+			Status:               aws.String(snapshotStatus),
+		},
+	}
+}
+
 func (m *mockRdsClient) DescribeDBSnapshots(*rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 	return &rds.DescribeDBSnapshotsOutput{
 		DBSnapshots: m.dbSnapshots,
@@ -79,12 +103,17 @@ func (m *mockRdsClient) CreateDBSnapshot(*rds.CreateDBSnapshotInput) (*rds.Creat
 }
 
 func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
+	ctx := context.TODO()
 	scheme, err := buildTestScheme()
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-
+	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildPostgresSnapshot()), buildPostgresSnapshot().ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build scheme", err)
+	}
 	type fields struct {
 		client            client.Client
 		scheme            *runtime.Scheme
@@ -106,28 +135,58 @@ func TestReconcilePostgresSnapshot_createSnapshot(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful snapshot create",
+			name: "test successful snapshot started",
 			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{dbSnapshot: &rds.DBSnapshot{
-					DBInstanceIdentifier: aws.String("rds-db"),
-				}},
-				snapshot: buildSnapshot(),
-				postgres: &integreatlyv1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "test",
-					},
-				},
+				ctx:      ctx,
+				rdsSvc:   &mockRdsClient{dbSnapshot: buildSnapshot()},
+				snapshot: buildPostgresSnapshot(),
+				postgres: buildPostgres(),
 			},
 			fields: fields{
-				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
+				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildPostgresSnapshot()),
 				scheme:            scheme,
 				logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
 			},
-			want: types.PhaseInProgress,
+			want:    types.PhaseInProgress,
+			wantErr: false,
+		},
+		{
+			name: "test successful snapshot created",
+			args: args{
+				ctx:      ctx,
+				rdsSvc:   &mockRdsClient{dbSnapshot: buildSnapshot(), dbSnapshots: buildSnapshots(snapshotName, "available")},
+				snapshot: buildPostgresSnapshot(),
+				postgres: buildPostgres(),
+			},
+			fields: fields{
+				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildPostgresSnapshot()),
+				scheme:            scheme,
+				logger:            testLogger,
+				ConfigManager:     nil,
+				CredentialManager: nil,
+			},
+			want:    types.PhaseComplete,
+			wantErr: false,
+		},
+		{
+			name: "test successful snapshot in progress",
+			args: args{
+				ctx:      ctx,
+				rdsSvc:   &mockRdsClient{dbSnapshot: buildSnapshot(), dbSnapshots: buildSnapshots(snapshotName, "creatring")},
+				snapshot: buildPostgresSnapshot(),
+				postgres: buildPostgres(),
+			},
+			fields: fields{
+				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildPostgresSnapshot()),
+				scheme:            scheme,
+				logger:            testLogger,
+				ConfigManager:     nil,
+				CredentialManager: nil,
+			},
+			want:    types.PhaseInProgress,
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {

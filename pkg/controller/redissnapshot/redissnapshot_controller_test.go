@@ -100,12 +100,12 @@ func buildReplicationGroups() []*elasticache.ReplicationGroup {
 }
 
 func buildSnapshots(snapshotName string, snapshotStatus string) []*elasticache.Snapshot {
-	var snaps []*elasticache.Snapshot
-	snaps = append(snaps, &elasticache.Snapshot{
-		SnapshotName:                aws.String(snapshotName),
-		SnapshotStatus:              aws.String(snapshotStatus),
-	})
-	return snaps
+	return []*elasticache.Snapshot{
+		{
+			SnapshotName:   aws.String(snapshotName),
+			SnapshotStatus: aws.String(snapshotStatus),
+		},
+	}
 }
 
 func (m *mockElasticacheClient) DescribeSnapshots(*elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
@@ -125,12 +125,13 @@ func (m *mockElasticacheClient) CreateSnapshot(*elasticache.CreateSnapshotInput)
 }
 
 func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
+	ctx := context.TODO()
 	scheme, err := buildTestScheme()
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()), buildSnapshot().ObjectMeta, croAws.DefaultAwsIdentifierLength)
+	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()), buildSnapshot().ObjectMeta, croAws.DefaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build snapshot name", err)
@@ -159,10 +160,10 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 		{
 			name: "test successful snapshot started",
 			args: args{
-				ctx:      context.TODO(),
+				ctx:      ctx,
 				cacheSvc: &mockElasticacheClient{repGroups: buildReplicationGroups()},
 				snapshot: buildSnapshot(),
-				redis: buildRedisCR(),
+				redis:    buildRedisCR(),
 			},
 			fields: fields{
 				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
@@ -178,10 +179,10 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 		{
 			name: "test successful snapshot created",
 			args: args{
-				ctx: context.TODO(),
-				cacheSvc: &mockElasticacheClient{repGroups:buildReplicationGroups(), snapshots: buildSnapshots(snapshotName, "available")},
+				ctx:      ctx,
+				cacheSvc: &mockElasticacheClient{repGroups: buildReplicationGroups(), snapshots: buildSnapshots(snapshotName, "available")},
 				snapshot: buildSnapshot(),
-				redis: buildRedisCR(),
+				redis:    buildRedisCR(),
 			},
 			fields: fields{
 				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
@@ -190,17 +191,17 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 			},
-			want: types.PhaseComplete,
-			want1: "snapshot created",
+			want:    types.PhaseComplete,
+			want1:   "snapshot created",
 			wantErr: false,
 		},
 		{
 			name: "test creating snapshot in progress",
 			args: args{
-				ctx: context.TODO(),
-				cacheSvc: &mockElasticacheClient{repGroups:buildReplicationGroups(), snapshots: buildSnapshots(snapshotName, "creating")},
+				ctx:      ctx,
+				cacheSvc: &mockElasticacheClient{repGroups: buildReplicationGroups(), snapshots: buildSnapshots(snapshotName, "creating")},
 				snapshot: buildSnapshot(),
-				redis: buildRedisCR(),
+				redis:    buildRedisCR(),
 			},
 			fields: fields{
 				client:            fake.NewFakeClientWithScheme(scheme, buildTestInfrastructure(), buildSnapshot()),
@@ -209,8 +210,8 @@ func TestReconcileRedisSnapshot_createSnapshot(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 			},
-			want: types.PhaseInProgress,
-			want1: "current snapshot status : creating",
+			want:    types.PhaseInProgress,
+			want1:   "current snapshot status : creating",
 			wantErr: false,
 		},
 	}

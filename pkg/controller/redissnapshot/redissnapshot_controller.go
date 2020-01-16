@@ -173,7 +173,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 
-return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 60}, nil
 }
 
 func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, snapshot *integreatlyv1alpha1.RedisSnapshot, redis *integreatlyv1alpha1.Redis) (croType.StatusPhase, croType.StatusMessage, error) {
