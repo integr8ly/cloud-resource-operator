@@ -36,6 +36,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 	type args struct {
 		ctx            context.Context
 		client         client.Client
+		productName    string
 		deploymentType string
 		tier           string
 		name           string
@@ -57,6 +58,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -90,6 +92,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				deploymentType: "managed",
 				tier:           "production",
 				name:           "test",
+				productName:    "test",
 				ns:             "test",
 				secretName:     "test",
 				secretNs:       "test",
@@ -127,6 +130,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				deploymentType: "workshop",
 				tier:           "development",
 				name:           "test",
+				productName:    "test",
 				ns:             "test",
 				secretName:     "test",
 				secretNs:       "test",
@@ -140,7 +144,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcileBlobStorage(tt.args.ctx, tt.args.client, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
+			got, err := ReconcileBlobStorage(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileBlobStorage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -192,9 +196,6 @@ func TestReconcileSMTPCredentialSet(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
-					Labels: map[string]string{
-						"productName": "test",
-					},
 				},
 				Spec: v1alpha1.SMTPCredentialSetSpec{
 					Type: "managed",
@@ -206,61 +207,6 @@ func TestReconcileSMTPCredentialSet(t *testing.T) {
 				},
 			},
 			wantErr: false,
-		},
-		{
-			name: "test modification function",
-			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
-				tier:           "production",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
-				modifyFunc: func(cr v1.Object) error {
-					cr.SetLabels(map[string]string{
-						"cro": "test",
-					})
-					return nil
-				},
-			},
-			want: &v1alpha1.SMTPCredentialSet{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-					Labels: map[string]string{
-						"cro": "test",
-					},
-				},
-				Spec: v1alpha1.SMTPCredentialSetSpec{
-					Type: "managed",
-					Tier: "production",
-					SecretRef: &types.SecretRef{
-						Name:      "test",
-						Namespace: "test",
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "test modification function error",
-			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
-				tier:           "development",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
-				modifyFunc: func(cr v1.Object) error {
-					return errors.New("error executing function")
-				},
-			},
-			want:    nil,
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -287,6 +233,7 @@ func TestReconcilePostgres(t *testing.T) {
 		ctx            context.Context
 		client         client.Client
 		deploymentType string
+		productName    string
 		tier           string
 		name           string
 		ns             string
@@ -307,6 +254,7 @@ func TestReconcilePostgres(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -338,6 +286,7 @@ func TestReconcilePostgres(t *testing.T) {
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
+				productName:    "test",
 				tier:           "production",
 				name:           "test",
 				ns:             "test",
@@ -376,6 +325,7 @@ func TestReconcilePostgres(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "workshop",
 				tier:           "development",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -390,7 +340,7 @@ func TestReconcilePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
+			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -412,6 +362,7 @@ func TestReconcileRedis(t *testing.T) {
 		client         client.Client
 		deploymentType string
 		tier           string
+		productName    string
 		name           string
 		ns             string
 		secretName     string
@@ -431,6 +382,7 @@ func TestReconcileRedis(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -463,6 +415,7 @@ func TestReconcileRedis(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -500,6 +453,7 @@ func TestReconcileRedis(t *testing.T) {
 				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "workshop",
 				tier:           "development",
+				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
@@ -514,7 +468,7 @@ func TestReconcileRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
+			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileRedis() error = %v, wantErr %v", err, tt.wantErr)
 				return
