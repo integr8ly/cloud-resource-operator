@@ -6,6 +6,23 @@ metadata:
       [
         {
           "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "BlobStorage",
+          "metadata": {
+            "labels": {
+              "productName": "ProductName"
+            },
+            "name": "example-blobstorage"
+          },
+          "spec": {
+            "secretRef": {
+              "name": "example-blobstorage-sec"
+            },
+            "tier": "development",
+            "type": "REPLACE_ME"
+          }
+        },
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
           "kind": "Postgres",
           "metadata": {
             "labels": {
@@ -74,29 +91,12 @@ metadata:
             "tier": "development",
             "type": "REPLACE_ME"
           }
-        },
-        {
-          "apiVersion": "integreatly.org/v1alpha1",
-          "kind": "BlobStorage",
-          "metadata": {
-            "labels": {
-              "productName": "ProductName"
-            },
-            "name": "example-blobstorage"
-          },
-          "spec": {
-            "secretRef": {
-              "name": "example-blobstorage-sec"
-            },
-            "tier": "development",
-            "type": "REPLACE_ME"
-          }
         }
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
     certified: "false"
-    containerImage: quay.io/integreatly/cloud-resource-operator:0.5.0
+    containerImage: quay.io/integreatly/cloud-resource-operator:v0.6.0
     createdAt: "2019-10-07 12:34:56"
     description: Operator to provision cloud provider resources in an abstracted manner
     support: Integreatly
@@ -142,9 +142,15 @@ spec:
         displayName: Secret Reference
         path: secretRef
       version: v1alpha1
-    - kind: PostgresSnapshot
+    - description: Represents an instance of a Postgres Snapshot
+      displayName: Postgres Snapshot
+      kind: PostgresSnapshot
       name: postgressnapshots.integreatly.org
       version: v1alpha1
+      specDescriptors:
+        - description: The type of the resource to snapshot
+          displayName: ResourceName
+          path: resourceName
     - description: Represents an instance of a Redis cluster in a provider
       displayName: Redis
       kind: Redis
@@ -163,9 +169,15 @@ spec:
         displayName: Secret Reference
         path: secretRef
       version: v1alpha1
-    - kind: RedisSnapshot
+    - description: Represents an instance of Postgres Snapshot
+      displayName: Redis Snapshot
+      kind: RedisSnapshot
       name: redissnapshots.integreatly.org
       version: v1alpha1
+      specDescriptors:
+        - description: The type of the resource to snapshot
+          displayName: ResourceName
+          path: resourceName
     - description: Represents an instance of SMTP credentials in a provider
       displayName: SMTP Credentials
       kind: SMTPCredentialSet
@@ -239,7 +251,7 @@ spec:
                   value: cloud-resource-operator
                 - name: TAG_KEY_PREFIX
                   value: integreatly.org/
-                image: quay.io/integreatly/cloud-resource-operator:0.6.0
+                image: quay.io/integreatly/cloud-resource-operator:v0.6.0
                 imagePullPolicy: Always
                 name: cloud-resource-operator
                 resources: {}
