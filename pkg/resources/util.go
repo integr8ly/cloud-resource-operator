@@ -15,13 +15,13 @@ import (
 type modifyResourceFunc func(cr metav1.Object) error
 
 // ReconcileBlobStorage creates or updates a blob storage custom resource
-func ReconcileBlobStorage(ctx context.Context, client client.Client, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.BlobStorage, error) {
+func ReconcileBlobStorage(ctx context.Context, client client.Client, productName, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.BlobStorage, error) {
 	bs := &v1alpha1.BlobStorage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 			Labels: map[string]string{
-				"productName": name,
+				"productName": productName,
 			},
 		},
 	}
@@ -58,9 +58,6 @@ func ReconcileSMTPCredentialSet(ctx context.Context, client client.Client, deplo
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
-			Labels: map[string]string{
-				"productName": name,
-			},
 		},
 	}
 
@@ -91,13 +88,13 @@ func ReconcileSMTPCredentialSet(ctx context.Context, client client.Client, deplo
 }
 
 // ReconcilePostgres creates or updates a postgres custom resource
-func ReconcilePostgres(ctx context.Context, client client.Client, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.Postgres, error) {
+func ReconcilePostgres(ctx context.Context, client client.Client, productName, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.Postgres, error) {
 	pg := &v1alpha1.Postgres{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 			Labels: map[string]string{
-				"productName": name,
+				"productName": productName,
 			},
 		},
 	}
@@ -129,13 +126,13 @@ func ReconcilePostgres(ctx context.Context, client client.Client, deploymentType
 }
 
 // ReconcileRedis creates or updates a redis custom resource
-func ReconcileRedis(ctx context.Context, client client.Client, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.Redis, error) {
+func ReconcileRedis(ctx context.Context, client client.Client, productName, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.Redis, error) {
 	r := &v1alpha1.Redis{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 			Labels: map[string]string{
-				"productName": name,
+				"productName": productName,
 			},
 		},
 	}
