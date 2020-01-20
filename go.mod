@@ -18,7 +18,7 @@ require (
 	github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
 	github.com/operator-framework/operator-sdk v0.12.1-0.20191112211508-82fc57de5e5b
 	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v1.1.0 // indirect
+	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/procfs v0.0.4 // indirect
 	github.com/sirupsen/logrus v1.4.2
