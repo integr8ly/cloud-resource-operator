@@ -416,6 +416,7 @@ github.com/opencontainers/image-spec v0.0.0-20170604055404-372ad780f634/go.mod h
 github.com/opencontainers/runc v0.0.0-20181113202123-f000fe11ece1/go.mod h1:qT5XzbpPznkRYVz/mWwUaVBUv2rmF59PVA73FjuZG0U=
 github.com/opencontainers/runtime-spec v1.0.0/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/opencontainers/selinux v0.0.0-20170621221121-4a2974bf1ee9/go.mod h1:+BLncwf63G4dgOzykXAxcmnFlUaOlkDdmw/CqsW6pjs=
+github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible h1:q2JBuObKafI7B4Eli6eLd+2T5JsU9ioWZ82zQwyjJPg=
 github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible/go.mod h1:dh9o4Fs58gpFXGSYfnVxGR9PnV53I8TW84pQaJDdGiY=
 github.com/openshift/api v3.9.1-0.20191002160657-d92789481b05+incompatible h1:pJi5juYTFwGV9coGQetdTBQayln4OadcrSW/ZKJ6FUw=
 github.com/openshift/api v3.9.1-0.20191002160657-d92789481b05+incompatible/go.mod h1:dh9o4Fs58gpFXGSYfnVxGR9PnV53I8TW84pQaJDdGiY=

@@ -60,6 +60,7 @@ code/fix:
 .PHONY: code/check
 code/check:
 	go fmt `go list ./... | grep -v /vendor/`
+	golint ./pkg/...
 
 .PHONY: code/audit
 code/audit:
