@@ -30,6 +30,7 @@ stages:
 before_install:
   - go get github.com/mattn/goveralls
   - go get github.com/securego/gosec/cmd/gosec
+  - go get golang.org/x/lint/golint
 
 jobs:
   include:
