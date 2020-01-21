@@ -236,15 +236,15 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 
 	// set the tag values that will always be added
 	organizationTag := resources.GetOrganizationTag()
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		errMsg := "failed to get cluster id"
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	cacheTags := []*elasticache.Tag{
 		{
-			Key:   aws.String(organizationTag + "clusterId"),
-			Value: aws.String(clusterId),
+			Key:   aws.String(organizationTag + "clusterID"),
+			Value: aws.String(clusterID),
 		},
 		{
 			Key:   aws.String(organizationTag + "resource-type"),

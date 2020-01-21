@@ -173,15 +173,15 @@ func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName str
 
 	// set tag values that will always be added
 	defaultOrganizationTag := resources.GetOrganizationTag()
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		errMsg := "failed to get cluster id"
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	bucketTags := []*s3.Tag{
 		{
-			Key:   aws.String(defaultOrganizationTag + "clusterId"),
-			Value: aws.String(clusterId),
+			Key:   aws.String(defaultOrganizationTag + "clusterID"),
+			Value: aws.String(clusterID),
 		},
 		{
 			Key:   aws.String(defaultOrganizationTag + "resource-type"),

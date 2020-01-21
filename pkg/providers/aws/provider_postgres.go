@@ -242,13 +242,13 @@ func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.P
 	defaultOrganizationTag := resources.GetOrganizationTag()
 
 	//get Cluster Id
-	clusterId, _ := resources.GetClusterId(ctx, p.Client)
+	clusterID, _ := resources.GetClusterID(ctx, p.Client)
 	// Set the Tag values
 
 	rdsTag := []*rds.Tag{
 		{
-			Key:   aws.String(defaultOrganizationTag + "clusterId"),
-			Value: aws.String(clusterId),
+			Key:   aws.String(defaultOrganizationTag + "clusterID"),
+			Value: aws.String(clusterID),
 		},
 		{
 			Key:   aws.String(defaultOrganizationTag + "resource-type"),
