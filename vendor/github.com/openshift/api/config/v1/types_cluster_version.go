@@ -16,7 +16,6 @@ type ClusterVersion struct {
 
 	// spec is the desired state of the cluster version - the operator will work
 	// to ensure that the desired version is applied to the cluster.
-	// +kubebuilder:validation:Required
 	// +required
 	Spec ClusterVersionSpec `json:"spec"`
 	// status contains information about the available updates and any in-progress
@@ -94,7 +93,7 @@ type ClusterVersionStatus struct {
 
 	// observedGeneration reports which version of the spec is being synced.
 	// If this value is not equal to metadata.generation, then the desired
-	// and conditions fields may represent a previous version.
+	// and conditions fields may represent from a previous version.
 	ObservedGeneration int64 `json:"observedGeneration"`
 
 	// versionHash is a fingerprint of the content that the cluster will be

@@ -158,7 +158,7 @@ github.com/mitchellh/go-homedir
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
-# github.com/openshift/api v3.9.1-0.20191002160657-d92789481b05+incompatible
+# github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
 github.com/openshift/api/config/v1
 # github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
 github.com/openshift/cloud-credential-operator/pkg/apis
