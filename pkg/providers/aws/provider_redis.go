@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/sts"
@@ -11,6 +12,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/sirupsen/logrus"
@@ -31,7 +33,9 @@ import (
 )
 
 const (
-	redisProviderName = "aws-elasticache"
+	CROAWSElastiCacheServiceMaintenance = "cro_aws_elasticache_service_maintenance"
+	defaultCroAwsElasticacheInfo        = "cro_aws_elasticache_info"
+	redisProviderName                   = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
@@ -99,6 +103,12 @@ func (p *AWSRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (
 	// setup aws elasticache cluster sdk session
 	cacheSvc, stsSvc := createAWSService(stratCfg, providerCreds)
 
+	err = p.setRedisServiceMaintenanceMetric(ctx, r)
+	if err != nil {
+		errMsg := "error creating the elasticache service maintenance metrics"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// create the aws elasticache cluster
 	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, elasticacheCreateConfig, stratCfg)
 }
@@ -108,6 +118,7 @@ func createAWSService(stratCfg *StrategyConfig, providerCreds *AWSCredentials) (
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	}))
+
 	return elasticache.New(sess), sts.New(sess)
 }
 
@@ -144,6 +155,11 @@ func (p *AWSRedisProvider) createElasticacheCluster(ctx context.Context, r *v1al
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		return nil, "started elasticache provision", nil
+	}
+
+	// set status metric
+	if err := p.setRedisInfoMetric(ctx, r, foundCache); err != nil {
+		return nil, "failed to set metric", err
 	}
 
 	// check elasticache phase
@@ -343,6 +359,11 @@ func (p *AWSRedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.El
 		return croType.StatusEmpty, nil
 	}
 
+	// set status metric
+	if err := p.setRedisInfoMetric(ctx, r, foundCache); err != nil {
+		return "failed to set metric", err
+	}
+
 	// if status is not available return
 	if *foundCache.Status != "available" {
 		return croType.StatusMessage(fmt.Sprintf("delete detected, deleteReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
@@ -471,6 +492,90 @@ func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v
 	}
 	if elasticacheDeleteConfig.FinalSnapshotIdentifier != nil && *elasticacheDeleteConfig.FinalSnapshotIdentifier == "" {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
+	}
+	return nil
+}
+
+func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) (map[string]string, error) {
+	labels := map[string]string{}
+	labels["clusterID"] = clusterID
+	labels["resourceID"] = r.Name
+	labels["namespace"] = r.Namespace
+	labels["instanceID"] = *cache.ReplicationGroupId
+	labels["status"] = *cache.Status
+	return labels, nil
+}
+
+func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
+	logrus.Info("setting redis information metric")
+	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to get cluster id")
+	}
+
+	// build metric labels
+	labels, err := buildRedisInfoMetricLables(cr, instance, clusterId)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build metric labels")
+	}
+
+	// set status gauge
+	if err := resources.SetMetricCurrentTime(defaultCroAwsElasticacheInfo, labels); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *AWSRedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis) error {
+
+	// info about the elasticache cluster to be created
+	_, _, stratCfg, err := p.getElasticacheConfig(ctx, cr)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to retrieve aws elasticache cluster config %s", cr.Name)
+		return errorUtil.Wrapf(err, errMsg)
+	}
+
+	// create the credentials to be used by the aws resource providers, not to be used by end-user
+	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, cr.Namespace)
+	if err != nil {
+		msg := "failed to reconcile elasticache credentials"
+		return errorUtil.Wrap(err, msg)
+	}
+
+	cacheSvc, _ := createAWSService(stratCfg, providerCreds)
+
+	// Retrieve service maintenance updates, create and export Prometheus metrics
+	output, err := cacheSvc.DescribeServiceUpdates(&elasticache.DescribeServiceUpdatesInput{})
+	if err != nil {
+		msg := "elasticache serviceupdates error"
+		return errorUtil.Wrap(err, msg)
+	}
+
+	logrus.Info(fmt.Sprintf("there are elasticache serviceupdates: %d available", len(output.ServiceUpdates)))
+	metricName := CROAWSElastiCacheServiceMaintenance
+	for _, su := range output.ServiceUpdates {
+		metricLabels := map[string]string{}
+
+		metricLabels["AutoUpdateAfterRecommendedApplyByDate"] = strconv.FormatBool(*su.AutoUpdateAfterRecommendedApplyByDate)
+		metricLabels["Engine"] = *su.Engine
+		metricLabels["EstimatedUpdateTime"] = *su.EstimatedUpdateTime
+		metricLabels["ServiceUpdateDescription"] = *su.ServiceUpdateDescription
+		metricLabels["ServiceUpdateEndDate"] = strconv.FormatInt((*su.ServiceUpdateEndDate).Unix(), 10)
+		metricLabels["ServiceUpdateName"] = *su.ServiceUpdateName
+		metricLabels["ServiceUpdateRecommendedApplyByDate"] = strconv.FormatInt((*su.ServiceUpdateRecommendedApplyByDate).Unix(), 10)
+		metricLabels["ServiceUpdateReleaseDate"] = strconv.FormatInt((*su.ServiceUpdateReleaseDate).Unix(), 10)
+		metricLabels["ServiceUpdateSeverity"] = *su.ServiceUpdateSeverity
+		metricLabels["ServiceUpdateStatus"] = *su.ServiceUpdateStatus
+		metricLabels["ServiceUpdateType"] = *su.ServiceUpdateType
+
+		metricEpochTimestamp := (*su.ServiceUpdateRecommendedApplyByDate).Unix()
+
+		err = croResources.SetMetric(metricName, metricLabels, float64(metricEpochTimestamp))
+		if err != nil {
+			msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", metricName)
+			return errorUtil.Wrap(err, msg)
+		}
 	}
 	return nil
 }

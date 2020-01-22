@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -35,8 +37,10 @@ import (
 )
 
 const (
-	postgresProviderName       = "aws-rds"
-	DefaultAwsIdentifierLength = 40
+	CROAWSRDSServiceMaintenance   = "cro_aws_rds_service_maintenance"
+	defaultPostgresInfoMetricName = "cro_aws_rds_info"
+	postgresProviderName          = "aws-rds"
+	DefaultAwsIdentifierLength    = 40
 	// default create options
 	defaultAwsPostgresDeletionProtection = true
 	defaultAwsPostgresPort               = 5432
@@ -129,6 +133,12 @@ func (p *AWSPostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.P
 	// setup aws RDS instance sdk session
 	rdsSession := createRDSSession(stratCfg, providerCreds)
 
+	err = p.setPostgresServiceMaintenanceMetric(ctx, pg)
+	if err != nil {
+		errMsg := "error creating the rds service maintenance metrics"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// create the aws RDS instance
 	return p.createRDSInstance(ctx, pg, rdsSession, rdsCfg)
 }
@@ -188,6 +198,11 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 		return nil, "started rds provision", nil
 	}
 
+	// set status metric
+	if err := p.setPostgresInfoMetric(ctx, cr, foundInstance); err != nil {
+		return nil, croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
+	}
+
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
@@ -221,7 +236,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 
 // Tags RDS resources
 func (p *AWSPostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
-	logrus.Infof("Adding Tags to RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	logrus.Infof("adding tags to rds instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
 	// set the tag values that will always be added
 	defaultOrganizationTag := resources.GetOrganizationTag()
@@ -354,6 +369,11 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
 		return croType.StatusEmpty, nil
+	}
+
+	// set status metric
+	if err := p.setPostgresInfoMetric(ctx, pg, foundInstance); err != nil {
+		return croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
 	}
 
 	// return if rds instance is not available
@@ -558,4 +578,96 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 	}
+}
+
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) (map[string]string, error) {
+	labels := map[string]string{}
+	labels["clusterID"] = clusterId
+	labels["resourceID"] = cr.Name
+	labels["namespace"] = cr.Namespace
+	labels["instanceID"] = *instance.DBInstanceIdentifier
+	labels["status"] = *instance.DBInstanceStatus
+	return labels, nil
+}
+
+func (p *AWSPostgresProvider) setPostgresInfoMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
+	// get Cluster Id
+	logrus.Info("setting postgres information metric")
+	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to get cluster id")
+	}
+
+	// build metric labels
+	labels, err := buildPostgresInfoMetricLabels(cr, instance, clusterId)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to build metric labels")
+	}
+
+	// set status gauge
+	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, labels); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *AWSPostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres) error {
+
+	// info about the RDS instance to be created
+	_, _, stratCfg, err := p.getRDSConfig(ctx, cr)
+	if err != nil {
+		msg := "failed to retrieve aws rds cluster config for instance"
+		return errorUtil.Wrapf(err, msg)
+	}
+
+	// create the credentials to be used by the aws resource providers, not to be used by end-user
+	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, cr.Namespace)
+	if err != nil {
+		msg := "failed to reconcile rds credentials"
+		return errorUtil.Wrap(err, msg)
+	}
+
+	rdsSession := createRDSSession(stratCfg, providerCreds)
+
+	// Retrieve service maintenance updates, create and export Prometheus metrics
+	output, err := rdsSession.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{})
+	if err != nil {
+		msg := "rds serviceupdates error"
+		return errorUtil.Wrap(err, msg)
+	}
+
+	logrus.Info(fmt.Sprintf("rds serviceupdates: %d available", len(output.PendingMaintenanceActions)))
+	metricName := CROAWSRDSServiceMaintenance
+	for _, su := range output.PendingMaintenanceActions {
+		metricLabels := map[string]string{}
+
+		metricLabels["ResourceIdentifier"] = *su.ResourceIdentifier
+
+		clusterId, err := resources.GetClusterId(ctx, p.Client)
+		if err != nil {
+			msg := "failed to get cluster id"
+			return errorUtil.Wrap(err, msg)
+		}
+
+		for _, pma := range su.PendingMaintenanceActionDetails {
+
+			metricLabels["AutoAppliedAfterDate"] = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
+			metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
+			metricLabels["Description"] = *pma.Description
+			metricLabels["Namespace"] = cr.Namespace
+			metricLabels["clusterID"] = clusterId
+			metricLabels["resourceID"] = cr.Name
+
+			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()
+
+			err = croResources.SetMetric(metricName, metricLabels, float64(metricEpochTimestamp))
+			if err != nil {
+				msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", metricName)
+				return errorUtil.Wrap(err, msg)
+			}
+		}
+	}
+
+	return nil
 }
