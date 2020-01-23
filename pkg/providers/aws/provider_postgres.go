@@ -138,7 +138,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	return p.createRDSInstance(ctx, pg, rdsSession, rdsCfg)
 }
 
-func createRDSSession(stratCfg *StrategyConfig, providerCreds *AWSCredentials) rdsiface.RDSAPI {
+func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) rdsiface.RDSAPI {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),

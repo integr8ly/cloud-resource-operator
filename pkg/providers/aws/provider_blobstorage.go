@@ -246,7 +246,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	return p.reconcileBucketDelete(ctx, bs, s3svc, bucketCreateCfg, bucketDeleteCfg)
 }
 
-func createS3Session(stratCfg *StrategyConfig, providerCreds *AWSCredentials) s3iface.S3API {
+func createS3Session(stratCfg *StrategyConfig, providerCreds *Credentials) s3iface.S3API {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),

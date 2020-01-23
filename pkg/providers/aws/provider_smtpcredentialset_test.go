@@ -71,8 +71,8 @@ func buildTestInfrastructure() *v13.Infrastructure {
 	}
 }
 
-func buildTestAWSCredentials() *AWSCredentials {
-	return &AWSCredentials{
+func buildTestAWSCredentials() *Credentials {
+	return &Credentials{
 		Username:        "test",
 		PolicyName:      "test",
 		AccessKeyID:     "test",
@@ -309,7 +309,7 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet(), buildTestInfrastructure()),
 				Logger: testLogger,
 				CredentialManager: &CredentialManagerMock{
-					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *AWSCredentials, e error) {
+					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *Credentials, e error) {
 						return buildTestAWSCredentials(), nil
 					},
 				},
@@ -352,7 +352,7 @@ func TestSMTPCredentialProvider_CreateSMTPCredentials(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestSMTPCredentialSet()),
 				Logger: testLogger,
 				CredentialManager: &CredentialManagerMock{
-					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *AWSCredentials, e error) {
+					ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (credentials *Credentials, e error) {
 						return buildTestAWSCredentials(), nil
 					},
 				},
