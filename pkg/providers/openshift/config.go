@@ -22,6 +22,9 @@ const (
 	DefaultConfigMapName = "cloud-resources-openshift-strategies"
 	DefaultFinalizer     = "finalizers.cloud-resources-operator.integreatly.org"
 	defaultReconcileTime = time.Second * 30
+
+	NamespacePrefixOpenShift = "openshift-"
+	NamespacePrefixRedHat    = "redhat-"
 )
 
 //get default namespace

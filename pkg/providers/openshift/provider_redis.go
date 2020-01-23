@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -302,7 +304,7 @@ type RedisStrat struct {
 }
 
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
-	dc := &appsv1.Deployment{
+	depl := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
 			APIVersion: "apps/v1",
@@ -334,7 +336,15 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 			Replicas: int32Ptr(1),
 		},
 	}
-	return dc
+	// required for restricted namespace
+	if strings.HasPrefix(r.Namespace, NamespacePrefixOpenShift) || strings.HasPrefix(r.Namespace, NamespacePrefixRedHat) {
+		userGroupId := int64(1001)
+		depl.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
+			FSGroup:            &userGroupId,
+			SupplementalGroups: []int64{userGroupId},
+		}
+	}
+	return depl
 }
 
 func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
