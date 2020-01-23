@@ -520,8 +520,8 @@ func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.
 	}
 
 	// build metric labels
-	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterId)
-	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterId)
+	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterID)
+	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
 	if err := resources.SetMetricCurrentTime(defaultRedisInfoMetricName, infoLabels); err != nil {

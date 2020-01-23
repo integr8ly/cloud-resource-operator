@@ -581,13 +581,13 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
-func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) map[string]string {
-	labels := buildPostgresGenericMetricLabels(cr, instance, clusterId)
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {
+	labels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 	labels["status"] = *instance.DBInstanceStatus
 	return labels
 }
 
-func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) map[string]string {
+func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -605,9 +605,9 @@ func (p *AWSPostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1a
 	}
 
 	// build metric labels
-	infoLabels:= buildPostgresInfoMetricLabels(cr, instance, clusterId)
+	infoLabels:= buildPostgresInfoMetricLabels(cr, instance, clusterID)
 	// build available mertic labels
-	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterId)
+	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
 	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, infoLabels); err != nil {
