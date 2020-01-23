@@ -33,9 +33,10 @@ import (
 )
 
 const (
-	CROAWSElastiCacheServiceMaintenance = "cro_aws_elasticache_service_maintenance"
-	defaultCroAwsElasticacheInfo        = "cro_aws_elasticache_info"
-	redisProviderName                   = "aws-elasticache"
+	defaultRedisMaintenanceMetricName = "cro_aws_elasticache_service_maintenance"
+	defaultRedisInfoMetricName        = "cro_aws_elasticache_info"
+	defaultRedisAvailMetricName       = "cro_aws_elasticache_avail"
+	redisProviderName                 = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
@@ -496,14 +497,19 @@ func (p *AWSRedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v
 	return nil
 }
 
-func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) (map[string]string, error) {
+func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) map[string]string {
+	labels := buildRedisGenericMetricLabels(r, cache, clusterID)
+	labels["status"] = *cache.Status
+	return labels
+}
+
+func buildRedisGenericMetricLabels(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = r.Name
 	labels["namespace"] = r.Namespace
 	labels["instanceID"] = *cache.ReplicationGroupId
-	labels["status"] = *cache.Status
-	return labels, nil
+	return labels
 }
 
 func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
@@ -514,13 +520,22 @@ func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.
 	}
 
 	// build metric labels
-	labels, err := buildRedisInfoMetricLables(cr, instance, clusterID)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to build metric labels")
-	}
+	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterId)
+	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterId)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultCroAwsElasticacheInfo, labels); err != nil {
+	if err := resources.SetMetricCurrentTime(defaultRedisInfoMetricName, infoLabels); err != nil {
+		return err
+	}
+
+	// set available metric
+	if *instance.Status != "available" {
+		if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 0); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 0); err != nil {
 		return err
 	}
 
@@ -553,7 +568,7 @@ func (p *AWSRedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context,
 	}
 
 	logrus.Info(fmt.Sprintf("there are elasticache serviceupdates: %d available", len(output.ServiceUpdates)))
-	metricName := CROAWSElastiCacheServiceMaintenance
+	metricName := defaultRedisMaintenanceMetricName
 	for _, su := range output.ServiceUpdates {
 		metricLabels := map[string]string{}
 
