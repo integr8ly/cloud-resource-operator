@@ -37,10 +37,11 @@ import (
 )
 
 const (
-	CROAWSRDSServiceMaintenance   = "cro_aws_rds_service_maintenance"
-	defaultPostgresInfoMetricName = "cro_aws_rds_info"
-	postgresProviderName          = "aws-rds"
-	DefaultAwsIdentifierLength    = 40
+	CROAWSRDSServiceMaintenance    = "cro_aws_rds_service_maintenance"
+	defaultPostgresInfoMetricName  = "cro_aws_rds_info"
+	defaultPostgresAvailMetricName = "cro_aws_rds_available"
+	postgresProviderName           = "aws-rds"
+	DefaultAwsIdentifierLength     = 40
 	// default create options
 	defaultAwsPostgresDeletionProtection = true
 	defaultAwsPostgresPort               = 5432
@@ -199,7 +200,7 @@ func (p *AWSPostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha
 	}
 
 	// set status metric
-	if err := p.setPostgresInfoMetric(ctx, cr, foundInstance); err != nil {
+	if err := p.exposePostgresMetrics(ctx, cr, foundInstance); err != nil {
 		return nil, croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
 	}
 
@@ -372,7 +373,7 @@ func (p *AWSPostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha
 	}
 
 	// set status metric
-	if err := p.setPostgresInfoMetric(ctx, pg, foundInstance); err != nil {
+	if err := p.exposePostgresMetrics(ctx, pg, foundInstance); err != nil {
 		return croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
 	}
 
@@ -580,17 +581,25 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
-func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) (map[string]string, error) {
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) (map[string]string, error) {
+	labels, err := buildPostgresGenericMetricLabels(cr, instance, clusterId)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to build generic metric labels")
+	}
+	labels["status"] = *instance.DBInstanceStatus
+	return labels, nil
+}
+
+func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) (map[string]string, error) {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
 	labels["instanceID"] = *instance.DBInstanceIdentifier
-	labels["status"] = *instance.DBInstanceStatus
 	return labels, nil
 }
 
-func (p *AWSPostgresProvider) setPostgresInfoMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
+func (p *AWSPostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
@@ -604,8 +613,25 @@ func (p *AWSPostgresProvider) setPostgresInfoMetric(ctx context.Context, cr *v1a
 		return errorUtil.Wrapf(err, "failed to build metric labels")
 	}
 
+	// build available mertic labels
+	infoLabels, err = buildPostgresGenericMetricLabels(cr, instance, clusterId)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to build generic labels")
+	}
+
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, labels); err != nil {
+	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, infoLabels); err != nil {
+		return err
+	}
+
+	if *instance.DBInstanceStatus != "available" {
+		if err := resources.SetMetric(defaultPostgresAvailMetricName, infoLabels, 0); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := resources.SetMetric(defaultPostgresAvailMetricName, infoLabels, 1); err != nil {
 		return err
 	}
 
