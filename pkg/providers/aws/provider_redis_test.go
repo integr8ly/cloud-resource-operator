@@ -94,6 +94,10 @@ func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCache
 	}, nil
 }
 
+func (m *mockElasticacheClient) DescribeServiceUpdates(*elasticache.DescribeServiceUpdatesInput) (*elasticache.DescribeServiceUpdatesOutput, error) {
+	return &elasticache.DescribeServiceUpdatesOutput{}, nil
+}
+
 // mock sts get caller identity
 func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
 	return &sts.GetCallerIdentityOutput{
