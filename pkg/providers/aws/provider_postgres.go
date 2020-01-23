@@ -580,9 +580,9 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
-func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterId string) (map[string]string, error) {
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) (map[string]string, error) {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterId
+	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
 	labels["instanceID"] = *instance.DBInstanceIdentifier
@@ -593,13 +593,13 @@ func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstan
 func (p *AWSPostgresProvider) setPostgresInfoMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get cluster id")
 	}
 
 	// build metric labels
-	labels, err := buildPostgresInfoMetricLabels(cr, instance, clusterId)
+	labels, err := buildPostgresInfoMetricLabels(cr, instance, clusterID)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to build metric labels")
 	}
@@ -644,7 +644,7 @@ func (p *AWSPostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Co
 
 		metricLabels["ResourceIdentifier"] = *su.ResourceIdentifier
 
-		clusterId, err := resources.GetClusterId(ctx, p.Client)
+		clusterID, err := resources.GetClusterID(ctx, p.Client)
 		if err != nil {
 			msg := "failed to get cluster id"
 			return errorUtil.Wrap(err, msg)
@@ -656,7 +656,7 @@ func (p *AWSPostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Co
 			metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
 			metricLabels["Description"] = *pma.Description
 			metricLabels["Namespace"] = cr.Namespace
-			metricLabels["clusterID"] = clusterId
+			metricLabels["clusterID"] = clusterID
 			metricLabels["resourceID"] = cr.Name
 
 			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()

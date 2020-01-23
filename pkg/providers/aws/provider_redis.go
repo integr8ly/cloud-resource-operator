@@ -207,7 +207,7 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 	// check the node to make sure it is available before applying the tag
 	// this is needed as the cluster may be available while a node is not
 	cacheClusterOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
-		CacheClusterId: cache.CacheClusterId,
+		CacheClusterID: cache.CacheClusterId,
 	})
 	if err != nil {
 		errMsg := "failed to get cache cluster output"
@@ -508,13 +508,13 @@ func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.Replicatio
 
 func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
 	logrus.Info("setting redis information metric")
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get cluster id")
 	}
 
 	// build metric labels
-	labels, err := buildRedisInfoMetricLables(cr, instance, clusterId)
+	labels, err := buildRedisInfoMetricLables(cr, instance, clusterID)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build metric labels")
 	}
