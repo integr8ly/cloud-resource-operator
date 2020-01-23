@@ -236,15 +236,15 @@ func (p *AWSRedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elas
 
 	// set the tag values that will always be added
 	organizationTag := resources.GetOrganizationTag()
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		errMsg := "failed to get cluster id"
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	cacheTags := []*elasticache.Tag{
 		{
-			Key:   aws.String(organizationTag + "clusterId"),
-			Value: aws.String(clusterId),
+			Key:   aws.String(organizationTag + "clusterID"),
+			Value: aws.String(clusterID),
 		},
 		{
 			Key:   aws.String(organizationTag + "resource-type"),
@@ -508,13 +508,13 @@ func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.Replicatio
 
 func (p *AWSRedisProvider) setRedisInfoMetric(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
 	logrus.Info("setting redis information metric")
-	clusterId, err := resources.GetClusterId(ctx, p.Client)
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get cluster id")
 	}
 
 	// build metric labels
-	labels, err := buildRedisInfoMetricLables(cr, instance, clusterId)
+	labels, err := buildRedisInfoMetricLables(cr, instance, clusterID)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build metric labels")
 	}
