@@ -392,6 +392,7 @@ func buildDefaultPostgresPVC(ps *v1alpha1.Postgres) *v1.PersistentVolumeClaim {
 }
 
 func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
+	userGroupId := int64(26)
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ps.Name,
@@ -409,6 +410,10 @@ func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 			},
 			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
+					SecurityContext: &v1.PodSecurityContext{
+						FSGroup:            &userGroupId,
+						SupplementalGroups: []int64{userGroupId},
+					},
 					Volumes: []v1.Volume{
 						{
 							Name: ps.Name,

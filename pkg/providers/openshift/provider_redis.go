@@ -302,6 +302,7 @@ type RedisStrat struct {
 }
 
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
+	userGroupId := int64(1001)
 	dc := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -314,6 +315,10 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Template: apiv1.PodTemplateSpec{
 				Spec: apiv1.PodSpec{
+					SecurityContext: &apiv1.PodSecurityContext{
+						FSGroup:            &userGroupId,
+						SupplementalGroups: []int64{userGroupId},
+					},
 					Volumes:    buildDefaultRedisPodVolumes(r),
 					Containers: buildDefaultRedisPodContainers(r),
 				},
