@@ -91,7 +91,7 @@ func buildPutBucketObjectEntries(bucket string) []v1.StatementEntry {
 	}
 }
 
-type AWSCredentials struct {
+type Credentials struct {
 	Username        string
 	PolicyName      string
 	AccessKeyID     string

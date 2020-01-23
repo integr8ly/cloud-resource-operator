@@ -126,7 +126,7 @@ func TestOpenShiftRedisProvider_SupportsStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftRedisProvider{
+			p := &RedisProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -192,7 +192,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftRedisProvider{
+			p := &RedisProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -247,7 +247,7 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftRedisProvider{
+			p := &RedisProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -293,7 +293,7 @@ func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftRedisProvider{}
+			p := &RedisProvider{}
 			if got := p.GetReconcileTime(tt.args.r); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}

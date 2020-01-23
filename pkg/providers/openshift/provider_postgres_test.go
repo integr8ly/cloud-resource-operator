@@ -203,7 +203,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftPostgresProvider{
+			p := &PostgresProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -269,7 +269,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftPostgresProvider{
+			p := &PostgresProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -410,7 +410,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftPostgresProvider{
+			p := &PostgresProvider{
 				Client:        tt.fields.Client,
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
@@ -465,7 +465,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &OpenShiftPostgresProvider{}
+			p := &PostgresProvider{}
 			if got := p.GetReconcileTime(tt.args.p); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
