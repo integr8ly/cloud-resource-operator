@@ -27,7 +27,7 @@ const (
 	NamespacePrefixRedHat    = "redhat-"
 )
 
-//get default namespace
+//DefaultConfigMapNamespace get default namespace
 var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
 type StrategyConfig struct {

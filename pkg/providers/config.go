@@ -22,10 +22,10 @@ const (
 	DefaultProviderConfigMapName = "cloud-resource-config"
 )
 
-//get default namespace
+//DefaultConfigNamespace get default namespace
 var DefaultConfigNamespace, _ = k8sutil.GetWatchNamespace()
 
-// Deployment Strategy Map
+//DeploymentStrategyMapping Deployment Strategy Map
 type DeploymentStrategyMapping struct {
 	BlobStorage     string `json:"blobstorage"`
 	SMTPCredentials string `json:"smtpCredentials"`
@@ -60,7 +60,7 @@ func NewConfigManager(cm string, namespace string, client client.Client) *Config
 	}
 }
 
-// Get high-level information about the strategy used in a deployment type
+//GetStrategyMappingForDeploymentType Get high-level information about the strategy used in a deployment type
 func (m *ConfigMapConfigManager) GetStrategyMappingForDeploymentType(ctx context.Context, t string) (*DeploymentStrategyMapping, error) {
 	cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.providerConfigMapName, Namespace: m.providerConfigMapNamespace}, m.buildDefaultConfigMap())
 	if err != nil {

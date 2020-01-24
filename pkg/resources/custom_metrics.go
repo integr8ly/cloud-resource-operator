@@ -14,7 +14,7 @@ const (
 )
 
 var (
-	// create the map of vectors
+	//MetricVecs create the map of vectors
 	MetricVecs map[string]prometheus.GaugeVec
 	logger     *logrus.Entry
 )
@@ -23,7 +23,7 @@ func init() {
 	StartGaugeVector()
 }
 
-// periodic loop that is wiping all known vectors.
+//StartGaugeVector periodic loop that is wiping all known vectors.
 func StartGaugeVector() {
 	MetricVecs = map[string]prometheus.GaugeVec{}
 	logger = logrus.WithFields(logrus.Fields{"custom_metrics": "StartGaugeVector"})
@@ -39,7 +39,7 @@ func StartGaugeVector() {
 	}()
 }
 
-// Set exports a Prometheus Gauge
+//SetMetric Set exports a Prometheus Gauge
 func SetMetric(name string, labels map[string]string, value float64) error {
 	// set vector value
 	gv, ok := MetricVecs[name]
@@ -62,7 +62,7 @@ func SetMetric(name string, labels map[string]string, value float64) error {
 	return nil
 }
 
-// Set current time wraps set metric
+//SetMetricCurrentTime Set current time wraps set metric
 func SetMetricCurrentTime(name string, labels map[string]string) error {
 	if err := SetMetric(name, labels, float64(time.Now().UnixNano())/1e9); err != nil {
 		return errorUtil.Wrap(err, "unable to set current time gauge vector")
