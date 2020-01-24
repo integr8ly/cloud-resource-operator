@@ -58,6 +58,10 @@ func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput)
 	return &rds.DescribeDBSnapshotsOutput{}, nil
 }
 
+func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+	return &rds.DescribePendingMaintenanceActionsOutput{}, nil
+}
+
 func buildTestPostgresCR() *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
