@@ -46,38 +46,38 @@ const (
 	redisContainerCommand = "/opt/rh/rh-redis32/root/usr/bin/redis-server"
 )
 
-var _ providers.RedisProvider = (*OpenShiftRedisProvider)(nil)
+var _ providers.RedisProvider = (*RedisProvider)(nil)
 
-type OpenShiftRedisProvider struct {
+type RedisProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
 	ConfigManager ConfigManager
 }
 
-func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *OpenShiftRedisProvider {
-	return &OpenShiftRedisProvider{
+func NewOpenShiftRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvider {
+	return &RedisProvider{
 		Client:        client,
 		Logger:        logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		ConfigManager: NewDefaultConfigManager(client),
 	}
 }
 
-func (p *OpenShiftRedisProvider) GetName() string {
+func (p *RedisProvider) GetName() string {
 	return redisProviderName
 }
 
-func (p *OpenShiftRedisProvider) SupportsStrategy(d string) bool {
+func (p *RedisProvider) SupportsStrategy(d string) bool {
 	return d == providers.OpenShiftDeploymentStrategy
 }
 
-func (p *OpenShiftRedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
+func (p *RedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
 	if r.Status.Phase != croType.PhaseComplete {
 		return time.Second * 10
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
+func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -134,7 +134,7 @@ func (p *OpenShiftRedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Re
 	return nil, "creation in progress", nil
 }
 
-func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
+func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// delete service
 	p.Logger.Info("Deleting redis service")
 	svc := &apiv1.Service{
@@ -204,7 +204,7 @@ func (p *OpenShiftRedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Re
 }
 
 // getPostgresConfig retrieves the redis config from the cloud-resources-openshift-strategies configmap
-func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*RedisStrat, *StrategyConfig, error) {
+func (p *RedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*RedisStrat, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to read openshift strategy config")
@@ -218,7 +218,7 @@ func (p *OpenShiftRedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1
 	return redisConfig, stratCfg, nil
 }
 
-func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 		if redisCfg.RedisDeploymentSpec == nil {
@@ -235,7 +235,7 @@ func (p *OpenShiftRedisProvider) CreateDeployment(ctx context.Context, d *appsv1
 	return nil
 }
 
-func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*apiv1.Service)
 
@@ -255,7 +255,7 @@ func (p *OpenShiftRedisProvider) CreateService(ctx context.Context, s *apiv1.Ser
 	return nil
 }
 
-func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
 		e := existing.(*apiv1.ConfigMap)
 
@@ -273,7 +273,7 @@ func (p *OpenShiftRedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.
 	return nil
 }
 
-func (p *OpenShiftRedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*apiv1.PersistentVolumeClaim)
 		// resources.requests is only mutable on bound claims

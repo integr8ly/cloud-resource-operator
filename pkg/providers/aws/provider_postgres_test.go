@@ -257,7 +257,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSPostgresProvider{
+			p := &PostgresProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
@@ -370,7 +370,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSPostgresProvider{
+			p := &PostgresProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
@@ -422,7 +422,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSPostgresProvider{}
+			p := &PostgresProvider{}
 			if got := p.GetReconcileTime(tt.args.p); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
@@ -480,7 +480,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSPostgresProvider{
+			p := &PostgresProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,

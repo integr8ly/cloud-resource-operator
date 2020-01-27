@@ -54,17 +54,17 @@ type PostgresStrat struct {
 	PostgresSecretData     map[string]string             `json:"secretData"`
 }
 
-var _ providers.PostgresProvider = (*OpenShiftPostgresProvider)(nil)
+var _ providers.PostgresProvider = (*PostgresProvider)(nil)
 
-type OpenShiftPostgresProvider struct {
+type PostgresProvider struct {
 	Client        client.Client
 	Logger        *logrus.Entry
 	ConfigManager ConfigManager
 	PodCommander  resources.PodCommander
 }
 
-func NewOpenShiftPostgresProvider(client client.Client, cs *kubernetes.Clientset, logger *logrus.Entry) *OpenShiftPostgresProvider {
-	return &OpenShiftPostgresProvider{
+func NewOpenShiftPostgresProvider(client client.Client, cs *kubernetes.Clientset, logger *logrus.Entry) *PostgresProvider {
+	return &PostgresProvider{
 		Client:        client,
 		PodCommander:  &resources.OpenShiftPodCommander{ClientSet: cs},
 		Logger:        logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
@@ -72,22 +72,22 @@ func NewOpenShiftPostgresProvider(client client.Client, cs *kubernetes.Clientset
 	}
 }
 
-func (p *OpenShiftPostgresProvider) GetName() string {
+func (p *PostgresProvider) GetName() string {
 	return postgresProviderName
 }
 
-func (p *OpenShiftPostgresProvider) SupportsStrategy(d string) bool {
+func (p *PostgresProvider) SupportsStrategy(d string) bool {
 	return d == providers.OpenShiftDeploymentStrategy
 }
 
-func (p *OpenShiftPostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration {
+func (p *PostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration {
 	if pg.Status.Phase != croType.PhaseComplete {
 		return time.Second * 10
 	}
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, ps, DefaultFinalizer); err != nil {
 		errMsg := "failed to set finalizer"
@@ -178,7 +178,7 @@ func (p *OpenShiftPostgresProvider) CreatePostgres(ctx context.Context, ps *v1al
 	}, "creation successful", nil
 }
 
-func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (croType.StatusMessage, error) {
+func (p *PostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	// delete service
 	p.Logger.Info("Deleting postgres service")
 	svc := &v1.Service{
@@ -248,7 +248,7 @@ func (p *OpenShiftPostgresProvider) DeletePostgres(ctx context.Context, ps *v1al
 }
 
 // getPostgresConfig retrieves the postgres config from the cloud-resources-openshift-strategies configmap
-func (p *OpenShiftPostgresProvider) getPostgresConfig(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresStrat, *StrategyConfig, error) {
+func (p *PostgresProvider) getPostgresConfig(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresStrat, *StrategyConfig, error) {
 	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, ps.Spec.Tier)
 	if err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to read openshift strategy config")
@@ -262,7 +262,7 @@ func (p *OpenShiftPostgresProvider) getPostgresConfig(ctx context.Context, ps *v
 	return postgresCfg, stratCfg, nil
 }
 
-func (p *OpenShiftPostgresProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, postgresCfg *PostgresStrat) error {
+func (p *PostgresProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployment, postgresCfg *PostgresStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, d, func(existing runtime.Object) error {
 		e := existing.(*appsv1.Deployment)
 
@@ -280,7 +280,7 @@ func (p *OpenShiftPostgresProvider) CreateDeployment(ctx context.Context, d *app
 	return nil
 }
 
-func (p *OpenShiftPostgresProvider) CreateService(ctx context.Context, s *v1.Service, postgresCfg *PostgresStrat) error {
+func (p *PostgresProvider) CreateService(ctx context.Context, s *v1.Service, postgresCfg *PostgresStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*v1.Service)
 
@@ -300,7 +300,7 @@ func (p *OpenShiftPostgresProvider) CreateService(ctx context.Context, s *v1.Ser
 	return nil
 }
 
-func (p *OpenShiftPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secret, postgresCfg *PostgresStrat) error {
+func (p *PostgresProvider) CreateSecret(ctx context.Context, s *v1.Secret, postgresCfg *PostgresStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
 		e := existing.(*v1.Secret)
 
@@ -325,7 +325,7 @@ func (p *OpenShiftPostgresProvider) CreateSecret(ctx context.Context, s *v1.Secr
 	return nil
 }
 
-func (p *OpenShiftPostgresProvider) CreatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim, postgresCfg *PostgresStrat) error {
+func (p *PostgresProvider) CreatePVC(ctx context.Context, pvc *v1.PersistentVolumeClaim, postgresCfg *PostgresStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
 		e := existing.(*v1.PersistentVolumeClaim)
 
@@ -346,7 +346,7 @@ func (p *OpenShiftPostgresProvider) CreatePVC(ctx context.Context, pvc *v1.Persi
 	return nil
 }
 
-func (p *OpenShiftPostgresProvider) ReconcileDatabaseUserRoles(ctx context.Context, d *appsv1.Deployment, u string) error {
+func (p *PostgresProvider) ReconcileDatabaseUserRoles(ctx context.Context, d *appsv1.Deployment, u string) error {
 	cmd := "psql -c \"ALTER USER \\\"" + u + "\\\" WITH SUPERUSER;\""
 	if err := p.PodCommander.ExecIntoPod(d, cmd); err != nil {
 		return errorUtil.Wrap(err, "failed to perform exec on database pod")

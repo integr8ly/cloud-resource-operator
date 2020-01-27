@@ -262,7 +262,7 @@ func Test_createRedisCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSRedisProvider{
+			p := &RedisProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
@@ -360,7 +360,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSRedisProvider{
+			p := &RedisProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
@@ -408,7 +408,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSRedisProvider{}
+			p := &RedisProvider{}
 			if got := p.GetReconcileTime(tt.args.r); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
@@ -469,7 +469,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &AWSRedisProvider{
+			p := &RedisProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,

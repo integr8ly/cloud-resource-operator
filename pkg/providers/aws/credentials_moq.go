@@ -5,8 +5,9 @@ package aws
 
 import (
 	"context"
-	"github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"sync"
+
+	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 )
 
 var (
@@ -26,16 +27,16 @@ var _ CredentialManager = &CredentialManagerMock{}
 //
 //         // make and configure a mocked CredentialManager
 //         mockedCredentialManager := &CredentialManagerMock{
-//             ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) {
+//             ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error) {
 // 	               panic("mock out the ReconcileCredentials method")
 //             },
-//             ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*AWSCredentials, error) {
+//             ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
 // 	               panic("mock out the ReconcileProviderCredentials method")
 //             },
-//             ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (*AWSCredentials, error) {
+//             ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (*Credentials, error) {
 // 	               panic("mock out the ReconcileSESCredentials method")
 //             },
-//             ReoncileBucketOwnerCredentialsFunc: func(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
+//             ReoncileBucketOwnerCredentialsFunc: func(ctx context.Context, name string, ns string, bucket string) (*Credentials, *v1.CredentialsRequest, error) {
 // 	               panic("mock out the ReoncileBucketOwnerCredentials method")
 //             },
 //         }
@@ -46,16 +47,16 @@ var _ CredentialManager = &CredentialManagerMock{}
 //     }
 type CredentialManagerMock struct {
 	// ReconcileCredentialsFunc mocks the ReconcileCredentials method.
-	ReconcileCredentialsFunc func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error)
+	ReconcileCredentialsFunc func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error)
 
 	// ReconcileProviderCredentialsFunc mocks the ReconcileProviderCredentials method.
-	ReconcileProviderCredentialsFunc func(ctx context.Context, ns string) (*AWSCredentials, error)
+	ReconcileProviderCredentialsFunc func(ctx context.Context, ns string) (*Credentials, error)
 
 	// ReconcileSESCredentialsFunc mocks the ReconcileSESCredentials method.
-	ReconcileSESCredentialsFunc func(ctx context.Context, name string, ns string) (*AWSCredentials, error)
+	ReconcileSESCredentialsFunc func(ctx context.Context, name string, ns string) (*Credentials, error)
 
 	// ReoncileBucketOwnerCredentialsFunc mocks the ReoncileBucketOwnerCredentials method.
-	ReoncileBucketOwnerCredentialsFunc func(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error)
+	ReoncileBucketOwnerCredentialsFunc func(ctx context.Context, name string, ns string, bucket string) (*Credentials, *v1.CredentialsRequest, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -101,7 +102,7 @@ type CredentialManagerMock struct {
 }
 
 // ReconcileCredentials calls ReconcileCredentialsFunc.
-func (mock *CredentialManagerMock) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *AWSCredentials, error) {
+func (mock *CredentialManagerMock) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error) {
 	if mock.ReconcileCredentialsFunc == nil {
 		panic("CredentialManagerMock.ReconcileCredentialsFunc: method is nil but CredentialManager.ReconcileCredentials was just called")
 	}
@@ -144,7 +145,7 @@ func (mock *CredentialManagerMock) ReconcileCredentialsCalls() []struct {
 }
 
 // ReconcileProviderCredentials calls ReconcileProviderCredentialsFunc.
-func (mock *CredentialManagerMock) ReconcileProviderCredentials(ctx context.Context, ns string) (*AWSCredentials, error) {
+func (mock *CredentialManagerMock) ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error) {
 	if mock.ReconcileProviderCredentialsFunc == nil {
 		panic("CredentialManagerMock.ReconcileProviderCredentialsFunc: method is nil but CredentialManager.ReconcileProviderCredentials was just called")
 	}
@@ -179,7 +180,7 @@ func (mock *CredentialManagerMock) ReconcileProviderCredentialsCalls() []struct 
 }
 
 // ReconcileSESCredentials calls ReconcileSESCredentialsFunc.
-func (mock *CredentialManagerMock) ReconcileSESCredentials(ctx context.Context, name string, ns string) (*AWSCredentials, error) {
+func (mock *CredentialManagerMock) ReconcileSESCredentials(ctx context.Context, name string, ns string) (*Credentials, error) {
 	if mock.ReconcileSESCredentialsFunc == nil {
 		panic("CredentialManagerMock.ReconcileSESCredentialsFunc: method is nil but CredentialManager.ReconcileSESCredentials was just called")
 	}
@@ -218,7 +219,7 @@ func (mock *CredentialManagerMock) ReconcileSESCredentialsCalls() []struct {
 }
 
 // ReoncileBucketOwnerCredentials calls ReoncileBucketOwnerCredentialsFunc.
-func (mock *CredentialManagerMock) ReoncileBucketOwnerCredentials(ctx context.Context, name string, ns string, bucket string) (*AWSCredentials, *v1.CredentialsRequest, error) {
+func (mock *CredentialManagerMock) ReoncileBucketOwnerCredentials(ctx context.Context, name string, ns string, bucket string) (*Credentials, *v1.CredentialsRequest, error) {
 	if mock.ReoncileBucketOwnerCredentialsFunc == nil {
 		panic("CredentialManagerMock.ReoncileBucketOwnerCredentialsFunc: method is nil but CredentialManager.ReoncileBucketOwnerCredentials was just called")
 	}
