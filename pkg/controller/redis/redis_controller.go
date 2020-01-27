@@ -77,7 +77,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcileRedis implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileRedis{}
 
-// ReconcileRedis reconciles a Redis object
+// ReconcileRedis defines the struct consumed by the redis reconciler
 type ReconcileRedis struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver

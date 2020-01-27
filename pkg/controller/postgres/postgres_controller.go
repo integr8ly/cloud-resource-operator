@@ -87,7 +87,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcilePostgres implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcilePostgres{}
 
-// ReconcilePostgres reconciles a Postgres object
+// ReconcilePostgres defines the struct consumed by the postgres reconciler
 type ReconcilePostgres struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
