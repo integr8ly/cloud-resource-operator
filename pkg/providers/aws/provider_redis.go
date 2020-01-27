@@ -515,7 +515,7 @@ func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.Replicatio
 }
 
 // used to expose an available and information metrics during reconcile
-func (p *AWSRedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
+func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
 	logrus.Info("setting redis information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
@@ -546,7 +546,7 @@ func (p *AWSRedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.
 }
 
 // sets maintenance metric
-func (p *AWSRedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) error {
+func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) error {
 	// info about the elasticache cluster to be created
 	logrus.Info("checking for pending redis service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)

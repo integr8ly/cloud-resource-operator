@@ -596,7 +596,7 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	return labels
 }
 
-func (p *AWSPostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
+func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
@@ -628,7 +628,7 @@ func (p *AWSPostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1a
 	return nil
 }
 
-func (p *AWSPostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) error {
+func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) error {
 	logrus.Info("checking for pending postgres service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {

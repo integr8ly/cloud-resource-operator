@@ -5,8 +5,9 @@ package aws
 
 import (
 	"context"
-	"github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"sync"
+
+	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 )
 
 var (
