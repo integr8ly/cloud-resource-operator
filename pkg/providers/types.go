@@ -2,14 +2,14 @@ package providers
 
 import (
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strconv"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 )
 
 //go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider SMTPCredentialsProvider
-
 type ResourceType string
 
 const (

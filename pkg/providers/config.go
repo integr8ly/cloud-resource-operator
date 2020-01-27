@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+//DefaultProviderConfigMapName represents the default config map name
 const (
 	DefaultProviderConfigMapName = "cloud-resource-config"
 )
