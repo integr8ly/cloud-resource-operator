@@ -536,7 +536,7 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	if rdsCreateConfig.MultiAZ == nil {
 		rdsCreateConfig.MultiAZ = aws.Bool(defaultAwsMultiAZ)
 	}
-	if !*rdsCreateConfig.MultiAZ {
+	if *rdsCreateConfig.MultiAZ {
 		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)

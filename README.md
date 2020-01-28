@@ -200,6 +200,7 @@ Update the operator version in the following files:
 ```sh
 make gen/csv
 ```
+Ensure, the latest `CSV` file points to the latest version of the operator image. *Note* the images is referenced twice in the `CSV`. 
 
 Commit changes and open pull request. When the PR is accepted, create a new release tag.
 
