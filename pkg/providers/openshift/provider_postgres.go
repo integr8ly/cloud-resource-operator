@@ -430,7 +430,7 @@ func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 		},
 	}
 	// required for restricted namespace
-	if strings.HasPrefix(ps.Namespace, NamespacePrefixOpenShift) || strings.HasPrefix(ps.Namespace, NamespacePrefixRedHat) {
+	if strings.HasPrefix(ps.Namespace, NamespacePrefixOpenShift) {
 		userGroupId := int64(26)
 		depl.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
 			FSGroup:            &userGroupId,

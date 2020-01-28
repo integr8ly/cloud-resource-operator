@@ -337,7 +337,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 		},
 	}
 	// required for restricted namespace
-	if strings.HasPrefix(r.Namespace, NamespacePrefixOpenShift) || strings.HasPrefix(r.Namespace, NamespacePrefixRedHat) {
+	if strings.HasPrefix(r.Namespace, NamespacePrefixOpenShift) {
 		userGroupId := int64(1001)
 		depl.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
 			FSGroup:            &userGroupId,
