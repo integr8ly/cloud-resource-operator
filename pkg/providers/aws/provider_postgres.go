@@ -42,7 +42,7 @@ const (
 	defaultPostgresAvailMetricName       = "cro_aws_rds_available"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
-	// default create options
+	defaultAwsMultiAZ                    = true
 	defaultAwsPostgresDeletionProtection = true
 	defaultAwsPostgresPort               = 5432
 	defaultAwsPostgresUser               = "postgres"
@@ -54,13 +54,11 @@ const (
 	defaultAwsEngine                     = "postgres"
 	defaultAwsEngineVersion              = "10.6"
 	defaultAwsPubliclyAccessible         = false
-	// default delete options
-	defaultAwsSkipFinalSnapshot      = false
-	defaultAwsDeleteAutomatedBackups = true
-	// defaults for DB user credentials
-	defaultCredSecSuffix       = "-aws-rds-credentials"
-	defaultPostgresUserKey     = "user"
-	defaultPostgresPasswordKey = "password"
+	defaultAwsSkipFinalSnapshot          = false
+	defaultAwsDeleteAutomatedBackups     = true
+	defaultCredSecSuffix                 = "-aws-rds-credentials"
+	defaultPostgresUserKey               = "user"
+	defaultPostgresPasswordKey           = "password"
 )
 
 var (
@@ -478,6 +476,10 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.EngineVersion = rdsConfig.EngineVersion
 		updateFound = true
 	}
+	if *rdsConfig.MultiAZ != *foundConfig.MultiAZ {
+		mi.MultiAZ = rdsConfig.MultiAZ
+		updateFound = true
+	}
 	if !updateFound {
 		return nil
 	}
@@ -530,6 +532,12 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	}
 	if rdsCreateConfig.DBInstanceIdentifier == nil {
 		rdsCreateConfig.DBInstanceIdentifier = aws.String(instanceName)
+	}
+	if rdsCreateConfig.MultiAZ == nil {
+		rdsCreateConfig.MultiAZ = aws.Bool(defaultAwsMultiAZ)
+	}
+	if !*rdsCreateConfig.MultiAZ {
+		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
 	return nil
