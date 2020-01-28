@@ -188,6 +188,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 						AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 						EngineVersion:         aws.String(defaultAwsEngineVersion),
 						Engine:                aws.String(defaultAwsEngine),
+						MultiAZ:               aws.Bool(true),
 						Endpoint: &rds.Endpoint{
 							Address:      aws.String("blob"),
 							HostedZoneId: aws.String("blog"),
@@ -232,6 +233,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 						AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 						EngineVersion:         aws.String("9.6"),
 						Engine:                aws.String(defaultAwsEngine),
+						MultiAZ:               aws.Bool(true),
 						Endpoint: &rds.Endpoint{
 							Address:      aws.String("blob"),
 							HostedZoneId: aws.String("blog"),
