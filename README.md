@@ -26,7 +26,7 @@ Operator is running.
 - `make`
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
-- Kubernetes/Openshift 4+ cluster
+- Access to an Openshift v4.2.0+ cluster
 
 Ensure you are running at least `Go 1.13`.
 ```shell script
