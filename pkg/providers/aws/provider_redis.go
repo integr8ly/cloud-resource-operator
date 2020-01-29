@@ -47,7 +47,7 @@ const (
 
 var _ providers.RedisProvider = (*RedisProvider)(nil)
 
-// AWS Redis Provider implementation for AWS Elasticache
+// RedisProvider implementation for AWS Elasticache
 type RedisProvider struct {
 	Client            client.Client
 	Logger            *logrus.Entry
@@ -201,7 +201,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
-// Add Tags to AWS Elasticache
+//TagElasticacheNode Add Tags to AWS Elasticache
 func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
 	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
 
@@ -303,7 +303,7 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 	return "successfully created and tagged", nil
 }
 
-// DeleteStorage Delete elasticache replication group
+//DeleteRedis Delete elasticache replication group
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// resolve elasticache information for elasticache created by provider
 	p.Logger.Info("getting cluster id from infrastructure for redis naming")
@@ -324,10 +324,10 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	cacheSvc, _ := createAWSService(stratCfg, providerCreds)
 
 	// delete the elasticache cluster
-	return p.deleteElasticacheCluster(cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, ctx, r)
+	return p.deleteElasticacheCluster(ctx, cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, r)
 }
 
-func (p *RedisProvider) deleteElasticacheCluster(cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
+func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {

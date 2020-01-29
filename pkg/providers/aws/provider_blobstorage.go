@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"time"
@@ -35,10 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+//provider name and default create options
 const (
-	blobstorageProviderName    = "aws-s3"
-	defaultAwsBucketNameLength = 40
-	// default create options
+	blobstorageProviderName               = "aws-s3"
+	defaultAwsBucketNameLength            = 40
 	DetailsBlobStorageBucketName          = "bucketName"
 	DetailsBlobStorageBucketRegion        = "bucketRegion"
 	DetailsBlobStorageCredentialKeyID     = "credentialKeyID"
@@ -97,7 +98,7 @@ func (p *BlobStorageProvider) GetReconcileTime(bs *v1alpha1.BlobStorage) time.Du
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-// custom s3 delete strat
+//S3DeleteStrat custom s3 delete strat
 type S3DeleteStrat struct {
 	_ struct{} `type:"structure"`
 

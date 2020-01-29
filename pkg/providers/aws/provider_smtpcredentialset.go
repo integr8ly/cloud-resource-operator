@@ -6,9 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"strconv"
 	"time"
+
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -26,14 +27,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// smtpCredentialProviderName and default create options
 const (
 	smtpCredentialProviderName = "aws-ses"
-	// default create options
-	DetailsSMTPUsernameKey = "username"
-	DetailsSMTPPasswordKey = "password"
-	DetailsSMTPPortKey     = "port"
-	DetailsSMTPHostKey     = "host"
-	DetailsSMTPTLSKey      = "tls"
+	DetailsSMTPUsernameKey     = "username"
+	DetailsSMTPPasswordKey     = "password"
+	DetailsSMTPPortKey         = "port"
+	DetailsSMTPHostKey         = "host"
+	DetailsSMTPTLSKey          = "tls"
 )
 
 // SMTPCredentialSetDetails Provider-specific details about SMTP credentials derived from an AWS IAM role

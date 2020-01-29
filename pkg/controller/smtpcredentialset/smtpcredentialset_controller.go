@@ -68,7 +68,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcileSMTPCredentials implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileSMTPCredentialSet{}
 
-// ReconcileSMTPCredentials reconciles a SMTPCredentials object
+// ReconcileSMTPCredentialSet defines the struct consumed by the SMTPCredentialSet reconciler
 type ReconcileSMTPCredentialSet struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver

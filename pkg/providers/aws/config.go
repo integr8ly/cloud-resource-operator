@@ -36,7 +36,7 @@ const (
 	sesSMTPEndpointEUWest1 = "email-smtp.eu-west-1.amazonaws.com"
 )
 
-//get default namespace
+//DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
 var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
 //go:generate moq -out config_moq.go . ConfigManager
