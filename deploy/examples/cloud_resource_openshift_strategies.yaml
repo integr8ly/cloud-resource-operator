@@ -6,6 +6,95 @@ data:
   blobstorage: |
     {"development": { "strategy": {} }}
   redis: |
-    {"development": { "strategy": {} }}
+    {"development": { "strategy": {"deploymentSpec" : "spec": {
+                                                        "volumes": [
+                                                          {
+                                                            "name": "threescale-redis-integreatly-operator",
+                                                            "persistentVolumeClaim": {
+                                                              "claimName": "threescale-redis-integreatly-operator"
+                                                            }
+                                                          },
+                                                          {
+                                                            "name": "redis-config",
+                                                            "configMap": {
+                                                              "name": "redis-config",
+                                                              "items": [
+                                                                {
+                                                                  "key": "redis.conf",
+                                                                  "path": "redis.conf"
+                                                                }
+                                                              ],
+                                                              "defaultMode": 420
+                                                            }
+                                                          }
+                                                        ],
+                                                        "containers": [
+                                                          {
+                                                            "resources": {
+                                                              "limits": {
+                                                                "cpu": "500m",
+                                                                "memory": "32Gi"
+                                                              },
+                                                              "requests": {
+                                                                "cpu": "150m",
+                                                                "memory": "256Mi"
+                                                              }
+                                                            },
+                                                            "readinessProbe": {
+                                                              "exec": {
+                                                                "command": [
+                                                                  "container-entrypoint",
+                                                                  "bash",
+                                                                  "-c",
+                                                                  "redis-cli set liveness-probe \"`date`\" | grep OK"
+                                                                ]
+                                                              },
+                                                              "initialDelaySeconds": 10,
+                                                              "timeoutSeconds": 1,
+                                                              "periodSeconds": 30,
+                                                              "successThreshold": 1,
+                                                              "failureThreshold": 3
+                                                            },
+                                                            "terminationMessagePath": "/dev/termination-log",
+                                                            "name": "redis",
+                                                            "command": [
+                                                              "/opt/rh/rh-redis32/root/usr/bin/redis-server"
+                                                            ],
+                                                            "livenessProbe": {
+                                                              "tcpSocket": {
+                                                                "port": 6379
+                                                              },
+                                                              "initialDelaySeconds": 10,
+                                                              "timeoutSeconds": 1,
+                                                              "periodSeconds": 10,
+                                                              "successThreshold": 1,
+                                                              "failureThreshold": 3
+                                                            },
+                                                            "imagePullPolicy": "IfNotPresent",
+                                                            "volumeMounts": [
+                                                              {
+                                                                "name": "threescale-redis-integreatly-operator",
+                                                                "mountPath": "/var/lib/redis/data"
+                                                              },
+                                                              {
+                                                                "name": "redis-config",
+                                                                "mountPath": "/etc/redis.d/"
+                                                              }
+                                                            ],
+                                                            "terminationMessagePolicy": "File",
+                                                            "image": "registry.redhat.io/rhscl/redis-32-rhel7",
+                                                            "args": [
+                                                              "/etc/redis.d/redis.conf",
+                                                              "--daemonize",
+                                                              "no"
+                                                            ]
+                                                          }
+                                                        ],
+                                                        "restartPolicy": "Always",
+                                                        "terminationGracePeriodSeconds": 30,
+                                                        "dnsPolicy": "ClusterFirst",
+                                                        "securityContext": {},
+                                                        "schedulerName": "default-scheduler"
+                                                      }} }}
   postgres: |
     {"development": { "strategy": {} }}
