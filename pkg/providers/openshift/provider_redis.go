@@ -225,7 +225,6 @@ func (p *RedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployme
 			e.Spec = d.Spec
 			return nil
 		}
-
 		e.Spec = *redisCfg.RedisDeploymentSpec
 		return nil
 	})
@@ -364,7 +363,7 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
 			Resources: apiv1.ResourceRequirements{
 				Limits: apiv1.ResourceList{
 					apiv1.ResourceCPU:    resource.MustParse("500m"),
-					apiv1.ResourceMemory: resource.MustParse("32Gi"),
+					apiv1.ResourceMemory: resource.MustParse("6Gi"),
 				},
 				Requests: apiv1.ResourceList{
 					apiv1.ResourceCPU:    resource.MustParse("150m"),
