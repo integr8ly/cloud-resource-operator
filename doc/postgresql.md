@@ -4,7 +4,7 @@
 To seed a Kubernetes/Openshift cluster with an example Postgres resource:
 ```
 $ make cluster/prepare 
-$ make cluster/seed/postgres
+$ make cluster/seed/<<workshop or managed>>/postgres
 ```
 ### AWS Strategy
 A JSON object containing three keys: `region`, which is the [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region), a `createStrategy`, which is a JSON representation of [this struct](https://docs.aws.amazon.com/sdk-for-go/api/service/rds/#CreateDBInstanceInput), and a `deleteStrategy`, which is a JSON representation of [this struct](https://docs.aws.amazon.com/sdk-for-go/api/service/rds/#DeleteDBInstanceInput).

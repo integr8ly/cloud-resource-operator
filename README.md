@@ -19,14 +19,14 @@ Operator is running.
 |   [PostgreSQL](./doc/postgresql.md) 	|     :heavy_check_mark:     	|  :heavy_check_mark:  	|
 |      [SMTP](./doc/smtp.md)     	|     :x:     	|  :heavy_check_mark:  	|
 
-## Running the Cloud Resource Operator
-## Locally
+## Running the Cloud Resource Operator (CRO)
 
-Prerequisites:
+## Prerequisites:
 - `go`
 - `make`
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
+- Kubernetes/Openshift 4+ cluster
 
 Ensure you are running at least `Go 1.13`.
 ```shell script
@@ -41,8 +41,9 @@ Clone this repository into your working directory, outside of `$GOPATH`. For exa
 $ cd ~/dev
 $ git clone git@github.com:integr8ly/cloud-resource-operator.git
 ```
+### Run the Operator Locally
 
-Seed the Kubernetes/OpenShift cluster with required resources:
+Seed your cluster with required resources:
 ```shell script
 $ make cluster/prepare
 ```
@@ -52,12 +53,93 @@ Run the operator:
 $ make run
 ```
 
-Clean up the Kubernetes/OpenShift cluster:
+Clean up your cluster:
 ```shell script
 $ make cluster/clean
 ```
+### Deploy the Operator in cluster
 
-## VPC Peering 
+Build and push the image
+```shell script
+$ make image/push IMAGE_ORG=<your quay org>
+```
+
+Update the `deploy/operator.yaml` to point at the newly built image
+```
+      ...
+        - name: cloud-resource-operator
+          image: quay.io/<your quay org>/cloud-resource-operator:v0.7.1
+          command:
+          - cloud-resource-operator
+          imagePullPolicy: Always
+      ...
+```
+
+Seed your cluster with required resources:
+```shell script
+$ make cluster/prepare
+```
+
+Create the service account
+```shell script
+$ make setup/service_account
+```
+
+Deploy the operator
+```shell script
+$ oc apply -f deploy/operator.yaml
+```
+
+### Via the Operator Catalog
+
+*Note* the following steps to installing CRO via the Operator Catalog are intended for Integreatly team members and testing changes in development
+
+Build and push the image to your Quay Org
+```shell script
+$ make image/push IMAGE_ORG=<your quay org>
+```
+
+Push the manifests to your Quay Org
+```shell script
+$ make manifest/push IMAGE_ORG=<your quay org>
+```
+
+Create a new operator source in your Openshift Cluster, updating the `registryNamespace` to your own org name.
+```
+apiVersion: operators.coreos.com/v1
+kind: OperatorSource
+metadata:
+  name: integreatly-operators
+  namespace: openshift-marketplace
+spec:
+  authorizationToken: {}
+  displayName: Integreatly Operators
+  endpoint: 'https://quay.io/cnr'
+  publisher: Integreatly Publisher
+  registryNamespace: <<your quay org name>>
+  type: appregistry
+```
+Once the OLM has reconciled, the CRO should be available in the Catalog.
+
+*Note* Make sure your Quay Repository and Applications are set to public
+
+## Usage
+### Seeding a Cluster
+After seeding yourcluster with required resources, your cluster is preconfigured to create `managed` and `workshop` resources. Resources deployed in cluster are known as `workshop` and those deployed in AWS are known as `managed`. *Note*, these are arbitrary names and can be updated via the config maps, which are added in the following command : 
+```shell script
+$ make cluster/prepare
+```
+
+To seed workshop resources run the following make target, replacing `<<Resource Type>>` with one of the following `Redis/Postgres/BlobStorage/SMTP`
+```shell script
+$ make cluster/seed/workshop/<<Resource Type>>
+```
+To seed managed resources run the following make target, replacing `<<Resource Type>>` with one of the following `Redis/Postgres/BlobStorage/SMTP`
+```shell script
+$ make cluster/seed/managed/<<Resource Type>>
+```
+
+### VPC Peering 
 Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC) than the VPC that the cluster is deployed into. In order for these to communicate, a `peering connection` must be established between the two VPCS. To do this:
 1. Create a new peering connection between the two VPCs.
   - Go to `VPC` > `Peering Connections`
@@ -90,8 +172,8 @@ Currently AWS resources are deployed into a separate Virtual Private Cloud (VPC)
 
 The two VPCs should now be able to communicate with each other. 
 
-## Snapshots
-The cloud resource operator supports the taking of arbitrary snapshots in the AWS provider for both `Postgres` and `Redis`. To take a snapshot you must create a `RedisSnapshot` or `PostgresSnapshot` resource, which should reference the `Redis` or `Postgres` resource you wish to create a snapshot of. The snapshot resource must also exist in the same namespace.
+### Snapshots
+CRO supports the taking of arbitrary snapshots in the AWS provider for both `Postgres` and `Redis`. To take a snapshot you must create a `RedisSnapshot` or `PostgresSnapshot` resource, which should reference the `Redis` or `Postgres` resource you wish to create a snapshot of. The snapshot resource must also exist in the same namespace.
 ```
 apiVersion: integreatly.org/v1alpha1
 kind: RedisSnapshot
@@ -104,14 +186,10 @@ spec:
 ```  
 *Note* You may experience some downtime in the resource during the creation of the Snapshot
 
-## Skip Create
-The cloud resource operator continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  
+### Skip Create
+CRO continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  
 
 There can be circumstances where a provisioned resource would need to be altered. If this is the case, add `skipCreate: true` to the resources CR `spec`. This will cause the operator to skip creating or updating the resource. 
-
-## Via the Operator Catalog
-
-***In development***
 
 ## Deployment
 The operator expects two configmaps to exist in the namespace it is watching. These configmaps provide the configuration needed to outline the deployment methods and strategies used when provisioning cloud resources.
@@ -212,7 +290,7 @@ Commit changes and open pull request. When the PR is accepted, create a new rele
 - `Deployment tier` - Provides a layer of abstraction, which allows the end user to request a resource of a certain level (for example, a `production` worthy Postgres instance), without being concerned with provider-specific deployment details (such as storage capacity, for example). 
 
 ### Design
-There are a few design philosophies for the Cloud Resource Operator:
+There are a few design philosophies for CRO:
 - Each resource type (e.g. `BlobStorage`, `Postgres`) should have its own controller
 - The end-user should be abstracted from explicitly specifying how the resource is provisioned by default
     - What cloud-provider the resource should be provisioned on should be handled in pre-created config objects
