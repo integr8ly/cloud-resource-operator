@@ -125,7 +125,7 @@ Once the OLM has reconciled, the CRO should be available in the Catalog.
 
 ## Usage
 ### Seeding a Cluster
-After seeding yourcluster with required resources, your cluster is preconfigured to create `managed` and `workshop` resources. Resources deployed in cluster are known as `workshop` and those deployed in AWS are known as `managed`. *Note*, these are arbitrary names and can be updated via the config maps, which are added in the following command : 
+After seeding your cluster with required resources, your cluster is preconfigured to create `managed` and `workshop` resources. Resources deployed in cluster are known as `workshop` and those deployed in AWS are known as `managed`. *Note*, these are arbitrary names and can be updated via the config maps, which are added in the following command : 
 ```shell script
 $ make cluster/prepare
 ```
