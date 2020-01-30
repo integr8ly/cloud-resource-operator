@@ -3,9 +3,12 @@ package resources
 import (
 	"time"
 
+	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	errorUtil "github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	customMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
@@ -68,4 +71,42 @@ func SetMetricCurrentTime(name string, labels map[string]string) error {
 		return errorUtil.Wrap(err, "unable to set current time gauge vector")
 	}
 	return nil
+}
+
+func createPrometheusRuleObject(ruleName string, namespace string, groups []prometheusv1.RuleGroup) *prometheusv1.PrometheusRule {
+	return &prometheusv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ruleName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"monitoring-key": "middleware",
+			},
+		},
+		Spec: prometheusv1.PrometheusRuleSpec{
+			Groups: groups,
+		},
+	}
+}
+
+// CreatePrometheusRule will create a PrometheusRule object
+func CreatePrometheusRule(ruleName string, namespace string, alertRuleName string, description string, alertExp intstr.IntOrString, labels map[string]string) (*prometheusv1.PrometheusRule, error) {
+	alertGroupName := alertRuleName + "Group"
+
+	groups := []prometheusv1.RuleGroup{
+		{
+			Name: alertGroupName,
+			Rules: []prometheusv1.Rule{
+				{
+					Alert:  alertRuleName,
+					Expr:   alertExp,
+					Labels: labels,
+					Annotations: map[string]string{
+						"description": description,
+					},
+				},
+			},
+		},
+	}
+
+	return createPrometheusRuleObject(ruleName, namespace, groups), nil
 }

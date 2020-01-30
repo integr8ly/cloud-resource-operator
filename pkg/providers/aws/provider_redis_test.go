@@ -7,10 +7,18 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	croApis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	openshiftConfv1 "github.com/openshift/api/config/v1"
+	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	apimachinery "k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -21,7 +29,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	"testing"
 )
@@ -43,6 +50,19 @@ type mockElasticacheClient struct {
 
 type mockStsClient struct {
 	stsiface.STSAPI
+}
+
+func buildTestSchemeRedis() (*runtime.Scheme, error) {
+	scheme := apimachinery.NewScheme()
+	err := croApis.AddToScheme(scheme)
+	err = openshiftConfv1.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
+	err = cloudCredentialApis.AddToScheme(scheme)
+	err = monitoringv1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
+	return scheme, nil
 }
 
 // mock elasticache DescribeReplicationGroups output
@@ -105,6 +125,15 @@ func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.Get
 	}, nil
 }
 
+func buildTestPrometheusRule() *monitoringv1.PrometheusRule {
+	return &monitoringv1.PrometheusRule{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "availability-rule-test-id",
+			Namespace: "test",
+		},
+	}
+}
+
 func buildTestRedisCR() *v1alpha1.Redis {
 	return &v1alpha1.Redis{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -153,7 +182,7 @@ func buildTestRedisCluster() *providers.RedisCluster {
 }
 
 func Test_createRedisCluster(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemeRedis()
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
@@ -193,7 +222,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
 			wantErr: false,
@@ -212,7 +241,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
 			wantErr: false,
@@ -231,7 +260,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
 			wantErr: false,
@@ -254,7 +283,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -281,7 +310,7 @@ func Test_createRedisCluster(t *testing.T) {
 }
 
 func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemeRedis()
 	if err != nil {
 		t.Error("failed to build scheme", err)
 		return
@@ -315,7 +344,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -332,7 +361,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -349,7 +378,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -417,7 +446,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 }
 
 func TestAWSRedisProvider_TagElasticache(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemeRedis()
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)

@@ -2,19 +2,27 @@ package aws
 
 import (
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	croApis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	openshiftConfv1 "github.com/openshift/api/config/v1"
 	v12 "github.com/openshift/api/config/v1"
+	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	apimachinery "k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -27,6 +35,19 @@ type mockRdsClient struct {
 	wantErrDelete bool
 	wantEmpty     bool
 	dbInstances   []*rds.DBInstance
+}
+
+func buildTestSchemePostgresql() (*runtime.Scheme, error) {
+	scheme := apimachinery.NewScheme()
+	err := croApis.AddToScheme(scheme)
+	err = openshiftConfv1.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
+	err = cloudCredentialApis.AddToScheme(scheme)
+	err = monitoringv1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
+	return scheme, nil
 }
 
 func (m *mockRdsClient) DescribeDBInstances(*rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
@@ -60,6 +81,15 @@ func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput)
 
 func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
 	return &rds.DescribePendingMaintenanceActionsOutput{}, nil
+}
+
+func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
+	return &monitoringv1.PrometheusRule{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "availability-rule-test-id",
+			Namespace: "test",
+		},
+	}
 }
 
 func buildTestPostgresCR() *v1alpha1.Postgres {
@@ -128,7 +158,7 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 }
 
 func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-identifier"
 	if err != nil {
 		logrus.Fatal(err)
@@ -278,7 +308,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 }
 
 func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-id"
 	if err != nil {
 		t.Error("failed to build scheme", err)
@@ -313,7 +343,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -329,7 +359,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -345,7 +375,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -361,7 +391,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra()),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -433,7 +463,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 }
 
 func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
-	scheme, err := buildTestScheme()
+	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-id"
 	if err != nil {
 		t.Error("failed to build scheme", err)

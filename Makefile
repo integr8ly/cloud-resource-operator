@@ -70,16 +70,16 @@ code/audit:
 cluster/prepare:
 	-oc new-project $(NAMESPACE) || true
 	-oc label namespace $(NAMESPACE) monitoring-key=middleware
-	oc create -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/crds/integreatly_v1alpha1_postgressnapshot_crd.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/service_account.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/role.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/role_binding.yaml -n $(NAMESPACE)
-	oc create -f ./deploy/examples/ -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgressnapshot_crd.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/service_account.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/role.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/role_binding.yaml -n $(NAMESPACE)
+	oc apply -f ./deploy/examples/ -n $(NAMESPACE)
 
 .PHONY: cluster/seed/workshop/smtp
 cluster/seed/workshop/smtp:
