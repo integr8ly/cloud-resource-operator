@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"strconv"
 	"time"
 
@@ -133,28 +135,32 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	}
 
 	// setup aws RDS instance sdk session
-	rdsSession := createRDSSession(stratCfg, providerCreds)
+	rdsSession, ec2Session := createRDSSession(stratCfg, providerCreds)
 
 	// create the aws RDS instance
-	return p.createRDSInstance(ctx, pg, rdsSession, rdsCfg)
+	return p.createRDSInstance(ctx, pg, rdsSession, ec2Session, rdsCfg)
 }
 
-func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) rdsiface.RDSAPI {
+func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) (rdsiface.RDSAPI, ec2iface.EC2API) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	}))
-	return rds.New(sess)
+	return rds.New(sess), ec2.New(sess)
 }
 
-func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pi, err := getRDSInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
 		msg := "error getting replication groups"
-		logrus.Info(msg, err)
 		return nil, croType.StatusMessage(msg), err
+	}
+
+	if err := p.setupVpc(ctx, cr, rdsSvc, ec2Svc, rdsCfg); err != nil {
+		errMsg := "error setting up resource vpc"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	// getting postgres user password from created secret
@@ -315,7 +321,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 		}
 	}
 
-	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	logrus.Infof("tags were added successfully to the rds instance %s", *foundInstance.DBInstanceIdentifier)
 	return "successfully created and tagged", nil
 }
 
@@ -334,11 +340,12 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	}
 
 	// setup aws postgres instance sdk session
-	instanceSvc := createRDSSession(stratCfg, providerCreds)
+	instanceSvc, _ := createRDSSession(stratCfg, providerCreds)
 
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
 
+// todo delete subnet group
 func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
@@ -562,6 +569,13 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
+	subGroup, err := BuildSubnetGroupName(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to build subnet group name")
+	}
+	if rdsCreateConfig.DBSubnetGroupName == nil {
+		rdsCreateConfig.DBSubnetGroupName = aws.String(subGroup)
+	}
 	return nil
 }
 
@@ -609,6 +623,63 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 	}
+}
+
+// ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
+func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) error {
+	// get subnet group id
+	sgID, err := BuildSubnetGroupName(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// check if group exists
+	groups, err := rdsSvc.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{})
+	if err != nil {
+		return errorUtil.Wrap(err, "error describing subnet groups")
+	}
+	var foundSubnet *rds.DBSubnetGroup
+	for _, sub := range groups.DBSubnetGroups {
+		if *sub.DBSubnetGroupName == sgID {
+			foundSubnet = sub
+			break
+		}
+	}
+	if foundSubnet != nil {
+		return nil
+	}
+
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting cluster id")
+	}
+
+	// get cluster vpc subnets
+	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting vpc subnets")
+	}
+
+	// build subnet group input
+	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
+		DBSubnetGroupDescription: aws.String("Subnet group created by the cloud resource operator"),
+		DBSubnetGroupName:        aws.String(sgID),
+		SubnetIds:                subIDs,
+		Tags: []*rds.Tag{
+			{
+				Key:   aws.String("cluster"),
+				Value: aws.String(clusterID),
+			},
+		},
+	}
+
+	// create db subnet group
+	if _, err := rdsSvc.CreateDBSubnetGroup(subnetGroupInput); err != nil {
+		return errorUtil.Wrap(err, "unable to create db subnet group")
+	}
+
+	return nil
 }
 
 func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -35,6 +37,12 @@ type mockRdsClient struct {
 	wantErrDelete bool
 	wantEmpty     bool
 	dbInstances   []*rds.DBInstance
+}
+
+type mockEc2Client struct {
+	ec2iface.EC2API
+	subnets []*ec2.Subnet
+	vpcs    []*ec2.Vpc
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -81,6 +89,26 @@ func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput)
 
 func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
 	return &rds.DescribePendingMaintenanceActionsOutput{}, nil
+}
+
+func (m *mockRdsClient) DescribeDBSubnetGroups(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+	return &rds.DescribeDBSubnetGroupsOutput{}, nil
+}
+
+func (m *mockRdsClient) CreateDBSubnetGroup(*rds.CreateDBSubnetGroupInput) (*rds.CreateDBSubnetGroupOutput, error) {
+	return &rds.CreateDBSubnetGroupOutput{}, nil
+}
+
+func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	return &ec2.DescribeSubnetsOutput{
+		Subnets: m.subnets,
+	}, nil
+}
+
+func (m *mockEc2Client) DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+	return &ec2.DescribeVpcsOutput{
+		Vpcs: m.vpcs,
+	}, nil
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
@@ -157,6 +185,59 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 	}
 }
 
+func buildDBInstance(testID string) []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier:  aws.String(testID),
+			DBInstanceStatus:      aws.String("available"),
+			AvailabilityZone:      aws.String("test-availabilityZone"),
+			DBInstanceArn:         aws.String("arn-test"),
+			DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:        aws.String(defaultAwsPostgresUser),
+			DBName:                aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
+			EngineVersion:         aws.String(defaultAwsEngineVersion),
+			Engine:                aws.String(defaultAwsEngine),
+			MultiAZ:               aws.Bool(true),
+			Endpoint: &rds.Endpoint{
+				Address:      aws.String("blob"),
+				HostedZoneId: aws.String("blog"),
+				Port:         aws.Int64(defaultAwsPostgresPort),
+			},
+		},
+	}
+}
+
+func buildVpcs() []*ec2.Vpc {
+	return []*ec2.Vpc{
+		{
+			VpcId: aws.String("testID"),
+			Tags: []*ec2.Tag{
+				{
+					Value: aws.String("test-vpc"),
+				},
+			},
+		},
+	}
+}
+
+func buildSubnets() []*ec2.Subnet {
+	return []*ec2.Subnet{
+		{
+			VpcId: aws.String("testID"),
+			Tags: []*ec2.Tag{
+				{
+					Key:   aws.String("test"),
+					Value: aws.String("test-private-test"),
+				},
+			},
+		},
+	}
+}
+
 func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-identifier"
@@ -174,6 +255,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		ctx         context.Context
 		cr          *v1alpha1.Postgres
 		rdsSvc      rdsiface.RDSAPI
+		ec2Svc      ec2iface.EC2API
 		postgresCfg *rds.CreateDBInstanceInput
 	}
 	tests := []struct {
@@ -187,6 +269,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds is created",
 			args: args{
 				rdsSvc:      &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
 				ctx:         context.TODO(),
 				cr:          buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{},
@@ -203,31 +286,10 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds is exists and is available",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
-					{
-						DBInstanceIdentifier:  aws.String(testIdentifier),
-						DBInstanceStatus:      aws.String("available"),
-						AvailabilityZone:      aws.String("test-availabilityZone"),
-						DBInstanceArn:         aws.String("arn-test"),
-						DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-						MasterUsername:        aws.String(defaultAwsPostgresUser),
-						DBName:                aws.String(defaultAwsPostgresDatabase),
-						BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-						DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-						PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-						AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-						EngineVersion:         aws.String(defaultAwsEngineVersion),
-						Engine:                aws.String(defaultAwsEngine),
-						MultiAZ:               aws.Bool(true),
-						Endpoint: &rds.Endpoint{
-							Address:      aws.String("blob"),
-							HostedZoneId: aws.String("blog"),
-							Port:         aws.Int64(defaultAwsPostgresPort),
-						},
-					},
-				}},
-				ctx: context.TODO(),
-				cr:  buildTestPostgresCR(),
+				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
+				ctx:    context.TODO(),
+				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -250,29 +312,10 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds needs to be modified",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{
-					{
-						DBInstanceIdentifier:  aws.String(testIdentifier),
-						DBInstanceStatus:      aws.String("available"),
-						DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-						MasterUsername:        aws.String("newmasteruser"),
-						DBName:                aws.String(defaultAwsPostgresDatabase),
-						BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-						DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-						PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-						AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-						EngineVersion:         aws.String("9.6"),
-						Engine:                aws.String(defaultAwsEngine),
-						MultiAZ:               aws.Bool(true),
-						Endpoint: &rds.Endpoint{
-							Address:      aws.String("blob"),
-							HostedZoneId: aws.String("blog"),
-							Port:         aws.Int64(defaultAwsPostgresPort),
-						},
-					},
-				}},
-				ctx: context.TODO(),
-				cr:  buildTestPostgresCR(),
+				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
+				ctx:    context.TODO(),
+				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -295,7 +338,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.postgresCfg)
+			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
