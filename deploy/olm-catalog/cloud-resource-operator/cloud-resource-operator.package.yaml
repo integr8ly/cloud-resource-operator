@@ -1,0 +1,7 @@
+channels:
+- currentCSV: cloud-resource-operator.v0.7.2
+  name: integreatly
+- currentCSV: cloud-resource-operator.v0.7.2
+  name: integreatly
+defaultChannel: integreatly
+packageName: cloud-resource-operator
