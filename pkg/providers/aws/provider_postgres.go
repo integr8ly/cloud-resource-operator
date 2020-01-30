@@ -623,6 +623,7 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
 	labels["instanceID"] = *instance.DBInstanceIdentifier
+	labels["productName"] = cr.Labels["productName"]
 	return labels
 }
 

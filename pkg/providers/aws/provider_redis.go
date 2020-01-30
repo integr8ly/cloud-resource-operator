@@ -528,6 +528,8 @@ func buildRedisGenericMetricLabels(r *v1alpha1.Redis, cache *elasticache.Replica
 	labels["resourceID"] = r.Name
 	labels["namespace"] = r.Namespace
 	labels["instanceID"] = *cache.ReplicationGroupId
+	labels["productName"] = r.Labels["productName"]
+
 	return labels
 }
 
