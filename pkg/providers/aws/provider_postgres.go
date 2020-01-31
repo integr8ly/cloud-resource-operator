@@ -12,6 +12,7 @@ import (
 	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -656,7 +657,7 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 	}
 
 	// get cluster vpc subnets
-	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
+	subIDs, err := GetAllSubnetIDS(ctx, p.Client, ec2Svc)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting vpc subnets")
 	}
@@ -814,6 +815,9 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	}
 
 	if err := p.Client.Get(ctx, selector, pr); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
 	}
 

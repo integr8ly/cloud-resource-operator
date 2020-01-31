@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -41,7 +42,7 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 	var foundVPC *ec2.Vpc
 	for _, vpc := range vpcs.Vpcs {
 		for _, tag := range vpc.Tags {
-			if *tag.Value == clusterID+"-vpc" {
+			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID){
 				foundVPC = vpc
 			}
 		}
@@ -70,6 +71,7 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
 func GetAllSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*string, error) {
+	logrus.Info("gathering all vpc subnets")
 	subs, err := GetVPCSubnets(ctx, c, ec2Svc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
@@ -89,6 +91,7 @@ func GetAllSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2AP
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
 func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*string, error) {
+	logrus.Info("gathering private vpc subnets")
 	subs, err := GetVPCSubnets(ctx, c, ec2Svc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
@@ -128,7 +131,7 @@ func BuildSubnetGroupName(ctx context.Context, c client.Client) (string, error) 
 	if err != nil {
 		return "", errorUtil.Wrap(err, "error getting clusterID")
 	}
-	return clusterID + "subnet-group-priv", nil
+	return fmt.Sprintf("%s-subnet-group", clusterID), nil
 }
 
 // function to get subnets, used to check/wait on AWS credentials
