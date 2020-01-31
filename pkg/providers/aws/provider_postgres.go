@@ -743,7 +743,7 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	}
 
 	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		return errorUtil.Wrapf(err ,"exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
+		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
 	}
 
 	// call delete on that object

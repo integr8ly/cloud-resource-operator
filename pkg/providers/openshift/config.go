@@ -24,7 +24,6 @@ const (
 	defaultReconcileTime = time.Second * 30
 
 	NamespacePrefixOpenShift = "openshift-"
-	NamespacePrefixRedHat    = "redhat-"
 )
 
 //DefaultConfigMapNamespace get default namespace
