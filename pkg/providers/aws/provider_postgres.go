@@ -160,7 +160,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// setup vpc
-	if err := p.setupVpc(ctx, rdsSvc, ec2Svc); err != nil {
+	if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
 		errMsg := "error setting up resource vpc"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -650,7 +650,7 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 }
 
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
-func (p *PostgresProvider) setupVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
+func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
 	logrus.Info("configuring cluster vpc for postgres resource")
 	// get subnet group id
 	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)

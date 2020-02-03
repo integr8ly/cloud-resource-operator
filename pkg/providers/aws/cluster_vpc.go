@@ -25,7 +25,7 @@ const (
 
 // ensures a subnet group is in place for the creation of a resource
 func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) error {
-	logrus.Info("setting redis security group")
+	logrus.Info("setting resource security group")
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -51,6 +51,7 @@ func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC
 
 	if foundSecGroup == nil {
 		// create security group
+		logrus.Info(fmt.Sprintf("creating security group from cluster %s", clusterID))
 		if _, err := ec2Svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
 			Description: aws.String(fmt.Sprintf("security group for cluster %s", clusterID)),
 			GroupName:   aws.String(secName),
@@ -71,6 +72,7 @@ func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC
 		},
 	}
 
+	// check if correct permissions are in place
 	for _, perm := range foundSecGroup.IpPermissions {
 		if reflect.DeepEqual(perm, ipPermission) {
 			logrus.Info("ip permissions are correct for postgres resource")
@@ -102,6 +104,7 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 		return nil, errorUtil.Wrap(err, "error getting subnets")
 	}
 
+	// get cluster vpc
 	foundVPC, err := getVpc(ctx, c, ec2Svc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpcs")
@@ -124,8 +127,8 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 	if associatedSubs == nil {
 		return nil, errorUtil.New("error, unable to find subnets associated with cluster vpc")
 	}
-	return associatedSubs, nil
 
+	return associatedSubs, nil
 }
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
@@ -145,6 +148,7 @@ func GetAllSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2AP
 	if subIDs == nil {
 		return nil, errorUtil.New("failed to get list of subnet ids")
 	}
+
 	return subIDs, nil
 }
 
@@ -180,6 +184,7 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 	if subIDs == nil {
 		return nil, errorUtil.New("failed to get list of private subnet ids")
 	}
+
 	return subIDs, nil
 }
 
@@ -263,5 +268,6 @@ func getSecurityGroup(ec2Svc ec2iface.EC2API, secName string) (*ec2.SecurityGrou
 			break
 		}
 	}
+
 	return foundSecGroup, nil
 }

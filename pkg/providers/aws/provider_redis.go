@@ -135,7 +135,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}
 
 	// setup vpc
-	if err := p.setupVpc(ctx, cacheSvc, ec2Svc); err != nil {
+	if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
 		errMsg := "error setting up resource vpc"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -562,7 +562,7 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 }
 
 // ensures a subnet group is in place to configure the resource, so that it is in the same vpc as the cluster
-func (p *RedisProvider) setupVpc(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
+func (p *RedisProvider) configureElasticacheVpc(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
 	logrus.Info("configuring cluster vpc for redis resource")
 	// get subnet group id
 	sgName, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
