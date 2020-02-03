@@ -16,6 +16,11 @@ import (
 	errorUtil "github.com/pkg/errors"
 )
 
+const (
+	defaultSubnetPostfix        = "subnet-group"
+	defaultSecurityGroupPostfix = "security-group"
+)
+
 // GetVPCSubnets returns a list of subnets associated with cluster VPC
 func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 	logrus.Info("gathering cluster vpc and subnet information")
@@ -26,26 +31,9 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 		return nil, errorUtil.Wrap(err, "error getting subnets")
 	}
 
-	// get vpcs
-	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	foundVPC, err := getVpc(ctx, c, ec2Svc)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting subnets")
-	}
-
-	// get cluster id
-	clusterID, err := resources.GetClusterID(ctx, c)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting clusterID")
-	}
-
-	// find associated vpc to cluster
-	var foundVPC *ec2.Vpc
-	for _, vpc := range vpcs.Vpcs {
-		for _, tag := range vpc.Tags {
-			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID){
-				foundVPC = vpc
-			}
-		}
+		return nil, errorUtil.Wrap(err, "error getting vpcs")
 	}
 
 	// check if found cluster vpc
@@ -124,14 +112,20 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 	return subIDs, nil
 }
 
-// BuildSubnetGroupName builds and returns an id used for subnet groups
-func BuildSubnetGroupName(ctx context.Context, c client.Client) (string, error) {
-	// get cluster id
-	clusterID, err := resources.GetClusterID(ctx, c)
+// returns vpc id and cidr block for found vpc
+func GetCidr(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) (string, string, error) {
+	logrus.Info("gathering cidr block for cluster")
+	foundVPC, err := getVpc(ctx, c, ec2Svc)
 	if err != nil {
-		return "", errorUtil.Wrap(err, "error getting clusterID")
+		return "", "", errorUtil.Wrap(err, "error getting vpcs")
 	}
-	return fmt.Sprintf("%s-subnet-group", clusterID), nil
+
+	// check if found cluster vpc
+	if foundVPC == nil {
+		return "", "", errorUtil.New("error, unable to find a vpc")
+	}
+
+	return *foundVPC.VpcId, *foundVPC.CidrBlock, nil
 }
 
 // function to get subnets, used to check/wait on AWS credentials
@@ -149,4 +143,54 @@ func getSubnets(ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 		return nil, err
 	}
 	return subs, nil
+}
+
+// function to get vpc of a cluster
+func getVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) (*ec2.Vpc, error) {
+	logrus.Info("finding cluster vpc")
+	// get vpcs
+	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting subnets")
+	}
+
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+
+	// find associated vpc to cluster
+	var foundVPC *ec2.Vpc
+	for _, vpc := range vpcs.Vpcs {
+		for _, tag := range vpc.Tags {
+			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID) {
+				foundVPC = vpc
+			}
+		}
+	}
+
+	if foundVPC == nil {
+		return nil, errorUtil.New("error, no vpc found")
+	}
+
+	return foundVPC, nil
+}
+
+func getSecurityGroup(ec2Svc ec2iface.EC2API, secName string) (*ec2.SecurityGroup, error) {
+	// get security groups
+	secGroups, err := ec2Svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to return information about security groups")
+	}
+
+	// check if security group exists
+	var foundSecGroup *ec2.SecurityGroup
+	for _, sec := range secGroups.SecurityGroups {
+		if *sec.GroupName == secName {
+			foundSecGroup = sec
+			break
+		}
+	}
+	return foundSecGroup, nil
 }

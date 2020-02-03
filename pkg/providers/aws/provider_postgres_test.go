@@ -41,8 +41,9 @@ type mockRdsClient struct {
 
 type mockEc2Client struct {
 	ec2iface.EC2API
-	subnets []*ec2.Subnet
-	vpcs    []*ec2.Vpc
+	subnets   []*ec2.Subnet
+	vpcs      []*ec2.Vpc
+	secGroups []*ec2.SecurityGroup
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -109,6 +110,20 @@ func (m *mockEc2Client) DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsO
 	return &ec2.DescribeVpcsOutput{
 		Vpcs: m.vpcs,
 	}, nil
+}
+
+func (m *mockEc2Client) DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+	return &ec2.DescribeSecurityGroupsOutput{
+		SecurityGroups: m.secGroups,
+	}, nil
+}
+
+func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+	return &ec2.CreateSecurityGroupOutput{}, nil
+}
+
+func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
+	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
@@ -214,7 +229,8 @@ func buildDBInstance(testID string) []*rds.DBInstance {
 func buildVpcs() []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
-			VpcId: aws.String("testID"),
+			VpcId:     aws.String("testID"),
+			CidrBlock: aws.String("10.0.0.0/16"),
 			Tags: []*ec2.Tag{
 				{
 					Value: aws.String("test-vpc"),
@@ -238,12 +254,26 @@ func buildSubnets() []*ec2.Subnet {
 	}
 }
 
+func buildSecurityGroups(groupName string) []*ec2.SecurityGroup {
+	return []*ec2.SecurityGroup{
+		{
+			GroupName: aws.String(groupName),
+			GroupId:   aws.String("testID"),
+		},
+	}
+}
+
 func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-identifier"
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
+	}
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build security name", err)
 	}
 	type fields struct {
 		Client            client.Client
@@ -269,7 +299,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds is created",
 			args: args{
 				rdsSvc:      &mockRdsClient{dbInstances: []*rds.DBInstance{}},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				ctx:         context.TODO(),
 				cr:          buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{},
@@ -287,7 +317,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds is exists and is available",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
@@ -313,7 +343,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds needs to be modified",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets()},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{

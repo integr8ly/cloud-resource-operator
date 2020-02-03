@@ -166,7 +166,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Post
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	p.Logger.Info("Found postgres deployment")
+	p.Logger.Info("found postgres deployment")
 	return &providers.PostgresInstance{
 		DeploymentDetails: &providers.PostgresDeploymentDetails{
 			Username: dbUser,
@@ -180,7 +180,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Post
 
 func (p *PostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	// delete service
-	p.Logger.Info("Deleting postgres service")
+	p.Logger.Info("deleting postgres service")
 	svc := &v1.Service{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      ps.Name,
@@ -194,7 +194,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, ps *v1alpha1.Post
 	}
 
 	// delete pvc
-	p.Logger.Info("Deleting postgres persistent volume claim")
+	p.Logger.Info("deleting postgres persistent volume claim")
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      ps.Name,

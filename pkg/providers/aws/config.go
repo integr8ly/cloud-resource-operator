@@ -136,6 +136,16 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 	}
 }
 
+// BuildSubnetGroupName builds and returns an id used for infra resources
+func BuildInfraName(ctx context.Context, c client.Client, postfix string, n int) (string, error) {
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "error getting clusterID")
+	}
+	return resources.ShortenString(fmt.Sprintf("%s-%s", clusterID, postfix), n), nil
+}
+
 func BuildInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta, n int) (string, error) {
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -159,9 +160,16 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(msg), err
 	}
 
+	// setup vpc
 	if err := p.setupVpc(ctx, cr, rdsSvc, ec2Svc, rdsCfg); err != nil {
 		errMsg := "error setting up resource vpc"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// setup security group
+	if err := p.setupSecurityGroup(ctx, cr, ec2Svc); err != nil {
+		errMsg := "error setting up security group"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// getting postgres user password from created secret
@@ -178,7 +186,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// verify and build rds create config
-	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
+	if err := p.buildRDSCreateStrategy(ctx, cr, ec2Svc, rdsCfg, postgresPass); err != nil {
 		msg := "failed to build and verify aws rds instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
@@ -346,7 +354,6 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
 
-// todo delete subnet group
 func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
@@ -517,7 +524,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 }
 
 // verify postgres create config
-func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, postgresPassword string) error {
+func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, postgresPassword string) error {
 	if rdsCreateConfig.DeletionProtection == nil {
 		rdsCreateConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
 	}
@@ -570,12 +577,29 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
-	subGroup, err := BuildSubnetGroupName(ctx, p.Client)
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to build subnet group name")
 	}
 	if rdsCreateConfig.DBSubnetGroupName == nil {
 		rdsCreateConfig.DBSubnetGroupName = aws.String(subGroup)
+	}
+	// build security group name
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// get security group
+	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
+	if err != nil {
+		return errorUtil.Wrap(err, "")
+	}
+
+	if rdsCreateConfig.VpcSecurityGroupIds == nil {
+		rdsCreateConfig.VpcSecurityGroupIds = []*string{
+			aws.String(*foundSecGroup.GroupId),
+		}
 	}
 	return nil
 }
@@ -626,10 +650,79 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
+func (p *PostgresProvider) setupSecurityGroup(ctx context.Context, cr *v1alpha1.Postgres, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("setting postgres security group")
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting cluster id")
+	}
+
+	// build security group name
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// get cluster cidr group
+	vpcID, cidr, err := GetCidr(ctx, p.Client, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "error finding cidr block")
+	}
+
+	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
+	if err != nil {
+		return errorUtil.Wrap(err, "error get security group")
+	}
+
+	if foundSecGroup == nil {
+		// create security group
+		if _, err := ec2Svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
+			Description: aws.String(fmt.Sprintf("security group for cluster %s", clusterID)),
+			GroupName:   aws.String(secName),
+			VpcId:       aws.String(vpcID),
+		}); err != nil {
+			return errorUtil.Wrap(err, "error creating security group")
+		}
+		return nil
+	}
+
+	// build ip permission
+	ipPermission := &ec2.IpPermission{
+		IpProtocol: aws.String("-1"),
+		IpRanges: []*ec2.IpRange{
+			{
+				CidrIp: aws.String(cidr),
+			},
+		},
+	}
+
+	for _, perm := range foundSecGroup.IpPermissions {
+		if reflect.DeepEqual(perm, ipPermission) {
+			logrus.Info("ip permissions are correct for postgres resource")
+			return nil
+		}
+	}
+
+	// authorize ingress
+	logrus.Info("setting ingress ip permissions")
+	if _, err := ec2Svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+		GroupId: aws.String(*foundSecGroup.GroupId),
+		IpPermissions: []*ec2.IpPermission{
+			ipPermission,
+		},
+	}); err != nil {
+		return errorUtil.Wrap(err, "error authorizing security group ingress")
+	}
+
+	return nil
+}
+
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
 func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) error {
+	logrus.Info("configuring resource vpc")
 	// get subnet group id
-	sgID, err := BuildSubnetGroupName(ctx, p.Client)
+	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -647,6 +740,7 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 		}
 	}
 	if foundSubnet != nil {
+		logrus.Info("resource subnet group as expected")
 		return nil
 	}
 
@@ -657,10 +751,11 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 	}
 
 	// get cluster vpc subnets
-	subIDs, err := GetAllSubnetIDS(ctx, p.Client, ec2Svc)
+	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting vpc subnets")
 	}
+	//BuildInfraNameFromObject
 
 	// build subnet group input
 	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
@@ -676,6 +771,7 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 	}
 
 	// create db subnet group
+	logrus.Info("creating resource subnet group")
 	if _, err := rdsSvc.CreateDBSubnetGroup(subnetGroupInput); err != nil {
 		return errorUtil.Wrap(err, "unable to create db subnet group")
 	}
