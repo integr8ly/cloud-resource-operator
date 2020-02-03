@@ -54,6 +54,8 @@ var (
 				"elasticache:DescribeSnapshots",
 				"elasticache:CreateSnapshot",
 				"elasticache:DescribeCacheClusters",
+				"elasticache:DescribeCacheSubnetGroups",
+				"elasticache:CreateCacheSubnetGroup",
 				"rds:DescribeDBInstances",
 				"rds:CreateDBInstance",
 				"rds:DeleteDBInstance",

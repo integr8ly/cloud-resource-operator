@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -161,13 +160,13 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// setup vpc
-	if err := p.setupVpc(ctx, cr, rdsSvc, ec2Svc, rdsCfg); err != nil {
+	if err := p.setupVpc(ctx, rdsSvc, ec2Svc); err != nil {
 		errMsg := "error setting up resource vpc"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup security group
-	if err := p.setupSecurityGroup(ctx, cr, ec2Svc); err != nil {
+	if err := SetupSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
 		errMsg := "error setting up security group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -584,12 +583,12 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	if rdsCreateConfig.DBSubnetGroupName == nil {
 		rdsCreateConfig.DBSubnetGroupName = aws.String(subGroup)
 	}
+
 	// build security group name
 	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
-
 	// get security group
 	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
 	if err != nil {
@@ -650,77 +649,9 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
-func (p *PostgresProvider) setupSecurityGroup(ctx context.Context, cr *v1alpha1.Postgres, ec2Svc ec2iface.EC2API) error {
-	logrus.Info("setting postgres security group")
-	// get cluster id
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
-	if err != nil {
-		return errorUtil.Wrap(err, "error getting cluster id")
-	}
-
-	// build security group name
-	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
-	if err != nil {
-		return errorUtil.Wrap(err, "error building subnet group name")
-	}
-
-	// get cluster cidr group
-	vpcID, cidr, err := GetCidr(ctx, p.Client, ec2Svc)
-	if err != nil {
-		return errorUtil.Wrap(err, "error finding cidr block")
-	}
-
-	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
-	if err != nil {
-		return errorUtil.Wrap(err, "error get security group")
-	}
-
-	if foundSecGroup == nil {
-		// create security group
-		if _, err := ec2Svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
-			Description: aws.String(fmt.Sprintf("security group for cluster %s", clusterID)),
-			GroupName:   aws.String(secName),
-			VpcId:       aws.String(vpcID),
-		}); err != nil {
-			return errorUtil.Wrap(err, "error creating security group")
-		}
-		return nil
-	}
-
-	// build ip permission
-	ipPermission := &ec2.IpPermission{
-		IpProtocol: aws.String("-1"),
-		IpRanges: []*ec2.IpRange{
-			{
-				CidrIp: aws.String(cidr),
-			},
-		},
-	}
-
-	for _, perm := range foundSecGroup.IpPermissions {
-		if reflect.DeepEqual(perm, ipPermission) {
-			logrus.Info("ip permissions are correct for postgres resource")
-			return nil
-		}
-	}
-
-	// authorize ingress
-	logrus.Info("setting ingress ip permissions")
-	if _, err := ec2Svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
-		GroupId: aws.String(*foundSecGroup.GroupId),
-		IpPermissions: []*ec2.IpPermission{
-			ipPermission,
-		},
-	}); err != nil {
-		return errorUtil.Wrap(err, "error authorizing security group ingress")
-	}
-
-	return nil
-}
-
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
-func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) error {
-	logrus.Info("configuring resource vpc")
+func (p *PostgresProvider) setupVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("configuring cluster vpc for postgres resource")
 	// get subnet group id
 	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
@@ -740,7 +671,7 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 		}
 	}
 	if foundSubnet != nil {
-		logrus.Info("resource subnet group as expected")
+		logrus.Info("resource subnet group found")
 		return nil
 	}
 
@@ -755,7 +686,6 @@ func (p *PostgresProvider) setupVpc(ctx context.Context, cr *v1alpha1.Postgres, 
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting vpc subnets")
 	}
-	//BuildInfraNameFromObject
 
 	// build subnet group input
 	subnetGroupInput := &rds.CreateDBSubnetGroupInput{

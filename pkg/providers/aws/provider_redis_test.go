@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"reflect"
 	"time"
 
@@ -118,6 +119,14 @@ func (m *mockElasticacheClient) DescribeServiceUpdates(*elasticache.DescribeServ
 	return &elasticache.DescribeServiceUpdatesOutput{}, nil
 }
 
+func (m *mockElasticacheClient) DescribeCacheSubnetGroups(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+	return &elasticache.DescribeCacheSubnetGroupsOutput{}, nil
+}
+
+func (m *mockElasticacheClient) CreateCacheSubnetGroup(*elasticache.CreateCacheSubnetGroupInput) (*elasticache.CreateCacheSubnetGroupOutput, error) {
+	return &elasticache.CreateCacheSubnetGroupOutput{}, nil
+}
+
 // mock sts get caller identity
 func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
 	return &sts.GetCallerIdentityOutput{
@@ -187,11 +196,17 @@ func Test_createRedisCluster(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build security name", err)
+	}
 	type args struct {
 		ctx         context.Context
 		r           *v1alpha1.Redis
 		stsSvc      stsiface.STSAPI
 		cacheSvc    elasticacheiface.ElastiCacheAPI
+		ec2Svc      ec2iface.EC2API
 		redisConfig *elasticache.CreateReplicationGroupInput
 		stratCfg    *StrategyConfig
 	}
@@ -213,6 +228,7 @@ func Test_createRedisCluster(t *testing.T) {
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
@@ -232,6 +248,7 @@ func Test_createRedisCluster(t *testing.T) {
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -253,6 +270,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -272,6 +290,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:        buildTestRedisCR(),
 				stsSvc:   &mockStsClient{},
+				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
@@ -297,7 +316,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.redisConfig, tt.args.stratCfg)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

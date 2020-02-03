@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"strconv"
 	"time"
 
@@ -107,22 +109,22 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, stsSvc := createAWSService(stratCfg, providerCreds)
+	cacheSvc, stsSvc, ec2Svc := createAWSService(stratCfg, providerCreds)
 
 	// create the aws elasticache cluster
-	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, elasticacheCreateConfig, stratCfg)
+	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, ec2Svc, elasticacheCreateConfig, stratCfg)
 }
 
-func createAWSService(stratCfg *StrategyConfig, providerCreds *Credentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI) {
+func createAWSService(stratCfg *StrategyConfig, providerCreds *Credentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI, ec2iface.EC2API) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	}))
 
-	return elasticache.New(sess), sts.New(sess)
+	return elasticache.New(sess), sts.New(sess), ec2.New(sess)
 }
 
-func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
+func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
@@ -132,8 +134,20 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
+	// setup vpc
+	if err := p.setupVpc(ctx, cacheSvc, ec2Svc); err != nil {
+		errMsg := "error setting up resource vpc"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// setup security group
+	if err := SetupSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
+		errMsg := "error setting up security group"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// verify and build elasticache create config
-	if err := p.buildElasticacheCreateStrategy(ctx, r, elasticacheConfig); err != nil {
+	if err := p.buildElasticacheCreateStrategy(ctx, r, ec2Svc, elasticacheConfig); err != nil {
 		errMsg := "failed to build and verify aws elasticache create strategy"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -338,7 +352,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, _ := createAWSService(stratCfg, providerCreds)
+	cacheSvc, _, _ := createAWSService(stratCfg, providerCreds)
 
 	// delete the elasticache cluster
 	return p.deleteElasticacheCluster(ctx, cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, r)
@@ -466,7 +480,7 @@ func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplica
 }
 
 // verifyRedisConfig checks elasticache config, if none exist sets values to default
-func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v1alpha1.Redis, elasticacheConfig *elasticache.CreateReplicationGroupInput) error {
+func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v1alpha1.Redis, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput) error {
 
 	elasticacheConfig.AutomaticFailoverEnabled = aws.Bool(true)
 	elasticacheConfig.Engine = aws.String("redis")
@@ -493,6 +507,32 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.ReplicationGroupId == nil {
 		elasticacheConfig.ReplicationGroupId = aws.String(cacheName)
 	}
+
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build subnet group name")
+	}
+	if elasticacheConfig.CacheSubnetGroupName == nil {
+		elasticacheConfig.CacheSubnetGroupName = aws.String(subGroup)
+	}
+
+	// build security group name
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+	// get security group
+	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
+	if err != nil {
+		return errorUtil.Wrap(err, "")
+	}
+
+	if elasticacheConfig.SecurityGroupIds == nil {
+		elasticacheConfig.SecurityGroupIds = []*string{
+			aws.String(*foundSecGroup.GroupId),
+		}
+	}
+
 	return nil
 }
 
@@ -518,6 +558,53 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 	if elasticacheDeleteConfig.FinalSnapshotIdentifier != nil && *elasticacheDeleteConfig.FinalSnapshotIdentifier == "" {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
 	}
+	return nil
+}
+
+// ensures a subnet group is in place to configure the resource, so that it is in the same vpc as the cluster
+func (p *RedisProvider) setupVpc(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("configuring cluster vpc for redis resource")
+	// get subnet group id
+	sgName, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// check if group exists
+	groups, err := cacheSvc.DescribeCacheSubnetGroups(&elasticache.DescribeCacheSubnetGroupsInput{})
+	if err != nil {
+		return errorUtil.Wrap(err, "error describing subnet groups")
+	}
+	var foundSubnet *elasticache.CacheSubnetGroup
+	for _, sub := range groups.CacheSubnetGroups {
+		if *sub.CacheSubnetGroupName == sgName {
+			foundSubnet = sub
+			break
+		}
+	}
+	if foundSubnet != nil {
+		logrus.Info(fmt.Sprintf("%s resource subnet group found", *foundSubnet.CacheSubnetGroupName))
+		return nil
+	}
+
+	// get cluster vpc subnets
+	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting vpc subnets")
+	}
+
+	// build subnet group input
+	subnetGroupInput := &elasticache.CreateCacheSubnetGroupInput{
+		CacheSubnetGroupDescription: aws.String("Subnet group created by the cloud resource operator"),
+		CacheSubnetGroupName:        aws.String(sgName),
+		SubnetIds:                   subIDs,
+	}
+
+	logrus.Info("creating resource subnet group")
+	if _, err := cacheSvc.CreateCacheSubnetGroup(subnetGroupInput); err != nil {
+		return errorUtil.Wrap(err, "unable to create cache subnet group")
+	}
+
 	return nil
 }
 

@@ -3,10 +3,12 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
+	"reflect"
 	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -20,6 +22,75 @@ const (
 	defaultSubnetPostfix        = "subnet-group"
 	defaultSecurityGroupPostfix = "security-group"
 )
+
+// ensures a subnet group is in place for the creation of a resource
+func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("setting redis security group")
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting cluster id")
+	}
+
+	// build security group name
+	secName, err := BuildInfraName(ctx, c, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// get cluster cidr group
+	vpcID, cidr, err := GetCidr(ctx, c, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "error finding cidr block")
+	}
+
+	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
+	if err != nil {
+		return errorUtil.Wrap(err, "error get security group")
+	}
+
+	if foundSecGroup == nil {
+		// create security group
+		if _, err := ec2Svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
+			Description: aws.String(fmt.Sprintf("security group for cluster %s", clusterID)),
+			GroupName:   aws.String(secName),
+			VpcId:       aws.String(vpcID),
+		}); err != nil {
+			return errorUtil.Wrap(err, "error creating security group")
+		}
+		return nil
+	}
+
+	// build ip permission
+	ipPermission := &ec2.IpPermission{
+		IpProtocol: aws.String("-1"),
+		IpRanges: []*ec2.IpRange{
+			{
+				CidrIp: aws.String(cidr),
+			},
+		},
+	}
+
+	for _, perm := range foundSecGroup.IpPermissions {
+		if reflect.DeepEqual(perm, ipPermission) {
+			logrus.Info("ip permissions are correct for postgres resource")
+			return nil
+		}
+	}
+
+	// authorize ingress
+	logrus.Info("setting ingress ip permissions")
+	if _, err := ec2Svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+		GroupId: aws.String(*foundSecGroup.GroupId),
+		IpPermissions: []*ec2.IpPermission{
+			ipPermission,
+		},
+	}); err != nil {
+		return errorUtil.Wrap(err, "error authorizing security group ingress")
+	}
+
+	return nil
+}
 
 // GetVPCSubnets returns a list of subnets associated with cluster VPC
 func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
