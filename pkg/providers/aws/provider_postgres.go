@@ -395,13 +395,6 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 		return croType.StatusMessage(fmt.Sprintf("delete detected, deleteDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
-	err = p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to delete RDS alert : %s", err)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-
 	// delete rds instance if deletion protection is false
 	if !*foundInstance.DeletionProtection {
 		_, err = instanceSvc.DeleteDBInstance(rdsDeleteConfig)
@@ -422,6 +415,14 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 		msg := "failed to remove deletion protection"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
+
+	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
+	err = p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to delete RDS alert : %s", err)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
 	return croType.StatusMessage(fmt.Sprintf("deletion protection detected, modifyDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
 }
 
@@ -726,7 +727,7 @@ func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v
 			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheusrule: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s reconcilced successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s reconciled successfully.", pr.Name))
 	return nil
 }
 

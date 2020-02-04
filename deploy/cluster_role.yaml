@@ -19,3 +19,9 @@ rules:
       - configmaps
     verbs:
       - "*"
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - prometheusrules
+    verbs:
+      - '*'
