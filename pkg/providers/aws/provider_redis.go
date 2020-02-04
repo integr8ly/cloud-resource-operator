@@ -441,8 +441,14 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
+
+	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	if err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
+	}
 	if stratCfg.Region == "" {
-		stratCfg.Region = DefaultRegion
+		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
+		stratCfg.Region = defRegion
 	}
 
 	// unmarshal the elasticache cluster config

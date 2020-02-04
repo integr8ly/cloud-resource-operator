@@ -459,9 +459,14 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
+
+	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	if err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
+	}
 	if stratCfg.Region == "" {
-		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", DefaultRegion)
-		stratCfg.Region = DefaultRegion
+		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
+		stratCfg.Region = defRegion
 	}
 
 	// create s3 bucket config created by the provider

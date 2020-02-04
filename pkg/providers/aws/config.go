@@ -170,3 +170,14 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 	}
 	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterID, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
 }
+
+func GetDefaultRegion(ctx context.Context, c client.Client) (string, error) {
+	region, err := resources.GetAWSRegion(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to retrieve region")
+	}
+	if region == "" {
+		return DefaultRegion, nil
+	}
+	return region, nil
+}
