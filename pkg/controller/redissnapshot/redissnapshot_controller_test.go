@@ -6,9 +6,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
+	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	v12 "github.com/openshift/api/config/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"

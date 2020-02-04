@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"reflect"
 	"testing"
 	"time"
@@ -17,8 +18,6 @@ import (
 	croApis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	openshiftConfv1 "github.com/openshift/api/config/v1"
-	v12 "github.com/openshift/api/config/v1"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -49,7 +48,6 @@ type mockEc2Client struct {
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 	scheme := apimachinery.NewScheme()
 	err := croApis.AddToScheme(scheme)
-	err = openshiftConfv1.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = cloudCredentialApis.AddToScheme(scheme)
 	err = monitoringv1.AddToScheme(scheme)

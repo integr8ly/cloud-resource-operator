@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	openshiftConfv1 "github.com/openshift/api/config/v1"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,7 +55,6 @@ type mockStsClient struct {
 func buildTestSchemeRedis() (*runtime.Scheme, error) {
 	scheme := apimachinery.NewScheme()
 	err := croApis.AddToScheme(scheme)
-	err = openshiftConfv1.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = cloudCredentialApis.AddToScheme(scheme)
 	err = monitoringv1.AddToScheme(scheme)
