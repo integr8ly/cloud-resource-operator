@@ -704,7 +704,7 @@ func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v
 	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
 	alertRuleName := "RDSInstanceUnavailable"
 	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(cro_aws_rds_available{namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
+		fmt.Sprintf("absent(cro_aws_rds_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
 			cr.Namespace, instanceID, clusterID, cr.Name),
 	)
 	alertDescription := fmt.Sprintf("RDS instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])

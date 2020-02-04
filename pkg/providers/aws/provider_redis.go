@@ -620,7 +620,7 @@ func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, 
 	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
 	alertRuleName := "ElastiCacheInstanceUnavailable"
 	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(cro_aws_elasticache_available{namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
+		fmt.Sprintf("absent(cro_aws_elasticache_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
 			cr.Namespace, instanceID, clusterID, cr.Name),
 	)
 	alertDescription := fmt.Sprintf("ElastiCache instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])
