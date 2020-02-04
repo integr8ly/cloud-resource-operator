@@ -417,9 +417,8 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
-	err = p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to delete RDS alert : %s", err)
+	if err :=  p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
+		errMsg := fmt.Sprintf("failed to delete rds alert : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
@@ -727,7 +726,7 @@ func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v
 			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheusrule: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s reconciled successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
 	return nil
 }
 

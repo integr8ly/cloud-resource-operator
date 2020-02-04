@@ -396,8 +396,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 	}
 
 	// Delete the PrometheusRule alert which watches the availability of this ElastiCache instance we provisioned
-	err = p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId)
-	if err != nil {
+	if err := p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId); err != nil{
 		errMsg := fmt.Sprintf("failed to delete elasticache alert : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
@@ -643,7 +642,7 @@ func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, 
 			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create metricName: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s reconciled successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
 	return nil
 }
 
