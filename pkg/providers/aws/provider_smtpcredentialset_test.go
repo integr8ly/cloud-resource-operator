@@ -65,6 +65,12 @@ func buildTestInfrastructure() *crov1.Infrastructure {
 		},
 		Status: crov1.InfrastructureStatus{
 			InfrastructureName: "test",
+			Platform:           crov1.AWSPlatformType,
+			PlatformStatus: &crov1.PlatformStatus{
+				AWS: &crov1.AWSPlatformStatus{
+					Region: "test",
+				},
+			},
 		},
 	}
 }
