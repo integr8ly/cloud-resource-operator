@@ -23,7 +23,6 @@ const (
 	DefaultConfigMapName = "cloud-resources-aws-strategies"
 
 	DefaultFinalizer = "finalizers.cloud-resources-operator.integreatly.org"
-	DefaultRegion    = "eu-west-1"
 
 	defaultReconcileTime = time.Second * 300
 
@@ -177,7 +176,7 @@ func GetDefaultRegion(ctx context.Context, c client.Client) (string, error) {
 		return "", errorUtil.Wrap(err, "failed to retrieve region")
 	}
 	if region == "" {
-		return DefaultRegion, nil
+		return "", errorUtil.New("found aws region was undefined")
 	}
 	return region, nil
 }

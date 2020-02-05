@@ -143,8 +143,14 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
+
+	defRegion, err := croAws.GetDefaultRegion(ctx, r.client)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
+	}
 	if stratCfg.Region == "" {
-		stratCfg.Region = croAws.DefaultRegion
+		r.logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
+		stratCfg.Region = defRegion
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user

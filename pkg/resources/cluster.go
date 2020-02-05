@@ -35,7 +35,7 @@ func GetAWSRegion(ctx context.Context, c client.Client) (string, error) {
 	if infra.Status.Platform == v1.AWSPlatformType {
 		return infra.Status.PlatformStatus.AWS.Region, nil
 	}
-	return "", nil
+	return "", errorUtil.New("infrastructure does not container aws region")
 }
 
 //go:generate moq -out cluster_moq.go . PodCommander
