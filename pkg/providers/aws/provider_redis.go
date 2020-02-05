@@ -387,13 +387,6 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 		return croType.StatusMessage(fmt.Sprintf("delete detected, deleteReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
 
-	// Delete the PrometheusRule alert which watches the availability of this ElastiCache instance we provisioned
-	err = p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to delete elasticache alert : %s", err)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-
 	// delete elasticache cluster
 	_, err = cacheSvc.DeleteReplicationGroup(elasticacheDeleteConfig)
 	elasticacheErr, isAwsErr := err.(awserr.Error)
@@ -401,6 +394,13 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 		errMsg := fmt.Sprintf("failed to delete elasticache cluster : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
+
+	// Delete the PrometheusRule alert which watches the availability of this ElastiCache instance we provisioned
+	if err := p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId); err != nil{
+		errMsg := fmt.Sprintf("failed to delete elasticache alert : %s", err)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
 	return "delete detected, deleteReplicationGroup started", nil
 }
 
@@ -642,7 +642,7 @@ func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, 
 			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create metricName: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s reconcilced successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
 	return nil
 }
 
