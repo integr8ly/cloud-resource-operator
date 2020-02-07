@@ -49,6 +49,8 @@ var (
 				"ec2:DescribeAvailabilityZones",
 				"ec2:CreateSubnet",
 				"ec2:CreateTags",
+				"s3:PutBucketPublicAccessBlock",
+				"s3:PutEncryptionConfiguration",
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",

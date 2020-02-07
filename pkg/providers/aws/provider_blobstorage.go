@@ -51,7 +51,7 @@ const (
 	defaultRestrictPublicBuckets = true
 
 	// bucket encryption defaults
-	defaultEncryptionSSEAlgorithm = "AES256"
+	defaultEncryptionSSEAlgorithm = s3.ServerSideEncryptionAes256
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -420,7 +420,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	if err = reconcileS3BucketSettings(aws.StringValue(bucketCfg.Bucket), s3svc); err != nil {
-		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", *foundBucket.Name)
+		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.StringValue(bucketCfg.Bucket))
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	p.Logger.Infof("reconcile for aws s3 bucket completed successfully, bucket created")
