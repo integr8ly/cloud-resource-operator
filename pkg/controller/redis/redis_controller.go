@@ -121,7 +121,6 @@ func (r *ReconcileRedis) Reconcile(request reconcile.Request) (reconcile.Result,
 
 	for _, p := range r.providerList {
 		if !p.SupportsStrategy(stratMap.Redis) {
-			r.logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.Redis)
 			continue
 		}
 

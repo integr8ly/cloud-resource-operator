@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"strconv"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
@@ -34,7 +35,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	errorUtil "github.com/pkg/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -109,13 +110,13 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, stsSvc, ec2Svc := createAWSService(stratCfg, providerCreds)
+	cacheSvc, stsSvc, ec2Svc := createAWSSession(stratCfg, providerCreds)
 
 	// create the aws elasticache cluster
 	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, ec2Svc, elasticacheCreateConfig, stratCfg)
 }
 
-func createAWSService(stratCfg *StrategyConfig, providerCreds *Credentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI, ec2iface.EC2API) {
+func createAWSSession(stratCfg *StrategyConfig, providerCreds *Credentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI, ec2iface.EC2API) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
@@ -141,7 +142,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}
 
 	// setup security group
-	if err := SetupSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
+	if err := configureSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
 		errMsg := "error setting up security group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -195,7 +196,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	// Create the PrometheusRule alert to watch for the availability of this ElastiCache instance we are provisioning
 	err = p.CreateElastiCacheAvailabilityAlert(ctx, r, *foundCache.ReplicationGroupId, clusterID)
 	if err != nil {
-		errMsg := "error creating the elasticache PrometheusRule"
+		errMsg := "error creating the elasticache prometheus rule"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -352,7 +353,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, _, _ := createAWSService(stratCfg, providerCreds)
+	cacheSvc, _, _ := createAWSSession(stratCfg, providerCreds)
 
 	// delete the elasticache cluster
 	return p.deleteElasticacheCluster(ctx, cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, r)
@@ -410,7 +411,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 	}
 
 	// Delete the PrometheusRule alert which watches the availability of this ElastiCache instance we provisioned
-	if err := p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId); err != nil{
+	if err := p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId); err != nil {
 		errMsg := fmt.Sprintf("failed to delete elasticache alert : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
@@ -731,11 +732,11 @@ func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, 
 	// Replace this with CreateOrUpdate if we can figure it out
 	err = p.Client.Create(ctx, pr)
 	if err != nil {
-		if !kerrors.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create metricName: %s", alertRuleName))
+		if !k8serr.IsAlreadyExists(err) {
+			return errorUtil.Wrap(err, fmt.Sprintf("exception calling create metric name: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
 	return nil
 }
 
@@ -752,8 +753,11 @@ func (p *RedisProvider) DeleteElastiCacheAvailabilityAlert(ctx context.Context, 
 	}
 
 	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		msg := fmt.Sprintf("exception calling DeleteElastiCacheAvailabilityAlert: %s", ruleName)
-		return errorUtil.Wrap(err, msg)
+		if k8serr.IsNotFound(err) {
+			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
+			return nil
+		}
+		return nil
 	}
 
 	// call delete on that object
@@ -761,6 +765,6 @@ func (p *RedisProvider) DeleteElastiCacheAvailabilityAlert(ctx context.Context, 
 		msg := fmt.Sprintf("exception calling DeleteElastiCacheAvailabilityAlert: %s", ruleName)
 		return errorUtil.Wrap(err, msg)
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s deleted.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
 	return nil
 }

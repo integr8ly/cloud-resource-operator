@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"reflect"
-	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
@@ -19,13 +21,15 @@ import (
 )
 
 const (
-	defaultSubnetPostfix        = "subnet-group"
-	defaultSecurityGroupPostfix = "security-group"
+	defaultSubnetPostfix          = "subnet-group"
+	defaultSecurityGroupPostfix   = "security-group"
+	defaultAWSPrivateSubnetTagKey = "kubernetes.io/role/internal-elb"
+	defaultSubnetGroupDesc        = "Subnet group created and managed by the Cloud Resource Operator"
 )
 
 // ensures a subnet group is in place for the creation of a resource
-func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) error {
-	logrus.Info("setting resource security group")
+func configureSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("ensuring security group is correct for resource")
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -34,6 +38,7 @@ func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC
 
 	// build security group name
 	secName, err := BuildInfraName(ctx, c, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	logrus.Info(fmt.Sprintf("setting resource security group %s", secName))
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -81,7 +86,7 @@ func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC
 	}
 
 	// authorize ingress
-	logrus.Info("setting ingress ip permissions")
+	logrus.Info(fmt.Sprintf("setting ingress ip permissions for %s ", *foundSecGroup.GroupName))
 	if _, err := ec2Svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId: aws.String(*foundSecGroup.GroupId),
 		IpPermissions: []*ec2.IpPermission{
@@ -97,7 +102,6 @@ func SetupSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2iface.EC
 // GetVPCSubnets returns a list of subnets associated with cluster VPC
 func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 	logrus.Info("gathering cluster vpc and subnet information")
-
 	// poll subnets to ensure credentials have reconciled
 	subs, err := getSubnets(ec2Svc)
 	if err != nil {
@@ -132,52 +136,51 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API)
 }
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
-func GetAllSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*string, error) {
-	logrus.Info("gathering all vpc subnets")
-	subs, err := GetVPCSubnets(ctx, c, ec2Svc)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
-	}
-
-	// build list of subnet ids
-	var subIDs []*string
-	for _, sub := range subs {
-		subIDs = append(subIDs, sub.SubnetId)
-	}
-
-	if subIDs == nil {
-		return nil, errorUtil.New("failed to get list of subnet ids")
-	}
-
-	return subIDs, nil
-}
-
-// GetSubnetIDS returns a list of subnet ids associated with cluster vpc
 func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) ([]*string, error) {
-	logrus.Info("gathering private vpc subnets")
+	logrus.Info("gathering all private subnets in cluster vpc")
+	// get cluster vpc
+	foundVPC, err := getVpc(ctx, c, ec2Svc)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting vpcs")
+	}
+
+	// get subnets in vpc
 	subs, err := GetVPCSubnets(ctx, c, ec2Svc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
 	}
 
-	regexpStr := "\\b(\\w*private\\w*)\\b"
-	anReg, err := regexp.Compile(regexpStr)
+	// get a list of availability zones
+	azs, err := getAZs(ec2Svc)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to compile regexp %s", regexpStr)
+		return nil, errorUtil.Wrap(err, "error getting availability zones")
 	}
 
-	var privateSubs []*ec2.Subnet
+	// filter based on a tag key attached to private subnets
+	var privSubs []*ec2.Subnet
 	for _, sub := range subs {
 		for _, tags := range sub.Tags {
-			if anReg.MatchString(*tags.Value) {
-				privateSubs = append(privateSubs, sub)
+			if *tags.Key == defaultAWSPrivateSubnetTagKey {
+				privSubs = append(privSubs, sub)
 			}
+		}
+	}
+
+	// for every az check there is a private subnet, if none create one
+	for _, az := range azs {
+		if !privateSubnetExists(privSubs, az) {
+			logrus.Info(fmt.Sprintf("no private subnet found in %s", *az.ZoneName))
+			subnet, err := createPrivateSubnet(ctx, c, ec2Svc, foundVPC, *az.ZoneName)
+			if err != nil {
+				return nil, errorUtil.Wrap(err, "failed to created private subnet")
+			}
+			privSubs = append(privSubs, subnet)
 		}
 	}
 
 	// build list of subnet ids
 	var subIDs []*string
-	for _, sub := range privateSubs {
+	for _, sub := range privSubs {
 		subIDs = append(subIDs, sub.SubnetId)
 	}
 
@@ -186,6 +189,117 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 	}
 
 	return subIDs, nil
+}
+
+// checks is a private subnet exists and is available in an availability zone
+func privateSubnetExists(privSubs []*ec2.Subnet, zone *ec2.AvailabilityZone) bool {
+	for _, subnet := range privSubs {
+		if *subnet.AvailabilityZone == *zone.ZoneName && *zone.State == "available" {
+			return true
+		}
+	}
+	return false
+}
+
+// creates and tags a private subnet
+func createPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, vpc *ec2.Vpc, zone string) (*ec2.Subnet, error) {
+	// get list of potential subnet addresses
+	logrus.Info(fmt.Sprintf("creating private subnet in %s", *vpc.VpcId))
+	subs, err := buildSubnetAddress(vpc)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to build subnets")
+	}
+
+	// create subnet looping through potential subnet list
+	var subnet *ec2.Subnet
+	for _, ip := range subs {
+		createOutput, err := ec2Svc.CreateSubnet(&ec2.CreateSubnetInput{
+			AvailabilityZone: aws.String(zone),
+			CidrBlock:        aws.String(ip),
+			VpcId:            aws.String(*vpc.VpcId),
+		})
+		ec2err, isAwsErr := err.(awserr.Error)
+		if err != nil && isAwsErr && ec2err.Code() == "InvalidSubnet.Conflict" {
+			logrus.Info(fmt.Sprintf("%s conflicts with a current subnet, trying again", ip))
+			continue
+		}
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "error creating new subnet")
+		}
+		if newErr := tagPrivateSubnet(ctx, c, ec2Svc, createOutput.Subnet); newErr != nil {
+			return nil, newErr
+		}
+		logrus.Info(fmt.Sprintf("created new subnet %s in %s", ip, *vpc.VpcId))
+		subnet = createOutput.Subnet
+		break
+	}
+
+	return subnet, nil
+}
+
+// tags a private subnet with the default aws private subnet tag
+func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, sub *ec2.Subnet) error {
+	logrus.Info(fmt.Sprintf("adding tags to subnet %s", *sub.SubnetId))
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting clusterID")
+	}
+	organizationTag := resources.GetOrganizationTag()
+
+	_, err = ec2Svc.CreateTags(&ec2.CreateTagsInput{
+		Resources: []*string{
+			aws.String(*sub.SubnetId),
+		},
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(defaultAWSPrivateSubnetTagKey),
+				Value: aws.String("1"),
+			}, {
+				Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
+				Value: aws.String(clusterID),
+			},
+		},
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to tag subnet")
+	}
+	return nil
+}
+
+// builds an array list of potential subnet addresses
+func buildSubnetAddress(vpc *ec2.Vpc) ([]string, error) {
+	logrus.Info(fmt.Sprintf("calculating subnet mask and address for vpc cidr %s", *vpc.CidrBlock))
+	if *vpc.CidrBlock == "" {
+		return nil, errorUtil.New("vpc cidr block can't be empty")
+	}
+
+	// reduce subnet mask to /20
+	reducedMask := strings.SplitAfter(*vpc.CidrBlock, "/")
+	if len(reducedMask) != 2 {
+		return nil, errorUtil.New(fmt.Sprintf("returned cidr %s from aws is not valid", *vpc.CidrBlock))
+	}
+	reducedMask[1] = "20"
+
+	// split cidr by octet
+	splitCidr := strings.SplitAfter(strings.Join(reducedMask[:], ""), ".")
+	var subnets []string
+
+	// build subnet address increments
+	var ipIncrements []int
+	increment := 0
+	for increment < 255 {
+		ipIncrements = append(ipIncrements, increment)
+		increment = increment + 16
+	}
+
+	// replace 3rd octet with increments
+	for _, val := range ipIncrements {
+		splitCidr[2] = fmt.Sprintf("%s.", strconv.Itoa(val))
+		subnets = append(subnets, strings.Join(splitCidr[:], ""))
+	}
+
+	return subnets, nil
 }
 
 // returns vpc id and cidr block for found vpc
@@ -202,6 +316,16 @@ func GetCidr(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) (stri
 	}
 
 	return *foundVPC.VpcId, *foundVPC.CidrBlock, nil
+}
+
+// function to get AZ
+func getAZs(ec2Svc ec2iface.EC2API) ([]*ec2.AvailabilityZone, error) {
+	logrus.Info("gathering cluster availability zones")
+	azs, err := ec2Svc.DescribeAvailabilityZones(&ec2.DescribeAvailabilityZonesInput{})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting availability zones")
+	}
+	return azs.AvailabilityZones, nil
 }
 
 // function to get subnets, used to check/wait on AWS credentials

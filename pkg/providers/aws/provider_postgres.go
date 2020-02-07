@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"strconv"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
 	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -38,7 +38,6 @@ import (
 
 	errorUtil "github.com/pkg/errors"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -166,7 +165,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// setup security group
-	if err := SetupSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
+	if err := configureSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
 		errMsg := "error setting up security group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
@@ -232,7 +231,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	// Create the PrometheusRule alert to watch for the availability of this ElastiCache instance we are provisioning
 	err = p.CreateRDSAvailabilityAlert(ctx, cr, *foundInstance.DBInstanceIdentifier, clusterID)
 	if err != nil {
-		errMsg := "error creating the elasticache PrometheusRule"
+		errMsg := "error creating the elasticache prometheus rule"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -431,7 +430,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
-	if err :=  p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
+	if err := p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
 		errMsg := fmt.Sprintf("failed to delete rds alert : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
@@ -657,7 +656,7 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
 func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
-	logrus.Info("configuring cluster vpc for postgres resource")
+	logrus.Info("ensuring vpc is as expected for resource")
 	// get subnet group id
 	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
@@ -677,7 +676,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 		}
 	}
 	if foundSubnet != nil {
-		logrus.Info("resource subnet group found")
+		logrus.Info(fmt.Sprintf("subnet group %s found", *foundSubnet.DBSubnetGroupName))
 		return nil
 	}
 
@@ -695,7 +694,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 
 	// build subnet group input
 	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
-		DBSubnetGroupDescription: aws.String("Subnet group created by the cloud resource operator"),
+		DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		DBSubnetGroupName:        aws.String(sgID),
 		SubnetIds:                subIDs,
 		Tags: []*rds.Tag{
@@ -826,11 +825,11 @@ func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v
 	// Replace this with CreateOrUpdate if we can figure it out
 	err = p.Client.Create(ctx, pr)
 	if err != nil {
-		if !kerrors.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheusrule: %s", alertRuleName))
+		if !k8serr.IsAlreadyExists(err) {
+			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheus rule: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
 	return nil
 }
 
@@ -847,7 +846,8 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	}
 
 	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		if errors.IsNotFound(err) {
+		if k8serr.IsNotFound(err) {
+			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
 			return nil
 		}
 		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
@@ -857,6 +857,6 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	if err := p.Client.Delete(ctx, pr); err != nil {
 		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s deleted.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
 	return nil
 }

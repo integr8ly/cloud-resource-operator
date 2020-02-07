@@ -43,6 +43,7 @@ type mockEc2Client struct {
 	subnets   []*ec2.Subnet
 	vpcs      []*ec2.Vpc
 	secGroups []*ec2.SecurityGroup
+	azs       []*ec2.AvailabilityZone
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -122,6 +123,10 @@ func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2
 
 func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
 	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
+}
+
+func (m *mockEc2Client) DescribeAvailabilityZones(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+	return &ec2.DescribeAvailabilityZonesOutput{}, nil
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
@@ -241,13 +246,22 @@ func buildVpcs() []*ec2.Vpc {
 func buildSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
-			VpcId: aws.String("testID"),
+			VpcId:            aws.String("testID"),
+			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
-					Key:   aws.String("test"),
-					Value: aws.String("test-private-test"),
+					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
+					Value: aws.String("1"),
 				},
 			},
+		},
+	}
+}
+
+func buildAZ() []*ec2.AvailabilityZone {
+	return []*ec2.AvailabilityZone{
+		{
+			ZoneName: aws.String("test"),
 		},
 	}
 }
@@ -297,7 +311,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds is created",
 			args: args{
 				rdsSvc:      &mockRdsClient{dbInstances: []*rds.DBInstance{}},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:         context.TODO(),
 				cr:          buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{},
@@ -315,7 +329,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds is exists and is available",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
@@ -341,7 +355,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds needs to be modified",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
