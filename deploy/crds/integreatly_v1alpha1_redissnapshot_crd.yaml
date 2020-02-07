@@ -44,6 +44,8 @@ spec:
               type: string
             phase:
               type: string
+            snapshotID:
+              type: string
           type: object
   version: v1alpha1
   versions:

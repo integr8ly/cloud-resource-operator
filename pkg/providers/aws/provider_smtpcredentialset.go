@@ -106,10 +106,18 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 		errMsg := fmt.Sprintf("failed to read deployment strategy for smtp credential instance %s", smtpCreds.Name)
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
+
 	awsRegion := stratCfg.Region
-	if awsRegion == "" {
-		awsRegion = DefaultRegion
+	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	if err != nil {
+		errMsg := "failed to get default region"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+	if awsRegion == "" {
+		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
+		awsRegion = defRegion
+	}
+
 	sesSMTPHost := p.ConfigManager.GetDefaultRegionSMTPServerMapping()[awsRegion]
 	if sesSMTPHost == "" {
 		errMsg := fmt.Sprintf("unsupported aws ses smtp region %s", sesSMTPHost)

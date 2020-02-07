@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"reflect"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	openshiftConfv1 "github.com/openshift/api/config/v1"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,7 +55,6 @@ type mockStsClient struct {
 func buildTestSchemeRedis() (*runtime.Scheme, error) {
 	scheme := apimachinery.NewScheme()
 	err := croApis.AddToScheme(scheme)
-	err = openshiftConfv1.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = cloudCredentialApis.AddToScheme(scheme)
 	err = monitoringv1.AddToScheme(scheme)
@@ -116,6 +115,14 @@ func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCache
 
 func (m *mockElasticacheClient) DescribeServiceUpdates(*elasticache.DescribeServiceUpdatesInput) (*elasticache.DescribeServiceUpdatesOutput, error) {
 	return &elasticache.DescribeServiceUpdatesOutput{}, nil
+}
+
+func (m *mockElasticacheClient) DescribeCacheSubnetGroups(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+	return &elasticache.DescribeCacheSubnetGroupsOutput{}, nil
+}
+
+func (m *mockElasticacheClient) CreateCacheSubnetGroup(*elasticache.CreateCacheSubnetGroupInput) (*elasticache.CreateCacheSubnetGroupOutput, error) {
+	return &elasticache.CreateCacheSubnetGroupOutput{}, nil
 }
 
 // mock sts get caller identity
@@ -187,11 +194,17 @@ func Test_createRedisCluster(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build security name", err)
+	}
 	type args struct {
 		ctx         context.Context
 		r           *v1alpha1.Redis
 		stsSvc      stsiface.STSAPI
 		cacheSvc    elasticacheiface.ElastiCacheAPI
+		ec2Svc      ec2iface.EC2API
 		redisConfig *elasticache.CreateReplicationGroupInput
 		stratCfg    *StrategyConfig
 	}
@@ -213,6 +226,7 @@ func Test_createRedisCluster(t *testing.T) {
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
@@ -232,6 +246,7 @@ func Test_createRedisCluster(t *testing.T) {
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -253,6 +268,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -272,6 +288,7 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:        buildTestRedisCR(),
 				stsSvc:   &mockStsClient{},
+				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
@@ -297,7 +314,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.redisConfig, tt.args.stratCfg)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

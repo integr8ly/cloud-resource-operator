@@ -8,12 +8,10 @@ import (
 	"testing"
 	"time"
 
-	v13 "github.com/openshift/api/config/v1"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	apis2 "github.com/integr8ly/cloud-resource-operator/pkg/apis"
-	confv1 "github.com/openshift/api/config/v1"
+	crov1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
@@ -30,7 +28,7 @@ import (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis2.AddToScheme(scheme)
-	err = confv1.AddToScheme(scheme)
+	err = crov1.SchemeBuilder.AddToScheme(scheme)
 	err = v12.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {
@@ -60,13 +58,19 @@ func buildTestCredentialsRequest() *v1.CredentialsRequest {
 	}
 }
 
-func buildTestInfrastructure() *v13.Infrastructure {
-	return &v13.Infrastructure{
+func buildTestInfrastructure() *crov1.Infrastructure {
+	return &crov1.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name: "cluster",
 		},
-		Status: v13.InfrastructureStatus{
+		Status: crov1.InfrastructureStatus{
 			InfrastructureName: "test",
+			Platform:           crov1.AWSPlatformType,
+			PlatformStatus: &crov1.PlatformStatus{
+				AWS: &crov1.AWSPlatformStatus{
+					Region: "test",
+				},
+			},
 		},
 	}
 }

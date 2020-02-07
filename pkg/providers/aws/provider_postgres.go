@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+
 	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -35,7 +38,6 @@ import (
 
 	errorUtil "github.com/pkg/errors"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -133,28 +135,39 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	}
 
 	// setup aws RDS instance sdk session
-	rdsSession := createRDSSession(stratCfg, providerCreds)
+	rdsSession, ec2Session := createRDSSession(stratCfg, providerCreds)
 
 	// create the aws RDS instance
-	return p.createRDSInstance(ctx, pg, rdsSession, rdsCfg)
+	return p.createRDSInstance(ctx, pg, rdsSession, ec2Session, rdsCfg)
 }
 
-func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) rdsiface.RDSAPI {
+func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) (rdsiface.RDSAPI, ec2iface.EC2API) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(stratCfg.Region),
 		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
 	}))
-	return rds.New(sess)
+	return rds.New(sess), ec2.New(sess)
 }
 
-func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pi, err := getRDSInstances(rdsSvc)
 	if err != nil {
 		// return nil error so this function can be requeued
 		msg := "error getting replication groups"
-		logrus.Info(msg, err)
 		return nil, croType.StatusMessage(msg), err
+	}
+
+	// setup vpc
+	if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
+		errMsg := "error setting up resource vpc"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// setup security group
+	if err := configureSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
+		errMsg := "error setting up security group"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// getting postgres user password from created secret
@@ -171,7 +184,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// verify and build rds create config
-	if err := p.buildRDSCreateStrategy(ctx, cr, rdsCfg, postgresPass); err != nil {
+	if err := p.buildRDSCreateStrategy(ctx, cr, ec2Svc, rdsCfg, postgresPass); err != nil {
 		msg := "failed to build and verify aws rds instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
@@ -218,7 +231,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	// Create the PrometheusRule alert to watch for the availability of this ElastiCache instance we are provisioning
 	err = p.CreateRDSAvailabilityAlert(ctx, cr, *foundInstance.DBInstanceIdentifier, clusterID)
 	if err != nil {
-		errMsg := "error creating the elasticache PrometheusRule"
+		errMsg := "error creating the elasticache prometheus rule"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -315,7 +328,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 		}
 	}
 
-	logrus.Infof("Tags were added successfully to the RDS instance %s", *foundInstance.DBInstanceIdentifier)
+	logrus.Infof("tags were added successfully to the rds instance %s", *foundInstance.DBInstanceIdentifier)
 	return "successfully created and tagged", nil
 }
 
@@ -334,7 +347,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	}
 
 	// setup aws postgres instance sdk session
-	instanceSvc := createRDSSession(stratCfg, providerCreds)
+	instanceSvc, _ := createRDSSession(stratCfg, providerCreds)
 
 	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
 }
@@ -417,7 +430,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
-	if err :=  p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
+	if err := p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
 		errMsg := fmt.Sprintf("failed to delete rds alert : %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
@@ -447,8 +460,14 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
+
+	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	if err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
+	}
 	if stratCfg.Region == "" {
-		stratCfg.Region = DefaultRegion
+		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
+		stratCfg.Region = defRegion
 	}
 
 	rdsCreateConfig := &rds.CreateDBInstanceInput{}
@@ -509,7 +528,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 }
 
 // verify postgres create config
-func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, postgresPassword string) error {
+func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, postgresPassword string) error {
 	if rdsCreateConfig.DeletionProtection == nil {
 		rdsCreateConfig.DeletionProtection = aws.Bool(defaultAwsPostgresDeletionProtection)
 	}
@@ -562,6 +581,30 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to build subnet group name")
+	}
+	if rdsCreateConfig.DBSubnetGroupName == nil {
+		rdsCreateConfig.DBSubnetGroupName = aws.String(subGroup)
+	}
+
+	// build security group name
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+	// get security group
+	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
+	if err != nil {
+		return errorUtil.Wrap(err, "")
+	}
+
+	if rdsCreateConfig.VpcSecurityGroupIds == nil {
+		rdsCreateConfig.VpcSecurityGroupIds = []*string{
+			aws.String(*foundSecGroup.GroupId),
+		}
+	}
 	return nil
 }
 
@@ -609,6 +652,66 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 	}
+}
+
+// ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
+func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
+	logrus.Info("ensuring vpc is as expected for resource")
+	// get subnet group id
+	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// check if group exists
+	groups, err := rdsSvc.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{})
+	if err != nil {
+		return errorUtil.Wrap(err, "error describing subnet groups")
+	}
+	var foundSubnet *rds.DBSubnetGroup
+	for _, sub := range groups.DBSubnetGroups {
+		if *sub.DBSubnetGroupName == sgID {
+			foundSubnet = sub
+			break
+		}
+	}
+	if foundSubnet != nil {
+		logrus.Info(fmt.Sprintf("subnet group %s found", *foundSubnet.DBSubnetGroupName))
+		return nil
+	}
+
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting cluster id")
+	}
+
+	// get cluster vpc subnets
+	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting vpc subnets")
+	}
+
+	// build subnet group input
+	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
+		DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
+		DBSubnetGroupName:        aws.String(sgID),
+		SubnetIds:                subIDs,
+		Tags: []*rds.Tag{
+			{
+				Key:   aws.String("cluster"),
+				Value: aws.String(clusterID),
+			},
+		},
+	}
+
+	// create db subnet group
+	logrus.Info("creating resource subnet group")
+	if _, err := rdsSvc.CreateDBSubnetGroup(subnetGroupInput); err != nil {
+		return errorUtil.Wrap(err, "unable to create db subnet group")
+	}
+
+	return nil
 }
 
 func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {
@@ -722,11 +825,11 @@ func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v
 	// Replace this with CreateOrUpdate if we can figure it out
 	err = p.Client.Create(ctx, pr)
 	if err != nil {
-		if !kerrors.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheusrule: %s", alertRuleName))
+		if !k8serr.IsAlreadyExists(err) {
+			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheus rule: %s", alertRuleName))
 		}
 	}
-	p.Logger.Info(fmt.Sprintf("prometheusrule: %s reconciled successfully.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
 	return nil
 }
 
@@ -743,6 +846,10 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	}
 
 	if err := p.Client.Get(ctx, selector, pr); err != nil {
+		if k8serr.IsNotFound(err) {
+			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
+			return nil
+		}
 		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
 	}
 
@@ -750,6 +857,6 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	if err := p.Client.Delete(ctx, pr); err != nil {
 		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
 	}
-	p.Logger.Info(fmt.Sprintf("PrometheusRule: %s deleted.", pr.Name))
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
 	return nil
 }

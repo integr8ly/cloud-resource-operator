@@ -23,7 +23,6 @@ const (
 	DefaultConfigMapName = "cloud-resources-aws-strategies"
 
 	DefaultFinalizer = "finalizers.cloud-resources-operator.integreatly.org"
-	DefaultRegion    = "eu-west-1"
 
 	defaultReconcileTime = time.Second * 300
 
@@ -136,6 +135,16 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 	}
 }
 
+// BuildSubnetGroupName builds and returns an id used for infra resources
+func BuildInfraName(ctx context.Context, c client.Client, postfix string, n int) (string, error) {
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "error getting clusterID")
+	}
+	return resources.ShortenString(fmt.Sprintf("%s-%s", clusterID, postfix), n), nil
+}
+
 func BuildInfraNameFromObject(ctx context.Context, c client.Client, om controllerruntime.ObjectMeta, n int) (string, error) {
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -159,4 +168,15 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 		return "", errorUtil.Wrap(err, "failed to retrieve timestamped cluster identifier")
 	}
 	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterID, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
+}
+
+func GetDefaultRegion(ctx context.Context, c client.Client) (string, error) {
+	region, err := resources.GetAWSRegion(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to retrieve region")
+	}
+	if region == "" {
+		return "", errorUtil.New("found aws region was undefined")
+	}
+	return region, nil
 }

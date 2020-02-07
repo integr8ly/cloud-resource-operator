@@ -4,12 +4,11 @@ import (
 	"context"
 	"testing"
 
-	v12 "github.com/openshift/api/config/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
-	v1 "k8s.io/api/core/v1"
 
+	crov1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -38,7 +37,7 @@ type mockRdsClient struct {
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
-	err := v1.AddToScheme(scheme)
+	err := crov1.SchemeBuilder.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {
 		return nil, err
@@ -64,12 +63,12 @@ func buildPostgres() *integreatlyv1alpha1.Postgres {
 	}
 }
 
-func buildTestInfrastructure() *v12.Infrastructure {
-	return &v12.Infrastructure{
+func buildTestInfrastructure() *crov1.Infrastructure {
+	return &crov1.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name: "cluster",
 		},
-		Status: v12.InfrastructureStatus{
+		Status: crov1.InfrastructureStatus{
 			InfrastructureName: "test",
 		},
 	}
