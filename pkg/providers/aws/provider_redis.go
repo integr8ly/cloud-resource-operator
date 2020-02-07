@@ -37,8 +37,9 @@ const (
 	defaultRedisInfoMetricName        = "cro_redis_info"
 	redisProviderName                 = "aws-elasticache"
 	// default create params
-	defaultCacheNodeType       = "cache.t2.micro"
-	defaultEngineVersion       = "3.2.10"
+	defaultCacheNodeType = "cache.t2.micro"
+	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
+	defaultEngineVersion       = "3.2.6"
 	defaultDescription         = "A Redis replication group"
 	defaultNumCacheClusters    = 2
 	defaultSnapshotRetention   = 30
