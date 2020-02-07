@@ -33,12 +33,17 @@ import (
 )
 
 const (
-	redisProviderName        = "aws-elasticache"
-	defaultCacheNodeType     = "cache.t2.micro"
-	defaultEngineVersion     = "3.2.10"
-	defaultDescription       = "A Redis replication group"
-	defaultNumCacheClusters  = 2
-	defaultSnapshotRetention = 30
+	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
+	defaultRedisInfoMetricName        = "cro_redis_info"
+	redisProviderName                 = "aws-elasticache"
+	// default create params
+	defaultCacheNodeType       = "cache.t2.micro"
+	defaultEngineVersion       = "3.2.10"
+	defaultDescription         = "A Redis replication group"
+	defaultNumCacheClusters    = 2
+	defaultSnapshotRetention   = 30
+	defaultAtRestEncryption    = true
+	defaultInTransitEncryption = true
 )
 
 var _ providers.RedisProvider = (*RedisProvider)(nil)
@@ -474,6 +479,12 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	}
 	if elasticacheConfig.SnapshotRetentionLimit == nil {
 		elasticacheConfig.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+	}
+	if elasticacheConfig.AtRestEncryptionEnabled == nil {
+		elasticacheConfig.AtRestEncryptionEnabled = aws.Bool(defaultAtRestEncryption)
+	}
+	if elasticacheConfig.TransitEncryptionEnabled == nil {
+		elasticacheConfig.TransitEncryptionEnabled = aws.Bool(defaultInTransitEncryption)
 	}
 	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {

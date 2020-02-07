@@ -56,6 +56,7 @@ const (
 	defaultCredSecSuffix                 = "-aws-rds-credentials"
 	defaultPostgresUserKey               = "user"
 	defaultPostgresPasswordKey           = "password"
+	defaultStorageEncrypted              = true
 )
 
 var (
@@ -534,6 +535,9 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	}
 	if rdsCreateConfig.EngineVersion == nil {
 		rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+	}
+	if rdsCreateConfig.StorageEncrypted == nil {
+		rdsCreateConfig.StorageEncrypted = aws.Bool(defaultStorageEncrypted)
 	}
 	if rdsCreateConfig.EngineVersion != nil {
 		if !resources.Contains(defaultSupportedEngineVersions, *rdsCreateConfig.EngineVersion) {
