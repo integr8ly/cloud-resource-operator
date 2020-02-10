@@ -11,7 +11,7 @@ require (
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
-	github.com/lib/pq v1.2.0
+	github.com/lib/pq v1.3.0
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible

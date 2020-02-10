@@ -143,7 +143,7 @@ github.com/joho/godotenv
 github.com/json-iterator/go
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/lib/pq v1.2.0
+# github.com/lib/pq v1.3.0
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
