@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 	"time"
 
@@ -248,8 +249,19 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		Port:     int(*foundInstance.Endpoint.Port),
 	}
 
-	if err = p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd); err != nil {
-		errMsg := fmt.Sprintf("failed to expose rds connection metric for rds: %s", *foundInstance.DBInstanceIdentifier)
+	// create connection metric
+	err = p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd)
+	netErr, isNetErr := err.(net.Error)
+	if err != nil && netErr.Timeout() && isNetErr {
+		errMsg := fmt.Sprintf("connection timed out when testing connection to rds instance: %s ", *foundInstance.DBInstanceIdentifier)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if err != nil && netErr.Temporary() && isNetErr {
+		errMsg := fmt.Sprintf("temporary dns error occured during testing connection to rds instance: %s", *foundInstance.DBInstanceIdentifier)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if err != nil {
+		errMsg := fmt.Sprintf("error occured  for rds: %s", *foundInstance.DBInstanceIdentifier)
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -875,16 +887,19 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// test the connection
-	if err := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port); err != nil {
+	err = p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
+	if err != nil {
 		// create failed connection metric
 		if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
-		return errorUtil.Wrap(err, "failed to connect to rds")
+		return err
 	}
+
 	// create successful connection metric
 	if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 1); err != nil {
 		return errorUtil.Wrap(err, "failed to set connection metric")
 	}
+
 	return nil
 }
