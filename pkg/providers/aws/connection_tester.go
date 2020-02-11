@@ -29,6 +29,9 @@ func (m *ConnectionTestManager) TCPConnection(host string, port int) error {
 		return err
 	}
 
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		return err
+	}
+
 	return nil
 }
