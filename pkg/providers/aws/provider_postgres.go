@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"time"
 
@@ -42,7 +41,7 @@ const (
 	defaultPostgresMaintenanceMetricName = "cro_aws_rds_service_maintenance"
 	defaultPostgresInfoMetricName        = "cro_aws_rds_info"
 	defaultPostgresAvailMetricName       = "cro_aws_rds_available"
-	defaultPostgresConnectionMetricName = "cro_aws_rds_connection"
+	defaultPostgresConnectionMetricName  = "cro_aws_rds_connection"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
 	defaultAwsMultiAZ                    = true
@@ -75,6 +74,7 @@ type PostgresProvider struct {
 	Logger            *logrus.Entry
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
+	TCPPinger         ConnectionTester
 }
 
 func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
@@ -83,6 +83,7 @@ func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *Postgre
 		Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
+		TCPPinger:         NewConnectionTestManager(),
 	}
 }
 
@@ -861,38 +862,29 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 	return nil
 }
 
+// tests to see if a simple tcp connection can be made to rds and creates a metric based on this
 func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) error {
-	logrus.Info("setting postgres connection metric")
+	// return cluster id needed for metric labels
+	logrus.Info("testing and exposing postgres connection metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get cluster id")
 	}
 
+	// build generic labels to be added to metric
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// test the connection
-	if err := p.checkRDSConnectivity(postgresInstance); err != nil {
+	if err := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port); err != nil {
+		// create failed connection metric
 		if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
-		return errorUtil.Wrap(err,"failed to connect to rds")
+		return errorUtil.Wrap(err, "failed to connect to rds")
 	}
-	// create happy metric
+	// create successful connection metric
 	if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 1); err != nil {
 		return errorUtil.Wrap(err, "failed to set connection metric")
 	}
-	return nil
-}
-
-func (p *PostgresProvider) checkRDSConnectivity(dbInstance *providers.PostgresDeploymentDetails) error {
-	// build connection psql string
-	logrus.Info(fmt.Sprintf("testing connectivity to rds instance %s", dbInstance.Host))
-
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", dbInstance.Host, dbInstance.Port), 100 * time.Millisecond)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to make connection")
-	}
-	conn.Close()
-
 	return nil
 }

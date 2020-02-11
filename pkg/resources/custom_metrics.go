@@ -54,7 +54,6 @@ func StartGaugeVector() {
 
 // SetMetric Set exports a Prometheus Gauge
 func SetMetric(name string, labels map[string]string, value float64) error {
-	fmt.Println("setting metric ", name)
 	// set vector value
 	gv, ok := MetricVecs[name]
 	if ok {

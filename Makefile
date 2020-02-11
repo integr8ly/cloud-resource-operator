@@ -1,5 +1,5 @@
 IMAGE_REG=quay.io
-IMAGE_ORG=croche
+IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
