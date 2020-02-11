@@ -135,7 +135,7 @@ func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.Get
 func buildTestPrometheusRule() *monitoringv1.PrometheusRule {
 	return &monitoringv1.PrometheusRule{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      "availability-rule-test-id",
+			Name:      "availability-rule-test",
 			Namespace: "test",
 		},
 	}
