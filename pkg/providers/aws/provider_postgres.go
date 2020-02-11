@@ -877,7 +877,7 @@ func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, names
 // tests to see if a simple tcp connection can be made to rds and creates a metric based on this
 func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) error {
 	// return cluster id needed for metric labels
-	logrus.Info("testing and exposing postgres connection metric")
+	logrus.Info(fmt.Sprintf("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier))
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get cluster id")

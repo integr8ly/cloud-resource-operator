@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 	"time"
 
@@ -35,8 +36,10 @@ import (
 )
 
 const (
-	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
-	defaultRedisInfoMetricName        = "cro_redis_info"
+	defaultRedisMaintenanceMetricName = "cro_aws_elasticache_service_maintenance"
+	defaultRedisInfoMetricName        = "cro_aws_elasticache_info"
+	defaultRedisAvailMetricName       = "cro_aws_elasticache_available"
+	defaultRedisConnectionMetricName  = "cro_aws_elasticache_connection"
 	redisProviderName                 = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType     = "cache.t2.micro"
@@ -55,7 +58,7 @@ type RedisProvider struct {
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
 	CacheSvc          elasticacheiface.ElastiCacheAPI
-	MonClientV1       monitoringclient.MonitoringV1Interface
+	TCPPinger         ConnectionTester
 }
 
 func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvider {
@@ -64,6 +67,7 @@ func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvi
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
+		TCPPinger:         NewConnectionTestManager(),
 	}
 }
 
@@ -208,12 +212,29 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 	}
 
-	// return secret information
 	primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
-	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+	rdd := &providers.RedisDeploymentDetails{
 		URI:  *primaryEndpoint.Address,
 		Port: *primaryEndpoint.Port,
-	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
+	}
+
+	err = p.createElasticacheConnectionMetric(ctx, r, foundCache, rdd)
+	netErr, isNetErr := err.(net.Error)
+	if err != nil && netErr.Timeout() && isNetErr {
+		errMsg := fmt.Sprintf("connection timed out when testing connection to elasticache group: %s ", *foundCache.ReplicationGroupId)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if err != nil && netErr.Temporary() && isNetErr {
+		errMsg := fmt.Sprintf("temporary dns error occured during testing connection to elasticache group: %s ", *foundCache.ReplicationGroupId)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if err != nil {
+		errMsg := fmt.Sprintf("error occured  for elasticache group: %s ", *foundCache.ReplicationGroupId)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	// return secret information
+	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
 // TagElasticacheNode Add Tags to AWS Elasticache
@@ -693,4 +714,95 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 		}
 	}
 	return nil
+}
+
+// CreateElastiCacheAvailabilityAlert Call this when we create the ElastiCache instance to create an
+// alert to watch for the availability of the instance
+func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, cr *v1alpha1.Redis, instanceID string, clusterID string) error {
+	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
+	alertRuleName := "ElastiCacheInstanceUnavailable"
+	alertExp := intstr.FromString(
+		fmt.Sprintf("absent(cro_aws_elasticache_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
+			cr.Namespace, instanceID, clusterID, cr.Name),
+	)
+	alertDescription := fmt.Sprintf("ElastiCache instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])
+	labels := map[string]string{
+		"severity":    "warning",
+		"productName": cr.Labels["productName"],
+	}
+
+	pr, err := croResources.CreatePrometheusRule(ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
+	if err != nil {
+		return err
+	}
+
+	// Unless it already exists, call the kubernetes api and create this PrometheusRule
+	// Replace this with CreateOrUpdate if we can figure it out
+	err = p.Client.Create(ctx, pr)
+	if err != nil {
+		if !k8serr.IsAlreadyExists(err) {
+			return errorUtil.Wrap(err, fmt.Sprintf("exception calling create metric name: %s", alertRuleName))
+		}
+	}
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
+	return nil
+}
+
+// DeleteElastiCacheAvailabilityAlert We call this when we delete an ElastiCache instance,
+// it removes the prometheusrule alert which watches for the availability of the instance.
+func (p *RedisProvider) DeleteElastiCacheAvailabilityAlert(ctx context.Context, namespace string, instanceID string) error {
+	// query the kubernetes api to find the object we're looking for
+	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
+
+	pr := &prometheusv1.PrometheusRule{}
+	selector := client.ObjectKey{
+		Namespace: namespace,
+		Name:      ruleName,
+	}
+
+	if err := p.Client.Get(ctx, selector, pr); err != nil {
+		if k8serr.IsNotFound(err) {
+			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
+			return nil
+		}
+		return nil
+	}
+
+	// call delete on that object
+	if err := p.Client.Delete(ctx, pr); err != nil {
+		msg := fmt.Sprintf("exception calling DeleteElastiCacheAvailabilityAlert: %s", ruleName)
+		return errorUtil.Wrap(err, msg)
+	}
+	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
+	return nil
+}
+
+func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, cr *v1alpha1.Redis, cache *elasticache.ReplicationGroup, elasticacheGroup *providers.RedisDeploymentDetails) error {
+	// return cluster id needed for metric labels
+	logrus.Info(fmt.Sprintf("testing and exposing redis connection metric for: %s", *cache.ReplicationGroupId))
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to get cluster id")
+	}
+
+	// build generic labels to be added to metric
+	genericLabels := buildRedisGenericMetricLabels(cr, cache, clusterID)
+
+	// test the connection
+	err = p.TCPPinger.TCPConnection(elasticacheGroup.URI, int(elasticacheGroup.Port))
+	if err != nil {
+		// create failed connection metric
+		if err := resources.SetMetric(defaultRedisConnectionMetricName, genericLabels, 0); err != nil {
+			return errorUtil.Wrap(err, "failed to set connection metric")
+		}
+		return err
+	}
+
+	// create successful connection metric
+	if err := resources.SetMetric(defaultRedisConnectionMetricName, genericLabels, 1); err != nil {
+		return errorUtil.Wrap(err, "failed to set connection metric")
+	}
+
+	return nil
+
 }
