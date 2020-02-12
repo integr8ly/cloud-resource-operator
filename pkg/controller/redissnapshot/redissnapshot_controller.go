@@ -144,7 +144,7 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
 
-	defRegion, err := croAws.GetDefaultRegion(ctx, r.client)
+	defRegion, err := croAws.GetRegionFromStrategyOrDefault(ctx, r.client, stratCfg)
 	if err != nil {
 		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}

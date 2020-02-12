@@ -21,14 +21,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	"github.com/aws/aws-sdk-go/aws"
 
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -139,11 +137,16 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// setup aws s3 sdk session
 	p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
-	s3svc := createS3Session(stratCfg, providerCreds)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to create s3 bucket"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	s3Client := s3.New(sess)
 
 	// create bucket if it doesn't already exist, if it does exist then use the existing bucket
 	p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
-	msg, err := p.reconcileBucketCreate(ctx, s3svc, bucketCreateCfg)
+	msg, err := p.reconcileBucketCreate(ctx, s3Client, bucketCreateCfg)
 	if err != nil {
 		return nil, msg, errorUtil.Wrapf(err, string(msg))
 	}
@@ -159,7 +162,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	}
 
 	// Adding tags to s3
-	msg, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3svc)
+	msg, err = p.TagBlobStorage(ctx, *bucketCreateCfg.Bucket, bs, stratCfg.Region, s3Client)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to add tags to bucket: %s", msg)
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -241,18 +244,14 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// create new s3 session
 	p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
-	s3svc := createS3Session(stratCfg, providerCreds)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to delete s3 bucket"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 
 	// delete the bucket that was created by the provider
-	return p.reconcileBucketDelete(ctx, bs, s3svc, bucketCreateCfg, bucketDeleteCfg)
-}
-
-func createS3Session(stratCfg *StrategyConfig, providerCreds *Credentials) s3iface.S3API {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	}))
-	return s3.New(sess)
+	return p.reconcileBucketDelete(ctx, bs, s3.New(sess), bucketCreateCfg, bucketDeleteCfg)
 }
 
 func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1alpha1.BlobStorage, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) (croType.StatusMessage, error) {
@@ -460,7 +459,7 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
 
-	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	defRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, stratCfg)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
 	}

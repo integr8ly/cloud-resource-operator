@@ -108,7 +108,7 @@ func (p *SMTPCredentialProvider) CreateSMTPCredentials(ctx context.Context, smtp
 	}
 
 	awsRegion := stratCfg.Region
-	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	defRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, stratCfg)
 	if err != nil {
 		errMsg := "failed to get default region"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
