@@ -25,8 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -135,18 +133,13 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	}
 
 	// setup aws RDS instance sdk session
-	rdsSession, ec2Session := createRDSSession(stratCfg, providerCreds)
-
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to create rds db instance"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 	// create the aws RDS instance
-	return p.createRDSInstance(ctx, pg, rdsSession, ec2Session, rdsCfg)
-}
-
-func createRDSSession(stratCfg *StrategyConfig, providerCreds *Credentials) (rdsiface.RDSAPI, ec2iface.EC2API) {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	}))
-	return rds.New(sess), ec2.New(sess)
+	return p.createRDSInstance(ctx, pg, rds.New(sess), ec2.New(sess), rdsCfg)
 }
 
 func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
@@ -347,9 +340,13 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	}
 
 	// setup aws postgres instance sdk session
-	instanceSvc, _ := createRDSSession(stratCfg, providerCreds)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to delete rds db instance"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 
-	return p.deleteRDSInstance(ctx, r, instanceSvc, rdsCreateConfig, rdsDeleteConfig)
+	return p.deleteRDSInstance(ctx, r, rds.New(sess), rdsCreateConfig, rdsDeleteConfig)
 }
 
 func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
@@ -461,7 +458,7 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
 
-	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	defRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, stratCfg)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
 	}

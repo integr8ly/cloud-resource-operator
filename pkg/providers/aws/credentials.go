@@ -70,6 +70,7 @@ var (
 				"rds:CreateDBSubnetGroup",
 				"rds:DescribeDBSubnetGroups",
 				"sts:GetCallerIdentity",
+				"iam:CreateServiceLinkedRole",
 			},
 			Resource: "*",
 		},

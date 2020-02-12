@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"time"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -127,10 +130,10 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.configMapNamespace,
 		},
 		Data: map[string]string{
-			"blobstorage":     "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
-			"smtpcredentials": "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
-			"redis":           "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
-			"postgres":        "{\"development\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"eu-west-1\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"blobstorage":     "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"smtpcredentials": "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"redis":           "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
+			"postgres":        "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",
 		},
 	}
 }
@@ -170,13 +173,40 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterID, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
 }
 
-func GetDefaultRegion(ctx context.Context, c client.Client) (string, error) {
+func CreateSessionFromStrategy(ctx context.Context, c client.Client, keyID, secretKey string, strategy *StrategyConfig) (*session.Session, error) {
+	region, err := GetRegionFromStrategyOrDefault(ctx, c, strategy)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get region from strategy while creating aws session")
+	}
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(region),
+		Credentials: credentials.NewStaticCredentials(keyID, secretKey, ""),
+	})
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s keyID=%s", region, keyID)
+	}
+	return sess, nil
+}
+
+func GetRegionFromStrategyOrDefault(ctx context.Context, c client.Client, strategy *StrategyConfig) (string, error) {
+	defaultRegion, err := getDefaultRegion(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to get default region")
+	}
+	region := strategy.Region
+	if region == "" {
+		region = defaultRegion
+	}
+	return region, nil
+}
+
+func getDefaultRegion(ctx context.Context, c client.Client) (string, error) {
 	region, err := resources.GetAWSRegion(ctx, c)
 	if err != nil {
-		return "", errorUtil.Wrap(err, "failed to retrieve region")
+		return "", errorUtil.Wrap(err, "failed to retrieve region from cluster")
 	}
 	if region == "" {
-		return "", errorUtil.New("found aws region was undefined")
+		return "", errorUtil.New("failed to retrieve region from cluster, region is not defined")
 	}
 	return region, nil
 }

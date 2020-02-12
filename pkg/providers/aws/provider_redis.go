@@ -24,8 +24,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -110,19 +108,13 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, stsSvc, ec2Svc := createAWSSession(stratCfg, providerCreds)
-
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to create elasticache replication group"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 	// create the aws elasticache cluster
-	return p.createElasticacheCluster(ctx, r, cacheSvc, stsSvc, ec2Svc, elasticacheCreateConfig, stratCfg)
-}
-
-func createAWSSession(stratCfg *StrategyConfig, providerCreds *Credentials) (elasticacheiface.ElastiCacheAPI, stsiface.STSAPI, ec2iface.EC2API) {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	}))
-
-	return elasticache.New(sess), sts.New(sess), ec2.New(sess)
+	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg)
 }
 
 func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
@@ -353,10 +345,14 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// setup aws elasticache cluster sdk session
-	cacheSvc, _, _ := createAWSSession(stratCfg, providerCreds)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	if err != nil {
+		errMsg := "failed to create aws session to delete elasticache replication group"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 
 	// delete the elasticache cluster
-	return p.deleteElasticacheCluster(ctx, cacheSvc, elasticacheCreateConfig, elasticacheDeleteConfig, r)
+	return p.deleteElasticacheCluster(ctx, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r)
 }
 
 func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis) (croType.StatusMessage, error) {
@@ -443,7 +439,7 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
 
-	defRegion, err := GetDefaultRegion(ctx, p.Client)
+	defRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, stratCfg)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
 	}
