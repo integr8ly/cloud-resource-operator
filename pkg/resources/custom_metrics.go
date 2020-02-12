@@ -27,9 +27,9 @@ const (
 	DefaultPostgresAvailMetricName       = "cro_postgres_available"
 	DefaultPostgresConnectionMetricName  = "cro_postgres_connection"
 	DefaultRedisMaintenanceMetricName    = "cro_redis_service_maintenance"
-	DefaultRedisInfoMetricName           = "cro_redis_elasticache_info"
-	DefaultRedisAvailMetricName          = "cro_redis_elasticache_available"
-	DefaultRedisConnectionMetricName     = "cro_redis_elasticache_connection"
+	DefaultRedisInfoMetricName           = "cro_redis_info"
+	DefaultRedisAvailMetricName          = "cro_redis_available"
+	DefaultRedisConnectionMetricName     = "cro_redis_connection"
 )
 
 var (
@@ -58,13 +58,14 @@ func StartGaugeVector() {
 	}()
 }
 
-// SetMetric Set exports a Prometheus Gauge
-func SetMetric(name string, labels map[string]string, value float64) error {
+//SetMetric Set exports a Prometheus Gauge
+func SetMetric(name string, labels map[string]string, value float64) {
 	// set vector value
 	gv, ok := MetricVecs[name]
 	if ok {
 		gv.With(labels).Set(value)
-		return nil
+		logrus.Info(fmt.Sprintf("successfully set metric value for %s", name))
+		return
 	}
 
 	// create label array for vector creation
@@ -78,15 +79,12 @@ func SetMetric(name string, labels map[string]string, value float64) error {
 	customMetrics.Registry.MustRegister(gv)
 	MetricVecs[name] = gv
 
-	return nil
+	logrus.Info(fmt.Sprintf("successfully created new gauge vector metric %s", name))
 }
 
-// SetMetricCurrentTime Set current time wraps set metric
-func SetMetricCurrentTime(name string, labels map[string]string) error {
-	if err := SetMetric(name, labels, float64(time.Now().UnixNano())/1e9); err != nil {
-		return errorUtil.Wrap(err, "unable to set current time gauge vector")
-	}
-	return nil
+//SetMetricCurrentTime Set current time wraps set metric
+func SetMetricCurrentTime(name string, labels map[string]string) {
+	SetMetric(name, labels, float64(time.Now().UnixNano())/1e9)
 }
 
 // CreatePrometheusRule will create a PrometheusRule object

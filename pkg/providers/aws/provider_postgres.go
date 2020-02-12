@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -198,16 +196,11 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, "started rds provision", nil
 	}
 
-	err = p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
-	if err != nil {
-		errMsg := "error creating the rds service maintenance metrics"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
+	// expose pending maintenance metric
+	p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
 
 	// set status metric
-	if err := p.exposePostgresMetrics(ctx, cr, foundInstance); err != nil {
-		return nil, croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
-	}
+	p.exposePostgresMetrics(ctx, cr, foundInstance)
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -246,20 +239,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// create connection metric
-	err = p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd)
-	netErr, isNetErr := err.(net.Error)
-	if err != nil && netErr.Timeout() && isNetErr {
-		errMsg := fmt.Sprintf("connection timed out when testing connection to rds instance: %s ", *foundInstance.DBInstanceIdentifier)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-	if err != nil && netErr.Temporary() && isNetErr {
-		errMsg := fmt.Sprintf("temporary dns error occured during testing connection to rds instance: %s", *foundInstance.DBInstanceIdentifier)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-	if err != nil {
-		errMsg := fmt.Sprintf("error occured  for rds: %s", *foundInstance.DBInstanceIdentifier)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
+	p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd)
 
 	// return secret information
 	return &providers.PostgresInstance{DeploymentDetails: pdd}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
@@ -407,9 +387,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// set status metric
-	if err := p.exposePostgresMetrics(ctx, pg, foundInstance); err != nil {
-		return croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
-	}
+	p.exposePostgresMetrics(ctx, pg, foundInstance)
 
 	// return if rds instance is not available
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -739,12 +717,13 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	return labels
 }
 
-func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
+func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	// build metric labels
@@ -753,35 +732,29 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels); err != nil {
-		return errorUtil.Wrap(err, "failed to set current time metric")
-	}
+	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
 	if *instance.DBInstanceStatus != "available" {
-		if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0); err != nil {
-			return errorUtil.Wrap(err, "failed to set avail metric")
-		}
-		return nil
+		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
+		return
 	}
-	if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1); err != nil {
-		return errorUtil.Wrap(err, "failed to set avail metric")
-	}
-
-	return nil
+	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 }
 
-func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) error {
+func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
 	logrus.Info("checking for pending postgres service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSession.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{})
 	if err != nil {
-		return errorUtil.Wrap(err, "rds serviceupdates error")
+		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	logrus.Info(fmt.Sprintf("rds serviceupdates: %d available", len(output.PendingMaintenanceActions)))
@@ -799,106 +772,33 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()
 
-			err = croResources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
-			if err != nil {
-				msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", resources.DefaultPostgresMaintenanceMetricName)
-				return errorUtil.Wrap(err, msg)
-			}
+			resources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 		}
 	}
 
-	return nil
-}
-
-// CreateRDSAvailabilityAlert Call this when we create the ElastiCache instance to create an
-// alert to watch for the availability of the instance
-func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v1alpha1.Postgres, instanceID string, clusterID string) error {
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-	alertRuleName := "RDSInstanceUnavailable"
-	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(cro_aws_rds_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
-			cr.Namespace, instanceID, clusterID, cr.Name),
-	)
-	alertDescription := fmt.Sprintf("RDS instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])
-	labels := map[string]string{
-		"severity":    "warning",
-		"productName": cr.Labels["productName"],
-	}
-
-	pr, err := croResources.CreatePrometheusRule(ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
-	if err != nil {
-		return err
-	}
-
-	// Unless it already exists, call the kubernetes api and create this PrometheusRule
-	// Replace this with CreateOrUpdate if we can figure it out
-	err = p.Client.Create(ctx, pr)
-	if err != nil {
-		if !k8serr.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheus rule: %s", alertRuleName))
-		}
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
-	return nil
-}
-
-// DeleteRDSAvailabilityAlert We call this when we delete an ElastiCache instance,
-// it removes the prometheusrule alert which watches for the availability of the instance.
-func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, namespace string, instanceID string) error {
-	// query the kubernetes api to find the object we're looking for
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-
-	pr := &prometheusv1.PrometheusRule{}
-	selector := client.ObjectKey{
-		Namespace: namespace,
-		Name:      ruleName,
-	}
-
-	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		if k8serr.IsNotFound(err) {
-			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
-			return nil
-		}
-		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
-	}
-
-	// call delete on that object
-	if err := p.Client.Delete(ctx, pr); err != nil {
-		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
-	return nil
 }
 
 // tests to see if a simple tcp connection can be made to rds and creates a metric based on this
-func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) error {
+func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) {
 	// return cluster id needed for metric labels
 	logrus.Info(fmt.Sprintf("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier))
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier))
+
 	}
 
 	// build generic labels to be added to metric
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// test the connection
-	conn, err := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
-	if err != nil && !conn {
+	conn := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
+	if !conn {
 		// create failed connection metric
-		if err := resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
-			return errorUtil.Wrap(err, "failed to set connection metric")
-		}
-		return err
+		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
+		return
 	}
-	if err != nil {
-		return err
-	}
-
 	// create successful connection metric
-	if err := resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1); err != nil {
-		return errorUtil.Wrap(err, "failed to set connection metric")
-	}
+	resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1)
 
-	return nil
 }
