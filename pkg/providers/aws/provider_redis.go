@@ -784,12 +784,15 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	genericLabels := buildRedisGenericMetricLabels(cr, cache, clusterID)
 
 	// test the connection
-	err = p.TCPPinger.TCPConnection(elasticacheGroup.URI, int(elasticacheGroup.Port))
-	if err != nil {
+	conn, err := p.TCPPinger.TCPConnection(elasticacheGroup.URI, int(elasticacheGroup.Port))
+	if err != nil && !conn {
 		// create failed connection metric
 		if err := resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
+		return err
+	}
+	if err != nil {
 		return err
 	}
 

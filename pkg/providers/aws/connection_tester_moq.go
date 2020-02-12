@@ -21,7 +21,7 @@ var _ ConnectionTester = &ConnectionTesterMock{}
 //
 //         // make and configure a mocked ConnectionTester
 //         mockedConnectionTester := &ConnectionTesterMock{
-//             TCPConnectionFunc: func(host string, port int) error {
+//             TCPConnectionFunc: func(host string, port int) (bool, error) {
 // 	               panic("mock out the TCPConnection method")
 //             },
 //         }
@@ -32,7 +32,7 @@ var _ ConnectionTester = &ConnectionTesterMock{}
 //     }
 type ConnectionTesterMock struct {
 	// TCPConnectionFunc mocks the TCPConnection method.
-	TCPConnectionFunc func(host string, port int) error
+	TCPConnectionFunc func(host string, port int) (bool, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -47,7 +47,7 @@ type ConnectionTesterMock struct {
 }
 
 // TCPConnection calls TCPConnectionFunc.
-func (mock *ConnectionTesterMock) TCPConnection(host string, port int) error {
+func (mock *ConnectionTesterMock) TCPConnection(host string, port int) (bool, error) {
 	if mock.TCPConnectionFunc == nil {
 		panic("ConnectionTesterMock.TCPConnectionFunc: method is nil but ConnectionTester.TCPConnection was just called")
 	}

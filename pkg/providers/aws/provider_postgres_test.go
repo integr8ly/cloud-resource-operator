@@ -60,8 +60,8 @@ func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 
 func buildMockConnectionTester() *ConnectionTesterMock {
 	mockTester := &ConnectionTesterMock{}
-	mockTester.TCPConnectionFunc = func(host string, port int) error {
-		return nil
+	mockTester.TCPConnectionFunc = func(host string, port int) (bool, error) {
+		return true, nil
 	}
 	return mockTester
 }

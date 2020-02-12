@@ -883,12 +883,15 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// test the connection
-	err = p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
-	if err != nil {
+	conn, err := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
+	if err != nil && !conn {
 		// create failed connection metric
 		if err := resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
+		return err
+	}
+	if err != nil {
 		return err
 	}
 
