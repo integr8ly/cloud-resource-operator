@@ -42,7 +42,6 @@ import (
 const (
 	defaultPostgresMaintenanceMetricName = "cro_postgres_service_maintenance"
 	defaultPostgresInfoMetricName        = "cro_postgres_info"
-	defaultPostgresAvailMetricName       = "cro_postgres_available"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
 	defaultAwsMultiAZ                    = true
@@ -744,12 +743,12 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 
 	// set available metric
 	if *instance.DBInstanceStatus != "available" {
-		if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0); err != nil {
 			return err
 		}
 		return nil
 	}
-	if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1); err != nil {
 		return err
 	}
 

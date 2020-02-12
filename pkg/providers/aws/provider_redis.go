@@ -39,7 +39,6 @@ import (
 const (
 	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
 	defaultRedisInfoMetricName        = "cro_redis_info"
-	defaultRedisAvailMetricName       = "cro_redis_available"
 	redisProviderName                 = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType     = "cache.t2.micro"
@@ -645,12 +644,12 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 
 	// set available metric
 	if *instance.Status != "available" {
-		if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0); err != nil {
 			return err
 		}
 		return nil
 	}
-	if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1); err != nil {
 		return err
 	}
 

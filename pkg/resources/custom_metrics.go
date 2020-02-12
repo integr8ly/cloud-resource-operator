@@ -155,7 +155,7 @@ func CreatePostgresAvailabilityAlert(ctx context.Context, client client.Client, 
 		fmt.Sprintf("absent(%s{exported_namespace='%s',resourceID='%s'} == 1)",
 			DefaultPostgresAvailMetricName, cr.Namespace, cr.Name),
 	)
-	alertDescription := fmt.Sprintf("Postgres instance: %s on cluster: %s for product: %s is unavailable", cr.Name, clusterID, cr.Labels["productName"])
+	alertDescription := fmt.Sprintf("Postgres instance: %s on cluster: %s for product: %s (strategy: %s) is unavailable", cr.Name, clusterID, cr.Labels["productName"], cr.Status.Strategy)
 	labels := map[string]string{
 		"severity":    "critical",
 		"productName": cr.Labels["productName"],
@@ -187,7 +187,7 @@ func CreateRedisAvailabilityAlert(ctx context.Context, client client.Client, cr 
 		fmt.Sprintf("absent(%s{exported_namespace='%s',resourceID='%s'} == 1)",
 			DefaultRedisAvailMetricName, cr.Namespace, cr.Name),
 	)
-	alertDescription := fmt.Sprintf("Redis cache: %s on cluster: %s for product: %s is unavailable", cr.Name, clusterID, cr.Labels["productName"])
+	alertDescription := fmt.Sprintf("Redis cache: %s on cluster: %s for product: %s (strategy: %s) is unavailable", cr.Name, clusterID, cr.Labels["productName"], cr.Status.Strategy)
 	labels := map[string]string{
 		"severity":    "critical",
 		"productName": cr.Labels["productName"],
