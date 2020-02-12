@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
-	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -27,20 +26,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	errorUtil "github.com/pkg/errors"
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	defaultRedisMaintenanceMetricName = "cro_aws_elasticache_service_maintenance"
-	defaultRedisInfoMetricName        = "cro_aws_elasticache_info"
-	defaultRedisAvailMetricName       = "cro_aws_elasticache_available"
+	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
+	defaultRedisInfoMetricName        = "cro_redis_info"
 	redisProviderName                 = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType     = "cache.t2.micro"
@@ -180,15 +176,10 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
 
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	// create the PrometheusRule alert to watch for the availability of the elasticache instance
+	_, err = resources.CreateRedisAvailabilityAlert(ctx, p.Client, r)
 	if err != nil {
-		errMsg := "failed to retrieve cluster identifier"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-	// Create the PrometheusRule alert to watch for the availability of this ElastiCache instance we are provisioning
-	err = p.CreateElastiCacheAvailabilityAlert(ctx, r, *foundCache.ReplicationGroupId, clusterID)
-	if err != nil {
-		errMsg := "error creating the elasticache prometheus rule"
+		errMsg := "error creating elasticache prometheus rule"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -225,7 +216,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
-//TagElasticacheNode Add Tags to AWS Elasticache
+// TagElasticacheNode Add Tags to AWS Elasticache
 func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
 	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
 
@@ -406,9 +397,9 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	// Delete the PrometheusRule alert which watches the availability of this ElastiCache instance we provisioned
-	if err := p.DeleteElastiCacheAvailabilityAlert(ctx, r.Namespace, *foundCache.ReplicationGroupId); err != nil {
-		errMsg := fmt.Sprintf("failed to delete elasticache alert : %s", err)
+	// delete the alert which watches the availability of the elasticache instance
+	if err := resources.DeleteRedisAvailabilityAlert(ctx, p.Client, r); err != nil {
+		errMsg := fmt.Sprintf("failed to delete elasticache alert: %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
@@ -619,7 +610,7 @@ func buildRedisGenericMetricLabels(r *v1alpha1.Redis, cache *elasticache.Replica
 	labels["namespace"] = r.Namespace
 	labels["instanceID"] = *cache.ReplicationGroupId
 	labels["productName"] = r.Labels["productName"]
-
+	labels["strategy"] = redisProviderName
 	return labels
 }
 
@@ -649,12 +640,12 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 
 	// set available metric
 	if *instance.Status != "available" {
-		if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0); err != nil {
 			return err
 		}
 		return nil
 	}
-	if err := resources.SetMetric(defaultRedisAvailMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1); err != nil {
 		return err
 	}
 
@@ -701,66 +692,5 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 			return errorUtil.Wrap(err, msg)
 		}
 	}
-	return nil
-}
-
-// CreateElastiCacheAvailabilityAlert Call this when we create the ElastiCache instance to create an
-// alert to watch for the availability of the instance
-func (p *RedisProvider) CreateElastiCacheAvailabilityAlert(ctx context.Context, cr *v1alpha1.Redis, instanceID string, clusterID string) error {
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-	alertRuleName := "ElastiCacheInstanceUnavailable"
-	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(cro_aws_elasticache_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
-			cr.Namespace, instanceID, clusterID, cr.Name),
-	)
-	alertDescription := fmt.Sprintf("ElastiCache instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])
-	labels := map[string]string{
-		"severity":    "warning",
-		"productName": cr.Labels["productName"],
-	}
-
-	pr, err := croResources.CreatePrometheusRule(ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
-	if err != nil {
-		return err
-	}
-
-	// Unless it already exists, call the kubernetes api and create this PrometheusRule
-	// Replace this with CreateOrUpdate if we can figure it out
-	err = p.Client.Create(ctx, pr)
-	if err != nil {
-		if !k8serr.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling create metric name: %s", alertRuleName))
-		}
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
-	return nil
-}
-
-// DeleteElastiCacheAvailabilityAlert We call this when we delete an ElastiCache instance,
-// it removes the prometheusrule alert which watches for the availability of the instance.
-func (p *RedisProvider) DeleteElastiCacheAvailabilityAlert(ctx context.Context, namespace string, instanceID string) error {
-	// query the kubernetes api to find the object we're looking for
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-
-	pr := &prometheusv1.PrometheusRule{}
-	selector := client.ObjectKey{
-		Namespace: namespace,
-		Name:      ruleName,
-	}
-
-	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		if k8serr.IsNotFound(err) {
-			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
-			return nil
-		}
-		return nil
-	}
-
-	// call delete on that object
-	if err := p.Client.Delete(ctx, pr); err != nil {
-		msg := fmt.Sprintf("exception calling DeleteElastiCacheAvailabilityAlert: %s", ruleName)
-		return errorUtil.Wrap(err, msg)
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
 	return nil
 }

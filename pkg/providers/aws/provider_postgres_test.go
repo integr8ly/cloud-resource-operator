@@ -132,7 +132,7 @@ func (m *mockEc2Client) DescribeAvailabilityZones(*ec2.DescribeAvailabilityZones
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
 	return &monitoringv1.PrometheusRule{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      "availability-rule-test-id",
+			Name:      "availability-rule-test",
 			Namespace: "test",
 		},
 	}

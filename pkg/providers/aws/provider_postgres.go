@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
-	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
@@ -21,7 +20,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -40,9 +38,8 @@ import (
 )
 
 const (
-	defaultPostgresMaintenanceMetricName = "cro_aws_rds_service_maintenance"
-	defaultPostgresInfoMetricName        = "cro_aws_rds_info"
-	defaultPostgresAvailMetricName       = "cro_aws_rds_available"
+	defaultPostgresMaintenanceMetricName = "cro_postgres_service_maintenance"
+	defaultPostgresInfoMetricName        = "cro_postgres_info"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
 	defaultAwsMultiAZ                    = true
@@ -208,7 +205,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// set status metric
 	if err := p.exposePostgresMetrics(ctx, cr, foundInstance); err != nil {
-		return nil, croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
+		return nil, croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
 	}
 
 	// check rds instance phase
@@ -216,15 +213,10 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	// create the PrometheusRule alert to watch for the availability of this rds instance
+	_, err = resources.CreatePostgresAvailabilityAlert(ctx, p.Client, cr)
 	if err != nil {
-		errMsg := "failed to retrieve cluster identifier"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-	// Create the PrometheusRule alert to watch for the availability of this ElastiCache instance we are provisioning
-	err = p.CreateRDSAvailabilityAlert(ctx, cr, *foundInstance.DBInstanceIdentifier, clusterID)
-	if err != nil {
-		errMsg := "error creating the elasticache prometheus rule"
+		errMsg := "error creating rds prometheus rule"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -254,7 +246,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
 }
 
-//TagRDSPostgres Tags RDS resources
+// TagRDSPostgres Tags RDS resources
 func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 	logrus.Infof("adding tags to rds instance %s", *foundInstance.DBInstanceIdentifier)
 	// get the environment from the CR
@@ -397,7 +389,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 
 	// set status metric
 	if err := p.exposePostgresMetrics(ctx, pg, foundInstance); err != nil {
-		return croType.StatusMessage(fmt.Sprintf("error seting metric %s", err)), err
+		return croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
 	}
 
 	// return if rds instance is not available
@@ -426,9 +418,9 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	// Delete the PrometheusRule alert which watches the availability of this RDS instance we provisioned
-	if err := p.DeleteRDSAvailabilityAlert(ctx, pg.Namespace, *foundInstance.DBInstanceIdentifier); err != nil {
-		errMsg := fmt.Sprintf("failed to delete rds alert : %s", err)
+	// delete the alert which watches the availability of the rds instance
+	if err := resources.DeletePostgresAvailabilityAlert(ctx, p.Client, pg); err != nil {
+		errMsg := fmt.Sprintf("failed to delete rds alert: %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
@@ -724,6 +716,7 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	labels["namespace"] = cr.Namespace
 	labels["instanceID"] = *instance.DBInstanceIdentifier
 	labels["productName"] = cr.Labels["productName"]
+	labels["strategy"] = postgresProviderName
 	return labels
 }
 
@@ -747,12 +740,12 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 
 	// set available metric
 	if *instance.DBInstanceStatus != "available" {
-		if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0); err != nil {
 			return err
 		}
 		return nil
 	}
-	if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1); err != nil {
 		return err
 	}
 
@@ -795,65 +788,5 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 		}
 	}
 
-	return nil
-}
-
-// CreateRDSAvailabilityAlert Call this when we create the ElastiCache instance to create an
-// alert to watch for the availability of the instance
-func (p *PostgresProvider) CreateRDSAvailabilityAlert(ctx context.Context, cr *v1alpha1.Postgres, instanceID string, clusterID string) error {
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-	alertRuleName := "RDSInstanceUnavailable"
-	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(cro_aws_rds_available{exported_namespace='%s',instanceID='%s',clusterID='%s',resourceID='%s'} == 1)",
-			cr.Namespace, instanceID, clusterID, cr.Name),
-	)
-	alertDescription := fmt.Sprintf("RDS instance: %s on cluster: %s for product: %s is unavailable", instanceID, clusterID, cr.Labels["productName"])
-	labels := map[string]string{
-		"severity":    "warning",
-		"productName": cr.Labels["productName"],
-	}
-
-	pr, err := croResources.CreatePrometheusRule(ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
-	if err != nil {
-		return err
-	}
-
-	// Unless it already exists, call the kubernetes api and create this PrometheusRule
-	// Replace this with CreateOrUpdate if we can figure it out
-	err = p.Client.Create(ctx, pr)
-	if err != nil {
-		if !k8serr.IsAlreadyExists(err) {
-			return errorUtil.Wrap(err, fmt.Sprintf("exception calling Create prometheus rule: %s", alertRuleName))
-		}
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s reconcilced successfully.", pr.Name))
-	return nil
-}
-
-// DeleteRDSAvailabilityAlert We call this when we delete an ElastiCache instance,
-// it removes the prometheusrule alert which watches for the availability of the instance.
-func (p *PostgresProvider) DeleteRDSAvailabilityAlert(ctx context.Context, namespace string, instanceID string) error {
-	// query the kubernetes api to find the object we're looking for
-	ruleName := fmt.Sprintf("availability-rule-%s", instanceID)
-
-	pr := &prometheusv1.PrometheusRule{}
-	selector := client.ObjectKey{
-		Namespace: namespace,
-		Name:      ruleName,
-	}
-
-	if err := p.Client.Get(ctx, selector, pr); err != nil {
-		if k8serr.IsNotFound(err) {
-			logrus.Info(fmt.Sprintf("prometheus rule %s not found", ruleName))
-			return nil
-		}
-		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
-	}
-
-	// call delete on that object
-	if err := p.Client.Delete(ctx, pr); err != nil {
-		return errorUtil.Wrapf(err, "exception calling DeleteRDSAvailabilityAlert: %s", ruleName)
-	}
-	p.Logger.Info(fmt.Sprintf("prometheus rule: %s deleted.", pr.Name))
 	return nil
 }
