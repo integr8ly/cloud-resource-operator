@@ -36,12 +36,7 @@ import (
 )
 
 const (
-	defaultRedisMaintenanceMetricName = "cro_aws_elasticache_service_maintenance"
-	defaultRedisInfoMetricName        = "cro_aws_elasticache_info"
-	defaultRedisAvailMetricName       = "cro_aws_elasticache_available"
-	defaultRedisConnectionMetricName  = "cro_aws_elasticache_connection"
-	redisProviderName                 = "aws-elasticache"
-	// default create params
+	redisProviderName        = "aws-elasticache"
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
 	defaultDescription       = "A Redis replication group"
@@ -655,7 +650,7 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultRedisInfoMetricName, infoLabels); err != nil {
+	if err := resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels); err != nil {
 		return err
 	}
 
@@ -707,9 +702,9 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 
 		metricEpochTimestamp := (*su.ServiceUpdateRecommendedApplyByDate).Unix()
 
-		err = croResources.SetMetric(defaultRedisMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
+		err = croResources.SetMetric(resources.DefaultRedisMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 		if err != nil {
-			msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", defaultRedisMaintenanceMetricName)
+			msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", resources.DefaultRedisMaintenanceMetricName)
 			return errorUtil.Wrap(err, msg)
 		}
 	}
@@ -792,14 +787,14 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	err = p.TCPPinger.TCPConnection(elasticacheGroup.URI, int(elasticacheGroup.Port))
 	if err != nil {
 		// create failed connection metric
-		if err := resources.SetMetric(defaultRedisConnectionMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
 		return err
 	}
 
 	// create successful connection metric
-	if err := resources.SetMetric(defaultRedisConnectionMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 1); err != nil {
 		return errorUtil.Wrap(err, "failed to set connection metric")
 	}
 

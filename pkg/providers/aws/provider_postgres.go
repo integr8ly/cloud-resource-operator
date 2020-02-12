@@ -39,10 +39,6 @@ import (
 )
 
 const (
-	defaultPostgresMaintenanceMetricName = "cro_aws_rds_service_maintenance"
-	defaultPostgresInfoMetricName        = "cro_aws_rds_info"
-	defaultPostgresAvailMetricName       = "cro_aws_rds_available"
-	defaultPostgresConnectionMetricName  = "cro_aws_rds_connection"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
 	defaultAwsMultiAZ                    = true
@@ -757,18 +753,18 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, infoLabels); err != nil {
+	if err := resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels); err != nil {
 		return errorUtil.Wrap(err, "failed to set current time metric")
 	}
 
 	// set available metric
 	if *instance.DBInstanceStatus != "available" {
-		if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set avail metric")
 		}
 		return nil
 	}
-	if err := resources.SetMetric(defaultPostgresAvailMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1); err != nil {
 		return errorUtil.Wrap(err, "failed to set avail metric")
 	}
 
@@ -803,9 +799,9 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()
 
-			err = croResources.SetMetric(defaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
+			err = croResources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 			if err != nil {
-				msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", defaultPostgresMaintenanceMetricName)
+				msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", resources.DefaultPostgresMaintenanceMetricName)
 				return errorUtil.Wrap(err, msg)
 			}
 		}
@@ -890,14 +886,14 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	err = p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
 	if err != nil {
 		// create failed connection metric
-		if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
+		if err := resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0); err != nil {
 			return errorUtil.Wrap(err, "failed to set connection metric")
 		}
 		return err
 	}
 
 	// create successful connection metric
-	if err := resources.SetMetric(defaultPostgresConnectionMetricName, genericLabels, 1); err != nil {
+	if err := resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1); err != nil {
 		return errorUtil.Wrap(err, "failed to set connection metric")
 	}
 

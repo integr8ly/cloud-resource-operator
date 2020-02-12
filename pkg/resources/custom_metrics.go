@@ -21,9 +21,15 @@ import (
 )
 
 const (
-	sleepytime                     = 3600
-	DefaultPostgresAvailMetricName = "cro_postgres_available"
-	DefaultRedisAvailMetricName    = "cro_redis_available"
+	sleepytime                           = 3600
+	DefaultPostgresMaintenanceMetricName = "cro_postgres_service_maintenance"
+	DefaultPostgresInfoMetricName        = "cro_postgres_info"
+	DefaultPostgresAvailMetricName       = "cro_postgres_available"
+	DefaultPostgresConnectionMetricName  = "cro_postgres_connection"
+	DefaultRedisMaintenanceMetricName    = "cro_redis_service_maintenance"
+	DefaultRedisInfoMetricName           = "cro_redis_elasticache_info"
+	DefaultRedisAvailMetricName          = "cro_redis_elasticache_available"
+	DefaultRedisConnectionMetricName     = "cro_redis_elasticache_connection"
 )
 
 var (
