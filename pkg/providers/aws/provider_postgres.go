@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -38,8 +37,6 @@ import (
 )
 
 const (
-	defaultPostgresMaintenanceMetricName = "cro_postgres_service_maintenance"
-	defaultPostgresInfoMetricName        = "cro_postgres_info"
 	postgresProviderName                 = "aws-rds"
 	DefaultAwsIdentifierLength           = 40
 	defaultAwsMultiAZ                    = true
@@ -72,6 +69,7 @@ type PostgresProvider struct {
 	Logger            *logrus.Entry
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
+	TCPPinger         ConnectionTester
 }
 
 func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
@@ -80,6 +78,7 @@ func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *Postgre
 		Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
+		TCPPinger:         NewConnectionTestManager(),
 	}
 }
 
@@ -197,16 +196,11 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, "started rds provision", nil
 	}
 
-	err = p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
-	if err != nil {
-		errMsg := "error creating the rds service maintenance metrics"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
+	// expose pending maintenance metric
+	p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
 
 	// set status metric
-	if err := p.exposePostgresMetrics(ctx, cr, foundInstance); err != nil {
-		return nil, croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
-	}
+	p.exposePostgresMetrics(ctx, cr, foundInstance)
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -236,14 +230,19 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	// return secret information
-	return &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
+	pdd := &providers.PostgresDeploymentDetails{
 		Username: *foundInstance.MasterUsername,
 		Password: postgresPass,
 		Host:     *foundInstance.Endpoint.Address,
 		Database: *foundInstance.DBName,
 		Port:     int(*foundInstance.Endpoint.Port),
-	}}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
+	}
+
+	// create connection metric
+	p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd)
+
+	// return secret information
+	return &providers.PostgresInstance{DeploymentDetails: pdd}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
 }
 
 // TagRDSPostgres Tags RDS resources
@@ -388,9 +387,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// set status metric
-	if err := p.exposePostgresMetrics(ctx, pg, foundInstance); err != nil {
-		return croType.StatusMessage(fmt.Sprintf("error setting metric %s", err)), err
-	}
+	p.exposePostgresMetrics(ctx, pg, foundInstance)
 
 	// return if rds instance is not available
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -720,12 +717,13 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	return labels
 }
 
-func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) error {
+func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	// build metric labels
@@ -734,35 +732,29 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultPostgresInfoMetricName, infoLabels); err != nil {
-		return err
-	}
+	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
 	if *instance.DBInstanceStatus != "available" {
-		if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0); err != nil {
-			return err
-		}
-		return nil
+		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
+		return
 	}
-	if err := resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1); err != nil {
-		return err
-	}
-
-	return nil
+	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 }
 
-func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) error {
+func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
 	logrus.Info("checking for pending postgres service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSession.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{})
 	if err != nil {
-		return errorUtil.Wrap(err, "rds serviceupdates error")
+		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.DBInstanceIdentifier))
+		return
 	}
 
 	logrus.Info(fmt.Sprintf("rds serviceupdates: %d available", len(output.PendingMaintenanceActions)))
@@ -780,13 +772,33 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()
 
-			err = croResources.SetMetric(defaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
-			if err != nil {
-				msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", defaultPostgresMaintenanceMetricName)
-				return errorUtil.Wrap(err, msg)
-			}
+			resources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 		}
 	}
 
-	return nil
+}
+
+// tests to see if a simple tcp connection can be made to rds and creates a metric based on this
+func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) {
+	// return cluster id needed for metric labels
+	logrus.Info(fmt.Sprintf("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier))
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier))
+
+	}
+
+	// build generic labels to be added to metric
+	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
+
+	// test the connection
+	conn := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
+	if !conn {
+		// create failed connection metric
+		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
+		return
+	}
+	// create successful connection metric
+	resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1)
+
 }

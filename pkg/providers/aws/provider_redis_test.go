@@ -213,6 +213,7 @@ func Test_createRedisCluster(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
+		TCPPinger         ConnectionTester
 	}
 	tests := []struct {
 		name    string
@@ -236,6 +237,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
@@ -256,6 +258,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
@@ -276,6 +279,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
@@ -300,6 +304,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -313,6 +318,7 @@ func Test_createRedisCluster(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         tt.fields.TCPPinger,
 			}
 			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg)
 			if (err != nil) != tt.wantErr {

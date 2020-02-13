@@ -58,6 +58,14 @@ func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
+func buildMockConnectionTester() *ConnectionTesterMock {
+	mockTester := &ConnectionTesterMock{}
+	mockTester.TCPConnectionFunc = func(host string, port int) bool {
+		return true
+	}
+	return mockTester
+}
+
 func (m *mockRdsClient) DescribeDBInstances(*rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
 	if m.wantEmpty {
 		return &rds.DescribeDBInstancesOutput{}, nil
@@ -292,6 +300,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
+		TCPPinger         ConnectionTester
 	}
 	type args struct {
 		ctx         context.Context
@@ -321,6 +330,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -341,6 +351,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
 			},
 			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: defaultAwsPostgresUser,
@@ -367,6 +378,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -379,6 +391,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         tt.fields.TCPPinger,
 			}
 			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg)
 			if (err != nil) != tt.wantErr {

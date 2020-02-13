@@ -14,9 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
-	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-	croResources "github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/sirupsen/logrus"
@@ -35,10 +33,7 @@ import (
 )
 
 const (
-	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
-	defaultRedisInfoMetricName        = "cro_redis_info"
-	redisProviderName                 = "aws-elasticache"
-	// default create params
+	redisProviderName        = "aws-elasticache"
 	defaultCacheNodeType     = "cache.t2.micro"
 	defaultEngineVersion     = "3.2.10"
 	defaultDescription       = "A Redis replication group"
@@ -55,7 +50,7 @@ type RedisProvider struct {
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
 	CacheSvc          elasticacheiface.ElastiCacheAPI
-	MonClientV1       monitoringclient.MonitoringV1Interface
+	TCPPinger         ConnectionTester
 }
 
 func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvider {
@@ -64,6 +59,7 @@ func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvi
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
+		TCPPinger:         NewConnectionTestManager(),
 	}
 }
 
@@ -160,16 +156,11 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, "started elasticache provision", nil
 	}
 
-	err = p.setRedisServiceMaintenanceMetric(ctx, r, cacheSvc, foundCache)
-	if err != nil {
-		errMsg := "error creating the elasticache service maintenance metrics"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
+	// expose elasticache maintenance metric
+	p.setRedisServiceMaintenanceMetric(ctx, r, cacheSvc, foundCache)
 
-	// set status metric
-	if err := p.exposeRedisMetrics(ctx, r, foundCache); err != nil {
-		return nil, "failed to set metric", err
-	}
+	// expose status metrics
+	p.exposeRedisMetrics(ctx, r, foundCache)
 
 	// check elasticache phase
 	if *foundCache.Status != "available" {
@@ -208,12 +199,17 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 	}
 
-	// return secret information
 	primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
-	return &providers.RedisCluster{DeploymentDetails: &providers.RedisDeploymentDetails{
+	rdd := &providers.RedisDeploymentDetails{
 		URI:  *primaryEndpoint.Address,
 		Port: *primaryEndpoint.Port,
-	}}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
+	}
+
+	// expose a connection metric
+	p.createElasticacheConnectionMetric(ctx, r, foundCache, rdd)
+
+	// return secret information
+	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
 // TagElasticacheNode Add Tags to AWS Elasticache
@@ -380,9 +376,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 	}
 
 	// set status metric
-	if err := p.exposeRedisMetrics(ctx, r, foundCache); err != nil {
-		return "failed to set metric", err
-	}
+	p.exposeRedisMetrics(ctx, r, foundCache)
 
 	// if status is not available return
 	if *foundCache.Status != "available" {
@@ -622,11 +616,12 @@ func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.Replicatio
 }
 
 // used to expose an available and information metrics during reconcile
-func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) error {
+func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) {
 	logrus.Info("setting redis information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metrics for %s", *instance.ReplicationGroupId))
+		return
 	}
 
 	// build metric labels
@@ -634,37 +629,32 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterID)
 
 	// set status gauge
-	if err := resources.SetMetricCurrentTime(defaultRedisInfoMetricName, infoLabels); err != nil {
-		return err
-	}
+	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 
 	// set available metric
 	if *instance.Status != "available" {
-		if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0); err != nil {
-			return err
-		}
-		return nil
+		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
+		return
 	}
-	if err := resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1); err != nil {
-		return err
-	}
+	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
 
-	return nil
 }
 
 // sets maintenance metric
-func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) error {
+func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) {
 	// info about the elasticache cluster to be created
 	logrus.Info("checking for pending redis service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to get cluster id")
+		logrus.Error(fmt.Sprintf("failed to get cluster information while exposing maintenance metric for %s", *instance.ReplicationGroupId))
+		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := cacheSvc.DescribeServiceUpdates(&elasticache.DescribeServiceUpdatesInput{})
 	if err != nil {
-		return errorUtil.Wrap(err, "elasticache serviceupdates error")
+		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.ReplicationGroupId))
+		return
 	}
 
 	logrus.Info(fmt.Sprintf("there are elasticache service updates: %d available", len(output.ServiceUpdates)))
@@ -686,11 +676,28 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 
 		metricEpochTimestamp := (*su.ServiceUpdateRecommendedApplyByDate).Unix()
 
-		err = croResources.SetMetric(defaultRedisMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
-		if err != nil {
-			msg := fmt.Sprintf("exception calling SetMetric with metricName: %s", defaultRedisMaintenanceMetricName)
-			return errorUtil.Wrap(err, msg)
-		}
+		resources.SetMetric(resources.DefaultRedisMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 	}
-	return nil
+}
+
+func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, cr *v1alpha1.Redis, cache *elasticache.ReplicationGroup, elasticacheGroup *providers.RedisDeploymentDetails) {
+	// return cluster id needed for metric labels
+	logrus.Info(fmt.Sprintf("testing and exposing redis connection metric for: %s", *cache.ReplicationGroupId))
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *cache.ReplicationGroupId))
+	}
+
+	// build generic labels to be added to metric
+	genericLabels := buildRedisGenericMetricLabels(cr, cache, clusterID)
+
+	// test the connection
+	conn := p.TCPPinger.TCPConnection(elasticacheGroup.URI, int(elasticacheGroup.Port))
+	if !conn {
+		// create failed connection metric
+		resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0)
+		return
+	}
+	// create successful connection metric
+	resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 1)
 }
