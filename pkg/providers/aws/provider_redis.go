@@ -167,13 +167,6 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
 
-	// create the PrometheusRule alert to watch for the availability of the elasticache instance
-	_, err = resources.CreateRedisAvailabilityAlert(ctx, p.Client, r)
-	if err != nil {
-		errMsg := "error creating elasticache prometheus rule"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
 	// check if found cluster and user strategy differs, and modify instance
 	logrus.Info("found existing elasticache instance")
 	ec := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache)
@@ -388,12 +381,6 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 	elasticacheErr, isAwsErr := err.(awserr.Error)
 	if err != nil && (!isAwsErr || elasticacheErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault) {
 		errMsg := fmt.Sprintf("failed to delete elasticache cluster : %s", err)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-
-	// delete the alert which watches the availability of the elasticache instance
-	if err := resources.DeleteRedisAvailabilityAlert(ctx, p.Client, r); err != nil {
-		errMsg := fmt.Sprintf("failed to delete elasticache alert: %s", err)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 

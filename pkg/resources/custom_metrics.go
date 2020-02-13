@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	prometheusv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/pkg/errors"
-	errorUtil "github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -145,68 +142,4 @@ func DeletePrometheusRule(ctx context.Context, client client.Client, ruleName, n
 	}
 
 	return nil
-}
-
-// CreatePostgresAvailabilityAlert creates an alert for the availability of a postgres instance
-func CreatePostgresAvailabilityAlert(ctx context.Context, client client.Client, cr *v1alpha1.Postgres) (*prometheusv1.PrometheusRule, error) {
-	clusterID, err := GetClusterID(ctx, client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to retrieve cluster identifier")
-	}
-	ruleName := fmt.Sprintf("availability-rule-%s", cr.Name)
-	alertRuleName := "PostgresInstanceUnavailable"
-	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(%s{exported_namespace='%s',resourceID='%s'} == 1)",
-			DefaultPostgresAvailMetricName, cr.Namespace, cr.Name),
-	)
-	alertDescription := fmt.Sprintf("Postgres instance: %s on cluster: %s for product: %s (strategy: %s) is unavailable", cr.Name, clusterID, cr.Labels["productName"], cr.Status.Strategy)
-	labels := map[string]string{
-		"severity":    "critical",
-		"productName": cr.Labels["productName"],
-	}
-
-	// create the rule
-	pr, err := ReconcilePrometheusRule(ctx, client, ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
-	if err != nil {
-		return nil, err
-	}
-	return pr, nil
-}
-
-// DeletePostgresAvailabilityAlert deletes the postgres availability alert
-func DeletePostgresAvailabilityAlert(ctx context.Context, client client.Client, cr *v1alpha1.Postgres) error {
-	ruleName := fmt.Sprintf("availability-rule-%s", cr.Name)
-	return DeletePrometheusRule(ctx, client, ruleName, cr.Namespace)
-}
-
-// CreateRedisAvailabilityAlert creates an alert for the availability of a redis cache
-func CreateRedisAvailabilityAlert(ctx context.Context, client client.Client, cr *v1alpha1.Redis) (*prometheusv1.PrometheusRule, error) {
-	clusterID, err := GetClusterID(ctx, client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to retrieve cluster identifier")
-	}
-	ruleName := fmt.Sprintf("availability-rule-%s", cr.Name)
-	alertRuleName := "RedisInstanceUnavailable"
-	alertExp := intstr.FromString(
-		fmt.Sprintf("absent(%s{exported_namespace='%s',resourceID='%s'} == 1)",
-			DefaultRedisAvailMetricName, cr.Namespace, cr.Name),
-	)
-	alertDescription := fmt.Sprintf("Redis cache: %s on cluster: %s for product: %s (strategy: %s) is unavailable", cr.Name, clusterID, cr.Labels["productName"], cr.Status.Strategy)
-	labels := map[string]string{
-		"severity":    "critical",
-		"productName": cr.Labels["productName"],
-	}
-
-	// create the rule
-	pr, err := ReconcilePrometheusRule(ctx, client, ruleName, cr.Namespace, alertRuleName, alertDescription, alertExp, labels)
-	if err != nil {
-		return nil, err
-	}
-	return pr, nil
-}
-
-// DeleteRedisAvailabilityAlert deletes the redis availability alert
-func DeleteRedisAvailabilityAlert(ctx context.Context, client client.Client, cr *v1alpha1.Redis) error {
-	ruleName := fmt.Sprintf("availability-rule-%s", cr.Name)
-	return DeletePrometheusRule(ctx, client, ruleName, cr.Namespace)
 }
