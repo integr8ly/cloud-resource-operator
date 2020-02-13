@@ -207,13 +207,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	// create the PrometheusRule alert to watch for the availability of this rds instance
-	_, err = resources.CreatePostgresAvailabilityAlert(ctx, p.Client, cr)
-	if err != nil {
-		errMsg := "error creating rds prometheus rule"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
 	// check if found instance and user strategy differs, and modify instance
 	logrus.Info("found existing rds instance")
 	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
@@ -413,12 +406,6 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	if err != nil {
 		msg := "failed to remove deletion protection"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-	}
-
-	// delete the alert which watches the availability of the rds instance
-	if err := resources.DeletePostgresAvailabilityAlert(ctx, p.Client, pg); err != nil {
-		errMsg := fmt.Sprintf("failed to delete rds alert: %s", err)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
 	return croType.StatusMessage(fmt.Sprintf("deletion protection detected, modifyDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
