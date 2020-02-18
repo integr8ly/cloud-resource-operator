@@ -109,10 +109,28 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 	}
 
 	r.logger.Infof("checking for provider for deployment strategy %s", stratMap.SMTPCredentials)
+
+	// Check the CR for existing Strategy
+	strategyToUse := stratMap.SMTPCredentials
+	if instance.Status.Strategy != "" {
+		strategyToUse = instance.Status.Strategy
+		if strategyToUse != stratMap.SMTPCredentials {
+			r.logger.Infof("strategy and provider already set, changing of cloud-resource-config config maps not allowed in existing installation. the existing strategy is '%s' , cloud-resource-config is now set to '%s'. operator will continue to use existing strategy", strategyToUse, stratMap.SMTPCredentials)
+		}
+	}
+
 	for _, p := range r.providerList {
-		if !p.SupportsStrategy(stratMap.SMTPCredentials) {
+		if !p.SupportsStrategy(strategyToUse) {
 			r.logger.Debugf("provider %s does not support deployment strategy %s, skipping", p.GetName(), stratMap.SMTPCredentials)
 			continue
+		}
+
+		instance.Status.Strategy = strategyToUse
+		instance.Status.Provider = p.GetName()
+		if instance.Status.Strategy != strategyToUse || instance.Status.Provider != p.GetName() {
+			if err = r.client.Status().Update(ctx, instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 		}
 
 		if instance.GetDeletionTimestamp() != nil {
@@ -146,7 +164,7 @@ func (r *ReconcileSMTPCredentialSet) Reconcile(request reconcile.Request) (recon
 		instance.Status.Phase = croType.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
-		instance.Status.Strategy = stratMap.BlobStorage
+		instance.Status.Strategy = strategyToUse
 		instance.Status.Provider = p.GetName()
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
