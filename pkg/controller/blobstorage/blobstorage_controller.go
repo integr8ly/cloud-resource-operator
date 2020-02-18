@@ -107,9 +107,25 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Check the CR for existing Strategy
+	strategyToUse := stratMap.BlobStorage
+	if instance.Status.Strategy != "" {
+		strategyToUse = instance.Status.Strategy
+		if strategyToUse != stratMap.BlobStorage {
+			r.logger.Infof("strategy and provider already set, changing of cloud-resource-config config maps not allowed in existing installation. the existing strategy is '%s' , cloud-resource-config is now set to '%s'. operator will continue to use existing strategy", strategyToUse, stratMap.BlobStorage)
+		}
+	}
+
 	for _, p := range r.providerList {
-		if !p.SupportsStrategy(stratMap.BlobStorage) {
+		if !p.SupportsStrategy(strategyToUse) {
 			continue
+		}
+		instance.Status.Strategy = strategyToUse
+		instance.Status.Provider = p.GetName()
+		if instance.Status.Strategy != strategyToUse || instance.Status.Provider != p.GetName() {
+			if err = r.client.Status().Update(ctx, instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 		}
 
 		if instance.GetDeletionTimestamp() != nil {
@@ -152,7 +168,7 @@ func (r *ReconcileBlobStorage) Reconcile(request reconcile.Request) (reconcile.R
 		instance.Status.Phase = croType.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
-		instance.Status.Strategy = stratMap.BlobStorage
+		instance.Status.Strategy = strategyToUse
 		instance.Status.Provider = p.GetName()
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)

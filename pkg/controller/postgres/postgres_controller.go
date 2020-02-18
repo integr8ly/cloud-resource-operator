@@ -129,9 +129,25 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", instance.Spec.Type)
 	}
 
+	// Check the CR for existing Strategy
+	strategyToUse := stratMap.Postgres
+	if instance.Status.Strategy != "" {
+		strategyToUse = instance.Status.Strategy
+		if strategyToUse != stratMap.Postgres {
+			r.logger.Infof("strategy and provider already set, changing of cloud-resource-config config maps not allowed in existing installation. the existing strategy is '%s' , cloud-resource-config is now set to '%s'. operator will continue to use existing strategy", strategyToUse, stratMap.Postgres)
+		}
+	}
+
 	for _, p := range r.providerList {
-		if !p.SupportsStrategy(stratMap.Postgres) {
+		if !p.SupportsStrategy(strategyToUse) {
 			continue
+		}
+		instance.Status.Strategy = strategyToUse
+		instance.Status.Provider = p.GetName()
+		if instance.Status.Strategy != strategyToUse || instance.Status.Provider != p.GetName() {
+			if err = r.client.Status().Update(ctx, instance); err != nil {
+				return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
 		}
 
 		// delete the postgres if the deletion timestamp exists
@@ -186,7 +202,7 @@ func (r *ReconcilePostgres) Reconcile(request reconcile.Request) (reconcile.Resu
 		instance.Status.Phase = croType.PhaseComplete
 		instance.Status.Message = msg
 		instance.Status.SecretRef = instance.Spec.SecretRef
-		instance.Status.Strategy = stratMap.Postgres
+		instance.Status.Strategy = strategyToUse
 		instance.Status.Provider = p.GetName()
 		if err = r.client.Status().Update(ctx, instance); err != nil {
 			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
