@@ -69,6 +69,14 @@ func (s *mockS3Svc) PutBucketTagging(*s3.PutBucketTaggingInput) (*s3.PutBucketTa
 	return &s3.PutBucketTaggingOutput{}, nil
 }
 
+func (s *mockS3Svc) PutPublicAccessBlock(*s3.PutPublicAccessBlockInput) (*s3.PutPublicAccessBlockOutput, error) {
+	return &s3.PutPublicAccessBlockOutput{}, nil
+}
+
+func (s *mockS3Svc) PutBucketEncryption(input *s3.PutBucketEncryptionInput) (*s3.PutBucketEncryptionOutput, error) {
+	return &s3.PutBucketEncryptionOutput{}, nil
+}
+
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
 		ObjectMeta: v1.ObjectMeta{

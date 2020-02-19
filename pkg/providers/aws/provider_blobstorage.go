@@ -43,6 +43,15 @@ const (
 	DetailsBlobStorageCredentialKeyID     = "credentialKeyID"
 	DetailsBlobStorageCredentialSecretKey = "credentialSecretKey"
 	defaultForceBucketDeletion            = false
+
+	// bucket accessibility defaults
+	defaultBlockPublicAcls       = true
+	defaultBlockPublicPolicy     = true
+	defaultIgnorePublicAcls      = true
+	defaultRestrictPublicBuckets = true
+
+	// bucket encryption defaults
+	defaultEncryptionSSEAlgorithm = s3.ServerSideEncryptionAes256
 )
 
 // BlobStorageDeploymentDetails Provider-specific details about the AWS S3 bucket created
@@ -395,8 +404,12 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 		}
 	}
 	if foundBucket != nil {
-		errMsg := fmt.Sprintf("using bucket %s", *foundBucket.Name)
-		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		if err = reconcileS3BucketSettings(aws.StringValue(foundBucket.Name), s3svc); err != nil {
+			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
+			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+		msg := fmt.Sprintf("using bucket %s", *foundBucket.Name)
+		return croType.StatusMessage(msg), nil
 	}
 
 	// create bucket
@@ -406,7 +419,10 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 		errMsg := fmt.Sprintf("failed to create s3 bucket %s", *bucketCfg.Bucket)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
-
+	if err = reconcileS3BucketSettings(aws.StringValue(bucketCfg.Bucket), s3svc); err != nil {
+		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.StringValue(bucketCfg.Bucket))
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
 	p.Logger.Infof("reconcile for aws s3 bucket completed successfully, bucket created")
 	return "successfully created", nil
 }
@@ -426,6 +442,37 @@ func getS3buckets(s3svc s3iface.S3API) ([]*s3.Bucket, error) {
 		return nil, errorUtil.Wrap(err, "timed out waiting to list s3 buckets")
 	}
 	return existingBuckets, nil
+}
+
+func reconcileS3BucketSettings(bucket string, s3svc s3iface.S3API) error {
+	_, err := s3svc.PutPublicAccessBlock(&s3.PutPublicAccessBlockInput{
+		Bucket: aws.String(bucket),
+		PublicAccessBlockConfiguration: &s3.PublicAccessBlockConfiguration{
+			BlockPublicAcls:       aws.Bool(defaultBlockPublicAcls),
+			BlockPublicPolicy:     aws.Bool(defaultBlockPublicPolicy),
+			IgnorePublicAcls:      aws.Bool(defaultIgnorePublicAcls),
+			RestrictPublicBuckets: aws.Bool(defaultRestrictPublicBuckets),
+		},
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to set public access settings on bucket %s", bucket)
+	}
+	_, err = s3svc.PutBucketEncryption(&s3.PutBucketEncryptionInput{
+		Bucket: aws.String(bucket),
+		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
+			Rules: []*s3.ServerSideEncryptionRule{
+				{
+					ApplyServerSideEncryptionByDefault: &s3.ServerSideEncryptionByDefault{
+						SSEAlgorithm: aws.String(defaultEncryptionSSEAlgorithm),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to set encryption settings on bucket %s", bucket)
+	}
+	return nil
 }
 
 func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *S3DeleteStrat, *StrategyConfig, error) {
