@@ -44,7 +44,8 @@ const (
 	defaultNumCacheClusters    = 2
 	defaultSnapshotRetention   = 30
 	defaultAtRestEncryption    = true
-	defaultInTransitEncryption = true
+	// 3scale does not support in transit encryption (redis with tls)
+	defaultInTransitEncryption = false
 )
 
 var _ providers.RedisProvider = (*RedisProvider)(nil)
