@@ -27,7 +27,7 @@ const (
 
 	DefaultFinalizer = "finalizers.cloud-resources-operator.integreatly.org"
 
-	defaultReconcileTime = time.Second * 300
+	defaultReconcileTime = time.Second * 30
 
 	regionUSEast1 = "us-east-1"
 	regionUSWest2 = "us-west-2"

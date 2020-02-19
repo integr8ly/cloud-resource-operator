@@ -164,23 +164,29 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// check elasticache phase
 	if *foundCache.Status != "available" {
+		logrus.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
 
 	// check if found cluster and user strategy differs, and modify instance
-	logrus.Info("found existing elasticache instance")
+	logrus.Infof("found existing elasticache instance %s", *foundCache.ReplicationGroupId)
 	ec := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache)
+	if ec == nil {
+		logrus.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
+	}
 	if ec != nil {
-		if _, err = cacheSvc.ModifyReplicationGroup(ec); err != nil {
+		logrus.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, ec)
+		if _, err := cacheSvc.ModifyReplicationGroup(ec); err != nil {
 			errMsg := "failed to modify elasticache cluster"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
+		logrus.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
 	}
 
 	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
 	if *cacheInstance.Status != "available" {
+		logrus.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
 	}
 
@@ -410,7 +416,6 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to read aws strategy config")
 	}
-
 	defRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, stratCfg)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to get default region")
@@ -435,8 +440,8 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 
 // checks found config vs user strategy for changes, if found returns a modify replication group
 func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup) *elasticache.ModifyReplicationGroupInput {
+	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.ReplicationGroupId)
 	updateFound := false
-
 	ec := &elasticache.ModifyReplicationGroupInput{}
 	ec.ReplicationGroupId = foundConfig.ReplicationGroupId
 
@@ -558,7 +563,7 @@ func (p *RedisProvider) configureElasticacheVpc(ctx context.Context, cacheSvc el
 		}
 	}
 	if foundSubnet != nil {
-		logrus.Info(fmt.Sprintf("%s resource subnet group found", *foundSubnet.CacheSubnetGroupName))
+		logrus.Infof("%s resource subnet group found", *foundSubnet.CacheSubnetGroupName)
 		return nil
 	}
 
@@ -644,7 +649,7 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 		return
 	}
 
-	logrus.Info(fmt.Sprintf("there are elasticache service updates: %d available", len(output.ServiceUpdates)))
+	logrus.Infof("there are elasticache service updates: %d available", len(output.ServiceUpdates))
 	for _, su := range output.ServiceUpdates {
 		metricLabels := map[string]string{}
 		metricLabels["clusterID"] = clusterID
@@ -669,10 +674,10 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 
 func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, cr *v1alpha1.Redis, cache *elasticache.ReplicationGroup, elasticacheGroup *providers.RedisDeploymentDetails) {
 	// return cluster id needed for metric labels
-	logrus.Info(fmt.Sprintf("testing and exposing redis connection metric for: %s", *cache.ReplicationGroupId))
+	logrus.Infof("testing and exposing redis connection metric for: %s", *cache.ReplicationGroupId)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *cache.ReplicationGroupId))
+		logrus.Errorf("failed to get cluster id while exposing connection metric for %s", *cache.ReplicationGroupId)
 	}
 
 	// build generic labels to be added to metric

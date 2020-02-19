@@ -282,7 +282,7 @@ func Test_createRedisCluster(t *testing.T) {
 				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
-			want:    nil,
+			want:    buildTestRedisCluster(),
 			wantErr: false,
 		},
 		{
