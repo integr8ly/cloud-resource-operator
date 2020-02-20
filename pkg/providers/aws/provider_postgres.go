@@ -198,10 +198,13 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 
 	// expose pending maintenance metric
-	p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
+	defer p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
 
 	// set status metric
-	p.exposePostgresMetrics(ctx, cr, foundInstance)
+	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
+
+	// create connection metric
+	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -231,9 +234,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		Database: *foundInstance.DBName,
 		Port:     int(*foundInstance.Endpoint.Port),
 	}
-
-	// create connection metric
-	p.createRDSConnectionMetric(ctx, cr, foundInstance, pdd)
 
 	// return secret information
 	return &providers.PostgresInstance{DeploymentDetails: pdd}, croType.StatusMessage(fmt.Sprintf("%s, aws rds status is %s", msg, *foundInstance.DBInstanceStatus)), nil
@@ -770,9 +770,9 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 }
 
 // tests to see if a simple tcp connection can be made to rds and creates a metric based on this
-func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, postgresInstance *providers.PostgresDeploymentDetails) {
+func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
 	// return cluster id needed for metric labels
-	logrus.Info(fmt.Sprintf("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier))
+	logrus.Infof("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier))
@@ -782,8 +782,15 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	// build generic labels to be added to metric
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
 
+	// check if the endpoint is available
+	if instance.Endpoint == nil {
+		logrus.Infof("instance endpoint not yet available for: %s", *instance.DBInstanceIdentifier)
+		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
+		return
+	}
+
 	// test the connection
-	conn := p.TCPPinger.TCPConnection(postgresInstance.Host, postgresInstance.Port)
+	conn := p.TCPPinger.TCPConnection(*instance.Endpoint.Address, int(*instance.Endpoint.Port))
 	if !conn {
 		// create failed connection metric
 		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
