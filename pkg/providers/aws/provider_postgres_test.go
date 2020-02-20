@@ -211,7 +211,7 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 	}
 }
 
-func buildDBInstance(testID string) []*rds.DBInstance {
+func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
 			DBInstanceIdentifier:  aws.String(testID),
@@ -232,6 +232,77 @@ func buildDBInstance(testID string) []*rds.DBInstance {
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),
 				Port:         aws.Int64(defaultAwsPostgresPort),
+			},
+		},
+	}
+}
+
+func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
+	return &rds.CreateDBInstanceInput{
+		DBInstanceIdentifier:  aws.String(testID),
+		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                  aws.Int64(defaultAwsPostgresPort),
+		BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
+		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		MultiAZ:               aws.Bool(true),
+	}
+}
+
+func buildRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceInput {
+	return &rds.CreateDBInstanceInput{
+		DBInstanceIdentifier:  aws.String(testID),
+		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                  aws.Int64(123),
+		BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
+		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		MultiAZ:               aws.Bool(true),
+	}
+}
+
+func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceInput {
+	return &rds.CreateDBInstanceInput{
+		DBInstanceIdentifier:  aws.String(testID),
+		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                  aws.Int64(123),
+		BackupRetentionPeriod: aws.Int64(123),
+		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		MultiAZ:               aws.Bool(true),
+	}
+}
+
+func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier:  aws.String(testID),
+			DBInstanceStatus:      aws.String("available"),
+			AvailabilityZone:      aws.String("test-availabilityZone"),
+			DBInstanceArn:         aws.String("arn-test"),
+			DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:        aws.String(defaultAwsPostgresUser),
+			DBName:                aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
+			EngineVersion:         aws.String(defaultAwsEngineVersion),
+			Engine:                aws.String(defaultAwsEngine),
+			MultiAZ:               aws.Bool(true),
+			Endpoint: &rds.Endpoint{
+				Address:      aws.String("blob"),
+				HostedZoneId: aws.String("blog"),
+				Port:         aws.Int64(defaultAwsPostgresPort),
+			},
+			PendingModifiedValues: &rds.PendingModifiedValues{
+				Port: aws.Int64(123),
 			},
 		},
 	}
@@ -338,7 +409,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds is exists and is available",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
+				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
 				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
@@ -363,15 +434,70 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds needs to be modified",
+			name: "test rds exists and status is available and needs to be modified",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: buildDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:    context.TODO(),
-				cr:     buildTestPostgresCR(),
-				postgresCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-				},
+				rdsSvc:      &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:         context.TODO(),
+				cr:          buildTestPostgresCR(),
+				postgresCfg: buildRequiresModificationsCreateInput(testIdentifier),
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test rds exists and status is available and does not need to be modified",
+			args: args{
+				rdsSvc:      &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:         context.TODO(),
+				cr:          buildTestPostgresCR(),
+				postgresCfg: buildAvailableCreateInput(testIdentifier),
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test rds exists and status is available and needs to be modified but maintenance is pending",
+			args: args{
+				rdsSvc:      &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:         context.TODO(),
+				cr:          buildTestPostgresCR(),
+				postgresCfg: buildRequiresModificationsCreateInput(testIdentifier),
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test rds exists and status is available and needs to update pending maintenance",
+			args: args{
+				rdsSvc:      &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:         context.TODO(),
+				cr:          buildTestPostgresCR(),
+				postgresCfg: buildNewRequiresModificationsCreateInput(testIdentifier),
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),

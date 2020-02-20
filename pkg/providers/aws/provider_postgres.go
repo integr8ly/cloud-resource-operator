@@ -473,15 +473,15 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.DeletionProtection = rdsConfig.DeletionProtection
 		updateFound = true
 	}
-	if *rdsConfig.Port != *foundConfig.Endpoint.Port && *foundConfig.PendingModifiedValues.Port != *rdsConfig.Port {
+	if *rdsConfig.Port != *foundConfig.Endpoint.Port {
 		mi.DBPortNumber = rdsConfig.Port
 		updateFound = true
 	}
-	if *rdsConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod && *foundConfig.PendingModifiedValues.BackupRetentionPeriod != *rdsConfig.BackupRetentionPeriod {
+	if *rdsConfig.BackupRetentionPeriod != *foundConfig.BackupRetentionPeriod {
 		mi.BackupRetentionPeriod = rdsConfig.BackupRetentionPeriod
 		updateFound = true
 	}
-	if *rdsConfig.DBInstanceClass != *foundConfig.DBInstanceClass && *foundConfig.PendingModifiedValues.DBInstanceClass != *rdsConfig.DBInstanceClass {
+	if *rdsConfig.DBInstanceClass != *foundConfig.DBInstanceClass {
 		mi.DBInstanceClass = rdsConfig.DBInstanceClass
 		updateFound = true
 	}
@@ -489,22 +489,61 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PubliclyAccessible = rdsConfig.PubliclyAccessible
 		updateFound = true
 	}
-	if *rdsConfig.AllocatedStorage != *foundConfig.AllocatedStorage && *foundConfig.PendingModifiedValues.AllocatedStorage != *rdsConfig.AllocatedStorage {
+	if *rdsConfig.AllocatedStorage != *foundConfig.AllocatedStorage {
 		mi.AllocatedStorage = rdsConfig.AllocatedStorage
 		updateFound = true
 	}
-	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion && *foundConfig.PendingModifiedValues.EngineVersion != *rdsConfig.EngineVersion {
+	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion {
 		mi.EngineVersion = rdsConfig.EngineVersion
 		updateFound = true
 	}
-	if *rdsConfig.MultiAZ != *foundConfig.MultiAZ && *foundConfig.PendingModifiedValues.MultiAZ != *rdsConfig.MultiAZ {
+	if *rdsConfig.MultiAZ != *foundConfig.MultiAZ {
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
 	}
-	if !updateFound {
+	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
 		return nil
 	}
 	return mi
+}
+
+// returns true if modify input is not pending
+func verifyPendingModification(mi *rds.ModifyDBInstanceInput, pm *rds.PendingModifiedValues) bool {
+	pendingModifications := true
+	if pm == nil {
+		return pendingModifications
+	}
+	if mi.DBPortNumber != nil && pm.Port != nil {
+		if *mi.DBPortNumber == *pm.Port {
+			pendingModifications = false
+		}
+	}
+	if mi.BackupRetentionPeriod != nil && pm.BackupRetentionPeriod != nil {
+		if *mi.BackupRetentionPeriod == *pm.BackupRetentionPeriod {
+			pendingModifications = false
+		}
+	}
+	if mi.DBInstanceClass != nil && pm.DBInstanceClass != nil {
+		if *mi.DBInstanceClass == *pm.DBInstanceClass {
+			pendingModifications = false
+		}
+	}
+	if mi.AllocatedStorage != nil && pm.AllocatedStorage != nil {
+		if *mi.AllocatedStorage == *pm.AllocatedStorage {
+			pendingModifications = false
+		}
+	}
+	if mi.EngineVersion != nil && pm.EngineVersion != nil {
+		if *mi.EngineVersion == *pm.EngineVersion {
+			pendingModifications = false
+		}
+	}
+	if mi.MultiAZ != nil && pm.MultiAZ != nil {
+		if *mi.MultiAZ == *pm.MultiAZ {
+			pendingModifications = false
+		}
+	}
+	return pendingModifications
 }
 
 // verify postgres create config
