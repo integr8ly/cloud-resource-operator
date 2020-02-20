@@ -208,18 +208,24 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
+		logrus.Infof("found instance %s current status %s", *foundInstance.DBInstanceIdentifier, *foundInstance.DBInstanceStatus)
 		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
 	// check if found instance and user strategy differs, and modify instance
-	logrus.Info("found existing rds instance")
+	logrus.Infof("found existing rds instance: %s", *foundInstance.DBInstanceIdentifier)
 	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+	if mi == nil {
+		logrus.Infof("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
+	}
 	if mi != nil {
 		if _, err = rdsSvc.ModifyDBInstance(mi); err != nil {
-			return nil, "failed to modify instance", err
+			errMsg := fmt.Sprintf("error experienced trying to modify db instance: %s", *foundInstance.DBInstanceIdentifier)
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-		return nil, croType.StatusMessage(fmt.Sprintf("changes detected, modifyDBInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
+		logrus.Infof("set pending modifications for rds instance: %s", *foundInstance.DBInstanceIdentifier)
 	}
+
 	// Add Tags to Aws Postgres resources
 	msg, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
 	if err != nil {
@@ -456,8 +462,9 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 	return rdsCreateConfig, rdsDeleteConfig, stratCfg, nil
 }
 
-// verifies if there is a change between a found instance and the configuration from the instance strat
+// verifies if there is a change between a found instance and the configuration from the instance strat and verified the changes are not pending
 func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput {
+	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.DBInstanceIdentifier)
 	updateFound := false
 
 	mi := &rds.ModifyDBInstanceInput{}
@@ -495,10 +502,49 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
 	}
-	if !updateFound {
+	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
 		return nil
 	}
 	return mi
+}
+
+// returns true if modify input is not pending
+func verifyPendingModification(mi *rds.ModifyDBInstanceInput, pm *rds.PendingModifiedValues) bool {
+	pendingModifications := true
+	if pm == nil {
+		return pendingModifications
+	}
+	if mi.DBPortNumber != nil && pm.Port != nil {
+		if *mi.DBPortNumber == *pm.Port {
+			pendingModifications = false
+		}
+	}
+	if mi.BackupRetentionPeriod != nil && pm.BackupRetentionPeriod != nil {
+		if *mi.BackupRetentionPeriod == *pm.BackupRetentionPeriod {
+			pendingModifications = false
+		}
+	}
+	if mi.DBInstanceClass != nil && pm.DBInstanceClass != nil {
+		if *mi.DBInstanceClass == *pm.DBInstanceClass {
+			pendingModifications = false
+		}
+	}
+	if mi.AllocatedStorage != nil && pm.AllocatedStorage != nil {
+		if *mi.AllocatedStorage == *pm.AllocatedStorage {
+			pendingModifications = false
+		}
+	}
+	if mi.EngineVersion != nil && pm.EngineVersion != nil {
+		if *mi.EngineVersion == *pm.EngineVersion {
+			pendingModifications = false
+		}
+	}
+	if mi.MultiAZ != nil && pm.MultiAZ != nil {
+		if *mi.MultiAZ == *pm.MultiAZ {
+			pendingModifications = false
+		}
+	}
+	return pendingModifications
 }
 
 // verify postgres create config
@@ -653,7 +699,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 		}
 	}
 	if foundSubnet != nil {
-		logrus.Info(fmt.Sprintf("subnet group %s found", *foundSubnet.DBSubnetGroupName))
+		logrus.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
 		return nil
 	}
 
@@ -748,7 +794,7 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 		return
 	}
 
-	logrus.Info(fmt.Sprintf("rds serviceupdates: %d available", len(output.PendingMaintenanceActions)))
+	logrus.Infof("rds serviceupdates: %d available", len(output.PendingMaintenanceActions))
 	for _, su := range output.PendingMaintenanceActions {
 		metricLabels := map[string]string{}
 
@@ -775,7 +821,7 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	logrus.Infof("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier)
 
 	}
 

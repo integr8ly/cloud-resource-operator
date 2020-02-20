@@ -244,6 +244,27 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test elasticache already exists and status is available",
+			args: args{
+				ctx:         context.TODO(),
+				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				r:           buildTestRedisCR(),
+				stsSvc:      &mockStsClient{},
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:    &StrategyConfig{Region: "test"},
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+		{
 			name: "test elasticache already exists and status is not available",
 			args: args{
 				ctx:         context.TODO(),
@@ -282,7 +303,7 @@ func Test_createRedisCluster(t *testing.T) {
 				TCPPinger:         buildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
-			want:    nil,
+			want:    buildTestRedisCluster(),
 			wantErr: false,
 		},
 		{
