@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.10.0
-VERSION=0.11.0
+PREV_VERSION=0.11.0
+VERSION=0.12.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 OPERATOR_SDK_VERSION=0.12.0
 
@@ -48,10 +48,10 @@ code/gen:
 
 .PHONY: gen/csv
 gen/csv:
-	sed -i.bak 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:$(VERSION)/g' deploy/operator.yaml && rm deploy/operator.yaml.bak
+	sed -i.bak 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:v$(VERSION)/g' deploy/operator.yaml && rm deploy/operator.yaml.bak
 	@operator-sdk olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel
 	@sed -i.bak 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml && rm deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml.bak
-	
+	@sed -i.bak s/cloud-resource-operator:v$(PREV_VERSION)/cloud-resource-operator:v$(VERSION)/g deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml && rm deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml.bak
 .PHONY: code/fix
 code/fix:
 	@go mod tidy
