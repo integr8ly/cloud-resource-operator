@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"github.com/sirupsen/logrus"
 
 	errorUtil "github.com/pkg/errors"
@@ -16,7 +15,7 @@ func GetConfigMapOrDefault(ctx context.Context, c client.Client, name types.Name
 	cm := &v1.ConfigMap{}
 	if err := c.Get(ctx, name, cm); err != nil {
 		if errors.IsNotFound(err) {
-			logrus.Debug(fmt.Sprintf("%s config not found in ns ( %s ) falling back to default strategy", name.Name, name.Namespace))
+			logrus.Debugf("%s config not found in ns ( %s ) falling back to default strategy", name.Name, name.Namespace)
 			return def, nil
 		}
 		return nil, errorUtil.Wrap(err, "failed to get config map, not returning default")
