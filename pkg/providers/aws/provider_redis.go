@@ -42,7 +42,7 @@ const (
 	defaultEngineVersion     = "3.2.6"
 	defaultDescription       = "A Redis replication group"
 	defaultNumCacheClusters  = 2
-	defaultSnapshotRetention = 30
+	defaultSnapshotRetention = 31
 	defaultAtRestEncryption  = true
 	// 3scale does not support in transit encryption (redis with tls)
 	defaultInTransitEncryption = false
