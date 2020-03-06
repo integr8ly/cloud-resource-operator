@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"time"
@@ -155,7 +156,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// create bucket if it doesn't already exist, if it does exist then use the existing bucket
 	p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
-	msg, err := p.reconcileBucketCreate(ctx, s3Client, bucketCreateCfg)
+	msg, err := p.reconcileBucketCreate(ctx, bs, s3Client, bucketCreateCfg)
 	if err != nil {
 		return nil, msg, errorUtil.Wrapf(err, string(msg))
 	}
@@ -385,7 +386,7 @@ func getBucketSize(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (int, e
 	return len(resp.Contents), nil
 }
 
-func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (croType.StatusMessage, error) {
+func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1alpha1.BlobStorage, s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	p.Logger.Infof("listing existing aws s3 buckets")
 	buckets, err := getS3buckets(s3svc)
@@ -412,6 +413,15 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 		return croType.StatusMessage(msg), nil
 	}
 
+	// foundBucket == nil at this point, so if the CR already has a resourceIdentifier
+	// annotation, then we expect it to be there. We shouldn't create it again, it will require
+	// manual intervention to restore from a backup.
+	if annotations.Has(bs, resourceIdentifierAnnotation) {
+		errMsg := fmt.Sprintf("BlobStorage CR %s in %s namespace has %s annotation with value %s, but no corresponding S3 Bucket was found",
+			bs.Name, bs.Namespace, resourceIdentifierAnnotation, bs.ObjectMeta.Annotations[resourceIdentifierAnnotation])
+		return croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+	}
+
 	// create bucket
 	p.Logger.Infof("bucket %s not found, creating bucket", *bucketCfg.Bucket)
 	_, err = s3svc.CreateBucket(bucketCfg)
@@ -419,12 +429,19 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, s3svc s
 		errMsg := fmt.Sprintf("failed to create s3 bucket %s", *bucketCfg.Bucket)
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
+
+	annotations.Add(bs, resourceIdentifierAnnotation, *bucketCfg.Bucket)
+	if err := p.Client.Update(ctx, bs); err != nil {
+		errMsg := "failed to add annotation"
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
 	if err = reconcileS3BucketSettings(aws.StringValue(bucketCfg.Bucket), s3svc); err != nil {
 		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.StringValue(bucketCfg.Bucket))
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
-	p.Logger.Infof("reconcile for aws s3 bucket completed successfully, bucket created")
-	return "successfully created", nil
+	p.Logger.Infof("reconcile for aws s3 bucket completed successfully")
+	return "successfully reconciled", nil
 }
 
 // function to get s3 buckets, used to check/wait on AWS credentials

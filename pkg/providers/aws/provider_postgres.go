@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -190,9 +191,20 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// create rds instance if it doesn't exist
 	if foundInstance == nil {
+		if annotations.Has(cr, resourceIdentifierAnnotation) {
+			errMsg := fmt.Sprintf("Postgres CR %s in %s namespace has %s annotation with value %s, but no corresponding RDS instance was found",
+				cr.Name, cr.Namespace, resourceIdentifierAnnotation, cr.ObjectMeta.Annotations[resourceIdentifierAnnotation])
+			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		}
+
 		logrus.Info("creating rds instance")
-		if _, err = rdsSvc.CreateDBInstance(rdsCfg); err != nil {
+		if _, err := rdsSvc.CreateDBInstance(rdsCfg); err != nil {
 			return nil, croType.StatusMessage(fmt.Sprintf("error creating rds instance %s", err)), err
+		}
+
+		annotations.Add(cr, resourceIdentifierAnnotation, *rdsCfg.DBInstanceIdentifier)
+		if err := p.Client.Update(ctx, cr); err != nil {
+			return nil, croType.StatusMessage("failed to add annotation"), err
 		}
 		return nil, "started rds provision", nil
 	}

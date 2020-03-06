@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"time"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
@@ -32,6 +33,8 @@ const (
 	regionUSEast1 = "us-east-1"
 	regionUSWest2 = "us-west-2"
 	regionEUWest1 = "eu-west-1"
+
+	resourceIdentifierAnnotation = "resourceIdentifier"
 
 	sesSMTPEndpointUSEast1 = "email-smtp.us-east-1.amazonaws.com"
 	sesSMTPEndpointUSWest2 = "email-smtp.us-west-2.amazonaws.com"
