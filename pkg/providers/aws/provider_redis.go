@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
@@ -155,10 +156,21 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
+		if annotations.Has(r, resourceIdentifierAnnotation) {
+			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache instance was found",
+				r.Name, r.Namespace, resourceIdentifierAnnotation, r.ObjectMeta.Annotations[resourceIdentifierAnnotation])
+			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		}
+
 		logrus.Info("creating elasticache cluster")
-		if _, err = cacheSvc.CreateReplicationGroup(elasticacheConfig); err != nil {
+		if _, err := cacheSvc.CreateReplicationGroup(elasticacheConfig); err != nil {
 			errMsg := fmt.Sprintf("error creating elasticache cluster %s", err)
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+
+		annotations.Add(r, resourceIdentifierAnnotation, *elasticacheConfig.ReplicationGroupId)
+		if err := p.Client.Update(ctx, r); err != nil {
+			return nil, croType.StatusMessage("failed to add annotation"), err
 		}
 		return nil, "started elasticache provision", nil
 	}

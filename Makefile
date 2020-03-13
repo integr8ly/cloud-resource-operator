@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.13.0
-VERSION=0.13.1
+PREV_VERSION=0.13.1
+VERSION=0.13.2
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 OPERATOR_SDK_VERSION=0.12.0
 
@@ -134,7 +134,7 @@ test/unit/setup:
 	go get -u github.com/rakyll/gotest
 
 .PHONY: setup/prow
-setup/prow: 
+setup/prow:
 	@echo Installing Operator SDK
 	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk
 

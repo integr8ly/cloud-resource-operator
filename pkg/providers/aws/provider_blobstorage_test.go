@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"testing"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -87,6 +89,11 @@ func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 }
 
 func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build test scheme", err)
+
+	}
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -107,7 +114,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket already exists",
 			fields: fields{
-				Client:            nil,
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -126,7 +133,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket is created if doesn't exist",
 			fields: fields{
-				Client:            nil,
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -151,7 +158,8 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if _, err := p.reconcileBucketCreate(tt.args.ctx, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
+			dummyBlobStorage := &v1alpha1.BlobStorage{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"}}
+			if _, err := p.reconcileBucketCreate(tt.args.ctx, dummyBlobStorage, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
