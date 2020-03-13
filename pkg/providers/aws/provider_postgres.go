@@ -53,6 +53,7 @@ const (
 	defaultAwsEngineVersion              = "10.6"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
+	defaultAWSCopyTagsToSnapshot         = true
 	defaultAwsDeleteAutomatedBackups     = true
 	defaultCredSecSuffix                 = "-aws-rds-credentials"
 	defaultPostgresUserKey               = "user"
@@ -639,6 +640,9 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.VpcSecurityGroupIds = []*string{
 			aws.String(*foundSecGroup.GroupId),
 		}
+	}
+	if rdsCreateConfig.CopyTagsToSnapshot == nil {
+		rdsCreateConfig.CopyTagsToSnapshot = aws.Bool(defaultAWSCopyTagsToSnapshot)
 	}
 	return nil
 }
