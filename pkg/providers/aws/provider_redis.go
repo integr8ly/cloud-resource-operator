@@ -33,9 +33,7 @@ import (
 )
 
 const (
-	defaultRedisMaintenanceMetricName = "cro_redis_elasticache_service_maintenance"
-	defaultRedisInfoMetricName        = "cro_redis_info"
-	redisProviderName                 = "aws-elasticache"
+	redisProviderName = "aws-elasticache"
 	// default create params
 	defaultCacheNodeType = "cache.t2.micro"
 	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
@@ -548,7 +546,7 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
-	if elasticacheDeleteConfig.FinalSnapshotIdentifier != nil && *elasticacheDeleteConfig.FinalSnapshotIdentifier == "" {
+	if elasticacheDeleteConfig.FinalSnapshotIdentifier == nil {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
 	}
 	return nil
