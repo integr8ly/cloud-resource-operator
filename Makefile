@@ -46,12 +46,14 @@ code/run/service_account: setup/service_account
 	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE})
 	@$(OPERATOR_SDK) up local --namespace=$(NAMESPACE)
 
-.PHONY: code/gen
-code/gen:
+operator-sdk-v0.10:
 	@echo $(OPERATOR_SDK_OS)
-	@curl -Lo operator-sdk-v0.10 https://github.com/operator-framework/operator-sdk/releases/download/v0.10.1/operator-sdk-v0.10.1-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk-v0.10 && sudo mv operator-sdk-v0.10 /usr/local/bin/
-	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate k8s
-	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate openapi
+	@curl -Lo operator-sdk-v0.10 https://github.com/operator-framework/operator-sdk/releases/download/v0.10.1/operator-sdk-v0.10.1-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk-v0.10
+
+.PHONY: code/gen
+code/gen: operator-sdk-v0.10
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" ./operator-sdk-v0.10 generate k8s
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" ./operator-sdk-v0.10 generate openapi
 	@go generate ./...
 
 .PHONY: gen/csv
