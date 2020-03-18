@@ -44,15 +44,12 @@ jobs:
         - make code/audit
     - stage: push
       script:
-        - make setup/travis
         - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io
         - export TAG=$(git rev-parse --short ${TRAVIS_COMMIT})
         - make image/push VERSION=$TAG
         - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make image/push VERSION=$TRAVIS_BRANCH; fi
     - stage: manifest
       script:
-        - make setup/travis
         - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io
         - alias python=python3
         - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make image/push; fi
-        - if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then make manifest/push; fi

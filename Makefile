@@ -185,15 +185,6 @@ image/build: build
 image/push: image/build
 	docker push $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
 
-.PHONY: manifest/push
-manifest/push:
-	@operator-courier --verbose push deploy/olm-catalog/cloud-resources/ $(IMAGE_ORG) $(MANIFEST_NAME) $(VERSION) "$(AUTH_TOKEN)"
-
-.PHONY: setup/travis
-setup/travis:
-	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.10.0/operator-sdk-v0.10.0-x86_64-linux-gnu && chmod +x operator-sdk && sudo mv operator-sdk /usr/local/bin/
-	pip3 install operator-courier==2.1.7
-
 .PHONY: vendor/check
 vendor/check: vendor/fix
 	git diff --exit-code vendor/
