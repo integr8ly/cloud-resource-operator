@@ -6,7 +6,15 @@ NAMESPACE=cloud-resource-operator
 PREV_VERSION=0.13.2
 VERSION=0.13.3
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
+
+# If the _correct_ version of operator-sdk is on the path, use that (faster);
+# otherwise use it through "go run" (slower but will always work and will use correct version)
 OPERATOR_SDK_VERSION=0.12.0
+ifeq ($(shell operator-sdk version 2> /dev/null | sed -e 's/", .*/"/' -e 's/.* //'), "v$(OPERATOR_SDK_VERSION)")
+	OPERATOR_SDK ?= operator-sdk
+else
+	OPERATOR_SDK ?= go run github.com/operator-framework/operator-sdk/cmd/operator-sdk
+endif
 
 AUTH_TOKEN=$(shell curl -sH "Content-Type: application/json" -XPOST https://quay.io/cnr/api/v1/users/login -d '{"user": {"username": "$(QUAY_USERNAME)", "password": "${QUAY_PASSWORD}"}}' | jq -r '.token')
 
@@ -23,7 +31,7 @@ build:
 
 .PHONY: run
 run:
-	RECTIME=30 operator-sdk up local --namespace=""
+	RECTIME=30 $(OPERATOR_SDK) up local --namespace=""
 
 .PHONY: setup/service_account
 setup/service_account:
@@ -36,20 +44,22 @@ setup/service_account:
 .PHONY: code/run/service_account
 code/run/service_account: setup/service_account
 	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE})
-	@operator-sdk up local --namespace=$(NAMESPACE)
+	@$(OPERATOR_SDK) up local --namespace=$(NAMESPACE)
+
+operator-sdk-v0.10:
+	@echo $(OPERATOR_SDK_OS)
+	@curl -Lo operator-sdk-v0.10 https://github.com/operator-framework/operator-sdk/releases/download/v0.10.1/operator-sdk-v0.10.1-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk-v0.10
 
 .PHONY: code/gen
-code/gen:
-	@echo $(OPERATOR_SDK_OS)
-	@curl -Lo operator-sdk-v0.10 https://github.com/operator-framework/operator-sdk/releases/download/v0.10.1/operator-sdk-v0.10.1-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk-v0.10 && sudo mv operator-sdk-v0.10 /usr/local/bin/
-	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate k8s
-	GOROOT=$(shell go env GOROOT) GO111MODULE="on" operator-sdk-v0.10 generate openapi
+code/gen: operator-sdk-v0.10
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" ./operator-sdk-v0.10 generate k8s
+	GOROOT=$(shell go env GOROOT) GO111MODULE="on" ./operator-sdk-v0.10 generate openapi
 	@go generate ./...
 
 .PHONY: gen/csv
 gen/csv:
 	sed -i.bak 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:v$(VERSION)/g' deploy/operator.yaml && rm deploy/operator.yaml.bak
-	@operator-sdk olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel
+	@$(OPERATOR_SDK) olm-catalog gen-csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --update-crds --csv-channel=integreatly --default-channel
 	@sed -i.bak 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml && rm deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml.bak
 	@sed -i.bak s/cloud-resource-operator:v$(PREV_VERSION)/cloud-resource-operator:v$(VERSION)/g deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml && rm deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml.bak
 .PHONY: code/fix
@@ -133,27 +143,22 @@ test/unit/setup:
 	@echo Installing gotest
 	go get -u github.com/rakyll/gotest
 
-.PHONY: setup/prow
-setup/prow:
-	@echo Installing Operator SDK
-	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-$(OPERATOR_SDK_OS) && chmod +x operator-sdk
-
 .PHONY: test/e2e/prow
-test/e2e/prow: setup/prow cluster/prepare
+test/e2e/prow: cluster/prepare
 	@echo Running e2e tests:
-	GO111MODULE=on ./operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
+	GO111MODULE=on $(OPERATOR_SDK) test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/e2e/local
 test/e2e/local: cluster/prepare
 	@echo Running e2e tests:
-	operator-sdk test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
+	$(OPERATOR_SDK) test local ./test/e2e --up-local --namespace $(NAMESPACE) --go-test-flags "-timeout=60m -v"
 	oc delete project $(NAMESPACE)
 
 .PHONY: test/e2e/image
 test/e2e/image:
 	@echo Running e2e tests:
-	operator-sdk test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
+	$(OPERATOR_SDK) test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
 
 .PHONY: test/unit
 test/unit:
@@ -174,20 +179,11 @@ test/unit/ci: test/unit
 
 .PHONY: image/build
 image/build: build
-	operator-sdk build $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
+	$(OPERATOR_SDK) build $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
 
 .PHONY: image/push
 image/push: image/build
 	docker push $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
-
-.PHONY: manifest/push
-manifest/push:
-	@operator-courier --verbose push deploy/olm-catalog/cloud-resources/ $(IMAGE_ORG) $(MANIFEST_NAME) $(VERSION) "$(AUTH_TOKEN)"
-
-.PHONY: setup/travis
-setup/travis:
-	@curl -Lo operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.10.0/operator-sdk-v0.10.0-x86_64-linux-gnu && chmod +x operator-sdk && sudo mv operator-sdk /usr/local/bin/
-	pip3 install operator-courier==2.1.7
 
 .PHONY: vendor/check
 vendor/check: vendor/fix
