@@ -764,7 +764,13 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBIns
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
-	labels["instanceID"] = *instance.DBInstanceIdentifier
+	if instance == nil {
+		annotations := cr.GetAnnotations()
+		labels["instanceID"] = annotations[resourceIdentifierAnnotation]
+	} else {
+		labels["instanceID"] = *instance.DBInstanceIdentifier
+	}
+
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
 	return labels
@@ -788,7 +794,7 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
-	if *instance.DBInstanceStatus != "available" {
+	if instance == nil || *instance.DBInstanceStatus != "available" {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
 		return
 	}
@@ -800,6 +806,11 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		return
+	}
+
+	if instance == nil {
+		logrus.Error(fmt.Sprintf("foundInstance is nil, skipping setPostgresServiceMaintenanceMetric"))
 		return
 	}
 
@@ -843,6 +854,13 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 
 	// build generic labels to be added to metric
 	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
+
+	// check if the instance is available
+	if instance == nil {
+		logrus.Infof("foundInstance is nil, setting createRDSConnectionMetric to 0")
+		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
+		return
+	}
 
 	// check if the endpoint is available
 	if instance.Endpoint == nil {
