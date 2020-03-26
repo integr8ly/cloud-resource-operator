@@ -190,6 +190,15 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		}
 	}
 
+	// expose pending maintenance metric
+	defer p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
+
+	// set status metric
+	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
+
+	// create connection metric
+	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
+
 	// create rds instance if it doesn't exist
 	if foundInstance == nil {
 		if annotations.Has(cr, resourceIdentifierAnnotation) {
@@ -209,15 +218,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		}
 		return nil, "started rds provision", nil
 	}
-
-	// expose pending maintenance metric
-	defer p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
-
-	// set status metric
-	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
-
-	// create connection metric
-	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
