@@ -81,7 +81,6 @@ cluster/prepare:
 	-oc new-project $(NAMESPACE) || true
 	-oc label namespace $(NAMESPACE) monitoring-key=middleware
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
-	oc apply -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
 	oc apply -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
@@ -90,14 +89,6 @@ cluster/prepare:
 	oc apply -f ./deploy/role.yaml -n $(NAMESPACE)
 	oc apply -f ./deploy/role_binding.yaml -n $(NAMESPACE)
 	oc apply -f ./deploy/examples/ -n $(NAMESPACE)
-
-.PHONY: cluster/seed/workshop/smtp
-cluster/seed/workshop/smtp:
-	@cat deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/managed/smtp
-cluster/seed/managed/smtp:
-	@cat deploy/crds/integreatly_v1alpha1_smtpcredentialset_cr.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/seed/workshop/blobstorage
 cluster/seed/workshop/blobstorage:
@@ -127,7 +118,6 @@ cluster/seed/managed/postgres:
 .PHONY: cluster/clean
 cluster/clean:
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_blobstorage_crd.yaml -n $(NAMESPACE)
-	oc delete -f ./deploy/crds/integreatly_v1alpha1_smtpcredentialset_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_redis_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_postgres_crd.yaml -n $(NAMESPACE)
 	oc delete -f ./deploy/crds/integreatly_v1alpha1_redissnapshot_crd.yaml -n $(NAMESPACE)
