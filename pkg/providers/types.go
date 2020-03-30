@@ -9,7 +9,7 @@ import (
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 )
 
-//go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider SMTPCredentialsProvider
+//go:generate moq -out types_moq.go . DeploymentDetails BlobStorageProvider
 type ResourceType string
 
 const (
@@ -18,10 +18,9 @@ const (
 	AWSDeploymentStrategy       = "aws"
 	OpenShiftDeploymentStrategy = "openshift"
 
-	BlobStorageResourceType    ResourceType = "blobstorage"
-	PostgresResourceType       ResourceType = "postgres"
-	RedisResourceType          ResourceType = "redis"
-	SMTPCredentialResourceType ResourceType = "smtpcredentials"
+	BlobStorageResourceType ResourceType = "blobstorage"
+	PostgresResourceType    ResourceType = "postgres"
+	RedisResourceType       ResourceType = "redis"
 )
 
 type DeploymentDetails interface {
@@ -50,14 +49,6 @@ type BlobStorageProvider interface {
 	GetReconcileTime(bs *v1alpha1.BlobStorage) time.Duration
 	CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, croType.StatusMessage, error)
 	DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (croType.StatusMessage, error)
-}
-
-type SMTPCredentialsProvider interface {
-	GetName() string
-	SupportsStrategy(s string) bool
-	GetReconcileTime(smtpCreds *v1alpha1.SMTPCredentialSet) time.Duration
-	CreateSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (*SMTPCredentialSetInstance, croType.StatusMessage, error)
-	DeleteSMTPCredentials(ctx context.Context, smtpCreds *v1alpha1.SMTPCredentialSet) (croType.StatusMessage, error)
 }
 
 type RedisProvider interface {
