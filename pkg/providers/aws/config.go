@@ -47,7 +47,6 @@ var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 //go:generate moq -out config_moq.go . ConfigManager
 type ConfigManager interface {
 	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
-	ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error)
 	GetDefaultRegionSMTPServerMapping() map[string]string
 }
 
@@ -87,14 +86,6 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 	stratCfg, err := m.getTierStrategyForProvider(ctx, string(rt), tier)
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(rt))
-	}
-	return stratCfg, nil
-}
-
-func (m *ConfigMapConfigManager) ReadSMTPCredentialSetStrategy(ctx context.Context, tier string) (*StrategyConfig, error) {
-	stratCfg, err := m.getTierStrategyForProvider(ctx, string(providers.SMTPCredentialResourceType), tier)
-	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(providers.BlobStorageResourceType))
 	}
 	return stratCfg, nil
 }

@@ -27,10 +27,6 @@ type DeploymentDetails interface {
 	Data() map[string][]byte
 }
 
-type SMTPCredentialSetInstance struct {
-	DeploymentDetails DeploymentDetails
-}
-
 type BlobStorageInstance struct {
 	DeploymentDetails DeploymentDetails
 }
