@@ -753,9 +753,13 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 	return nil
 }
 
-func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, clusterID, instanceName string) map[string]string {
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID, instanceName string) map[string]string {
 	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
-	labels["status"] = instanceName
+	if instance != nil {
+		labels["status"] = *instance.DBInstanceStatus
+		return labels
+	}
+	labels["status"] = "nil"
 	return labels
 }
 
@@ -765,7 +769,6 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, clusterID, instance
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
 	labels["instanceID"] = instanceName
-
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
 	return labels
@@ -775,19 +778,19 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// build instance name
 	instanceName, err := p.buildInstanceName(ctx, cr)
 	if err != nil {
-		logrus.Errorf("error occurred while building instance name during postgres metrics: %s", err)
+		logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
 	}
 
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Errorf("failed to get cluster id while exposing information metric for %s", instanceName)
+		logrus.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
 		return
 	}
 
 	// build metric labels
-	infoLabels := buildPostgresInfoMetricLabels(cr, clusterID, instanceName)
+	infoLabels := buildPostgresInfoMetricLabels(cr, instance, clusterID, instanceName)
 	// build available mertic labels
 	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
 
@@ -805,21 +808,21 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
 	// if the instance is nil skip this metric
 	if instance == nil {
-		logrus.Error(fmt.Sprintf("foundInstance is nil, skipping setPostgresServiceMaintenanceMetric"))
+		logrus.Error("foundInstance is nil, skipping setPostgresServiceMaintenanceMetric")
 		return
 	}
 
 	logrus.Info("checking for pending postgres service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get cluster id while exposing information metric for %s : %v", *instance.DBInstanceIdentifier, err)
 		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSession.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{})
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get maintenance information while exposing maintenance metric for %s : %v", *instance.DBInstanceIdentifier, err)
 		return
 	}
 
@@ -849,14 +852,14 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	// build instance name
 	instanceName, err := p.buildInstanceName(ctx, cr)
 	if err != nil {
-		logrus.Errorf("error occurred while building instance name during postgres metrics: %s", err)
+		logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
 	}
 
 	// return cluster id needed for metric labels
 	logrus.Infof("testing and exposing postgres connection metric for: %s", instanceName)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Errorf("failed to get cluster id while exposing connection metric for %s", instanceName)
+		logrus.Errorf("failed to get cluster id while exposing connection metric for %v", instanceName)
 
 	}
 
@@ -888,10 +891,11 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1)
 }
 
+// returns the name of the instance from build infra
 func (p *PostgresProvider) buildInstanceName(ctx context.Context, pg *v1alpha1.Postgres) (string, error) {
 	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
-		return "", errorUtil.Errorf("error occurred building instance name: %s", err)
+		return "", errorUtil.Errorf("error occurred building instance name: %v", err)
 	}
 	return instanceName, nil
 }

@@ -152,6 +152,15 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 	}
 
+	// expose elasticache maintenance metric
+	defer p.setRedisServiceMaintenanceMetric(ctx, cacheSvc, foundCache)
+
+	// expose status metrics
+	defer p.exposeRedisMetrics(ctx, r, foundCache)
+
+	// expose a connection metric
+	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
+
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, resourceIdentifierAnnotation) {
@@ -172,15 +181,6 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 		return nil, "started elasticache provision", nil
 	}
-
-	// expose elasticache maintenance metric
-	defer p.setRedisServiceMaintenanceMetric(ctx, r, cacheSvc, foundCache)
-
-	// expose status metrics
-	defer p.exposeRedisMetrics(ctx, r, foundCache)
-
-	// expose a connection metric
-	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
 
 	// check elasticache phase
 	if *foundCache.Status != "available" {
@@ -612,42 +612,52 @@ func (p *RedisProvider) configureElasticacheVpc(ctx context.Context, cacheSvc el
 }
 
 // returns generic labels to be added to every metric
-func buildRedisGenericMetricLabels(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) map[string]string {
+func buildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = r.Name
 	labels["namespace"] = r.Namespace
-	labels["instanceID"] = *cache.ReplicationGroupId
+	labels["instanceID"] = cacheName
 	labels["productName"] = r.Labels["productName"]
 	labels["strategy"] = redisProviderName
 	return labels
 }
 
 // adds extra information to labels around resource
-func buildRedisInfoMetricLables(r *v1alpha1.Redis, cache *elasticache.ReplicationGroup, clusterID string) map[string]string {
-	labels := buildRedisGenericMetricLabels(r, cache, clusterID)
-	labels["status"] = *cache.Status
+func buildRedisInfoMetricLables(r *v1alpha1.Redis, group *elasticache.ReplicationGroup, clusterID, cacheName string) map[string]string {
+	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
+	if group != nil {
+		labels["status"] = *group.Status
+		return labels
+	}
+	labels["status"] = fmt.Sprintf("%s is nil", cacheName)
 	return labels
 }
 
 // used to expose an available and information metrics during reconcile
 func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) {
+	// build cache name
+	cacheName, err := p.buildCacheName(ctx, cr)
+	if err != nil {
+		logrus.Errorf("error occurred while building instance name while exposing redis metrics: %v", err)
+	}
+
 	logrus.Info("setting redis information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metrics for %s", *instance.ReplicationGroupId))
+		logrus.Errorf("failed to get cluster id while exposing information metrics for %s : %v", cacheName, err)
 		return
 	}
 
 	// build metric labels
-	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterID)
-	genericLabels := buildRedisGenericMetricLabels(cr, instance, clusterID)
+	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterID, cacheName)
+	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 
 	// set available metric
-	if *instance.Status != "available" {
+	if instance == nil || *instance.Status != "available" {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
 		return
 	}
@@ -656,19 +666,25 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 }
 
 // sets maintenance metric
-func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) {
+func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, instance *elasticache.ReplicationGroup) {
+	// if the instance is nil skip this metric
+	if instance == nil {
+		logrus.Error("foundInstance is nil, skipping setRedisServiceMaintenanceMetric")
+		return
+	}
+
 	// info about the elasticache cluster to be created
 	logrus.Info("checking for pending redis service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster information while exposing maintenance metric for %s", *instance.ReplicationGroupId))
+		logrus.Errorf("failed to get cluster information while exposing maintenance metric for %s : %v", *instance.ReplicationGroupId, err)
 		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := cacheSvc.DescribeServiceUpdates(&elasticache.DescribeServiceUpdatesInput{})
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.ReplicationGroupId))
+		logrus.Errorf("failed to get maintenance information while exposing maintenance metric for %s : %v", *instance.ReplicationGroupId, err)
 		return
 	}
 
@@ -696,20 +712,26 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, cr
 }
 
 func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, cr *v1alpha1.Redis, cache *elasticache.ReplicationGroup) {
+	// build cache name
+	cacheName, err := p.buildCacheName(ctx, cr)
+	if err != nil {
+		logrus.Errorf("error occurred while building instance name while exposing redis metrics: %v", err)
+	}
+
 	// return cluster id needed for metric labels
-	logrus.Infof("testing and exposing redis connection metric for: %s", *cache.ReplicationGroupId)
+	logrus.Infof("testing and exposing redis connection metric for: %s", cacheName)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Errorf("failed to get cluster id while exposing connection metric for %s", *cache.ReplicationGroupId)
+		logrus.Errorf("failed to get cluster id while exposing connection metric for %v", cacheName)
 	}
 
 	// build generic labels to be added to metric
-	genericLabels := buildRedisGenericMetricLabels(cr, cache, clusterID)
+	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
 
 	// check if the node group is available
-	if cache.NodeGroups == nil {
+	if cache == nil || cache.NodeGroups == nil {
+		logrus.Infof("%s cache is nil and not yet available", cacheName)
 		resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0)
-		logrus.Infof("node group not yet available for: %s", *cache.ReplicationGroupId)
 		return
 	}
 
@@ -722,4 +744,12 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	}
 	// create successful connection metric
 	resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 1)
+}
+
+func (p *RedisProvider) buildCacheName(ctx context.Context, rd *v1alpha1.Redis) (string, error) {
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, rd.ObjectMeta, DefaultAwsIdentifierLength)
+	if err != nil {
+		return "", errorUtil.Errorf("error occurred building cache name: %v", err)
+	}
+	return cacheName, nil
 }
