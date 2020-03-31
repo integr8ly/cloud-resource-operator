@@ -91,10 +91,9 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.configMapNamespace,
 		},
 		Data: map[string]string{
-			"postgres":        "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
-			"redis":           "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
-			"smtpcredentials": "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
-			"blobstorage":     "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"postgres":    "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"redis":       "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
+			"blobstorage": "{\"development\": { \"strategy\": {} }, \"production\": { \"strategy\": {} } }",
 		},
 	}
 }
