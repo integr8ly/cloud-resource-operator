@@ -30,15 +30,7 @@ const (
 
 	defaultReconcileTime = time.Second * 30
 
-	regionUSEast1 = "us-east-1"
-	regionUSWest2 = "us-west-2"
-	regionEUWest1 = "eu-west-1"
-
 	resourceIdentifierAnnotation = "resourceIdentifier"
-
-	sesSMTPEndpointUSEast1 = "email-smtp.us-east-1.amazonaws.com"
-	sesSMTPEndpointUSWest2 = "email-smtp.us-west-2.amazonaws.com"
-	sesSMTPEndpointEUWest1 = "email-smtp.eu-west-1.amazonaws.com"
 )
 
 //DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
@@ -47,7 +39,6 @@ var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 //go:generate moq -out config_moq.go . ConfigManager
 type ConfigManager interface {
 	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
-	GetDefaultRegionSMTPServerMapping() map[string]string
 }
 
 var _ ConfigManager = (*ConfigMapConfigManager)(nil)
@@ -88,14 +79,6 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 		return nil, errorUtil.Wrapf(err, "failed to get tier to strategy mapping for resource type %s", string(rt))
 	}
 	return stratCfg, nil
-}
-
-func (m *ConfigMapConfigManager) GetDefaultRegionSMTPServerMapping() map[string]string {
-	return map[string]string{
-		regionUSEast1: sesSMTPEndpointUSEast1,
-		regionUSWest2: sesSMTPEndpointUSWest2,
-		regionEUWest1: sesSMTPEndpointEUWest1,
-	}
 }
 
 func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, rt string, tier string) (*StrategyConfig, error) {

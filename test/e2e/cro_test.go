@@ -13,7 +13,6 @@ const (
 	postgresName    = "example-postgres"
 	redisName       = "example-redis"
 	blobstorageName = "example-blobstorage"
-	smtpName        = "example-smtp"
 )
 
 var (
@@ -40,12 +39,6 @@ func TestCRO(t *testing.T) {
 		t.Fatalf("failed to add Blobstorage custom resource scheme to framework: %v", err)
 	}
 
-	// adding smtp scheme to framework
-	smtpList := &v1alpha1.SMTPCredentialSet{}
-	if err := framework.AddToFrameworkScheme(apis.AddToScheme, smtpList); err != nil {
-		t.Fatalf("failed to add SMTP custom resource scheme to framework: %v", err)
-	}
-
 	// run subtests
 	t.Run("cro-openshift-postgres-test", func(t *testing.T) {
 		t.Run("Cluster", OpenshiftPostgresTestCluster)
@@ -57,10 +50,6 @@ func TestCRO(t *testing.T) {
 
 	t.Run("cro-openshift-blobstorage-test", func(t *testing.T) {
 		t.Run("Cluster", OpenshiftBlobstorageTestCluster)
-	})
-
-	t.Run("cro-openshift-smtp-test", func(t *testing.T) {
-		t.Run("Cluster", OpenshiftSMTPTestCluster)
 	})
 
 }
@@ -179,24 +168,6 @@ func OpenshiftBlobstorageTestCluster(t *testing.T) {
 
 	// run blobstorage test
 	if err = OpenshiftBlobstorageBasicTest(t, f, *ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func OpenshiftSMTPTestCluster(t *testing.T) {
-	t.Parallel()
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup()
-	err := ctx.InitializeClusterResources(getCleanupOptions(t))
-	if err != nil {
-		t.Fatalf("failed to initialize cluster resources: %v", err)
-	}
-	t.Log("initialized cluster resources")
-
-	f := framework.Global
-
-	// run smtp test
-	if err = OpenshiftSMTPBasicTest(t, f, *ctx); err != nil {
 		t.Fatal(err)
 	}
 }

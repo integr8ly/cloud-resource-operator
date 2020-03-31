@@ -27,10 +27,9 @@ var DefaultConfigNamespace, _ = k8sutil.GetWatchNamespace()
 
 //DeploymentStrategyMapping Deployment Strategy Map
 type DeploymentStrategyMapping struct {
-	BlobStorage     string `json:"blobstorage"`
-	SMTPCredentials string `json:"smtpCredentials"`
-	Redis           string `json:"redis"`
-	Postgres        string `json:"postgres"`
+	BlobStorage string `json:"blobstorage"`
+	Redis       string `json:"redis"`
+	Postgres    string `json:"postgres"`
 }
 
 //go:generate moq -out config_moq.go . ConfigManager
