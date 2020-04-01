@@ -27,10 +27,9 @@ var DefaultConfigNamespace, _ = k8sutil.GetWatchNamespace()
 
 //DeploymentStrategyMapping Deployment Strategy Map
 type DeploymentStrategyMapping struct {
-	BlobStorage     string `json:"blobstorage"`
-	SMTPCredentials string `json:"smtpCredentials"`
-	Redis           string `json:"redis"`
-	Postgres        string `json:"postgres"`
+	BlobStorage string `json:"blobstorage"`
+	Redis       string `json:"redis"`
+	Postgres    string `json:"postgres"`
 }
 
 //go:generate moq -out config_moq.go . ConfigManager
@@ -80,8 +79,8 @@ func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
 			Namespace: m.providerConfigMapNamespace,
 		},
 		Data: map[string]string{
-			"managed":  "{\"blobstorage\":\"aws\", \"smtpcredentials\": \"aws\", \"redis\":\"aws\", \"postgres\":\"aws\"}",
-			"workshop": "{\"blobstorage\":\"openshift\", \"smtpcredentials\": \"openshift\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
+			"managed":  "{\"blobstorage\":\"aws\", \"redis\":\"aws\", \"postgres\":\"aws\"}",
+			"workshop": "{\"blobstorage\":\"openshift\", \"redis\":\"openshift\", \"postgres\":\"openshift\"}",
 		},
 	}
 }

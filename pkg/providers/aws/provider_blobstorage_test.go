@@ -4,12 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	crov1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"testing"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	croapis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
+	"github.com/openshift/cloud-credential-operator/pkg/apis"
+	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +38,39 @@ type mockS3Svc struct {
 	wantErrDelete     bool
 	wantErrWaitDelete bool
 	bucketNames       []string
+}
+
+func buildTestScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	err := croapis.AddToScheme(scheme)
+	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
+	err = apis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
+	return scheme, nil
+}
+
+func buildTestCredentialsRequest() *cloudcredentialv1.CredentialsRequest {
+	return &cloudcredentialv1.CredentialsRequest{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: cloudcredentialv1.CredentialsRequestSpec{
+			SecretRef: corev1.ObjectReference{
+				Name:      "test",
+				Namespace: "test",
+			},
+		},
+		Status: cloudcredentialv1.CredentialsRequestStatus{
+			Provisioned: true,
+			ProviderStatus: &runtime.RawExtension{
+				Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+			},
+		},
+	}
 }
 
 func (s *mockS3Svc) ListBuckets(lbi *s3.ListBucketsInput) (*s3.ListBucketsOutput, error) {
@@ -92,7 +133,6 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build test scheme", err)
-
 	}
 	type fields struct {
 		Client            client.Client
