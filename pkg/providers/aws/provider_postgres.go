@@ -190,6 +190,15 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		}
 	}
 
+	// expose pending maintenance metric
+	defer p.setPostgresServiceMaintenanceMetric(ctx, rdsSvc, foundInstance)
+
+	// set status metric
+	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
+
+	// create connection metric
+	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
+
 	// create rds instance if it doesn't exist
 	if foundInstance == nil {
 		if annotations.Has(cr, resourceIdentifierAnnotation) {
@@ -209,15 +218,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		}
 		return nil, "started rds provision", nil
 	}
-
-	// expose pending maintenance metric
-	defer p.setPostgresServiceMaintenanceMetric(ctx, cr, rdsSvc, foundInstance)
-
-	// set status metric
-	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
-
-	// create connection metric
-	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
 
 	// check rds instance phase
 	if *foundInstance.DBInstanceStatus != "available" {
@@ -603,7 +603,7 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 			rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 		}
 	}
-	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
+	instanceName, err := p.buildInstanceName(ctx, pg)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
@@ -753,60 +753,76 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 	return nil
 }
 
-func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {
-	labels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
-	labels["status"] = *instance.DBInstanceStatus
+func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID, instanceName string) map[string]string {
+	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
+	if instance != nil {
+		labels["status"] = *instance.DBInstanceStatus
+		return labels
+	}
+	labels["status"] = "nil"
 	return labels
 }
 
-func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID string) map[string]string {
+func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, clusterID, instanceName string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
 	labels["namespace"] = cr.Namespace
-	labels["instanceID"] = *instance.DBInstanceIdentifier
+	labels["instanceID"] = instanceName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
 	return labels
 }
 
 func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
+	// build instance name
+	instanceName, err := p.buildInstanceName(ctx, cr)
+	if err != nil {
+		logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
+	}
+
 	// get Cluster Id
 	logrus.Info("setting postgres information metric")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
 		return
 	}
 
 	// build metric labels
-	infoLabels := buildPostgresInfoMetricLabels(cr, instance, clusterID)
+	infoLabels := buildPostgresInfoMetricLabels(cr, instance, clusterID, instanceName)
 	// build available mertic labels
-	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
+	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
-	if *instance.DBInstanceStatus != "available" {
+	if instance == nil || *instance.DBInstanceStatus != "available" {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
 		return
 	}
 	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 }
 
-func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, cr *v1alpha1.Postgres, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
+func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
+	// if the instance is nil skip this metric
+	if instance == nil {
+		logrus.Error("foundInstance is nil, skipping setPostgresServiceMaintenanceMetric")
+		return
+	}
+
 	logrus.Info("checking for pending postgres service updates")
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get cluster id while exposing information metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get cluster id while exposing information metric for %s : %v", *instance.DBInstanceIdentifier, err)
 		return
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSession.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{})
 	if err != nil {
-		logrus.Error(fmt.Sprintf("failed to get maintenance information while exposing maintenance metric for %s", *instance.DBInstanceIdentifier))
+		logrus.Errorf("failed to get maintenance information while exposing maintenance metric for %s : %v", *instance.DBInstanceIdentifier, err)
 		return
 	}
 
@@ -833,16 +849,29 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 // tests to see if a simple tcp connection can be made to rds and creates a metric based on this
 func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
+	// build instance name
+	instanceName, err := p.buildInstanceName(ctx, cr)
+	if err != nil {
+		logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
+	}
+
 	// return cluster id needed for metric labels
-	logrus.Infof("testing and exposing postgres connection metric for: %s", *instance.DBInstanceIdentifier)
+	logrus.Infof("testing and exposing postgres connection metric for: %s", instanceName)
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		logrus.Errorf("failed to get cluster id while exposing connection metric for %s", *instance.DBInstanceIdentifier)
+		logrus.Errorf("failed to get cluster id while exposing connection metric for %v", instanceName)
 
 	}
 
 	// build generic labels to be added to metric
-	genericLabels := buildPostgresGenericMetricLabels(cr, instance, clusterID)
+	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
+
+	// check if the instance is available
+	if instance == nil {
+		logrus.Infof("foundInstance is nil, setting createRDSConnectionMetric to 0")
+		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
+		return
+	}
 
 	// check if the endpoint is available
 	if instance.Endpoint == nil {
@@ -860,5 +889,13 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 	}
 	// create successful connection metric
 	resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 1)
+}
 
+// returns the name of the instance from build infra
+func (p *PostgresProvider) buildInstanceName(ctx context.Context, pg *v1alpha1.Postgres) (string, error) {
+	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
+	if err != nil {
+		return "", errorUtil.Errorf("error occurred building instance name: %v", err)
+	}
+	return instanceName, nil
 }
