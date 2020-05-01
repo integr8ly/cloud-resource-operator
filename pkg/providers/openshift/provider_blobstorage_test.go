@@ -56,11 +56,13 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 				},
 			},
 			want: &providers.BlobStorageInstance{
-				DeploymentDetails: &aws.BlobStorageDeploymentDetails{
-					BucketName:          varPlaceholder,
-					BucketRegion:        varPlaceholder,
-					CredentialKeyID:     varPlaceholder,
-					CredentialSecretKey: varPlaceholder,
+				DeploymentDetails: &BlobStorageDeploymentDetails{
+					data: map[string]string{
+						aws.DetailsBlobStorageCredentialSecretKey: varPlaceholder,
+						aws.DetailsBlobStorageCredentialKeyID:     varPlaceholder,
+						aws.DetailsBlobStorageBucketRegion:        varPlaceholder,
+						aws.DetailsBlobStorageBucketName:          varPlaceholder,
+					},
 				},
 			},
 			wantErr: false,
@@ -78,6 +80,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						aws.DetailsBlobStorageBucketRegion:        []byte("test"),
 						aws.DetailsBlobStorageCredentialKeyID:     []byte("test"),
 						aws.DetailsBlobStorageCredentialSecretKey: []byte("test"),
+						"test": []byte("test"),
 					},
 				}),
 				Logger: &logrus.Entry{},
@@ -105,11 +108,14 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 				},
 			},
 			want: &providers.BlobStorageInstance{
-				DeploymentDetails: &aws.BlobStorageDeploymentDetails{
-					BucketName:          "test",
-					BucketRegion:        "test",
-					CredentialKeyID:     "test",
-					CredentialSecretKey: "test",
+				DeploymentDetails: &BlobStorageDeploymentDetails{
+					data: map[string]string{
+						aws.DetailsBlobStorageBucketName:          "test",
+						aws.DetailsBlobStorageBucketRegion:        "test",
+						aws.DetailsBlobStorageCredentialKeyID:     "test",
+						aws.DetailsBlobStorageCredentialSecretKey: "test",
+						"test": "test",
+					},
 				},
 			},
 			wantErr: false,
@@ -124,6 +130,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						aws.DetailsBlobStorageCredentialKeyID: []byte("test"),
+						"test":                                []byte("test"),
 					},
 				}),
 				Logger: &logrus.Entry{},
@@ -151,11 +158,14 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 				},
 			},
 			want: &providers.BlobStorageInstance{
-				DeploymentDetails: &aws.BlobStorageDeploymentDetails{
-					BucketName:          varPlaceholder,
-					BucketRegion:        varPlaceholder,
-					CredentialKeyID:     "test",
-					CredentialSecretKey: varPlaceholder,
+				DeploymentDetails: &BlobStorageDeploymentDetails{
+					data: map[string]string{
+						aws.DetailsBlobStorageBucketName:          varPlaceholder,
+						aws.DetailsBlobStorageBucketRegion:        varPlaceholder,
+						aws.DetailsBlobStorageCredentialKeyID:     "test",
+						aws.DetailsBlobStorageCredentialSecretKey: varPlaceholder,
+						"test": "test",
+					},
 				},
 			},
 			wantErr: false,
