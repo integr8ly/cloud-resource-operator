@@ -18,6 +18,18 @@ const (
 	varPlaceholder = "REPLACE_ME"
 )
 
+type BlobStorageDeploymentDetails struct {
+	data map[string]string
+}
+
+func (d *BlobStorageDeploymentDetails) Data() map[string][]byte {
+	convertedData := map[string][]byte{}
+	for key, value := range d.data {
+		convertedData[key] = []byte(value)
+	}
+	return convertedData
+}
+
 var _ providers.BlobStorageProvider = (*BlobStorageProvider)(nil)
 
 type BlobStorageProvider struct {
@@ -47,11 +59,13 @@ func (b BlobStorageProvider) GetReconcileTime(bs *v1alpha1.BlobStorage) time.Dur
 func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*providers.BlobStorageInstance, croType.StatusMessage, error) {
 	// default to an empty s3 set of credentials for now. in the future. this should determine the cloud provider being
 	// used by checking the infrastructure cr.
-	dd := &aws.BlobStorageDeploymentDetails{
-		BucketName:          varPlaceholder,
-		BucketRegion:        varPlaceholder,
-		CredentialKeyID:     varPlaceholder,
-		CredentialSecretKey: varPlaceholder,
+	dd := &BlobStorageDeploymentDetails{
+		data: map[string]string{
+			aws.DetailsBlobStorageBucketName:          varPlaceholder,
+			aws.DetailsBlobStorageCredentialSecretKey: varPlaceholder,
+			aws.DetailsBlobStorageCredentialKeyID:     varPlaceholder,
+			aws.DetailsBlobStorageBucketRegion:        varPlaceholder,
+		},
 	}
 
 	if bs.Spec.SecretRef.Namespace == "" {
@@ -69,10 +83,16 @@ func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Blo
 		return nil, "failed to reconcile", err
 	}
 
-	dd.BucketName = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageBucketName]), varPlaceholder)
-	dd.BucketRegion = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageBucketRegion]), varPlaceholder)
-	dd.CredentialKeyID = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageCredentialKeyID]), varPlaceholder)
-	dd.CredentialSecretKey = resources.StringOrDefault(string(sec.Data[aws.DetailsBlobStorageCredentialSecretKey]), varPlaceholder)
+	for key, value := range sec.Data {
+		switch key {
+		case aws.DetailsBlobStorageBucketName, aws.DetailsBlobStorageBucketRegion, aws.DetailsBlobStorageCredentialKeyID, aws.DetailsBlobStorageCredentialSecretKey:
+			dd.data[key] = resources.StringOrDefault(string(sec.Data[key]), varPlaceholder)
+		// Allow any additional keys to be added, as long as they don't override known AWS keys
+		default:
+			dd.data[key] = string(value)
+		}
+	}
+
 	return &providers.BlobStorageInstance{
 		DeploymentDetails: dd,
 	}, "reconcile complete", nil
