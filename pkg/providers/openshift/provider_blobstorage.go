@@ -2,13 +2,13 @@ package openshift
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
-	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -72,25 +72,21 @@ func (b BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Blo
 		bs.Spec.SecretRef.Namespace = bs.Namespace
 	}
 
-	if bs.Status.Phase != croType.PhaseComplete || bs.Status.SecretRef.Name == "" || bs.Status.SecretRef.Namespace == "" {
-		return &providers.BlobStorageInstance{
-			DeploymentDetails: dd,
-		}, "reconcile complete", nil
+	secName := bs.Spec.SecretRef.Name
+	if bs.Status.SecretRef != nil && bs.Status.SecretRef.Name != "" {
+		secName = bs.Status.SecretRef.Name
 	}
-
+	secNamespace := bs.Spec.SecretRef.Namespace
+	if bs.Status.SecretRef != nil && bs.Status.SecretRef.Namespace != "" {
+		secNamespace = bs.Status.SecretRef.Namespace
+	}
 	sec := &v1.Secret{}
-	if err := b.Client.Get(ctx, client.ObjectKey{Name: bs.Status.SecretRef.Name, Namespace: bs.Status.SecretRef.Namespace}, sec); err != nil {
+	if err := b.Client.Get(ctx, client.ObjectKey{Name: secName, Namespace: secNamespace}, sec); err != nil && !errors.IsNotFound(err) {
 		return nil, "failed to reconcile", err
 	}
 
 	for key, value := range sec.Data {
-		switch key {
-		case aws.DetailsBlobStorageBucketName, aws.DetailsBlobStorageBucketRegion, aws.DetailsBlobStorageCredentialKeyID, aws.DetailsBlobStorageCredentialSecretKey:
-			dd.data[key] = resources.StringOrDefault(string(sec.Data[key]), varPlaceholder)
-		// Allow any additional keys to be added, as long as they don't override known AWS keys
-		default:
-			dd.data[key] = string(value)
-		}
+		dd.data[key] = string(value)
 	}
 
 	return &providers.BlobStorageInstance{
