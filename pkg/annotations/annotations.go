@@ -4,9 +4,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Created is a string that can be used as an annotation
-const Created string = "created"
-
 // Add makes sure that the provided key/value are set as an annotation
 func Add(instance metav1.Object, key, value string) {
 	annotations := instance.GetAnnotations()

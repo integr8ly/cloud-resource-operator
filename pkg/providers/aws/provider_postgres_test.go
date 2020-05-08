@@ -29,6 +29,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const (
+	testPreferredBackupWindow      = "02:40-03:10"
+	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
+)
+
 type mockRdsClient struct {
 	rdsiface.RDSAPI
 	wantErrList   bool
@@ -192,10 +197,12 @@ func buildDbInstanceGroupPending() []*rds.DBInstance {
 func buildDbInstanceGroupAvailable() []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
-			DBInstanceIdentifier: aws.String("test-id"),
-			DBInstanceStatus:     aws.String("available"),
-			AvailabilityZone:     aws.String("test-availabilityZone"),
-			DeletionProtection:   aws.Bool(false),
+			DBInstanceIdentifier:       aws.String("test-id"),
+			DBInstanceStatus:           aws.String("available"),
+			AvailabilityZone:           aws.String("test-availabilityZone"),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+			DeletionProtection:         aws.Bool(false),
 		},
 	}
 }
@@ -214,20 +221,22 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
-			DBInstanceIdentifier:  aws.String(testID),
-			DBInstanceStatus:      aws.String("available"),
-			AvailabilityZone:      aws.String("test-availabilityZone"),
-			DBInstanceArn:         aws.String("arn-test"),
-			DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-			MasterUsername:        aws.String(defaultAwsPostgresUser),
-			DBName:                aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-			DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-			PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-			EngineVersion:         aws.String(defaultAwsEngineVersion),
-			Engine:                aws.String(defaultAwsEngine),
-			MultiAZ:               aws.Bool(true),
+			DBInstanceIdentifier:       aws.String(testID),
+			DBInstanceStatus:           aws.String("available"),
+			AvailabilityZone:           aws.String("test-availabilityZone"),
+			DBInstanceArn:              aws.String("arn-test"),
+			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:             aws.String(defaultAwsPostgresUser),
+			DBName:                     aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+			EngineVersion:              aws.String(defaultAwsEngineVersion),
+			Engine:                     aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+			MultiAZ:                    aws.Bool(true),
 			Endpoint: &rds.Endpoint{
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),
@@ -248,63 +257,71 @@ func buildPendingDBInstance(testID string) []*rds.DBInstance {
 
 func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
 	return &rds.CreateDBInstanceInput{
-		DBInstanceIdentifier:  aws.String(testID),
-		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                  aws.Int64(defaultAwsPostgresPort),
-		BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-		EngineVersion:         aws.String(defaultAwsEngineVersion),
-		MultiAZ:               aws.Bool(true),
+		DBInstanceIdentifier:       aws.String(testID),
+		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                       aws.Int64(defaultAwsPostgresPort),
+		BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+		MultiAZ:                    aws.Bool(true),
 	}
 }
 
 func buildRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceInput {
 	return &rds.CreateDBInstanceInput{
-		DBInstanceIdentifier:  aws.String(testID),
-		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                  aws.Int64(123),
-		BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-		EngineVersion:         aws.String(defaultAwsEngineVersion),
-		MultiAZ:               aws.Bool(true),
+		DBInstanceIdentifier:       aws.String(testID),
+		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                       aws.Int64(123),
+		BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+		MultiAZ:                    aws.Bool(true),
 	}
 }
 
 func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceInput {
 	return &rds.CreateDBInstanceInput{
-		DBInstanceIdentifier:  aws.String(testID),
-		DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                  aws.Int64(123),
-		BackupRetentionPeriod: aws.Int64(123),
-		DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-		EngineVersion:         aws.String(defaultAwsEngineVersion),
-		MultiAZ:               aws.Bool(true),
+		DBInstanceIdentifier:       aws.String(testID),
+		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+		Port:                       aws.Int64(123),
+		BackupRetentionPeriod:      aws.Int64(123),
+		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+		MultiAZ:                    aws.Bool(true),
 	}
 }
 
 func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
-			DBInstanceIdentifier:  aws.String(testID),
-			DBInstanceStatus:      aws.String("available"),
-			AvailabilityZone:      aws.String("test-availabilityZone"),
-			DBInstanceArn:         aws.String("arn-test"),
-			DeletionProtection:    aws.Bool(defaultAwsPostgresDeletionProtection),
-			MasterUsername:        aws.String(defaultAwsPostgresUser),
-			DBName:                aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod: aws.Int64(defaultAwsBackupRetentionPeriod),
-			DBInstanceClass:       aws.String(defaultAwsDBInstanceClass),
-			PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
-			EngineVersion:         aws.String(defaultAwsEngineVersion),
-			Engine:                aws.String(defaultAwsEngine),
-			MultiAZ:               aws.Bool(true),
+			DBInstanceIdentifier:       aws.String(testID),
+			DBInstanceStatus:           aws.String("available"),
+			AvailabilityZone:           aws.String("test-availabilityZone"),
+			DBInstanceArn:              aws.String("arn-test"),
+			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:             aws.String(defaultAwsPostgresUser),
+			DBName:                     aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+			EngineVersion:              aws.String(defaultAwsEngineVersion),
+			Engine:                     aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+			MultiAZ:                    aws.Bool(true),
 			Endpoint: &rds.Endpoint{
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),

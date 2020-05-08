@@ -187,16 +187,27 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		logrus.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
-
-	// check if found cluster and user strategy differs, and modify instance
 	logrus.Infof("found existing elasticache instance %s", *foundCache.ReplicationGroupId)
-	ec := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache)
-	if ec == nil {
+
+	cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
+	if err != nil {
+		errMsg := "failed to describe clusters"
+		return nil, croType.StatusMessage(fmt.Sprintf(errMsg)), errorUtil.Wrapf(err, errMsg)
+	}
+	var replicationGroupClusters []elasticache.CacheCluster
+	for _, checkedCluster := range cacheClustersOutput.CacheClusters {
+		if *checkedCluster.ReplicationGroupId == *foundCache.ReplicationGroupId {
+			replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
+		}
+	}
+	//check if found cluster and user strategy differs, and modify instance
+	modifyInput := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache, replicationGroupClusters)
+	if modifyInput == nil {
 		logrus.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
 	}
-	if ec != nil {
+	if modifyInput != nil {
 		logrus.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, ec)
-		if _, err := cacheSvc.ModifyReplicationGroup(ec); err != nil {
+		if _, err := cacheSvc.ModifyReplicationGroup(modifyInput); err != nil {
 			errMsg := "failed to modify elasticache cluster"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
@@ -456,22 +467,33 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 }
 
 // checks found config vs user strategy for changes, if found returns a modify replication group
-func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup) *elasticache.ModifyReplicationGroupInput {
+func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup, replicationGroupClusters []elasticache.CacheCluster) *elasticache.ModifyReplicationGroupInput {
 	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.ReplicationGroupId)
 	updateFound := false
-	ec := &elasticache.ModifyReplicationGroupInput{}
-	ec.ReplicationGroupId = foundConfig.ReplicationGroupId
+	modifyInput := &elasticache.ModifyReplicationGroupInput{}
+	modifyInput.ReplicationGroupId = foundConfig.ReplicationGroupId
 
 	if *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
-		ec.CacheNodeType = elasticacheConfig.CacheNodeType
+		modifyInput.CacheNodeType = elasticacheConfig.CacheNodeType
 		updateFound = true
 	}
 	if *elasticacheConfig.SnapshotRetentionLimit != *foundConfig.SnapshotRetentionLimit {
-		ec.SnapshotRetentionLimit = elasticacheConfig.SnapshotRetentionLimit
+		modifyInput.SnapshotRetentionLimit = elasticacheConfig.SnapshotRetentionLimit
 		updateFound = true
 	}
+
+	for _, foundCacheCluster := range replicationGroupClusters {
+		if elasticacheConfig.PreferredMaintenanceWindow != nil && *elasticacheConfig.PreferredMaintenanceWindow != *foundCacheCluster.PreferredMaintenanceWindow {
+			modifyInput.PreferredMaintenanceWindow = elasticacheConfig.PreferredMaintenanceWindow
+			updateFound = true
+		}
+		if elasticacheConfig.SnapshotWindow != nil && *elasticacheConfig.SnapshotWindow != *foundCacheCluster.SnapshotWindow {
+			modifyInput.SnapshotWindow = elasticacheConfig.SnapshotWindow
+			updateFound = true
+		}
+	}
 	if updateFound {
-		return ec
+		return modifyInput
 	}
 	return nil
 }
