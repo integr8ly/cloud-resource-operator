@@ -29,6 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const (
+	testPreferredBackupWindow = "02:40-03:10"
+	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
+)
 type mockRdsClient struct {
 	rdsiface.RDSAPI
 	wantErrList   bool
@@ -195,6 +199,8 @@ func buildDbInstanceGroupAvailable() []*rds.DBInstance {
 			DBInstanceIdentifier: aws.String("test-id"),
 			DBInstanceStatus:     aws.String("available"),
 			AvailabilityZone:     aws.String("test-availabilityZone"),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 			DeletionProtection:   aws.Bool(false),
 		},
 	}
@@ -227,6 +233,8 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 			EngineVersion:         aws.String(defaultAwsEngineVersion),
 			Engine:                aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 			MultiAZ:               aws.Bool(true),
 			Endpoint: &rds.Endpoint{
 				Address:      aws.String("blob"),
@@ -256,6 +264,8 @@ func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
 		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 		MultiAZ:               aws.Bool(true),
 	}
 }
@@ -270,6 +280,8 @@ func buildRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceI
 		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 		MultiAZ:               aws.Bool(true),
 	}
 }
@@ -284,6 +296,8 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 		PubliclyAccessible:    aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 		EngineVersion:         aws.String(defaultAwsEngineVersion),
+		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+		PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 		MultiAZ:               aws.Bool(true),
 	}
 }
@@ -304,6 +318,8 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 			AllocatedStorage:      aws.Int64(defaultAwsAllocatedStorage),
 			EngineVersion:         aws.String(defaultAwsEngineVersion),
 			Engine:                aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow: aws.String(testPreferredBackupWindow),
 			MultiAZ:               aws.Bool(true),
 			Endpoint: &rds.Endpoint{
 				Address:      aws.String("blob"),
