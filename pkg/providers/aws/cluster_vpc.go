@@ -24,7 +24,7 @@ const (
 	defaultAWSPrivateSubnetTagKey = "kubernetes.io/role/internal-elb"
 	defaultSubnetGroupDesc        = "Subnet group created and managed by the Cloud Resource Operator"
 	// Default subnet mask is AWS's minimum possible value
-	defaultSubnetMask = 28
+	defaultSubnetMask = 27
 )
 
 // ensures a subnet group is in place for the creation of a resource
