@@ -9,12 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"net"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
-	"strings"
-
-	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 
 	errorUtil "github.com/pkg/errors"
@@ -25,6 +23,8 @@ const (
 	defaultSecurityGroupPostfix   = "security-group"
 	defaultAWSPrivateSubnetTagKey = "kubernetes.io/role/internal-elb"
 	defaultSubnetGroupDesc        = "Subnet group created and managed by the Cloud Resource Operator"
+	// Default subnet mask is AWS's minimum possible value
+	defaultSubnetMask = 27
 )
 
 // ensures a subnet group is in place for the creation of a resource
@@ -168,6 +168,7 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 
 	// for every az check there is a private subnet, if none create one
 	for _, az := range azs {
+		logrus.Infof("checking if private subnet exists in zone %s", *az.ZoneName)
 		if !privateSubnetExists(privSubs, az) {
 			logrus.Info(fmt.Sprintf("no private subnet found in %s", *az.ZoneName))
 			subnet, err := createPrivateSubnet(ctx, c, ec2Svc, foundVPC, *az.ZoneName)
@@ -213,9 +214,10 @@ func createPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 	// create subnet looping through potential subnet list
 	var subnet *ec2.Subnet
 	for _, ip := range subs {
+		logrus.Infof("attempting to create subnet with cidr block %s for vpc %s in zone %s", ip.String(), *vpc.VpcId, zone)
 		createOutput, err := ec2Svc.CreateSubnet(&ec2.CreateSubnetInput{
 			AvailabilityZone: aws.String(zone),
-			CidrBlock:        aws.String(ip),
+			CidrBlock:        aws.String(ip.String()),
 			VpcId:            aws.String(*vpc.VpcId),
 		})
 		ec2err, isAwsErr := err.(awserr.Error)
@@ -268,38 +270,79 @@ func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2A
 }
 
 // builds an array list of potential subnet addresses
-func buildSubnetAddress(vpc *ec2.Vpc) ([]string, error) {
+func buildSubnetAddress(vpc *ec2.Vpc) ([]net.IPNet, error) {
 	logrus.Info(fmt.Sprintf("calculating subnet mask and address for vpc cidr %s", *vpc.CidrBlock))
 	if *vpc.CidrBlock == "" {
 		return nil, errorUtil.New("vpc cidr block can't be empty")
 	}
 
-	// reduce subnet mask to /20
-	reducedMask := strings.SplitAfter(*vpc.CidrBlock, "/")
-	if len(reducedMask) != 2 {
-		return nil, errorUtil.New(fmt.Sprintf("returned cidr %s from aws is not valid", *vpc.CidrBlock))
+	// Get details about the VPC CIDR block
+	_, awsCIDR, err := net.ParseCIDR(*vpc.CidrBlock)
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to parse vpc cidr block %s", *vpc.CidrBlock)
 	}
-	reducedMask[1] = "20"
+	maskSize, _ := awsCIDR.Mask.Size()
 
-	// split cidr by octet
-	splitCidr := strings.SplitAfter(strings.Join(reducedMask[:], ""), ".")
-	var subnets []string
-
-	// build subnet address increments
-	var ipIncrements []int
-	increment := 0
-	for increment < 255 {
-		ipIncrements = append(ipIncrements, increment)
-		increment = increment + 16
+	// Return descriptive error if VPC CIDR block cannot contain subnet we want to generate
+	if maskSize >= defaultSubnetMask {
+		return nil, errorUtil.New(fmt.Sprintf("vpc cidr block %s cannot contain generated subnet mask /%d", *vpc.CidrBlock, defaultSubnetMask))
 	}
 
-	// replace 3rd octet with increments
-	for _, val := range ipIncrements {
-		splitCidr[2] = fmt.Sprintf("%s.", strconv.Itoa(val))
-		subnets = append(subnets, strings.Join(splitCidr[:], ""))
+	croCIDRStr := fmt.Sprintf("%s/%d", awsCIDR.IP.String(), defaultSubnetMask)
+	_, croCIDR, err := net.ParseCIDR(croCIDRStr)
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to parse cro cidr block %s", croCIDRStr)
 	}
+	networks := generateAvailableSubnets(awsCIDR, croCIDR)
+	// Reverse the network list as the end networks are more likely to be unused
+	for i, j := 0, len(networks)-1; i < j; i, j = i+1, j-1 {
+		networks[i], networks[j] = networks[j], networks[i]
+	}
+	return networks, nil
+}
 
-	return subnets, nil
+func generateAvailableSubnets(fromCIDR, toCIDR *net.IPNet) []net.IPNet {
+	toIPv4 := toCIDR.IP.To4()
+
+	networks := []net.IPNet{
+		{
+			IP:   toIPv4,
+			Mask: toCIDR.Mask,
+		},
+	}
+	for i := 0; fromCIDR.Contains(incrementIP(toIPv4, i)); i++ {
+		nextFoundNetwork := incrementIP(toIPv4, i)
+		nextFoundNetworkMasked := nextFoundNetwork.Mask(toCIDR.Mask)
+		// Don't need duplicates
+		if containsNetwork(networks, nextFoundNetworkMasked) {
+			continue
+		}
+		networks = append(networks, net.IPNet{
+			IP:   nextFoundNetworkMasked,
+			Mask: toCIDR.Mask,
+		})
+	}
+	return networks
+}
+
+func containsNetwork(networks []net.IPNet, toFind net.IP) bool {
+	for _, n := range networks {
+		if n.IP.Equal(toFind) {
+			return true
+		}
+	}
+	return false
+}
+
+func incrementIP(ip net.IP, inc int) net.IP {
+	ipv4 := ip.To4()
+	v := uint(ipv4[0])<<24 + uint(ipv4[1])<<16 + uint(ipv4[2])<<8 + uint(ipv4[3])
+	v += uint(inc)
+	v3 := byte(v & 0xFF)
+	v2 := byte((v >> 8) & 0xFF)
+	v1 := byte((v >> 16) & 0xFF)
+	v0 := byte((v >> 24) & 0xFF)
+	return net.IPv4(v0, v1, v2, v3)
 }
 
 // returns vpc id and cidr block for found vpc
