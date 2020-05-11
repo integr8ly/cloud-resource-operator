@@ -74,6 +74,8 @@ var (
 				"rds:DescribeDBSubnetGroups",
 				"sts:GetCallerIdentity",
 				"iam:CreateServiceLinkedRole",
+				"cloudwatch:ListMetrics",
+				"cloudwatch:GetMetricStatistics",
 			},
 			Resource: "*",
 		},
