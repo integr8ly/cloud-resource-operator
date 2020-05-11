@@ -515,6 +515,14 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
 	}
+	if rdsConfig.PreferredBackupWindow != nil && *rdsConfig.PreferredBackupWindow != *foundConfig.PreferredBackupWindow {
+		mi.PreferredBackupWindow = rdsConfig.PreferredBackupWindow
+		updateFound = true
+	}
+	if rdsConfig.PreferredMaintenanceWindow != nil && *rdsConfig.PreferredMaintenanceWindow != *foundConfig.PreferredMaintenanceWindow {
+		mi.PreferredMaintenanceWindow = rdsConfig.PreferredMaintenanceWindow
+		updateFound = true
+	}
 	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
 		return nil
 	}
