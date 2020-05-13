@@ -108,6 +108,7 @@ func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCache
 		CacheClusters: []*elasticache.CacheCluster{
 			{
 				CacheClusterStatus: aws.String("available"),
+				ReplicationGroupId: aws.String("test-id"),
 			},
 		},
 	}, nil
