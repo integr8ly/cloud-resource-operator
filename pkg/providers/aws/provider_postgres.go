@@ -763,11 +763,13 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 
 func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstance, clusterID, instanceName string) map[string]string {
 	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
-	if instance != nil {
-		labels["status"] = *instance.DBInstanceStatus
+	if instance != nil && len(string(cr.Status.Phase)) != 0 {
+		labels["statusAWS"] = *instance.DBInstanceStatus
+		labels["statusPhase"] = string(cr.Status.Phase)
 		return labels
 	}
-	labels["status"] = "nil"
+	labels["statusAWS"] = "nil"
+	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -800,17 +802,17 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// build metric labels
 	infoLabels := buildPostgresInfoMetricLabels(cr, instance, clusterID, instanceName)
 	// build available mertic labels
-	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
+	//genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
-	if instance == nil || *instance.DBInstanceStatus != "available" {
-		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
+	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultPostgresAvailMetricName, infoLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
+	resources.SetMetric(resources.DefaultPostgresAvailMetricName, infoLabels, 1)
 }
 
 func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {

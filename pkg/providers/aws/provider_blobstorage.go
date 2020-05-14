@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -338,6 +336,9 @@ func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v
 		errMsg := "failed to update blob storage cr as part of finalizer reconcile"
 		return errorUtil.Wrapf(err, errMsg)
 	}
+
+	p.exposeBlobStorageMetrics(ctx, bs)
+
 	return nil
 }
 
@@ -404,6 +405,9 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 			break
 		}
 	}
+
+	defer p.exposeBlobStorageMetrics(ctx, bs)
+
 	if foundBucket != nil {
 		if err = reconcileS3BucketSettings(aws.StringValue(foundBucket.Name), s3svc); err != nil {
 			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
@@ -549,4 +553,56 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 
 func buildEndUserCredentialsNameFromBucket(b string) string {
 	return fmt.Sprintf("cro-aws-s3-%s-creds", b)
+}
+
+func buildBlobStorageInfoMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string) map[string]string {
+	labels := buildBlobStorageGenericMetricLabels(cr, clusterID, bucketName)
+	if len(string(cr.Status.Phase)) != 0 {
+		fmt.Println("Status Message : ", cr.Status.Message)
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	// If the status hasn't reconciled using cr.Status.Phase need to return something
+	labels["statusPhase"] = "nil"
+	return labels
+}
+
+func buildBlobStorageGenericMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string) map[string]string {
+	labels := map[string]string{}
+	labels["clusterID"] = clusterID
+	labels["resourceID"] = cr.Name
+	labels["namespace"] = cr.Namespace
+	labels["instanceID"] = bucketName
+	labels["productName"] = cr.Labels["productName"]
+	labels["strategy"] = blobstorageProviderName
+	return labels
+}
+
+func (p *BlobStorageProvider) exposeBlobStorageMetrics(ctx context.Context, cr *v1alpha1.BlobStorage) {
+	// build instance name
+	bucketName, err := BuildInfraNameFromObject(ctx, p.Client, cr.ObjectMeta, defaultAwsBucketNameLength)
+	if err != nil {
+		logrus.Errorf("error occurred while building instance name during blob storage metrics: %v", err)
+	}
+
+	// get Cluster Id
+	logrus.Info("setting blob storage information metric")
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		logrus.Errorf("failed to get cluster id while exposing information metric for %v", bucketName)
+		return
+	}
+
+	// build metric labels
+	infoLabels := buildBlobStorageInfoMetricLabels(cr, clusterID, bucketName)
+
+	// set status gauge
+	resources.SetMetricCurrentTime(resources.DefaultBlobStorageInfoMetricName, infoLabels)
+
+	// set available metric
+	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, infoLabels, 0)
+		return
+	}
+	resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, infoLabels, 1)
 }

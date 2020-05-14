@@ -23,10 +23,13 @@ const (
 	DefaultPostgresInfoMetricName        = "cro_postgres_info"
 	DefaultPostgresAvailMetricName       = "cro_postgres_available"
 	DefaultPostgresConnectionMetricName  = "cro_postgres_connection"
+	DefaultPostgresSnapshotMetricName    = "cro_postgres_snapshot_info"
 	DefaultRedisMaintenanceMetricName    = "cro_redis_service_maintenance"
 	DefaultRedisInfoMetricName           = "cro_redis_info"
 	DefaultRedisAvailMetricName          = "cro_redis_available"
 	DefaultRedisConnectionMetricName     = "cro_redis_connection"
+	DefaultRedisSnapshotMetricName       = "cro_redis_snapshot_info"
+	DefaultBlobStorageInfoMetricName     = "cro_blobstorage_info"
 )
 
 var (
