@@ -1,4 +1,4 @@
-package cloudwatchmetrics
+package cloudmetrics
 
 import (
 	"context"
@@ -16,13 +16,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_cloudwatchmetrics")
+var log = logf.Log.WithName("controller_cloudmetrics")
 
 // Set the reconcile duration for this controller.
 // Currently it will be called once every 5 minutes
-const watchDuration = 5
+const watchDuration = 600
 
-// Add creates a new CloudwatchMetrics Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new CloudMetrics Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -30,20 +30,24 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileCloudwatchMetrics{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileCloudMetrics{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("cloudwatchmetrics-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("cloudmetrics-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Send a generic event to the channel to kick
-	// off the first reconcile
+	// Set up a GenericEvent channel that will be used
+	// as the event source to trigger the controller's
+	// reconcile loop
 	events := make(chan event.GenericEvent)
+
+	// Send a generic event to the channel to kick
+	// off the first reconcile loop
 	go func() {
 		events <- event.GenericEvent{
 			Meta:   &integreatlyv1alpha1.Redis{},
@@ -60,21 +64,21 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// blank assignment to verify that ReconcileCloudwatchMetrics implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileCloudwatchMetrics{}
+// blank assignment to verify that ReconcileCloudMetrics implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileCloudMetrics{}
 
-// ReconcileCloudwatchMetrics reconciles a CloudwatchMetrics object
-type ReconcileCloudwatchMetrics struct {
+// ReconcileCloudMetrics reconciles a CloudMetrics object
+type ReconcileCloudMetrics struct {
 	client client.Client
 	scheme *runtime.Scheme
 }
 
-// Reconcile reads that state of the cluster and makes changes based on the state read
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileCloudwatchMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+// This controller reconciles metrics for cloud resources (currently redis and postgres)
+// It takes a sync the world approach, reconciling all cloud resources every set period
+// of time (currently every 5 minutes)
+func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling CloudwatchMetrics")
+	reqLogger.Info("Reconciling CloudMetrics")
 
 	// Fetch all redis crs
 	redisInstances := &integreatlyv1alpha1.RedisList{}
@@ -106,6 +110,6 @@ func (r *ReconcileCloudwatchMetrics) Reconcile(request reconcile.Request) (recon
 
 	// Requeue every 5 minutes
 	return reconcile.Result{
-		RequeueAfter: watchDuration * time.Minute,
+		RequeueAfter: watchDuration * time.Second,
 	}, nil
 }
