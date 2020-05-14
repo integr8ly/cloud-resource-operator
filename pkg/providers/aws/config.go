@@ -36,6 +36,12 @@ const (
 //DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
 var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
+type StrategyConfig struct {
+	Region         string          `json:"region"`
+	CreateStrategy json.RawMessage `json:"createStrategy"`
+	DeleteStrategy json.RawMessage `json:"deleteStrategy"`
+}
+
 //go:generate moq -out config_moq.go . ConfigManager
 type ConfigManager interface {
 	ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error)
@@ -47,12 +53,6 @@ type ConfigMapConfigManager struct {
 	configMapName      string
 	configMapNamespace string
 	client             client.Client
-}
-
-type StrategyConfig struct {
-	Region         string          `json:"region"`
-	CreateStrategy json.RawMessage `json:"createStrategy"`
-	DeleteStrategy json.RawMessage `json:"deleteStrategy"`
 }
 
 func NewConfigMapConfigManager(cm string, namespace string, client client.Client) *ConfigMapConfigManager {

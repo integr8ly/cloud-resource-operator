@@ -222,7 +222,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}
 
 	for _, cache := range cacheInstance.NodeGroupMembers {
-		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, *stratCfg, cache)
+		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
 			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -240,7 +240,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 }
 
 // TagElasticacheNode Add Tags to AWS Elasticache
-func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, stratCfg StrategyConfig, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
+func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, cache *elasticache.NodeGroupMember) (types.StatusMessage, error) {
 	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
 
 	// check the node to make sure it is available before applying the tag

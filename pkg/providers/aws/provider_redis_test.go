@@ -550,7 +550,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			got, err := p.TagElasticacheNode(tt.args.ctx, tt.args.cacheSvc, tt.args.stsSvc, tt.args.r, tt.args.stratCfg, tt.args.cache)
+			got, err := p.TagElasticacheNode(tt.args.ctx, tt.args.cacheSvc, tt.args.stsSvc, tt.args.r, tt.args.cache)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
 				return
