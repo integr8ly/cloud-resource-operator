@@ -41,11 +41,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Push an event to the channel every 5 minutes to
-	// trigger a new reconcile.Request
+	// Send a generic event to the channel to kick
+	// off the first reconcile
 	events := make(chan event.GenericEvent)
 	go func() {
-		time.Sleep(watchDuration * time.Minute)
 		events <- event.GenericEvent{
 			Meta:   &integreatlyv1alpha1.Redis{},
 			Object: &integreatlyv1alpha1.Redis{},
@@ -105,5 +104,8 @@ func (r *ReconcileCloudwatchMetrics) Reconcile(request reconcile.Request) (recon
 		reqLogger.Info("Found no postgres instances")
 	}
 
-	return reconcile.Result{}, nil
+	// Requeue every 5 minutes
+	return reconcile.Result{
+		RequeueAfter: watchDuration * time.Minute,
+	}, nil
 }
