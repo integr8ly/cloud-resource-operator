@@ -620,6 +620,8 @@ func buildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName strin
 	labels["instanceID"] = cacheName
 	labels["productName"] = r.Labels["productName"]
 	labels["strategy"] = redisProviderName
+	labels["statusAWS"] = ""
+	labels["statusPhase"] = ""
 	return labels
 }
 
@@ -631,8 +633,6 @@ func buildRedisInfoMetricLables(r *v1alpha1.Redis, group *elasticache.Replicatio
 		labels["statusPhase"] = string(r.Status.Phase)
 		return labels
 	}
-	labels["statusAWS"] = fmt.Sprintf("%s is nil", cacheName)
-	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -653,18 +653,19 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 
 	// build metric labels
 	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterID, cacheName)
+
+	// build generic metrics
 	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 
 	// set available metric
-	//if instance == nil || *instance.Status != "available" {
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
+	resources.SetMetric(resources.DefaultRedisAvailMetricName, infoLabels, 1)
 
 }
 

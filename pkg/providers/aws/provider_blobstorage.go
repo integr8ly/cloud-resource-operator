@@ -562,8 +562,6 @@ func buildBlobStorageInfoMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucke
 		labels["statusPhase"] = string(cr.Status.Phase)
 		return labels
 	}
-	// If the status hasn't reconciled using cr.Status.Phase need to return something
-	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -575,6 +573,7 @@ func buildBlobStorageGenericMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bu
 	labels["instanceID"] = bucketName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = blobstorageProviderName
+	labels["statusPhase"] = ""
 	return labels
 }
 
@@ -596,12 +595,15 @@ func (p *BlobStorageProvider) exposeBlobStorageMetrics(ctx context.Context, cr *
 	// build metric labels
 	infoLabels := buildBlobStorageInfoMetricLabels(cr, clusterID, bucketName)
 
+	// build generic labels
+	genericLabels := buildBlobStorageGenericMetricLabels(cr, clusterID, bucketName)
+
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultBlobStorageInfoMetricName, infoLabels)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, infoLabels, 0)
+		resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, genericLabels, 0)
 		return
 	}
 	resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, infoLabels, 1)

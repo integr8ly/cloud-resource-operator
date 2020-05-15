@@ -768,8 +768,6 @@ func buildPostgresInfoMetricLabels(cr *v1alpha1.Postgres, instance *rds.DBInstan
 		labels["statusPhase"] = string(cr.Status.Phase)
 		return labels
 	}
-	labels["statusAWS"] = "nil"
-	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -781,6 +779,8 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, clusterID, instance
 	labels["instanceID"] = instanceName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
+	labels["statusAWS"] = ""
+	labels["statusPhase"] = ""
 	return labels
 }
 
@@ -802,14 +802,14 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// build metric labels
 	infoLabels := buildPostgresInfoMetricLabels(cr, instance, clusterID, instanceName)
 	// build available mertic labels
-	//genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
+	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultPostgresAvailMetricName, infoLabels, 0)
+		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
 		return
 	}
 	resources.SetMetric(resources.DefaultPostgresAvailMetricName, infoLabels, 1)

@@ -112,6 +112,9 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 
+	// set info metric
+	defer r.exposePostgresSnapshotMetrics(ctx, instance)
+
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
 		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
@@ -194,9 +197,6 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	// update cr with snapshot name
 	snapshot.Status.SnapshotID = snapshotName
 
-	// set info metric
-	defer r.exposePostgresSnapshotMetrics(ctx, snapshot)
-
 	if err = r.client.Status().Update(ctx, snapshot); err != nil {
 		errMsg := fmt.Sprintf("failed to update instance %s in namespace %s", snapshot.Name, snapshot.Namespace)
 		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -246,14 +246,12 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
-func buildPostgresSnapshotInfoMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, bucketName string) map[string]string {
-	labels := buildPostgresSnapshotGenericMetricLabels(cr, clusterID, bucketName)
+func buildPostgresSnapshotInfoMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string) map[string]string {
+	labels := buildPostgresSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
 	if len(string(cr.Status.Phase)) != 0 {
 		labels["statusPhase"] = string(cr.Status.Phase)
 		return labels
 	}
-	// If the status hasn't reconciled using cr.Status.Phase need to return something
-	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -265,6 +263,7 @@ func buildPostgresSnapshotGenericMetricLabels(cr *integreatlyv1alpha1.PostgresSn
 	labels["instanceID"] = snapshotName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
+	labels["statusPhase"] = ""
 	return labels
 }
 
@@ -282,13 +281,15 @@ func (r *ReconcilePostgresSnapshot) exposePostgresSnapshotMetrics(ctx context.Co
 
 	// build metric labels
 	infoLabels := buildPostgresSnapshotInfoMetricLabels(cr, clusterID, snapshotName)
+	// build generic labels
+	genericLabels := buildPostgresSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultPostgresSnapshotMetricName, infoLabels)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultPostgresSnapshotMetricName, infoLabels, 0)
+		resources.SetMetric(resources.DefaultPostgresSnapshotMetricName, genericLabels, 0)
 		return
 	}
 	resources.SetMetric(resources.DefaultPostgresSnapshotMetricName, infoLabels, 1)
