@@ -99,7 +99,7 @@ func (m *mockElasticacheClient) DescribeSnapshots(*elasticache.DescribeSnapshots
 	return &elasticache.DescribeSnapshotsOutput{}, nil
 }
 
-// mock elasticache DescribeReplicationGroups output
+// mock elasticache DescribeCacheClustersGroups output
 func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 	if m.wantEmpty {
 		return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -108,6 +108,7 @@ func (m *mockElasticacheClient) DescribeCacheClusters(*elasticache.DescribeCache
 		CacheClusters: []*elasticache.CacheCluster{
 			{
 				CacheClusterStatus: aws.String("available"),
+				ReplicationGroupId: aws.String("test-id"),
 			},
 		},
 	}, nil
@@ -556,6 +557,79 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("TagElasticache() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_buildElasticacheUpdateStrategy(t *testing.T) {
+	type args struct {
+		elasticacheConfig        *elasticache.CreateReplicationGroupInput
+		foundConfig              *elasticache.ReplicationGroup
+		replicationGroupClusters []elasticache.CacheCluster
+	}
+	tests := []struct {
+		name string
+		args args
+		want *elasticache.ModifyReplicationGroupInput
+	}{
+		{
+			name: "test no modification required",
+			args: args{
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("test"),
+					SnapshotRetentionLimit:     aws.Int64(30),
+					PreferredMaintenanceWindow: aws.String("test"),
+					SnapshotWindow:             aws.String("test"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "test when modification is required",
+			args: args{
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("newValue"),
+					SnapshotRetentionLimit:     aws.Int64(50),
+					PreferredMaintenanceWindow: aws.String("newValue"),
+					SnapshotWindow:             aws.String("newValue"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					CacheNodeType:          aws.String("test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+					ReplicationGroupId:     aws.String("test-id"),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+			},
+			want: &elasticache.ModifyReplicationGroupInput{
+				CacheNodeType:              aws.String("newValue"),
+				SnapshotRetentionLimit:     aws.Int64(50),
+				PreferredMaintenanceWindow: aws.String("newValue"),
+				SnapshotWindow:             aws.String("newValue"),
+				ReplicationGroupId:         aws.String("test-id"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildElasticacheUpdateStrategy(tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildElasticacheUpdateStrategy() = %v, want %v", got, tt.want)
 			}
 		})
 	}
