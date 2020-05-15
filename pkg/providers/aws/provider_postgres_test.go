@@ -800,3 +800,101 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 		})
 	}
 }
+
+func Test_buildRDSUpdateStrategy(t *testing.T) {
+	type args struct {
+		rdsConfig   *rds.CreateDBInstanceInput
+		foundConfig *rds.DBInstance
+	}
+	tests := []struct {
+		name string
+		args args
+		want *rds.ModifyDBInstanceInput
+	}{
+		{
+			name: "test modification not required",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					EngineVersion:              aws.String("test"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					EngineVersion:              aws.String("test"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "test when modification is required",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					DeletionProtection:         aws.Bool(false),
+					BackupRetentionPeriod:      aws.Int64(0),
+					DBInstanceClass:            aws.String("newValue"),
+					PubliclyAccessible:         aws.Bool(false),
+					AllocatedStorage:           aws.Int64(0),
+					EngineVersion:              aws.String("newValue"),
+					MultiAZ:                    aws.Bool(false),
+					PreferredBackupWindow:      aws.String("newValue"),
+					PreferredMaintenanceWindow: aws.String("newValue"),
+					Port:                       aws.Int64(0),
+				},
+				foundConfig: &rds.DBInstance{
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					EngineVersion:              aws.String("test"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want: &rds.ModifyDBInstanceInput{
+				DeletionProtection:         aws.Bool(false),
+				BackupRetentionPeriod:      aws.Int64(0),
+				DBInstanceClass:            aws.String("newValue"),
+				PubliclyAccessible:         aws.Bool(false),
+				AllocatedStorage:           aws.Int64(0),
+				EngineVersion:              aws.String("newValue"),
+				MultiAZ:                    aws.Bool(false),
+				PreferredBackupWindow:      aws.String("newValue"),
+				PreferredMaintenanceWindow: aws.String("newValue"),
+				DBPortNumber:               aws.Int64(0),
+				DBInstanceIdentifier:       aws.String("test"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
