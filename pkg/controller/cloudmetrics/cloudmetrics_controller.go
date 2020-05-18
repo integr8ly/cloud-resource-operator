@@ -1,3 +1,6 @@
+// This controller reconciles metrics for cloud resources (currently redis and postgres)
+// It takes a sync the world approach, reconciling all cloud resources every set period
+// of time (currently every 5 minutes)
 package cloudmetrics
 
 import (
@@ -79,9 +82,9 @@ type ReconcileCloudMetrics struct {
 	logger *logrus.Entry
 }
 
-// This controller reconciles metrics for cloud resources (currently redis and postgres)
-// It takes a sync the world approach, reconciling all cloud resources every set period
-// of time (currently every 5 minutes)
+// Reconcile reads all redis and postgres crs periodically and reconcile metrics for these
+// resources.
+// The Controller will requeue the Request every 5 minutes constantly when RequeueAfter is set
 func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("Reconciling CloudMetrics")
 
