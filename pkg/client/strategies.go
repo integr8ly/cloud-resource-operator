@@ -31,7 +31,7 @@ const (
 )
 
 type StrategyTimeConfig struct {
-	BackupStartTime string
+	BackupStartTime      string
 	MaintenanceStartTime string
 }
 

@@ -28,7 +28,7 @@ func GetClusterID(ctx context.Context, c client.Client) (string, error) {
 }
 
 func GetAWSRegion(ctx context.Context, c client.Client) (string, error) {
-	infra, err := GetClusterInfrastructure(ctx, c )
+	infra, err := GetClusterInfrastructure(ctx, c)
 	if err != nil {
 		return "", errorUtil.Wrapf(err, "failure happened while retrieving cluster infrastructure")
 	}

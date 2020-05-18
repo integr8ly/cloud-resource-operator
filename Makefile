@@ -154,7 +154,7 @@ test/e2e/image:
 test/unit:
 	@echo Running tests:
 	GO111MODULE=off go get -u github.com/rakyll/gotest
-	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/controller/... ./pkg/providers/... ./pkg/resources/... ./pkg/apis/integreatly/v1alpha1/types/...
+	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/controller/... ./pkg/providers/... ./pkg/resources/... ./pkg/apis/integreatly/v1alpha1/types/... ./pkg/client/...
 
 .PHONY: test/unit/coverage
 test/unit/coverage:

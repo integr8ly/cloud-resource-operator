@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
@@ -21,6 +22,7 @@ import (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
 	if err != nil {
 		return nil, err
 	}

@@ -32,6 +32,10 @@ import (
 	"time"
 )
 
+const (
+	awsStratName = "cloud-resources-aws-strategies"
+)
+
 // reconciles aws strategy map, adding maintenance and backup window fields
 func reconcileAWSStrategyMap(ctx context.Context, client client.Client, timeConfig *StrategyTimeConfig, tier, namespace string) error {
 	// build backup and maintenance windows
@@ -43,7 +47,7 @@ func reconcileAWSStrategyMap(ctx context.Context, client client.Client, timeConf
 	// create or update aws strategies config map
 	awsStratConfig := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cloud-resources-aws-strategies",
+			Name:      awsStratName,
 			Namespace: namespace,
 		},
 	}
@@ -209,7 +213,7 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 
 	// ensure backup and maintenance time ranges do not overlap
 	// add extra hour to MaintenanceTime if backup and maintenance over lap
-	if parsedBackupTime.Hour() == parsedMaintenanceTime.Hour(){
+	if parsedBackupTime.Hour() == parsedMaintenanceTime.Hour() {
 		parsedMaintenanceTime = parsedMaintenanceTime.Add(time.Hour)
 	}
 
@@ -259,4 +263,3 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 
 	return awsBackupString, awsMaintenanceString, nil
 }
-
