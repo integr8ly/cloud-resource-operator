@@ -4,19 +4,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-var log = logf.Log.WithName("controller_cloudmetrics")
 
 // Set the reconcile duration for this controller.
 // Currently it will be called once every 5 minutes
@@ -30,7 +29,13 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileCloudMetrics{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	logger := logrus.WithFields(logrus.Fields{"controller": "controller_cloudmetrics"})
+
+	return &ReconcileCloudMetrics{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		logger: logger,
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -71,14 +76,14 @@ var _ reconcile.Reconciler = &ReconcileCloudMetrics{}
 type ReconcileCloudMetrics struct {
 	client client.Client
 	scheme *runtime.Scheme
+	logger *logrus.Entry
 }
 
 // This controller reconciles metrics for cloud resources (currently redis and postgres)
 // It takes a sync the world approach, reconciling all cloud resources every set period
 // of time (currently every 5 minutes)
 func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling CloudMetrics")
+	r.logger.Info("Reconciling CloudMetrics")
 
 	// Fetch all redis crs
 	redisInstances := &integreatlyv1alpha1.RedisList{}
@@ -88,10 +93,10 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 	}
 	if len(redisInstances.Items) > 0 {
 		for _, redis := range redisInstances.Items {
-			reqLogger.Info("Found redis cr:", redis.Name)
+			r.logger.Infof("Found redis cr: %s", redis.Name)
 		}
 	} else {
-		reqLogger.Info("Found no redis instances")
+		r.logger.Info("Found no redis instances")
 	}
 
 	// Fetch all postgres crs
@@ -102,10 +107,10 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 	}
 	if len(postgresInstances.Items) > 0 {
 		for _, postgres := range postgresInstances.Items {
-			reqLogger.Info("Found postgres cr:", postgres.Name)
+			r.logger.Infof("Found postgres cr: %s", postgres.Name)
 		}
 	} else {
-		reqLogger.Info("Found no postgres instances")
+		r.logger.Info("Found no postgres instances")
 	}
 
 	// Requeue every 5 minutes
