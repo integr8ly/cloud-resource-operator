@@ -18,18 +18,20 @@ import (
 )
 
 const (
-	sleepytime                           = 3600
-	DefaultPostgresMaintenanceMetricName = "cro_postgres_service_maintenance"
-	DefaultPostgresInfoMetricName        = "cro_postgres_info"
-	DefaultPostgresAvailMetricName       = "cro_postgres_available"
-	DefaultPostgresConnectionMetricName  = "cro_postgres_connection"
-	DefaultPostgresSnapshotMetricName    = "cro_postgres_snapshot_info"
-	DefaultRedisMaintenanceMetricName    = "cro_redis_service_maintenance"
-	DefaultRedisInfoMetricName           = "cro_redis_info"
-	DefaultRedisAvailMetricName          = "cro_redis_available"
-	DefaultRedisConnectionMetricName     = "cro_redis_connection"
-	DefaultRedisSnapshotMetricName       = "cro_redis_snapshot_info"
-	DefaultBlobStorageInfoMetricName     = "cro_blobstorage_info"
+	sleepytime                              = 3600
+	DefaultPostgresMaintenanceMetricName    = "redhat_rhmi_postgres_service_maintenance"
+	DefaultPostgresInfoMetricName           = "redhat_rhmi_postgres_info"
+	DefaultPostgresAvailMetricName          = "redhat_rhmi_postgres_available"
+	DefaultPostgresConnectionMetricName     = "redhat_rhmi_postgres_connection"
+	DefaultPostgresStatusMetricName         = "redhat_rhmi_postgres_status_phase"
+	DefaultPostgresSnapshotStatusMetricName = "redhat_rhmi_postgres_snapshot_status_phase"
+	DefaultRedisMaintenanceMetricName       = "redhat_rhmi_redis_service_maintenance"
+	DefaultRedisInfoMetricName              = "redhat_rhmi_redis_info"
+	DefaultRedisAvailMetricName             = "redhat_rhmi_redis_available"
+	DefaultRedisConnectionMetricName        = "redhat_rhmi_redis_connection"
+	DefaultRedisStatusMetricName            = "redhat_rhmi_redis_status_phase"
+	DefaultRedisSnapshotStatusMetricName    = "redhat_rhmi_redis_snapshot_status_phase"
+	DefaultBlobStorageStatusMetricName      = "redhat_rhmi_blobstorage_status_phase"
 )
 
 var (

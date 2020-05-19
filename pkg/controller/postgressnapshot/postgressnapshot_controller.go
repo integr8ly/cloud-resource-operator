@@ -246,16 +246,7 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
-func buildPostgresSnapshotInfoMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string) map[string]string {
-	labels := buildPostgresSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
-	if len(string(cr.Status.Phase)) != 0 {
-		labels["statusPhase"] = string(cr.Status.Phase)
-		return labels
-	}
-	return labels
-}
-
-func buildPostgresSnapshotGenericMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string) map[string]string {
+func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -263,7 +254,11 @@ func buildPostgresSnapshotGenericMetricLabels(cr *integreatlyv1alpha1.PostgresSn
 	labels["instanceID"] = snapshotName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
-	labels["statusPhase"] = ""
+	if len(string(cr.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -279,18 +274,13 @@ func (r *ReconcilePostgresSnapshot) exposePostgresSnapshotMetrics(ctx context.Co
 		return
 	}
 
-	// build metric labels
-	infoLabels := buildPostgresSnapshotInfoMetricLabels(cr, clusterID, snapshotName)
-	// build generic labels
-	genericLabels := buildPostgresSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
-
-	// set status gauge
-	resources.SetMetricCurrentTime(resources.DefaultPostgresSnapshotMetricName, infoLabels)
+	// build status metric labels
+	statusLables := buildPostgresSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultPostgresSnapshotMetricName, genericLabels, 0)
+		resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLables, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultPostgresSnapshotMetricName, infoLabels, 1)
+	resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLables, 1)
 }

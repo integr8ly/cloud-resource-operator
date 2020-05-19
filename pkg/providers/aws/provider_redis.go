@@ -620,19 +620,27 @@ func buildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName strin
 	labels["instanceID"] = cacheName
 	labels["productName"] = r.Labels["productName"]
 	labels["strategy"] = redisProviderName
-	labels["statusAWS"] = ""
-	labels["statusPhase"] = ""
 	return labels
 }
 
 // adds extra information to labels around resource
 func buildRedisInfoMetricLables(r *v1alpha1.Redis, group *elasticache.ReplicationGroup, clusterID, cacheName string) map[string]string {
 	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
-	if group != nil && len(string(r.Status.Phase)) != 0 {
-		labels["statusAWS"] = *group.Status
+	if group != nil {
+		labels["status"] = *group.Status
+		return labels
+	}
+	labels["status"] = fmt.Sprintf("%s is nil", cacheName)
+	return labels
+}
+
+func buildRedisStatusMetricsLabels(r *v1alpha1.Redis, clusterID, cacheName string) map[string]string {
+	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
+	if len(string(r.Status.Phase)) != 0 {
 		labels["statusPhase"] = string(r.Status.Phase)
 		return labels
 	}
+	labels["statusPhase"] = fmt.Sprintf("%s is nil", cacheName)
 	return labels
 }
 
@@ -657,15 +665,24 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	// build generic metrics
 	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
 
+	statusLables := buildRedisStatusMetricsLabels(cr, clusterID, cacheName)
+
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 
-	// set available metric
+	// set the status phase metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultRedisStatusMetricName, statusLables, 0)
+	} else {
+		resources.SetMetric(resources.DefaultRedisStatusMetricName, statusLables, 1)
+	}
+
+	// set available metric
+	if instance == nil || *instance.Status != "available" {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultRedisAvailMetricName, infoLabels, 1)
+	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
 
 }
 

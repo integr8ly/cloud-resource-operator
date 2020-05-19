@@ -555,17 +555,7 @@ func buildEndUserCredentialsNameFromBucket(b string) string {
 	return fmt.Sprintf("cro-aws-s3-%s-creds", b)
 }
 
-func buildBlobStorageInfoMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string) map[string]string {
-	labels := buildBlobStorageGenericMetricLabels(cr, clusterID, bucketName)
-	if len(string(cr.Status.Phase)) != 0 {
-		fmt.Println("Status Message : ", cr.Status.Message)
-		labels["statusPhase"] = string(cr.Status.Phase)
-		return labels
-	}
-	return labels
-}
-
-func buildBlobStorageGenericMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string) map[string]string {
+func buildBlobStorageStatusMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -573,7 +563,11 @@ func buildBlobStorageGenericMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bu
 	labels["instanceID"] = bucketName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = blobstorageProviderName
-	labels["statusPhase"] = ""
+	if len(string(cr.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -592,19 +586,13 @@ func (p *BlobStorageProvider) exposeBlobStorageMetrics(ctx context.Context, cr *
 		return
 	}
 
-	// build metric labels
-	infoLabels := buildBlobStorageInfoMetricLabels(cr, clusterID, bucketName)
+	// build status metric labels
+	statusLabels := buildBlobStorageStatusMetricLabels(cr, clusterID, bucketName)
 
-	// build generic labels
-	genericLabels := buildBlobStorageGenericMetricLabels(cr, clusterID, bucketName)
-
-	// set status gauge
-	resources.SetMetricCurrentTime(resources.DefaultBlobStorageInfoMetricName, infoLabels)
-
-	// set available metric
+	// set status metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, genericLabels, 0)
+		resources.SetMetric(resources.DefaultBlobStorageStatusMetricName, statusLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultBlobStorageInfoMetricName, infoLabels, 1)
+	resources.SetMetric(resources.DefaultBlobStorageStatusMetricName, statusLabels, 1)
 }

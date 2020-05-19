@@ -270,16 +270,7 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
-func buildRedisSnapshotInfoMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string) map[string]string {
-	labels := buildRedisSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
-	if len(string(cr.Status.Phase)) != 0 {
-		labels["statusPhase"] = string(cr.Status.Phase)
-		return labels
-	}
-	return labels
-}
-
-func buildRedisSnapshotGenericMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string) map[string]string {
+func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -287,7 +278,11 @@ func buildRedisSnapshotGenericMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot
 	labels["instanceID"] = snapshotName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = redisProviderName
-	labels["statusPhase"] = ""
+	if len(string(cr.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -304,18 +299,12 @@ func (r *ReconcileRedisSnapshot) exposeRedisSnapshotMetrics(ctx context.Context,
 	}
 
 	// build metric labels
-	infoLabels := buildRedisSnapshotInfoMetricLabels(cr, clusterID, snapshotName)
-
-	// build generic labels
-	genericLabels := buildRedisSnapshotGenericMetricLabels(cr, clusterID, snapshotName)
-
-	// set status gauge
-	resources.SetMetricCurrentTime(resources.DefaultRedisSnapshotMetricName, infoLabels)
+	statusLabels := buildRedisSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultRedisSnapshotMetricName, genericLabels, 0)
+		resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultRedisSnapshotMetricName, infoLabels, 1)
+	resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 1)
 }
