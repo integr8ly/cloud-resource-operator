@@ -82,7 +82,7 @@ func (m *ConfigMapConfigManager) ReadStorageStrategy(ctx context.Context, rt pro
 }
 
 func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context, rt string, tier string) (*StrategyConfig, error) {
-	cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, m.buildDefaultConfigMap())
+	cm, err := resources.GetConfigMapOrDefault(ctx, m.client, types.NamespacedName{Name: m.configMapName, Namespace: m.configMapNamespace}, BuildDefaultConfigMap(m.configMapName, m.configMapNamespace))
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws strategy config map %s in namespace %s", m.configMapName, m.configMapNamespace)
 	}
@@ -100,11 +100,11 @@ func (m *ConfigMapConfigManager) getTierStrategyForProvider(ctx context.Context,
 	return strategyMapping[tier], nil
 }
 
-func (m *ConfigMapConfigManager) buildDefaultConfigMap() *v1.ConfigMap {
+func BuildDefaultConfigMap(name, namespace string) *v1.ConfigMap {
 	return &v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      m.configMapName,
-			Namespace: m.configMapNamespace,
+			Name:      name,
+			Namespace: namespace,
 		},
 		Data: map[string]string{
 			"blobstorage": "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}",

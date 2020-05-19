@@ -25,6 +25,10 @@ import (
 )
 
 const (
+	// exported tiers to be used by RHMI operator
+	TierProduction  = "production"
+	TierDevelopment = "development"
+
 	postgresStratKey    = "postgres"
 	redisStratKey       = "redis"
 	blobstorageStratKey = "blobstorage"

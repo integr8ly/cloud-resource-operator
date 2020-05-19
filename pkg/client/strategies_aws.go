@@ -18,6 +18,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elasticache"
@@ -32,10 +33,6 @@ import (
 	"time"
 )
 
-const (
-	awsStratName = "cloud-resources-aws-strategies"
-)
-
 // reconciles aws strategy map, adding maintenance and backup window fields
 func reconcileAWSStrategyMap(ctx context.Context, client client.Client, timeConfig *StrategyTimeConfig, tier, namespace string) error {
 	// build backup and maintenance windows
@@ -47,7 +44,7 @@ func reconcileAWSStrategyMap(ctx context.Context, client client.Client, timeConf
 	// create or update aws strategies config map
 	awsStratConfig := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      awsStratName,
+			Name:      croAWS.DefaultConfigMapName,
 			Namespace: namespace,
 		},
 	}
@@ -55,7 +52,7 @@ func reconcileAWSStrategyMap(ctx context.Context, client client.Client, timeConf
 		// ensure data is not nil, create a default config map
 		if awsStratConfig.Data == nil {
 			// default config map contains a `development` and `production` tier
-			awsStratConfig.Data = buildDefaultAWSConfigMap()
+			awsStratConfig.Data = croAWS.BuildDefaultConfigMap(awsStratConfig.Name, awsStratConfig.Namespace).Data
 		}
 
 		// check to ensure postgres and redis key is included in config data
@@ -201,8 +198,6 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 	if err != nil {
 		return "", "", errorUtil.Wrapf(err, "failed to parse backup ApplyOn value")
 	}
-	// add one hour to applyOn format
-	parsedBackupTimePlusOneHour := parsedBackupTime.Add(time.Hour)
 
 	// correct format is assumed by the time this function is called
 	maintenanceWindowSegments := strings.Split(timeConfig.MaintenanceStartTime, " ")
@@ -211,15 +206,9 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 		return "", "", errorUtil.Wrapf(err, "failed to parse maintenance ApplyFrom value")
 	}
 
-	// ensure backup and maintenance time ranges do not overlap
-	// add extra hour to MaintenanceTime if backup and maintenance over lap
-	if parsedBackupTime.Hour() == parsedMaintenanceTime.Hour() {
-		parsedMaintenanceTime = parsedMaintenanceTime.Add(time.Hour)
-	}
-
 	// ensure ddd is correct and overlaps to the following day if block starts after 23 hours
 	// set window day from value from segmented string
-	maintenanceWindowDayFrom := maintenanceWindowSegments[0]
+	maintenanceWindowDayFrom := strings.ToLower(maintenanceWindowSegments[0][:3])
 	// map of valid day with time.weekday int value
 	var validMaintenanceDays = map[string]int{
 		"sun": 0,
@@ -256,10 +245,27 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 	// set maintenance time plus one hour
 	parsedMaintenanceTimePlusOneHour := parsedMaintenanceTime.Add(time.Hour)
 
+	// add one hour to applyOn format
+	parsedBackupTimePlusOneHour := parsedBackupTime.Add(time.Hour)
+
 	// build expected aws maintenance format ddd:hh:mm-ddd:hh:mm
-	awsMaintenanceString := fmt.Sprintf("%s:%d:%d-%s:%d:%d", maintenanceWindowDayFrom, parsedMaintenanceTime.Hour(), parsedMaintenanceTime.Minute(), maintenanceWindowDayTo, parsedMaintenanceTimePlusOneHour.Hour(), parsedMaintenanceTimePlusOneHour.Minute())
+	awsMaintenanceString := fmt.Sprintf("%s:%02d:%02d-%s:%02d:%02d", maintenanceWindowDayFrom, parsedMaintenanceTime.Hour(), parsedMaintenanceTime.Minute(), maintenanceWindowDayTo, parsedMaintenanceTimePlusOneHour.Hour(), parsedMaintenanceTimePlusOneHour.Minute())
 	// build expected aws backup format hh:mm-hh:mm
-	awsBackupString := fmt.Sprintf("%s-%d:%d", timeConfig.BackupStartTime, parsedBackupTimePlusOneHour.Hour(), parsedBackupTimePlusOneHour.Minute())
+	awsBackupString := fmt.Sprintf("%02d:%02d-%02d:%02d", parsedBackupTime.Hour(), parsedBackupTime.Minute(), parsedBackupTimePlusOneHour.Hour(), parsedBackupTimePlusOneHour.Minute())
+
+	// ensure backup and maintenance time ranges do not overlap
+	// we expect RHMI operator to validate the ranges, as a sanity check we preform an extra validation here
+	// this is to avoid an obscure error message from AWS when we apply the times
+	// http://baodad.blogspot.com/2014/06/date-range-overlap.html
+	// (StartA <= EndB)  and  (EndA >= StartB)
+	if timeBlockOverlaps(parsedBackupTime, parsedBackupTimePlusOneHour, parsedMaintenanceTime, parsedMaintenanceTimePlusOneHour) {
+		return "", "", errors.New(fmt.Sprintf("backup and maintenance windows can not overlap, we require a minumum of 1 hour windows, current backup window : %s, current maintenance window : %s ", awsBackupString, awsMaintenanceString))
+	}
 
 	return awsBackupString, awsMaintenanceString, nil
 }
+
+func timeBlockOverlaps(startA, endA, startB, endB time.Time) bool {
+	return startA.Unix() <= endB.Unix()  && endA.Unix() >= startB.Unix()
+}
+
