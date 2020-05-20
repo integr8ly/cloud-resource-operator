@@ -476,7 +476,7 @@ func reconcileS3BucketSettings(bucket string, s3svc s3iface.S3API) error {
 		},
 	})
 	if err != nil {
-		return errorUtil.Wrapf(err, "failed to set public access settings on bucket %s", bucket)
+		return errorUtil.Wrapf(err, "failed to set client access settings on bucket %s", bucket)
 	}
 	_, err = s3svc.PutBucketEncryption(&s3.PutBucketEncryptionInput{
 		Bucket: aws.String(bucket),
