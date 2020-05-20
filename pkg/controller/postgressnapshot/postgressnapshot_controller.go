@@ -275,12 +275,12 @@ func (r *ReconcilePostgresSnapshot) exposePostgresSnapshotMetrics(ctx context.Co
 	}
 
 	// build status metric labels
-	statusLables := buildPostgresSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
+	statusLabels := buildPostgresSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
 
 	// set available metric
 	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLables, 0)
+		resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLabels, 0)
 		return
 	}
-	resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLables, 1)
+	resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLabels, 1)
 }
