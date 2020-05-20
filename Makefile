@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.15.1
-VERSION=0.15.2
+PREV_VERSION=0.15.2
+VERSION=0.16.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
