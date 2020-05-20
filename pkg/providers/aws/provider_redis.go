@@ -646,13 +646,23 @@ func buildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName strin
 }
 
 // adds extra information to labels around resource
-func buildRedisInfoMetricLables(r *v1alpha1.Redis, group *elasticache.ReplicationGroup, clusterID, cacheName string) map[string]string {
+func buildRedisInfoMetricLabels(r *v1alpha1.Redis, group *elasticache.ReplicationGroup, clusterID, cacheName string) map[string]string {
 	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
 	if group != nil {
 		labels["status"] = *group.Status
 		return labels
 	}
-	labels["status"] = fmt.Sprintf("%s is nil", cacheName)
+	labels["status"] = "nil"
+	return labels
+}
+
+func buildRedisStatusMetricsLabels(r *v1alpha1.Redis, clusterID, cacheName string) map[string]string {
+	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
+	if len(string(r.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(r.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
 	return labels
 }
 
@@ -672,11 +682,22 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	}
 
 	// build metric labels
-	infoLabels := buildRedisInfoMetricLables(cr, instance, clusterID, cacheName)
+	infoLabels := buildRedisInfoMetricLabels(cr, instance, clusterID, cacheName)
+
+	// build generic metrics
 	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
+
+	statusLabels := buildRedisStatusMetricsLabels(cr, clusterID, cacheName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
+
+	// set the status phase metric
+	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultRedisStatusMetricName, statusLabels, 0)
+	} else {
+		resources.SetMetric(resources.DefaultRedisStatusMetricName, statusLabels, 1)
+	}
 
 	// set available metric
 	if instance == nil || *instance.Status != "available" {

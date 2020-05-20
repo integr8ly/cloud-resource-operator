@@ -782,6 +782,16 @@ func buildPostgresGenericMetricLabels(cr *v1alpha1.Postgres, clusterID, instance
 	return labels
 }
 
+func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instanceName string) map[string]string {
+	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
+	if len(string(cr.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
+	return labels
+}
+
 func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
 	// build instance name
 	instanceName, err := p.buildInstanceName(ctx, cr)
@@ -802,8 +812,16 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// build available mertic labels
 	genericLabels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
 
+	statusLabels := buildPostgresStatusMetricsLabels(cr, clusterID, instanceName)
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
+
+	// set the status phase metric
+	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultPostgresStatusMetricName, statusLabels, 0)
+	} else {
+		resources.SetMetric(resources.DefaultPostgresStatusMetricName, statusLabels, 1)
+	}
 
 	// set available metric
 	if instance == nil || *instance.DBInstanceStatus != "available" {

@@ -29,6 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const (
+	redisProviderName = "aws-elasticache"
+)
+
 // Add creates a new RedisSnapshot Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -108,6 +112,9 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+
+	// generate info metrics
+	defer r.exposeRedisSnapshotMetrics(ctx, instance)
 
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
@@ -191,6 +198,7 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 
 	// update cr with snapshot name
 	snapshot.Status.SnapshotID = snapshotName
+
 	if err = r.client.Status().Update(ctx, snapshot); err != nil {
 		errMsg := fmt.Sprintf("failed to update instance %s in namespace %s", snapshot.Name, snapshot.Namespace)
 		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -260,4 +268,43 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.SnapshotStatus)
 	r.logger.Info(msg)
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
+}
+
+func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string) map[string]string {
+	labels := map[string]string{}
+	labels["clusterID"] = clusterID
+	labels["resourceID"] = cr.Name
+	labels["namespace"] = cr.Namespace
+	labels["instanceID"] = snapshotName
+	labels["productName"] = cr.Labels["productName"]
+	labels["strategy"] = redisProviderName
+	if len(string(cr.Status.Phase)) != 0 {
+		labels["statusPhase"] = string(cr.Status.Phase)
+		return labels
+	}
+	labels["statusPhase"] = "nil"
+	return labels
+}
+
+func (r *ReconcileRedisSnapshot) exposeRedisSnapshotMetrics(ctx context.Context, cr *integreatlyv1alpha1.RedisSnapshot) {
+	// build instance name
+	snapshotName := cr.Status.SnapshotID
+
+	// get Cluster Id
+	logrus.Info("setting redis snapshot information metric")
+	clusterID, err := resources.GetClusterID(ctx, r.client)
+	if err != nil {
+		logrus.Errorf("failed to get cluster id while exposing information metric for %v", snapshotName)
+		return
+	}
+
+	// build metric labels
+	statusLabels := buildRedisSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
+
+	// set available metric
+	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
+		resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 0)
+		return
+	}
+	resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 1)
 }
