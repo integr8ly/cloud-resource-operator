@@ -18,7 +18,7 @@ We keep n-1 versions of manifests due to a config map size limitation
 Remove the oldest version directory from 
 - https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources
 
-Remove the `replaces` line from the remain versions csv
+Remove the `replaces` line from the remaining versions csv
 e.g. https://github.com/integr8ly/integreatly-operator/blob/4cade544489acd8a9107f687d92a8d893a3db257/manifests/integreatly-cloud-resources/0.15.2/cloud-resources.v0.15.2.clusterserviceversion.yaml#L344
 
 Copy into [this](https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources) directory the latest version from CRO 
