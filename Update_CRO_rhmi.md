@@ -19,7 +19,8 @@ Remove the oldest version directory from
 - https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources
 
 Remove the `replaces` line from the remaining versions csv
-e.g. https://github.com/integr8ly/integreatly-operator/blob/4cade544489acd8a9107f687d92a8d893a3db257/manifests/integreatly-cloud-resources/0.15.2/cloud-resources.v0.15.2.clusterserviceversion.yaml#L344
+e.g. 
+- https://github.com/integr8ly/integreatly-operator/blob/4cade544489acd8a9107f687d92a8d893a3db257/manifests/integreatly-cloud-resources/0.15.2/cloud-resources.v0.15.2.clusterserviceversion.yaml#L344
 
 Copy into [this](https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources) directory the latest version from CRO 
 - `./deploy/olm-catalog/cloud-resources/<latest-version>`
