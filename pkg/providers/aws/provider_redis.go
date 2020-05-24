@@ -699,13 +699,16 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 		resources.SetMetric(resources.DefaultRedisStatusMetricName, statusLabels, 1)
 	}
 
-	// set available metric
-	if instance == nil || *instance.Status != "available" {
+	// set availability metric, based on the status flag on the elasticache replication group in aws.
+	// 0 is a failure status, 1 is a success status.
+	// consider available and snapshotting as non-failure states.
+	// see .ReplicationGroups.Status in https://docs.aws.amazon.com/cli/latest/reference/elasticache/describe-replication-groups.html#output
+	// for more details on possible status values.
+	if instance == nil || !resources.Contains([]string{"available", "snapshotting"}, *instance.Status) {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
-		return
+	} else {
+		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
 	}
-	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
-
 }
 
 // sets maintenance metric
