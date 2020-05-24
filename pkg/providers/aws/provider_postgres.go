@@ -823,12 +823,16 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 		resources.SetMetric(resources.DefaultPostgresStatusMetricName, statusLabels, 1)
 	}
 
-	// set available metric
-	if instance == nil || *instance.DBInstanceStatus != "available" {
+	// set availability metric, based on the status flag on the rds instance in aws.
+	// 0 is a failure status, 1 is a success status.
+	// consider available and backing-up as non-failure states as they don't cause connection failures.
+	// see https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html for possible status
+	// values.
+	if instance == nil || !resources.Contains([]string{"available", "backing-up"}, *instance.DBInstanceStatus) {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
-		return
+	} else {
+		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 	}
-	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 }
 
 func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Context, rdsSession rdsiface.RDSAPI, instance *rds.DBInstance) {
