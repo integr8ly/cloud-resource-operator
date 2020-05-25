@@ -246,7 +246,7 @@ func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc r
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
-func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string) map[string]string {
+func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -254,11 +254,7 @@ func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSna
 	labels["instanceID"] = snapshotName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = postgresProviderName
-	if len(string(cr.Status.Phase)) != 0 {
-		labels["statusPhase"] = string(cr.Status.Phase)
-		return labels
-	}
-	labels["statusPhase"] = "nil"
+	labels["statusPhase"] = string(phase)
 	return labels
 }
 
@@ -274,13 +270,13 @@ func (r *ReconcilePostgresSnapshot) exposePostgresSnapshotMetrics(ctx context.Co
 		return
 	}
 
-	// build status metric labels
-	statusLabels := buildPostgresSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
-
-	// set available metric
-	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLabels, 0)
-		return
+	// set generic status metrics
+	// a single metric should be exposed for each possible phase
+	// the value of the metric should be 1.0 when the resource is in that phase
+	// the value of the metric should be 0.0 when the resource is not in that phase
+	// this follows the approach that pod status
+	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
+		labelsFailed := buildPostgresSnapshotStatusMetricLabels(cr, clusterID, snapshotName, phase)
+		resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, labelsFailed, resources.Btof64(cr.Status.Phase == phase))
 	}
-	resources.SetMetric(resources.DefaultPostgresSnapshotStatusMetricName, statusLabels, 1)
 }
