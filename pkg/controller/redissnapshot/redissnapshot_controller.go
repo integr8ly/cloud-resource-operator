@@ -270,7 +270,7 @@ func (r *ReconcileRedisSnapshot) createSnapshot(ctx context.Context, cacheSvc el
 	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
-func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string) map[string]string {
+func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["resourceID"] = cr.Name
@@ -278,11 +278,7 @@ func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot,
 	labels["instanceID"] = snapshotName
 	labels["productName"] = cr.Labels["productName"]
 	labels["strategy"] = redisProviderName
-	if len(string(cr.Status.Phase)) != 0 {
-		labels["statusPhase"] = string(cr.Status.Phase)
-		return labels
-	}
-	labels["statusPhase"] = "nil"
+	labels["statusPhase"] = string(phase)
 	return labels
 }
 
@@ -298,13 +294,13 @@ func (r *ReconcileRedisSnapshot) exposeRedisSnapshotMetrics(ctx context.Context,
 		return
 	}
 
-	// build metric labels
-	statusLabels := buildRedisSnapshotStatusMetricLabels(cr, clusterID, snapshotName)
-
-	// set available metric
-	if len(string(cr.Status.Phase)) == 0 || cr.Status.Phase != croType.PhaseComplete {
-		resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 0)
-		return
+	// set generic status metrics
+	// a single metric should be exposed for each possible phase
+	// the value of the metric should be 1.0 when the resource is in that phase
+	// the value of the metric should be 0.0 when the resource is not in that phase
+	// this follows the approach that pod status
+	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
+		labelsFailed := buildRedisSnapshotStatusMetricLabels(cr, clusterID, snapshotName, phase)
+		resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, labelsFailed, resources.Btof64(cr.Status.Phase == phase))
 	}
-	resources.SetMetric(resources.DefaultRedisSnapshotStatusMetricName, statusLabels, 1)
 }
