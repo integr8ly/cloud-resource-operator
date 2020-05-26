@@ -17,7 +17,9 @@ It should also add the latest version of CRO to the `vendor/` directory and upda
 `vendor/modules.txt`
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
-We keep n-1 versions of manifests due to a config map size limitation
+We typically keep n-1 versions of manifests due to a config map size limitation, 
+- If there were multiple releases of CRO we keep the version that was in use at the time of the last RHMI release **(n-1)** 
+- Add latest version of CRO **(n)**
 
 Remove the oldest version directory from 
 - https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources
