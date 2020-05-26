@@ -9,6 +9,10 @@ go get github.com/integr8ly/cloud-resource-operator
 ```
 This should update the `go.mod` and `go.sum` file with the correct version from master
 
+The integreatly-operator has a make command for fixing vendor
+```cassandraql
+make vendor/fix
+```
 It should also add the latest version of CRO to the `vendor/` directory and update
 `vendor/modules.txt`
 
