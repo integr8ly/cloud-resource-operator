@@ -40,5 +40,8 @@ e.g.
 - https://github.com/integr8ly/integreatly-operator/blob/v2.2.0/pkg/apis/integreatly/v1alpha1/rhmi_types.go#L64
 - https://github.com/integr8ly/integreatly-operator/blob/v2.2.0/pkg/apis/integreatly/v1alpha1/rhmi_types.go#L91
 
-
+## Verification
+- Install RHMI on byoc cluster
+ 
+- Upgrade rhmi on byoc cluster, See the upgrade [sop](https://github.com/RHCloudServices/integreatly-help/blob/11eef40ff3f34cea64810cfbe93a4c2b280b7d07/sops/2.x/upgrade/upgrade_cluster_rhmi_SOP.md)
 
