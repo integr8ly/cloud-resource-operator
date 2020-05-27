@@ -17,7 +17,9 @@ It should also add the latest version of CRO to the `vendor/` directory and upda
 `vendor/modules.txt`
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
-We keep n-1 versions of manifests due to a config map size limitation
+We typically keep n-1 versions of manifests due to a config map size limitation, 
+- If there were multiple releases of CRO we keep the version that was in use at the time of the last RHMI release **(n-1)** 
+- Add latest version of CRO **(n)**
 
 Remove the oldest version directory from 
 - https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources
@@ -38,5 +40,8 @@ e.g.
 - https://github.com/integr8ly/integreatly-operator/blob/v2.2.0/pkg/apis/integreatly/v1alpha1/rhmi_types.go#L64
 - https://github.com/integr8ly/integreatly-operator/blob/v2.2.0/pkg/apis/integreatly/v1alpha1/rhmi_types.go#L91
 
-
+## Verification
+- Install RHMI on byoc cluster
+ 
+- Upgrade rhmi on byoc cluster, See the upgrade [sop](https://github.com/RHCloudServices/integreatly-help/blob/11eef40ff3f34cea64810cfbe93a4c2b280b7d07/sops/2.x/upgrade/upgrade_cluster_rhmi_SOP.md)
 
