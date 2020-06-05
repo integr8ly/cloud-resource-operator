@@ -188,7 +188,7 @@ func buildDefaultAWSConfigMap() map[string]string {
 
 // builder function to provide default value used per tier in aws strategy config map
 func buildDefaultAWSStratValue() string {
-	return "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}"
+	return "{\"development\": { \"region\": \"\", \"_network\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }, \"production\": { \"region\": \"\", \"_network\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {} }}"
 }
 
 // build aws maintenance and backup windows
