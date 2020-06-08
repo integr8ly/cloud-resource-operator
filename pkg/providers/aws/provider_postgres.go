@@ -706,15 +706,8 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 }
 
 /*
-reconcileRDSNetworking configures networking required for cro resources (postgres)
-
-networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
-when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
-was created in a cluster with a cluster version <= 4.4.5
-
-when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
-and we should create a new vpc for all resources to be deployed in and we should peer the
-resource vpc and cluster vpc
+reconcileRDSNetworking creates networking resources (vpcs, subnets, subnet groups etc) needed to provision an rds instance.
+we will use the backwards compatible networking approach on older openshift clusters, see NetworkProvider for more details.
 */
 func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
 	logger := p.Logger.WithField("action", "reconcilingRDSNetworking")

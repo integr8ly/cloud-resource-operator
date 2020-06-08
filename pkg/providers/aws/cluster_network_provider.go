@@ -1,3 +1,16 @@
+// utility to manage a dedicated vpc for the resources created by the cloud resource operator.
+//
+// this has been added to allow the operator to work with clusters provisioned with openshift tooling >= 4.4.6,
+// as they will not allow multi-az cloud resources to be created in single-az openshift clusters due to the single-az
+// cluster subnets taking up all networking addresses in the cluster vpc.
+//
+// any openshift clusters that have used the cloud resource operator before this utility was added will be using the old approach,
+// which is bundling cloud resources in with the cluster vpc. backwards compatibility for this approach must be maintained.
+//
+// see [1] for more details.
+//
+// [1] https://docs.google.com/document/d/1UWfon-tBNfiDS5pJRAUqPXoJuUUqO1P4B6TTR8SMqSc/edit?usp=sharing
+
 package aws
 
 import (
@@ -39,10 +52,13 @@ func (n *NetworkProvider) CreateNetwork() error {
 		we expect _network to exist with a valid cidr
 		the absence of either _network or valid cidr we should return with an informative message
 		re-reconcile until we have a valid _network strat and valid cidr
+
+		- Check if a VPC exists with the integreatly.org/clusterID tag
+		- If VPC doesn't exist, create a VPC with CIDR block and tag it
 	*/
 	logger := n.logger.WithField("action", "CreateNetwork")
 	logger.Debug("CreateNetwork stub")
-	return nil
+	return errorUtil.New("CreateNetwork stub")
 }
 
 func (n *NetworkProvider) DeleteNetwork() error {
@@ -52,15 +68,14 @@ func (n *NetworkProvider) DeleteNetwork() error {
 }
 
 /*
-IsEnabled checks for valid rhmi subnets within the cluster VPC
-a valid rhmi subnet will contain a tag with the `organizationTag` value
+IsEnabled returns true when no subnets created by the cloud resource operator exist in the openshift cluster vpc.
 
-when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
-was created in a cluster with a cluster version <= 4.4.5
+subnets created by the cloud resource operator are identified by having a tag with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
 
-when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
-and we should create a new vpc for all resources to be deployed in and we should peer the
-resource vpc and cluster vpc
+this check allows us to maintain backwards compatibility with openshift clusters that used the cloud resource operator before this standalone vpc provider was added.
+If this function returns false, we should continue using the backwards compatible approach of bundling resources in with the openshift cluster vpc.
+
 */
 func (n *NetworkProvider) IsEnabled(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) (bool, error) {
 	logger := n.logger.WithField("action", "isEnabled")

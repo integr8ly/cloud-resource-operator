@@ -190,6 +190,7 @@ func buildTestRedisCluster() *providers.RedisCluster {
 	}}
 }
 
+// todo tests should be extended when createNetwork is implemented, we should ensure creation of both vpc implementations
 func Test_createRedisCluster(t *testing.T) {
 	scheme, err := buildTestSchemeRedis()
 	if err != nil {
@@ -225,11 +226,11 @@ func Test_createRedisCluster(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test elasticache buildReplicationGroupPending is called",
+			name: "test elasticache buildReplicationGroupPending is called (valid cluster rhmi subnets)",
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{},
@@ -246,11 +247,11 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache already exists and status is available",
+			name: "test elasticache already exists and status is available (valid cluster rhmi subnets)",
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -267,11 +268,11 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache already exists and status is not available",
+			name: "test elasticache already exists and status is not available (valid cluster rhmi subnets)",
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -288,13 +289,13 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache exists and status is available and needs to be modified",
+			name: "test elasticache exists and status is available and needs to be modified (valid cluster rhmi subnets)",
 			args: args{
 				ctx:         context.TODO(),
 				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:           buildTestRedisCR(),
 				stsSvc:      &mockStsClient{},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:    &StrategyConfig{Region: "test"},
 			},
@@ -309,13 +310,13 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache exists and status is available and does not need to be modified",
+			name: "test elasticache exists and status is available and does not need to be modified (valid cluster rhmi subnets)",
 			args: args{
 				ctx:      context.TODO(),
 				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:        buildTestRedisCR(),
 				stsSvc:   &mockStsClient{},
-				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
