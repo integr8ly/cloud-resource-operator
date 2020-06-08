@@ -706,13 +706,18 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 }
 
 func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
+	logger := p.Logger.WithField("action", "reconcilingRDSNetworking")
+
 	networkManager := NewNetworkManager(p.Logger)
 	isEnabled, err := networkManager.IsEnabled(ctx, p.Client, ec2Svc)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
 	}
 	if isEnabled {
-		logrus.Debug("we should not see this right now :) ")
+		if err := networkManager.CreateNetwork(); err != nil {
+			return errorUtil.Wrap(err, "failed to create resource network")
+		}
+		// todo after `CreateNetwork` has been implemented return here
 		//	return nil
 	}
 
@@ -722,7 +727,7 @@ func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rd
 	}
 
 	// setup security group
-	if err := configureSecurityGroup(ctx, p.Client, ec2Svc); err != nil {
+	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
 		return errorUtil.Wrap(err, "error setting up security group")
 	}
 	return nil
@@ -730,7 +735,8 @@ func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rd
 
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster
 func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
-	logrus.Info("ensuring vpc is as expected for resource")
+	logger := p.Logger.WithField("action", "configureRDSVpc")
+	logger.Info("ensuring vpc is as expected for resource")
 	// get subnet group id
 	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
@@ -750,7 +756,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 		}
 	}
 	if foundSubnet != nil {
-		logrus.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
+		logger.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
 		return nil
 	}
 
@@ -761,7 +767,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 	}
 
 	// get cluster vpc subnets
-	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc)
+	subIDs, err := GetPrivateSubnetIDS(ctx, p.Client, ec2Svc, logger)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting vpc subnets")
 	}
@@ -780,7 +786,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 	}
 
 	// create db subnet group
-	logrus.Info("creating resource subnet group")
+	logger.Infof("creating resource subnet group %s", *subnetGroupInput.DBSubnetGroupName)
 	if _, err := rdsSvc.CreateDBSubnetGroup(subnetGroupInput); err != nil {
 		return errorUtil.Wrap(err, "unable to create db subnet group")
 	}

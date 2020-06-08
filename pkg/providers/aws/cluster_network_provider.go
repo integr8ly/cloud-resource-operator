@@ -65,7 +65,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context, c client.Client, ec2Svc
 
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
-	vpcSubnets, err := GetVPCSubnets(ctx, c, ec2Svc)
+	vpcSubnets, err := GetVPCSubnets(ctx, c, ec2Svc, logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "error happened while returning vpc subnets")
 	}
