@@ -92,7 +92,6 @@ func configureSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2ifac
 	}
 	logger.Infof("found security group %s for cluster %s", *foundSecGroup.GroupId, clusterID)
 
-
 	// build ip permission
 	ipPermission := &ec2.IpPermission{
 		IpProtocol: aws.String("-1"),

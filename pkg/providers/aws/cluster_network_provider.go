@@ -40,12 +40,14 @@ func (n *NetworkProvider) CreateNetwork() error {
 		the absence of either _network or valid cidr we should return with an informative message
 		re-reconcile until we have a valid _network strat and valid cidr
 	*/
-	fmt.Println("CreateNetwork stub")
+	logger := n.logger.WithField("action", "CreateNetwork")
+	logger.Debug("CreateNetwork stub")
 	return nil
 }
 
 func (n *NetworkProvider) DeleteNetwork() error {
-	fmt.Println("DeleteNetwork stub")
+	logger := n.logger.WithField("action", "DeleteNetwork")
+	logger.Debug("DeleteNetwork stub")
 	return nil
 }
 

@@ -40,6 +40,10 @@ func buildValidRHMISubnets() []*ec2.Subnet {
 					Key:   aws.String(defaultRHMISubnetTag),
 					Value: aws.String("1"),
 				},
+				{
+					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
+					Value: aws.String("1"),
+				},
 			},
 		},
 	}

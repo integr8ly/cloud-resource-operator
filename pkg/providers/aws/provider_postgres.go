@@ -705,28 +705,40 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 	}
 }
 
+/*
+reconcileRDSNetworking configures networking required for cro resources (postgres)
+
+networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
+when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+was created in a cluster with a cluster version <= 4.4.5
+
+when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+and we should create a new vpc for all resources to be deployed in and we should peer the
+resource vpc and cluster vpc
+*/
 func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
 	logger := p.Logger.WithField("action", "reconcilingRDSNetworking")
 
+	// check if rhmi subnets exist in vpc cluster
 	networkManager := NewNetworkManager(p.Logger)
 	isEnabled, err := networkManager.IsEnabled(ctx, p.Client, ec2Svc)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
 	}
 	if isEnabled {
+		// setup networking in rhmi vpc and peer to cluster vpc
 		if err := networkManager.CreateNetwork(); err != nil {
 			return errorUtil.Wrap(err, "failed to create resource network")
 		}
-		// todo after `CreateNetwork` has been implemented return here
-		//	return nil
+		return nil
 	}
 
-	// configure rds vpc
+	// setup networking in cluster vpc rds vpc
 	if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
 		return errorUtil.Wrap(err, "error setting up resource vpc")
 	}
 
-	// setup security group
+	// setup security group for cluster vpc
 	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
 		return errorUtil.Wrap(err, "error setting up security group")
 	}

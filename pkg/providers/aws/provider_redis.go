@@ -126,15 +126,8 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	// setup vpc
-	if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
-		errMsg := "error setting up resource vpc"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
-	// setup security group
-	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
-		errMsg := "error setting up security group"
+	if err := p.reconcileElasticacheNetworking(ctx, cacheSvc, ec2Svc); err != nil {
+		errMsg := "error reconciling elasticache networking"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -185,10 +178,10 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// check elasticache phase
 	if *foundCache.Status != "available" {
-		logrus.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
+		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
-	logrus.Infof("found existing elasticache instance %s", *foundCache.ReplicationGroupId)
+	logger.Infof("found existing elasticache instance %s", *foundCache.ReplicationGroupId)
 
 	cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
 	if err != nil {
@@ -204,21 +197,21 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	//check if found cluster and user strategy differs, and modify instance
 	modifyInput := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache, replicationGroupClusters)
 	if modifyInput == nil {
-		logrus.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
+		logger.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
 	}
 	if modifyInput != nil {
-		logrus.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
+		logger.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
 		if _, err := cacheSvc.ModifyReplicationGroup(modifyInput); err != nil {
 			errMsg := "failed to modify elasticache cluster"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-		logrus.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
+		logger.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
 	}
 
 	// add tags to cache nodes
 	cacheInstance := *foundCache.NodeGroups[0]
 	if *cacheInstance.Status != "available" {
-		logrus.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
+		logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
 	}
 
@@ -583,6 +576,46 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 	}
 	if elasticacheDeleteConfig.FinalSnapshotIdentifier == nil {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
+	}
+	return nil
+}
+
+/*
+reconcileElasticacheNetworking configures networking required for cro resources (postgres)
+
+networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
+when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+was created in a cluster with a cluster version <= 4.4.5
+
+when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+and we should create a new vpc for all resources to be deployed in and we should peer the
+resource vpc and cluster vpc
+*/
+func (p *RedisProvider) reconcileElasticacheNetworking(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
+	logger := p.Logger.WithField("action", "reconcileElasticacheNetworking")
+
+	// check if rhmi subnets exist in vpc cluster
+	networkManager := NewNetworkManager(p.Logger)
+	isEnabled, err := networkManager.IsEnabled(ctx, p.Client, ec2Svc)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
+	}
+	if isEnabled {
+		// setup networking in rhmi vpc and peer to cluster vpc
+		if err := networkManager.CreateNetwork(); err != nil {
+			return errorUtil.Wrap(err, "failed to create resource network")
+		}
+		return nil
+	}
+
+	// setup networking in cluster vpc
+	if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
+		return errorUtil.Wrap(err, "error setting up resource vpc")
+	}
+
+	// setup security group for cluster vpc
+	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
+		return errorUtil.Wrap(err, "error setting up security group")
 	}
 	return nil
 }

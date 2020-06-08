@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"reflect"
 	"time"
@@ -630,6 +631,101 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := buildElasticacheUpdateStrategy(tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildElasticacheUpdateStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_reconcileElasticacheNetworking(t *testing.T) {
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build security name", err)
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		CacheSvc          elasticacheiface.ElastiCacheAPI
+		TCPPinger         ConnectionTester
+	}
+	type args struct {
+		ctx      context.Context
+		cacheSvc elasticacheiface.ElastiCacheAPI
+		ec2Svc   ec2iface.EC2API
+	}
+	tests := []struct {
+		name                   string
+		fields                 fields
+		args                   args
+		want                   interface{}
+		wantErr                bool
+		getSubnetConfiguration func() ([]*ec2.Subnet, error)
+	}{
+		{
+			name: "verify cluster vpc and rhmi valid subnets exists and remain",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			args: args{
+				ctx:      context.TODO(),
+				cacheSvc: &mockElasticacheClient{},
+				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
+			},
+			getSubnetConfiguration: func() ([]*ec2.Subnet, error) {
+				api := &mockEc2Client{
+					subnets: buildValidRHMISubnets(),
+				}
+				subnetOutput, err := api.DescribeSubnets(&ec2.DescribeSubnetsInput{})
+				if err != nil {
+					t.Fatalf("could not get mock subnets : %v", err)
+				}
+				var clusterVPCSubnets []*ec2.Subnet
+				for _, subnet := range subnetOutput.Subnets {
+					if *subnet.VpcId == defaultVPCID {
+						clusterVPCSubnets = append(clusterVPCSubnets, subnet)
+					}
+				}
+				return clusterVPCSubnets, nil
+			},
+			want:    buildValidRHMISubnets(),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				CacheSvc:          tt.fields.CacheSvc,
+				TCPPinger:         tt.fields.TCPPinger,
+			}
+			err := p.reconcileElasticacheNetworking(tt.args.ctx, tt.args.cacheSvc, tt.args.ec2Svc)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("reconcileElasticacheNetworking() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			got, err := tt.getSubnetConfiguration()
+			if err != nil {
+				t.Error("unexpected error while getting mock subnets", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("reconcileElasticacheNetworking() \n got = %+v, \n want = %+v", got, tt.want)
+
 			}
 		})
 	}

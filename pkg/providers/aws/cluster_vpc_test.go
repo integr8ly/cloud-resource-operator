@@ -10,7 +10,7 @@ import (
 
 func Test_buildSubnetAddress(t *testing.T) {
 	type args struct {
-		vpc *ec2.Vpc
+		vpc    *ec2.Vpc
 		logger *logrus.Entry
 	}
 	tests := []struct {

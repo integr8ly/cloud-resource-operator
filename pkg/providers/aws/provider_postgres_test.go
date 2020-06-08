@@ -32,6 +32,7 @@ import (
 const (
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
+	defaultVPCID                   = "testID"
 )
 
 type mockRdsClient struct {
@@ -337,7 +338,7 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 func buildVpcs() []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
-			VpcId:     aws.String("testID"),
+			VpcId:     aws.String(defaultVPCID),
 			CidrBlock: aws.String("10.0.0.0/16"),
 			Tags: []*ec2.Tag{
 				{
@@ -894,6 +895,94 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_reconcileRDSNetworking(t *testing.T) {
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		TCPPinger         ConnectionTester
+	}
+	type args struct {
+		ctx    context.Context
+		rdsSvc rdsiface.RDSAPI
+		ec2Svc ec2iface.EC2API
+	}
+	tests := []struct {
+		name                   string
+		fields                 fields
+		args                   args
+		want                   interface{}
+		wantErr                bool
+		getSubnetConfiguration func() ([]*ec2.Subnet, error)
+	}{
+		{
+			name: "verify cluster vpc and rhmi valid subnets exists and remain",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			args: args{
+				ctx:    context.TODO(),
+				rdsSvc: &mockRdsClient{},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets()},
+			},
+			getSubnetConfiguration: func() ([]*ec2.Subnet, error) {
+				api := &mockEc2Client{
+					subnets: buildValidRHMISubnets(),
+				}
+				subnetOutput, err := api.DescribeSubnets(&ec2.DescribeSubnetsInput{})
+				if err != nil {
+					t.Fatalf("could not get mock subnets : %v", err)
+				}
+				var clusterVPCSubnets []*ec2.Subnet
+				for _, subnet := range subnetOutput.Subnets {
+					if *subnet.VpcId == defaultVPCID {
+						clusterVPCSubnets = append(clusterVPCSubnets, subnet)
+					}
+				}
+				return clusterVPCSubnets, nil
+			},
+			want:    buildValidRHMISubnets(),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         tt.fields.TCPPinger,
+			}
+			err := p.reconcileRDSNetworking(tt.args.ctx, tt.args.rdsSvc, tt.args.ec2Svc)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("reconcileRDSNetworking() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			got, err := tt.getSubnetConfiguration()
+			if err != nil {
+				t.Error("unexpected error while getting mock subnets", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("reconcileRDSNetworking() \n got = %+v, \n want = %+v", got, tt.want)
+
 			}
 		})
 	}
