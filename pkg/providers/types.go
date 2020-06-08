@@ -21,6 +21,7 @@ const (
 	BlobStorageResourceType ResourceType = "blobstorage"
 	PostgresResourceType    ResourceType = "postgres"
 	RedisResourceType       ResourceType = "redis"
+	NetworkResourceType     ResourceType = "_network"
 )
 
 type DeploymentDetails interface {
