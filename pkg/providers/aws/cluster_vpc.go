@@ -22,6 +22,10 @@ package aws
 import (
 	"context"
 	"fmt"
+	"net"
+	"reflect"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -29,10 +33,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"net"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 
 	errorUtil "github.com/pkg/errors"
 )
@@ -134,7 +135,7 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 	}
 
 	// get cluster vpc
-	foundVPC, err := getVpc(ctx, c, ec2Svc, logger)
+	foundVPC, err := getClusterVpc(ctx, c, ec2Svc, logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpcs")
 	}
@@ -164,7 +165,7 @@ func GetVPCSubnets(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) ([]*string, error) {
 	logger.Info("gathering all private subnets in cluster vpc")
 	// get cluster vpc
-	foundVPC, err := getVpc(ctx, c, ec2Svc, logger)
+	foundVPC, err := getClusterVpc(ctx, c, ec2Svc, logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpcs")
 	}
@@ -420,7 +421,7 @@ func incrementIP(ip net.IP, inc int) net.IP {
 
 // returns vpc id and cidr block for found vpc
 func GetCidr(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (string, string, error) {
-	foundVPC, err := getVpc(ctx, c, ec2Svc, logger)
+	foundVPC, err := getClusterVpc(ctx, c, ec2Svc, logger)
 	if err != nil {
 		return "", "", errorUtil.Wrap(err, "error getting vpcs")
 	}
@@ -460,7 +461,7 @@ func getSubnets(ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 }
 
 // function to get vpc of a cluster
-func getVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (*ec2.Vpc, error) {
+func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (*ec2.Vpc, error) {
 	// get vpcs
 	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
 	if err != nil {

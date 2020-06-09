@@ -2,10 +2,11 @@ package aws
 
 import (
 	"context"
-	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"reflect"
 	"testing"
 	"time"
+
+	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -597,6 +598,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		ctx                  context.Context
 		pg                   *v1alpha1.Postgres
 		instanceSvc          rdsiface.RDSAPI
+		ec2Svc               ec2iface.EC2API
 		postgresCreateConfig *rds.CreateDBInstanceInput
 		postgresDeleteConfig *rds.DeleteDBInstanceInput
 	}
@@ -614,6 +616,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
 				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:               &mockEc2Client{},
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -630,6 +633,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
+				ec2Svc:               &mockEc2Client{},
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -646,6 +650,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
+				ec2Svc:               &mockEc2Client{},
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -662,6 +667,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
+				ec2Svc:               &mockEc2Client{},
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -681,7 +687,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.ec2Svc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return

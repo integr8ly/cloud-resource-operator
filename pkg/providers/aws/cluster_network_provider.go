@@ -16,6 +16,7 @@ package aws
 import (
 	"context"
 	"fmt"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -26,27 +27,36 @@ import (
 	errorUtil "github.com/pkg/errors"
 )
 
+const (
+	DefaultRHMIVpcNameTagKey   = "Name"
+	DefaultRHMIVpcNameTagValue = "RHMI Cloud Resource VPC"
+)
+
 //todo we need to ensure we test that if `IsEnabled` is true, it remains true for consecutive reconciles
 
 type NetworkManager interface {
-	CreateNetwork() error
-	DeleteNetwork() error
-	IsEnabled(context.Context, client.Client, ec2iface.EC2API) (bool, error)
+	CreateNetwork(context.Context) (*ec2.Vpc, error)
+	DeleteNetwork(context.Context) error
+	IsEnabled(context.Context) (bool, error)
 }
 
 var _ NetworkManager = (*NetworkProvider)(nil)
 
 type NetworkProvider struct {
-	logger *logrus.Entry
+	Client client.Client
+	Ec2Svc ec2iface.EC2API
+	Logger *logrus.Entry
 }
 
-func NewNetworkManager(logger *logrus.Entry) *NetworkProvider {
+func NewNetworkManager(client client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) *NetworkProvider {
 	return &NetworkProvider{
-		logger: logger.WithField("provider", "standalone_network_provider"),
+		Client: client,
+		Ec2Svc: ec2Svc,
+		Logger: logger.WithField("provider", "standalone_network_provider"),
 	}
 }
 
-func (n *NetworkProvider) CreateNetwork() error {
+func (n *NetworkProvider) CreateNetwork(ctx context.Context) (*ec2.Vpc, error) {
 	/*
 		todo CreateNetwork is called we need to ensure the following
 		we expect _network to exist with a valid cidr
@@ -55,15 +65,84 @@ func (n *NetworkProvider) CreateNetwork() error {
 
 		- Check if a VPC exists with the integreatly.org/clusterID tag
 		- If VPC doesn't exist, create a VPC with CIDR block and tag it
+
+		verify there is a _network strategy
+		note we need to handle the tier differently to other products
 	*/
-	logger := n.logger.WithField("action", "CreateNetwork")
-	logger.Debug("CreateNetwork stub")
-	return errorUtil.New("CreateNetwork stub")
+	logger := n.Logger.WithField("action", "CreateNetwork")
+	logger.Debug("CreateNetwork called")
+
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+	organizationTag := resources.GetOrganizationTag()
+
+	//check if there is an rhmi specific vpc already created.
+	foundVpc, err := getStandaloneVpc(ctx, n.Client, n.Ec2Svc, logger, clusterID, organizationTag)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "unable to get vpc")
+	}
+	if foundVpc != nil {
+		return foundVpc, nil
+	}
+
+	createVpcOutput, err := n.Ec2Svc.CreateVpc(&ec2.CreateVpcInput{
+		CidrBlock: aws.String("10.0.0.0/26"),
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "unable to create vpc")
+	}
+	logger.Infof("creating vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
+	_, err = n.Ec2Svc.CreateTags(&ec2.CreateTagsInput{
+		Resources: []*string{
+			aws.String(*createVpcOutput.Vpc.VpcId),
+		},
+		Tags: []*ec2.Tag{
+			{
+				Key:   aws.String(DefaultRHMIVpcNameTagKey),
+				Value: aws.String(DefaultRHMIVpcNameTagValue),
+			}, {
+				Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
+				Value: aws.String(clusterID),
+			},
+		},
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "unable to tag vpc")
+	}
+	logger.Infof("successfully tagged vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
+
+	return createVpcOutput.Vpc, nil
 }
 
-func (n *NetworkProvider) DeleteNetwork() error {
-	logger := n.logger.WithField("action", "DeleteNetwork")
+func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
+	logger := n.Logger.WithField("action", "DeleteNetwork")
 	logger.Debug("DeleteNetwork stub")
+
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting clusterID")
+	}
+	organizationTag := resources.GetOrganizationTag()
+
+	//check if there is an rhmi specific vpc already created.
+	foundVpc, err := getStandaloneVpc(ctx, n.Client, n.Ec2Svc, logger, clusterID, organizationTag)
+	if err != nil {
+		return errorUtil.Wrap(err, "unable to get vpc")
+	}
+	if foundVpc == nil {
+		logger.Infof("no vpc found for clusterID: %s", clusterID)
+		return nil
+	}
+
+	logger.Infof("attempting to delete vpc id: %s for clusterID: %s", *foundVpc.VpcId, clusterID)
+	_, err = n.Ec2Svc.DeleteVpc(&ec2.DeleteVpcInput{
+		VpcId: aws.String(*foundVpc.VpcId),
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "unable to delete vpc")
+	}
 	return nil
 }
 
@@ -77,12 +156,12 @@ this check allows us to maintain backwards compatibility with openshift clusters
 If this function returns false, we should continue using the backwards compatible approach of bundling resources in with the openshift cluster vpc.
 
 */
-func (n *NetworkProvider) IsEnabled(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API) (bool, error) {
-	logger := n.logger.WithField("action", "isEnabled")
+func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
+	logger := n.Logger.WithField("action", "isEnabled")
 
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
-	vpcSubnets, err := GetVPCSubnets(ctx, c, ec2Svc, logger)
+	vpcSubnets, err := GetVPCSubnets(ctx, n.Client, n.Ec2Svc, logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "error happened while returning vpc subnets")
 	}
@@ -99,4 +178,27 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context, c client.Client, ec2Svc
 	}
 	logger.Infof("found %d rhmi subnets in cluster vpc", len(validRHMISubnets))
 	return len(validRHMISubnets) == 0, nil
+}
+
+func getStandaloneVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry, clusterID, organizationTag string) (*ec2.Vpc, error) {
+	// get vpcs
+	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting vpcs")
+	}
+
+	//there will be a tags associated with the seperate vpc
+	//Name='RHMI Cloud Resource VPC' and integreatly.org/clusterID=<infrastructure-id>
+	//use these in order to pick up the correct one.
+	// find associated vpc to tag
+	var foundVPC *ec2.Vpc
+	for _, vpc := range vpcs.Vpcs {
+		for _, tag := range vpc.Tags {
+			if *tag.Key == fmt.Sprintf("%sclusterID", organizationTag) && *tag.Value == clusterID {
+				foundVPC = vpc
+			}
+		}
+	}
+	return foundVPC, nil
+
 }

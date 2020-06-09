@@ -2,13 +2,14 @@ package aws
 
 import (
 	"context"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 const (
@@ -95,12 +96,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		logger *logrus.Entry
+		Logger *logrus.Entry
+		Client client.Client
+		Ec2Svc ec2iface.EC2API
 	}
 	type args struct {
-		ctx    context.Context
-		c      client.Client
-		ec2Svc ec2iface.EC2API
+		ctx context.Context
 	}
 	tests := []struct {
 		name    string
@@ -113,12 +114,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			// we expect if no rhmi subnets exist in the cluster vpc isEnabled will return true
 			name: "verify isEnabled is true, no rhmi subnets found in cluster vpc",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildNoneRHMISubnets()},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildNoneRHMISubnets()},
 			},
 			want:    true,
 			wantErr: false,
@@ -128,12 +129,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			//we expect if a single rhmi subnet is found in cluster vpc isEnabled will return true
 			name: "verify isEnabled is false, a single rhmi subnet is found in cluster vpc",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets()},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets()},
 			},
 			want:    false,
 			wantErr: false,
@@ -142,12 +143,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			// we expect isEnable to return true if more then one rhmi subnet is found in cluster vpc
 			name: "verify isEnabled is true, multiple rhmi subnets found in cluster vpc",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildMultipleValidRHMISubnets()},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildMultipleValidRHMISubnets()},
 			},
 			want:    false,
 			wantErr: false,
@@ -156,12 +157,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			// we always expect subnets to exist in the cluster vpc, this ensures we get an error if none exist
 			name: "verify error, if no subnets are found",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs()},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs()},
 			},
 			wantErr: true,
 		},
@@ -169,12 +170,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			// we always expect a cluster vpc, this ensures we get an error is none exist
 			name: "verify error, if no cluster vpc is found",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{},
 			},
 			wantErr: true,
 		},
@@ -183,12 +184,12 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			// this test ensures an error if subnets exist in the cluster vpc but not associated with the vpc
 			name: "verify error, if no subnets found in cluster vpc",
 			args: args{
-				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildNoneVPCAssociatedSubnets()},
+				ctx: context.TODO(),
 			},
 			fields: fields{
-				logger: logrus.NewEntry(logrus.StandardLogger()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildNoneVPCAssociatedSubnets()},
 			},
 			wantErr: true,
 		},
@@ -196,9 +197,11 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				logger: tt.fields.logger,
+				Logger: tt.fields.Logger,
+				Client: tt.fields.Client,
+				Ec2Svc: tt.fields.Ec2Svc,
 			}
-			got, err := n.IsEnabled(tt.args.ctx, tt.args.c, tt.args.ec2Svc)
+			got, err := n.IsEnabled(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("IsEnabled() error = %v, wantErr %v", err, tt.wantErr)
 				return

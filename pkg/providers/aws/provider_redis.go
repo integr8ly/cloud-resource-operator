@@ -595,14 +595,14 @@ func (p *RedisProvider) reconcileElasticacheNetworking(ctx context.Context, cach
 	logger := p.Logger.WithField("action", "reconcileElasticacheNetworking")
 
 	// check if rhmi subnets exist in vpc cluster
-	networkManager := NewNetworkManager(p.Logger)
-	isEnabled, err := networkManager.IsEnabled(ctx, p.Client, ec2Svc)
+	networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
+	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
 	}
 	if isEnabled {
 		// setup networking in rhmi vpc and peer to cluster vpc
-		if err := networkManager.CreateNetwork(); err != nil {
+		if _, err := networkManager.CreateNetwork(ctx); err != nil {
 			return errorUtil.Wrap(err, "failed to create resource network")
 		}
 		return nil

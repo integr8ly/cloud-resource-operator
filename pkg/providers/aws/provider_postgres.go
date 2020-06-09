@@ -158,6 +158,8 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		errMsg := "error reconciling rds networking"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+	//errMsg := "we don;t wanna create other stufff and thngs"
+	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// getting postgres user password from created secret
 	credSec := &v1.Secret{}
@@ -350,10 +352,10 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	return p.deleteRDSInstance(ctx, r, rds.New(sess), rdsCreateConfig, rdsDeleteConfig)
+	return p.deleteRDSInstance(ctx, r, rds.New(sess), ec2.New(sess), rdsCreateConfig, rdsDeleteConfig)
 }
 
-func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
@@ -378,6 +380,13 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 
 	// check if instance does not exist, delete finalizer and credential secret
 	if foundInstance == nil {
+		//TODO Manual testing only - should be removed
+		//will be handled properly in https://issues.redhat.com/browse/INTLY-8163
+		networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
+		if err = networkManager.DeleteNetwork(ctx); err != nil {
+			msg := "failed to delete aws networking"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
 		// delete credential secret
 		logger.Info("deleting rds secret")
 		sec := &v1.Secret{
@@ -713,14 +722,16 @@ func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rd
 	logger := p.Logger.WithField("action", "reconcilingRDSNetworking")
 
 	// check if rhmi subnets exist in vpc cluster
-	networkManager := NewNetworkManager(p.Logger)
-	isEnabled, err := networkManager.IsEnabled(ctx, p.Client, ec2Svc)
+
+	networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
+	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
 	}
 	if isEnabled {
 		// setup networking in rhmi vpc and peer to cluster vpc
-		if err := networkManager.CreateNetwork(); err != nil {
+		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
+		if _, err := networkManager.CreateNetwork(ctx); err != nil {
 			return errorUtil.Wrap(err, "failed to create resource network")
 		}
 		return nil
