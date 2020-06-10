@@ -159,8 +159,8 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		errMsg := "error reconciling rds networking"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	errMsg := "we don;t wanna create other stufff and thngs"
-	return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
+	//errMsg := "we don;t wanna create other stufff and thngs"
+	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// getting postgres user password from created secret
 	credSec := &v1.Secret{}
@@ -733,7 +733,7 @@ func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rd
 		// setup networking in rhmi vpc and peer to cluster vpc
 		logger.Debug("using temp cidr block")
 		// todo handle getting vpc cidr block from _network strat
-		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/20")
+		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
 		if err != nil {
 			return errorUtil.Wrap(err, "failed to parse vpc codr")
 		}

@@ -53,6 +53,7 @@ var (
 				"ec2:CreateTags",
 				"ec2:CreateVpc",
 				"ec2:DeleteVpc",
+				"ec2:DeleteSubnet",
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",

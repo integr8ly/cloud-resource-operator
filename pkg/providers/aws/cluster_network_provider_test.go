@@ -19,6 +19,7 @@ const (
 func buildNoneRHMISubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
+			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String("testID"),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
@@ -34,6 +35,7 @@ func buildNoneRHMISubnets() []*ec2.Subnet {
 func buildValidRHMISubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
+			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String("testID"),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
@@ -53,6 +55,7 @@ func buildValidRHMISubnets() []*ec2.Subnet {
 func buildMultipleValidRHMISubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
+			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String("testID"),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
@@ -63,6 +66,7 @@ func buildMultipleValidRHMISubnets() []*ec2.Subnet {
 			},
 		},
 		{
+			SubnetId:         aws.String("test-id-2"),
 			VpcId:            aws.String("testID"),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
@@ -78,6 +82,7 @@ func buildMultipleValidRHMISubnets() []*ec2.Subnet {
 func buildNoneVPCAssociatedSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
+			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String("notTestID"),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
