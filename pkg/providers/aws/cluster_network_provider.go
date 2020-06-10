@@ -16,8 +16,10 @@ package aws
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -35,7 +37,7 @@ const (
 //todo we need to ensure we test that if `IsEnabled` is true, it remains true for consecutive reconciles
 
 type NetworkManager interface {
-	CreateNetwork(context.Context) (*ec2.Vpc, error)
+	CreateNetwork(context.Context, *net.IPNet) (*ec2.Vpc, error)
 	DeleteNetwork(context.Context) error
 	IsEnabled(context.Context) (bool, error)
 }
@@ -56,7 +58,7 @@ func NewNetworkManager(client client.Client, ec2Svc ec2iface.EC2API, logger *log
 	}
 }
 
-func (n *NetworkProvider) CreateNetwork(ctx context.Context) (*ec2.Vpc, error) {
+func (n *NetworkProvider) CreateNetwork(ctx context.Context, CIDR *net.IPNet) (*ec2.Vpc, error) {
 	/*
 		todo CreateNetwork is called we need to ensure the following
 		we expect _network to exist with a valid cidr
@@ -87,9 +89,22 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context) (*ec2.Vpc, error) {
 		return foundVpc, nil
 	}
 
+	mask, _ := CIDR.Mask.Size()
+	if mask < 16 || mask > 26 {
+		return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", CIDR.String()))
+	}
+
 	createVpcOutput, err := n.Ec2Svc.CreateVpc(&ec2.CreateVpcInput{
-		CidrBlock: aws.String("10.0.0.0/26"),
+		CidrBlock: aws.String(CIDR.String()),
 	})
+	ec2Err, isAwsErr := err.(awserr.Error)
+	if err != nil && isAwsErr && ec2Err.Code() == "InvalidVpc.Range" {
+		return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", CIDR.String()))
+	}
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "unexpected error creating vpc")
+	}
+	logger.Infof("creating vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "unable to create vpc")
 	}
@@ -136,6 +151,17 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 		return nil
 	}
 
+	vpcSubs, err := getVPCAssociatedSubnets(n.Ec2Svc, logger, foundVpc)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to get standalone vpc subnetes")
+	}
+
+	for _, subnet := range vpcSubs {
+		_, err = n.Ec2Svc.DeleteSubnet(&ec2.DeleteSubnetInput{
+			SubnetId: aws.String(*subnet.SubnetId),
+		})
+	}
+
 	logger.Infof("attempting to delete vpc id: %s for clusterID: %s", *foundVpc.VpcId, clusterID)
 	_, err = n.Ec2Svc.DeleteVpc(&ec2.DeleteVpcInput{
 		VpcId: aws.String(*foundVpc.VpcId),
@@ -159,9 +185,15 @@ If this function returns false, we should continue using the backwards compatibl
 func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	logger := n.Logger.WithField("action", "isEnabled")
 
+	//check if there is an rhmi specific vpc already created.
+	foundVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Svc, logger)
+	if err != nil {
+		return false, errorUtil.Wrap(err, "unable to get vpc")
+	}
+
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
-	vpcSubnets, err := GetVPCSubnets(ctx, n.Client, n.Ec2Svc, logger)
+	vpcSubnets, err := GetVPCSubnets(n.Ec2Svc, logger, foundVpc)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "error happened while returning vpc subnets")
 	}
@@ -201,4 +233,26 @@ func getStandaloneVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2A
 	}
 	return foundVPC, nil
 
+}
+
+func getVPCAssociatedSubnets(ec2Svc ec2iface.EC2API, logger *logrus.Entry, vpc *ec2.Vpc) ([]*ec2.Subnet, error) {
+	logger.Info("gathering cluster vpc and subnet information")
+	// poll subnets to ensure credentials have reconciled
+	subs, err := getSubnets(ec2Svc)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting subnets")
+	}
+
+	if vpc == nil {
+		return nil, errorUtil.Wrap(err, "vpc is nil, need vpc to find associated subnets")
+	}
+	// find associated subnets
+	var associatedSubs []*ec2.Subnet
+	for _, sub := range subs {
+		if *sub.VpcId == *vpc.VpcId {
+			associatedSubs = append(associatedSubs, sub)
+		}
+	}
+
+	return associatedSubs, nil
 }

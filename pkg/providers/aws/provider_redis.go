@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 	"time"
 
@@ -602,10 +603,18 @@ func (p *RedisProvider) reconcileElasticacheNetworking(ctx context.Context, cach
 	}
 	if isEnabled {
 		// setup networking in rhmi vpc and peer to cluster vpc
-		if _, err := networkManager.CreateNetwork(ctx); err != nil {
+		logger.Debug("using temp cidr block")
+		// todo handle getting vpc cidr block from _network strat
+		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
+		if err != nil {
+			return errorUtil.Wrap(err, "failed to parse vpc codr")
+		}
+
+		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
+		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
+		if err != nil {
 			return errorUtil.Wrap(err, "failed to create resource network")
 		}
-		return nil
 	}
 
 	// setup networking in cluster vpc
