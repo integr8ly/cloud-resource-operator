@@ -764,6 +764,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 		logger.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
 		return nil
 	}
+	defaultOrganizationTag := resources.GetOrganizationTag()
 
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
@@ -784,7 +785,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 		SubnetIds:                subIDs,
 		Tags: []*rds.Tag{
 			{
-				Key:   aws.String("cluster"),
+				Key:   aws.String(defaultOrganizationTag + "clusterID"),
 				Value: aws.String(clusterID),
 			},
 		},
