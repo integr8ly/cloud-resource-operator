@@ -87,6 +87,8 @@ func (p *RedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
 
 // CreateRedis Create an Elasticache Replication Group from strategy config
 func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "CreateRedis")
+	logger.Infof("reconciling redes %s", r.Name)
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -112,11 +114,47 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		errMsg := "failed to create aws session to create elasticache replication group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+
+	// check if a standalone network is required
+	networkManager := NewNetworkManager(sess, p.Client, logger)
+	isEnabled, err := networkManager.IsEnabled(ctx)
+	if err != nil {
+		errMsg := "failed to check cluster vpc subnets"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	/*
+		reconcileElasticacheNetworking configures networking required for cro resources (postgres)
+
+		networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
+		when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+		was created in a cluster with a cluster version <= 4.4.5
+
+		when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+		and we should create a new vpc for all resources to be deployed in and we should peer the
+		resource vpc and cluster vpc
+	*/
+	if isEnabled {
+		// todo handle getting vpc cidr block from _network strat
+		logger.Debug("using temp cidr block")
+		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
+		if err != nil {
+			errMsg := "failed to parse vpc cidr"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+
+		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
+		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
+		if err != nil {
+			errMsg := "failed to create resource network"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+	}
 	// create the aws elasticache cluster
-	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg)
+	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg, isEnabled)
 }
 
-func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig) (*providers.RedisCluster, types.StatusMessage, error) {
+func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, stratCfg *StrategyConfig, standaloneNetworkExists bool) (*providers.RedisCluster, types.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "createElasticacheCluster")
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
@@ -127,10 +165,22 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	if err := p.reconcileElasticacheNetworking(ctx, cacheSvc, ec2Svc); err != nil {
-		errMsg := "error reconciling elasticache networking"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	if !standaloneNetworkExists {
+		// setup networking in cluster vpc
+		if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
+			errMsg := "error setting up resource vpc"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+
+		// setup security group for cluster vpc
+		if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
+			errMsg := "error setting up security group"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
 	}
+
+	errMsg := "we don;t wanna create other stufff and thngs"
+	return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// verify and build elasticache create config
 	if err := p.buildElasticacheCreateStrategy(ctx, r, ec2Svc, elasticacheConfig); err != nil {
@@ -339,7 +389,8 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 //DeleteRedis Delete elasticache replication group
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// resolve elasticache information for elasticache created by provider
-	p.Logger.Info("getting cluster id from infrastructure for redis naming")
+	logger := p.Logger.WithField("action", "DeleteRedis")
+	logger.Infof("reconciling delete redis %s", r.Name)
 	elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
@@ -360,11 +411,14 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
+	// network manager required for cleaning up network.
+	networkManager := NewNetworkManager(sess, p.Client, logger)
+
 	// delete the elasticache cluster
-	return p.deleteElasticacheCluster(ctx, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r)
+	return p.deleteElasticacheCluster(ctx, networkManager, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r)
 }
 
-func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis) (croType.StatusMessage, error) {
+func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
@@ -388,6 +442,12 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, cacheSvc e
 
 	// check if replication group does not exist and delete finalizer
 	if foundCache == nil {
+		//TODO Manual testing only - should be removed
+		//will be handled properly in https://issues.redhat.com/browse/INTLY-8163
+		if err = networkManager.DeleteNetwork(ctx); err != nil {
+			msg := "failed to delete aws networking"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
 		// remove the finalizer added by the provider
 		resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 		if err := p.Client.Update(ctx, r); err != nil {
@@ -577,54 +637,6 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 	}
 	if elasticacheDeleteConfig.FinalSnapshotIdentifier == nil {
 		elasticacheDeleteConfig.FinalSnapshotIdentifier = aws.String(snapshotIdentifier)
-	}
-	return nil
-}
-
-/*
-reconcileElasticacheNetworking configures networking required for cro resources (postgres)
-
-networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
-when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
-was created in a cluster with a cluster version <= 4.4.5
-
-when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
-and we should create a new vpc for all resources to be deployed in and we should peer the
-resource vpc and cluster vpc
-*/
-func (p *RedisProvider) reconcileElasticacheNetworking(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
-	logger := p.Logger.WithField("action", "reconcileElasticacheNetworking")
-
-	// check if rhmi subnets exist in vpc cluster
-	networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
-	isEnabled, err := networkManager.IsEnabled(ctx)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
-	}
-	if isEnabled {
-		// setup networking in rhmi vpc and peer to cluster vpc
-		logger.Debug("using temp cidr block")
-		// todo handle getting vpc cidr block from _network strat
-		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
-		if err != nil {
-			return errorUtil.Wrap(err, "failed to parse vpc codr")
-		}
-
-		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
-		if err != nil {
-			return errorUtil.Wrap(err, "failed to create resource network")
-		}
-	}
-
-	// setup networking in cluster vpc
-	if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
-		return errorUtil.Wrap(err, "error setting up resource vpc")
-	}
-
-	// setup security group for cluster vpc
-	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
-		return errorUtil.Wrap(err, "error setting up security group")
 	}
 	return nil
 }

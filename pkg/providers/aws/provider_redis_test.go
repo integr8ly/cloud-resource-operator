@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"reflect"
 	"time"
@@ -47,6 +46,7 @@ type mockElasticacheClient struct {
 	wantErrDelete     bool
 	wantEmpty         bool
 	replicationGroups []*elasticache.ReplicationGroup
+	cacheSubnetGroup  []*elasticache.CacheSubnetGroup
 }
 
 type mockStsClient struct {
@@ -120,7 +120,9 @@ func (m *mockElasticacheClient) DescribeServiceUpdates(*elasticache.DescribeServ
 }
 
 func (m *mockElasticacheClient) DescribeCacheSubnetGroups(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
-	return &elasticache.DescribeCacheSubnetGroupsOutput{}, nil
+	return &elasticache.DescribeCacheSubnetGroupsOutput{
+		CacheSubnetGroups: m.cacheSubnetGroup,
+	}, nil
 }
 
 func (m *mockElasticacheClient) CreateCacheSubnetGroup(*elasticache.CreateCacheSubnetGroupInput) (*elasticache.CreateCacheSubnetGroupOutput, error) {
@@ -203,13 +205,14 @@ func Test_createRedisCluster(t *testing.T) {
 		t.Fatal("failed to build security name", err)
 	}
 	type args struct {
-		ctx         context.Context
-		r           *v1alpha1.Redis
-		stsSvc      stsiface.STSAPI
-		cacheSvc    elasticacheiface.ElastiCacheAPI
-		ec2Svc      ec2iface.EC2API
-		redisConfig *elasticache.CreateReplicationGroupInput
-		stratCfg    *StrategyConfig
+		ctx                     context.Context
+		r                       *v1alpha1.Redis
+		stsSvc                  stsiface.STSAPI
+		cacheSvc                elasticacheiface.ElastiCacheAPI
+		ec2Svc                  ec2iface.EC2API
+		redisConfig             *elasticache.CreateReplicationGroupInput
+		stratCfg                *StrategyConfig
+		standaloneNetworkExists bool
 	}
 	type fields struct {
 		Client            client.Client
@@ -228,13 +231,14 @@ func Test_createRedisCluster(t *testing.T) {
 		{
 			name: "test elasticache buildReplicationGroupPending is called (valid cluster rhmi subnets)",
 			args: args{
-				ctx:         context.TODO(),
-				cacheSvc:    &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
-				r:           buildTestRedisCR(),
-				stsSvc:      &mockStsClient{},
-				redisConfig: &elasticache.CreateReplicationGroupInput{},
-				stratCfg:    &StrategyConfig{Region: "test"},
+				ctx:                     context.TODO(),
+				cacheSvc:                &mockElasticacheClient{replicationGroups: []*elasticache.ReplicationGroup{}},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -249,13 +253,14 @@ func Test_createRedisCluster(t *testing.T) {
 		{
 			name: "test elasticache already exists and status is available (valid cluster rhmi subnets)",
 			args: args{
-				ctx:         context.TODO(),
-				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
-				r:           buildTestRedisCR(),
-				stsSvc:      &mockStsClient{},
-				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				stratCfg:    &StrategyConfig{Region: "test"},
+				ctx:                     context.TODO(),
+				cacheSvc:                &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -270,13 +275,14 @@ func Test_createRedisCluster(t *testing.T) {
 		{
 			name: "test elasticache already exists and status is not available (valid cluster rhmi subnets)",
 			args: args{
-				ctx:         context.TODO(),
-				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
-				r:           buildTestRedisCR(),
-				stsSvc:      &mockStsClient{},
-				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				stratCfg:    &StrategyConfig{Region: "test"},
+				ctx:                     context.TODO(),
+				cacheSvc:                &mockElasticacheClient{replicationGroups: buildReplicationGroupPending()},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -291,13 +297,14 @@ func Test_createRedisCluster(t *testing.T) {
 		{
 			name: "test elasticache exists and status is available and needs to be modified (valid cluster rhmi subnets)",
 			args: args{
-				ctx:         context.TODO(),
-				cacheSvc:    &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
-				r:           buildTestRedisCR(),
-				stsSvc:      &mockStsClient{},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
-				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				stratCfg:    &StrategyConfig{Region: "test"},
+				ctx:                     context.TODO(),
+				cacheSvc:                &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -316,13 +323,14 @@ func Test_createRedisCluster(t *testing.T) {
 				cacheSvc: &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
 				r:        buildTestRedisCR(),
 				stsSvc:   &mockStsClient{},
-				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
 					SnapshotRetentionLimit: aws.Int64(20),
 				},
-				stratCfg: &StrategyConfig{Region: "test"},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -344,7 +352,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg, tt.args.standaloneNetworkExists)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -372,6 +380,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 	}
 	type args struct {
 		cacheSvc          elasticacheiface.ElastiCacheAPI
+		networkManager    NetworkManager
 		redisCreateConfig *elasticache.CreateReplicationGroupInput
 		redisDeleteConfig *elasticache.DeleteReplicationGroupInput
 		ctx               context.Context
@@ -388,6 +397,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 			args: args{
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{},
+				networkManager:    &mockNetworkManager{},
 				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
@@ -402,7 +412,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing unavailable redis",
 			args: args{
-
+				networkManager:    &mockNetworkManager{},
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redis:             buildTestRedisCR(),
@@ -419,7 +429,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing available redis",
 			args: args{
-
+				networkManager:    &mockNetworkManager{},
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redis:             buildTestRedisCR(),
@@ -443,7 +453,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis); (err != nil) != tt.wantErr {
+			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis); (err != nil) != tt.wantErr {
 				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -632,101 +642,6 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := buildElasticacheUpdateStrategy(tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildElasticacheUpdateStrategy() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRedisProvider_reconcileElasticacheNetworking(t *testing.T) {
-	scheme, err := buildTestSchemePostgresql()
-	if err != nil {
-		t.Error("failed to build scheme", err)
-		return
-	}
-	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
-	if err != nil {
-		logrus.Fatal(err)
-		t.Fatal("failed to build security name", err)
-	}
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-		CacheSvc          elasticacheiface.ElastiCacheAPI
-		TCPPinger         ConnectionTester
-	}
-	type args struct {
-		ctx      context.Context
-		cacheSvc elasticacheiface.ElastiCacheAPI
-		ec2Svc   ec2iface.EC2API
-	}
-	tests := []struct {
-		name                   string
-		fields                 fields
-		args                   args
-		want                   interface{}
-		wantErr                bool
-		getSubnetConfiguration func() ([]*ec2.Subnet, error)
-	}{
-		{
-			name: "verify cluster vpc and rhmi valid subnets exists and remain",
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			args: args{
-				ctx:      context.TODO(),
-				cacheSvc: &mockElasticacheClient{},
-				ec2Svc:   &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName)},
-			},
-			getSubnetConfiguration: func() ([]*ec2.Subnet, error) {
-				api := &mockEc2Client{
-					subnets: buildValidRHMISubnets(),
-				}
-				subnetOutput, err := api.DescribeSubnets(&ec2.DescribeSubnetsInput{})
-				if err != nil {
-					t.Fatalf("could not get mock subnets : %v", err)
-				}
-				var clusterVPCSubnets []*ec2.Subnet
-				for _, subnet := range subnetOutput.Subnets {
-					if *subnet.VpcId == defaultVPCID {
-						clusterVPCSubnets = append(clusterVPCSubnets, subnet)
-					}
-				}
-				return clusterVPCSubnets, nil
-			},
-			want:    buildValidRHMISubnets(),
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := &RedisProvider{
-				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-				CacheSvc:          tt.fields.CacheSvc,
-				TCPPinger:         tt.fields.TCPPinger,
-			}
-			err := p.reconcileElasticacheNetworking(tt.args.ctx, tt.args.cacheSvc, tt.args.ec2Svc)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("reconcileElasticacheNetworking() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				return
-			}
-			got, err := tt.getSubnetConfiguration()
-			if err != nil {
-				t.Error("unexpected error while getting mock subnets", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("reconcileElasticacheNetworking() \n got = %+v, \n want = %+v", got, tt.want)
-
 			}
 		})
 	}

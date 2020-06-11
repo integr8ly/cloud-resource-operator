@@ -141,11 +141,38 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 		errMsg := "failed to create aws session to create rds db instance"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+
+	// check is a standalone network is required
+	networkManager := NewNetworkManager(sess, p.Client, logger)
+	isEnabled, err := networkManager.IsEnabled(ctx)
+	if err != nil {
+		errMsg := "failed to check cluster vpc subnets"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	// if a standalone network is required configure the network
+	// (standalone vpc, private subnets, subnet groups, security groups, vpc peering)
+	if isEnabled {
+		// todo handle getting vpc cidr block from _network strat
+		logger.Debug("using temp cidr block")
+		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
+		if err != nil {
+			errMsg := "failed to parse vpc cidr"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+
+		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
+		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
+		if err != nil {
+			errMsg := "failed to create resource network"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+	}
+
 	// create the aws RDS instance
-	return p.createRDSInstance(ctx, pg, rds.New(sess), ec2.New(sess), rdsCfg)
+	return p.createRDSInstance(ctx, pg, rds.New(sess), ec2.New(sess), rdsCfg, isEnabled)
 }
 
-func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput, standaloneNetworkExists bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "createRDSInstance")
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pi, err := getRDSInstances(rdsSvc)
@@ -155,10 +182,22 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(msg), err
 	}
 
-	if err := p.reconcileRDSNetworking(ctx, rdsSvc, ec2Svc); err != nil {
-		errMsg := "error reconciling rds networking"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	// we should handle networking higher up for installs on >= 4.4.6 openshift cluster
+	// this check is to ensure backward compatibility with <= 4.4.5 openshift cluster
+	if !standaloneNetworkExists {
+		// setup networking in cluster vpc rds vpc
+		if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
+			msg := "error setting up resource vpc"
+			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+
+		// setup security group for cluster vpc
+		if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
+			msg := "error setting up security group"
+			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
 	}
+
 	//errMsg := "we don;t wanna create other stufff and thngs"
 	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
@@ -353,10 +392,13 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	return p.deleteRDSInstance(ctx, r, rds.New(sess), ec2.New(sess), rdsCreateConfig, rdsDeleteConfig)
+	// network manager required for cleaning up network.
+	networkManager := NewNetworkManager(sess, p.Client, logger)
+
+	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), rdsCreateConfig, rdsDeleteConfig)
 }
 
-func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, instanceSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
@@ -383,7 +425,6 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	if foundInstance == nil {
 		//TODO Manual testing only - should be removed
 		//will be handled properly in https://issues.redhat.com/browse/INTLY-8163
-		networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -713,49 +754,6 @@ func buildDefaultRDSSecret(ps *v1alpha1.Postgres) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 	}
-}
-
-/*
-reconcileRDSNetworking creates networking resources (vpcs, subnets, subnet groups etc) needed to provision an rds instance.
-we will use the backwards compatible networking approach on older openshift clusters, see NetworkProvider for more details.
-*/
-func (p *PostgresProvider) reconcileRDSNetworking(ctx context.Context, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API) error {
-	logger := p.Logger.WithField("action", "reconcilingRDSNetworking")
-
-	// check if rhmi subnets exist in vpc cluster
-
-	networkManager := NewNetworkManager(p.Client, ec2Svc, logger)
-	isEnabled, err := networkManager.IsEnabled(ctx)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to check cluster vpc subnets")
-	}
-	if isEnabled {
-		// setup networking in rhmi vpc and peer to cluster vpc
-		logger.Debug("using temp cidr block")
-		// todo handle getting vpc cidr block from _network strat
-		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
-		if err != nil {
-			return errorUtil.Wrap(err, "failed to parse vpc codr")
-		}
-
-		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
-		if err != nil {
-			return errorUtil.Wrap(err, "failed to create resource network")
-		}
-		return nil
-	}
-
-	// setup networking in cluster vpc rds vpc
-	if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
-		return errorUtil.Wrap(err, "error setting up resource vpc")
-	}
-
-	// setup security group for cluster vpc
-	if err := configureSecurityGroup(ctx, p.Client, ec2Svc, logger); err != nil {
-		return errorUtil.Wrap(err, "error setting up security group")
-	}
-	return nil
 }
 
 // ensures a subnet group is in place to configure the resource to be in the same vpc as the cluster

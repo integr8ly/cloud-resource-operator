@@ -454,10 +454,21 @@ func getSubnets(ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 
 // function to get vpc of a cluster
 func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (*ec2.Vpc, error) {
-	// get vpcs
-	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	// first call to aws api from the network provider is to get cluster vpc
+	// polling to allow credential minter time to reconcile credentials
+	var vpcs []*ec2.Vpc
+	var pollErr error
+	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+		vpcOutput, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+		if err != nil {
+			pollErr = err
+			return false, nil
+		}
+		vpcs = vpcOutput.Vpcs
+		return true, nil
+	})
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting subnets")
+		return nil, errorUtil.Wrapf(err, "error while polling for vpcs %v", pollErr)
 	}
 
 	// get cluster id
@@ -469,7 +480,7 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 	// find associated vpc to cluster
 	var foundVPC *ec2.Vpc
 	logger.Infof("searching for cluster %s vpc", clusterID)
-	for _, vpc := range vpcs.Vpcs {
+	for _, vpc := range vpcs {
 		for _, tag := range vpc.Tags {
 			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID) {
 				foundVPC = vpc

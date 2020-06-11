@@ -16,6 +16,11 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"net"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -48,24 +53,38 @@ type NetworkManager interface {
 var _ NetworkManager = (*NetworkProvider)(nil)
 
 type NetworkProvider struct {
-	Client client.Client
-	Ec2Svc ec2iface.EC2API
-	Logger *logrus.Entry
+	Client         client.Client
+	Session        *session.Session
+	RdsApi         rdsiface.RDSAPI
+	Ec2Api         ec2iface.EC2API
+	ElasticacheApi elasticacheiface.ElastiCacheAPI
+	Logger         *logrus.Entry
 }
 
-func NewNetworkManager(client client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) *NetworkProvider {
+func NewNetworkManager(session *session.Session, client client.Client, logger *logrus.Entry) *NetworkProvider {
 	return &NetworkProvider{
-		Client: client,
-		Ec2Svc: ec2Svc,
-		Logger: logger.WithField("provider", "standalone_network_provider"),
+		Client:         client,
+		RdsApi:         rds.New(session),
+		Ec2Api:         ec2.New(session),
+		ElasticacheApi: elasticache.New(session),
+		Logger:         logger.WithField("provider", "standalone_network_provider"),
 	}
 }
 
 /*
-	- Check if a VPC exists with the integreatly.org/clusterID tag
-	- If VPC doesn't exist, create a VPC with CIDR block and tag it
+CreateNetwork returns a Network type or error
+
+VPC's created by the cloud resource operator are identified by having a tag with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
+
+CreateNetwork does not:
+	* If VPC does exist do not reconcile on it (this is to avoid potential changes to the CIDR range and unwanted/unexpected behaviour)
+
+CreateNetwork does:
+    * If VPC doesn't exist, create a VPC with CIDR block and tag it
+	* If VPC does exist do reconcile on subnets, subnet groups
 */
-func (n *NetworkProvider) CreateNetwork(ctx context.Context, CIDR *net.IPNet) (*Network, error) {
+func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.IPNet) (*Network, error) {
 	logger := n.Logger.WithField("action", "CreateNetwork")
 	logger.Debug("CreateNetwork called")
 
@@ -76,66 +95,95 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, CIDR *net.IPNet) (*
 	organizationTag := resources.GetOrganizationTag()
 
 	// check if there is cluster specific vpc already created.
-	foundVpc, err := getStandaloneVpc(n.Ec2Svc, logger, clusterID, organizationTag)
+	foundVpc, err := getStandaloneVpc(n.Ec2Api, logger, clusterID, organizationTag)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "unable to get vpc")
 	}
 
-	// if vpc does not exist create it
-	// we do not want to update the vpc configuration (eg. cidr block) after it has been created
-	// to avoid unwanted and unexpected behaviour
-	if foundVpc == nil {
-		// expected valid CIDR block between /16 and /26
-		if !isValidCIDR(CIDR) {
-			return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", CIDR.String()))
-		}
-		logger.Infof("cidr %s is valid 👍", CIDR.String())
-
-		// create vpc using cidr string from _network
-		createVpcOutput, err := n.Ec2Svc.CreateVpc(&ec2.CreateVpcInput{
-			CidrBlock: aws.String(CIDR.String()),
-		})
-		ec2Err, isAwsErr := err.(awserr.Error)
-		if err != nil && isAwsErr && ec2Err.Code() == "InvalidVpc.Range" {
-			return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", CIDR.String()))
-		}
+	if foundVpc != nil {
+		/* if vpc is found reconcile on vpc networking
+		* subnets (2 private)
+		* subnet groups -> rds and elasticache
+		* security groups
+		* route table configuration
+		 */
+		privateSubnets, err := n.reconcileVPCAssociatedPrivateSubnets(ctx, n.Logger, foundVpc)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "unexpected error creating vpc")
+			return nil, errorUtil.Wrap(err, "unexpected error creating vpc subnets")
 		}
-		logger.Infof("creating vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
 
-		// ensure standalone vpc has correct tags
-		clusterIDTag := &ec2.Tag{
-			Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
-			Value: aws.String(clusterID),
+		// create rds subnet group
+		if err = n.reconcileStandaloneRDSVpc(ctx, privateSubnets, clusterID); err != nil {
+			return nil, errorUtil.Wrap(err, "unexpected error reconciling standalone rds vpc networking")
 		}
-		if err = n.reconcileVPCTags(createVpcOutput.Vpc, clusterIDTag); err != nil {
-			return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
+
+		// create elasticache subnet groups
+		if err = n.reconcileStandaloneElasticacheVpc(ctx, privateSubnets); err != nil {
+			return nil, errorUtil.Wrap(err, "unexpected error reconciling standalone elasticache vpc networking")
 		}
 
 		return &Network{
-			Vpc: createVpcOutput.Vpc,
+			Vpc: foundVpc,
 		}, nil
 	}
+	// if no vpc is found return and create a standalone vpc
+	return n.createStandaloneVpc(vpcCidrBlock, clusterID, organizationTag)
+}
 
-	/* if vpc is found reconcile on vpc networking
-	* subnets (2 private)
-	* subnet groups -> rds and elasticache
-	* security groups
-	* route table configuration
-	 */
-	var privateSubnets []*ec2.Subnet
-	if err = n.reconcileVPCAssociatedPrivateSubnets(ctx, n.Logger, foundVpc, privateSubnets); err != nil {
-		return nil, errorUtil.Wrap(err, "unexpected error creating vpc subnets")
+/*
+createStandaloneVPC returns a Network type and error
+
+VPCs created withing a valid CIDR range, between \16 and \26
+
+VPCs are tagged with with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
+
+NOTE - Once a VPC is created we do not want to update it. To avoid changing cidr block
+ */
+func (n *NetworkProvider) createStandaloneVpc(vpcCidrBlock *net.IPNet, clusterID, organizationTag string) (*Network, error) {
+	logger := n.Logger.WithField("action", "creating standalone vpc")
+	// expected valid CIDR block between /16 and /26
+	if !isValidCIDRRange(vpcCidrBlock) {
+		return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
+	}
+
+	logger.Infof("cidr %s is valid 👍", vpcCidrBlock.String())
+
+	// create vpc using cidr string from _network
+	createVpcOutput, err := n.Ec2Api.CreateVpc(&ec2.CreateVpcInput{
+		CidrBlock: aws.String(vpcCidrBlock.String()),
+	})
+	ec2Err, isAwsErr := err.(awserr.Error)
+	if err != nil && isAwsErr && ec2Err.Code() == "InvalidVpc.Range" {
+		return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
+	}
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "unexpected error creating vpc")
+	}
+	logger.Infof("creating vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
+
+	// ensure standalone vpc has correct tags
+	clusterIDTag := &ec2.Tag{
+		Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
+		Value: aws.String(clusterID),
+	}
+	if err = n.reconcileVPCTags(createVpcOutput.Vpc, clusterIDTag); err != nil {
+		return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
 	}
 
 	return &Network{
-		Vpc: foundVpc,
+		Vpc: createVpcOutput.Vpc,
 	}, nil
 }
 
 /*
-DeleteNetwork deletes standalone cro networking
+DeleteNetwork returns an error
+
+VPCs are tagged with with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
+
+This tag is used to find a standalone VPC
+If found DeleteNetwork will attempt to remove:
 	* all vpc associated subnets
 	* vpc
 */
@@ -149,7 +197,7 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	organizationTag := resources.GetOrganizationTag()
 
 	//check if there is a standalone vpc already created.
-	foundVpc, err := getStandaloneVpc(n.Ec2Svc, logger, clusterID, organizationTag)
+	foundVpc, err := getStandaloneVpc(n.Ec2Api, logger, clusterID, organizationTag)
 	if err != nil {
 		return errorUtil.Wrap(err, "unable to get vpc")
 	}
@@ -158,14 +206,14 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 		return nil
 	}
 
-	vpcSubs, err := getVPCAssociatedSubnets(n.Ec2Svc, logger, foundVpc)
+	vpcSubs, err := getVPCAssociatedSubnets(n.Ec2Api, logger, foundVpc)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get standalone vpc subnets")
 	}
 
 	for _, subnet := range vpcSubs {
-		fmt.Printf("attempting to delete subnet with id: %s", *subnet.SubnetId)
-		_, err = n.Ec2Svc.DeleteSubnet(&ec2.DeleteSubnetInput{
+		logger.Infof("attempting to delete subnet with id: %s", *subnet.SubnetId)
+		_, err = n.Ec2Api.DeleteSubnet(&ec2.DeleteSubnetInput{
 			SubnetId: aws.String(*subnet.SubnetId),
 		})
 		if err != nil {
@@ -174,12 +222,13 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	}
 
 	logger.Infof("attempting to delete vpc id: %s for clusterID: %s", *foundVpc.VpcId, clusterID)
-	_, err = n.Ec2Svc.DeleteVpc(&ec2.DeleteVpcInput{
+	_, err = n.Ec2Api.DeleteVpc(&ec2.DeleteVpcInput{
 		VpcId: aws.String(*foundVpc.VpcId),
 	})
 	if err != nil {
 		return errorUtil.Wrap(err, "unable to delete vpc")
 	}
+	logger.Infof("vpc %s deleted successfully", *foundVpc.VpcId)
 	return nil
 }
 
@@ -197,14 +246,14 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	logger := n.Logger.WithField("action", "isEnabled")
 
 	//check if there is a standalone vpc already created.
-	foundVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Svc, logger)
+	foundVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
 	}
 
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
-	vpcSubnets, err := GetVPCSubnets(n.Ec2Svc, logger, foundVpc)
+	vpcSubnets, err := GetVPCSubnets(n.Ec2Api, logger, foundVpc)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "error happened while returning vpc subnets")
 	}
@@ -226,24 +275,30 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 }
 
 /*
+reconcileVPCAssociatedPrivateSubnets returns an array list of private subnets associated with a vpc or an error
+
+each standalone vpc cidr range is split in half, to create two private subnets.
+these subnets are located in different az's
+the az is determined by the cro strategy, either provided by override config map or provided by the infrastructure CR
 
  */
-func (n *NetworkProvider) reconcileVPCAssociatedPrivateSubnets(ctx context.Context, logger *logrus.Entry, vpc *ec2.Vpc, privateSubnets []*ec2.Subnet) error {
+func (n *NetworkProvider) reconcileVPCAssociatedPrivateSubnets(ctx context.Context, logger *logrus.Entry, vpc *ec2.Vpc) ([]*ec2.Subnet, error) {
 	logger.Info("gathering all private subnets in cluster vpc")
 
 	// get a list of availability zones
-	azs, err := getAZs(n.Ec2Svc)
+	azs, err := getAZs(n.Ec2Api)
 	if err != nil {
-		return errorUtil.Wrap(err, "error getting availability zones")
+		return nil, errorUtil.Wrap(err, "error getting availability zones")
 	}
 
 	// filter based on a tag key attached to private subnets
 	// get subnets in vpc
-	subs, err := getVPCAssociatedSubnets(n.Ec2Svc, logger, vpc)
+	subs, err := getVPCAssociatedSubnets(n.Ec2Api, logger, vpc)
 	if err != nil {
-		return errorUtil.Wrap(err, "error getting vpc subnets")
+		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
 	}
 
+	var privateSubnets []*ec2.Subnet
 	for _, sub := range subs {
 		for _, tags := range sub.Tags {
 			if *tags.Key == defaultAWSPrivateSubnetTagKey {
@@ -258,9 +313,9 @@ func (n *NetworkProvider) reconcileVPCAssociatedPrivateSubnets(ctx context.Conte
 		logger.Infof("checking if private subnet exists in zone %s", *az.ZoneName)
 		if !privateSubnetExists(privateSubnets, az) {
 			logger.Infof("no private subnet found in %s", *az.ZoneName)
-			subnet, err := createPrivateSubnet(ctx, n.Client, n.Ec2Svc, vpc, logger, *az.ZoneName)
+			subnet, err := createPrivateSubnet(ctx, n.Client, n.Ec2Api, vpc, logger, *az.ZoneName)
 			if err != nil {
-				return errorUtil.Wrap(err, "failed to created private subnet")
+				return nil, errorUtil.Wrap(err, "failed to created private subnet")
 			}
 			privateSubnets = append(privateSubnets, subnet)
 		}
@@ -270,10 +325,14 @@ func (n *NetworkProvider) reconcileVPCAssociatedPrivateSubnets(ctx context.Conte
 			break
 		}
 	}
-	return nil
+	return privateSubnets, nil
 }
 
 /*
+reconcileVPCTags will tag a VPC or return an error
+
+VPCs are tagged with with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
  */
 func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) error {
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
@@ -282,7 +341,7 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 	if !tagsContains(vpcTags, DefaultRHMIVpcNameTagKey, DefaultRHMIVpcNameTagValue) ||
 		!tagsContains(vpcTags, *clusterIDTag.Key, *clusterIDTag.Value) {
 
-		_, err := n.Ec2Svc.CreateTags(&ec2.CreateTagsInput{
+		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 			Resources: []*string{
 				aws.String(*vpc.VpcId),
 			},
@@ -301,16 +360,140 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 	return nil
 }
 
+/*
+We require an rds subnet group to be in place when provisioning rds resources
+
+reconcileStandaloneRDSVpc ensures that an rds subnet group is created with 2 private subnets
+*/
+func (n *NetworkProvider) reconcileStandaloneRDSVpc(ctx context.Context, privateVPCSubnets []*ec2.Subnet, clusterID string) error {
+	logger := n.Logger.WithField("action", "configureRDSVpc")
+	logger.Info("ensuring rds subnet groups in vpc are as expected")
+	// get subnet group id
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// check if group exists
+	groups, err := n.RdsApi.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{})
+	if err != nil {
+		return errorUtil.Wrap(err, "error describing subnet groups")
+	}
+	var foundSubnet *rds.DBSubnetGroup
+	for _, sub := range groups.DBSubnetGroups {
+		if *sub.DBSubnetGroupName == subnetGroupName {
+			foundSubnet = sub
+			break
+		}
+	}
+	if foundSubnet != nil {
+		logger.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
+		return nil
+	}
+
+	// in the case of no private subnets being found, we return a less verbose error message compared to obscure aws error message
+	if len(privateVPCSubnets) == 0 {
+		return errorUtil.New("no private subnets found, can not create subnet group for rds")
+	}
+
+	// build array list of all vpc private subnets
+	var subnetIDs []*string
+	for _, subnet := range privateVPCSubnets {
+		subnetIDs = append(subnetIDs, subnet.SubnetId)
+	}
+
+	// build subnet group input
+	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
+		DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
+		DBSubnetGroupName:        aws.String(subnetGroupName),
+		SubnetIds:                subnetIDs,
+		Tags: []*rds.Tag{
+			{
+				Key:   aws.String("cluster"),
+				Value: aws.String(clusterID),
+			},
+		},
+	}
+
+	// create db subnet group
+	logger.Infof("creating resource subnet group %s", *subnetGroupInput.DBSubnetGroupName)
+	if _, err := n.RdsApi.CreateDBSubnetGroup(subnetGroupInput); err != nil {
+		return errorUtil.Wrap(err, "unable to create db subnet group")
+	}
+	return nil
+}
+
+/*
+We require an elasticache subnet group to be in place when provisioning rds resources
+
+reconcileStandaloneElasticacheVpc ensures that an rds subnet group is created with 2 private subnets
+*/func (n *NetworkProvider) reconcileStandaloneElasticacheVpc(ctx context.Context, privateVPCSubnets []*ec2.Subnet) error {
+	logger := n.Logger.WithField("action", "configureElasticacheVpc")
+	logger.Info("ensuring elasticache subnet groups in vpc are as expected")
+	// get subnet group id
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// check if group exists
+	groups, err := n.ElasticacheApi.DescribeCacheSubnetGroups(&elasticache.DescribeCacheSubnetGroupsInput{})
+	if err != nil {
+		return errorUtil.Wrap(err, "error describing subnet groups")
+	}
+	var foundSubnet *elasticache.CacheSubnetGroup
+	for _, sub := range groups.CacheSubnetGroups {
+		if *sub.CacheSubnetGroupName == subnetGroupName {
+			foundSubnet = sub
+			break
+		}
+	}
+	if foundSubnet != nil {
+		logger.Infof("subnet group %s found", *foundSubnet.CacheSubnetGroupName)
+		return nil
+	}
+
+	// in the case of no private subnets being found, we return a less verbose error message compared to obscure aws error message
+	if len(privateVPCSubnets) == 0 {
+		return errorUtil.New("no private subnets found, can not create subnet group for rds")
+	}
+
+	// build array list of all vpc private subnets
+	var subnetIDs []*string
+	for _, subnet := range privateVPCSubnets {
+		subnetIDs = append(subnetIDs, subnet.SubnetId)
+	}
+
+	// build subnet group input
+	subnetGroupInput := &elasticache.CreateCacheSubnetGroupInput{
+		CacheSubnetGroupDescription: aws.String("Subnet group created by the cloud resource operator"),
+		CacheSubnetGroupName:        aws.String(subnetGroupName),
+		SubnetIds:                   subnetIDs,
+	}
+
+	logger.Infof("creating resource subnet group %s", subnetGroupName)
+	if _, err := n.ElasticacheApi.CreateCacheSubnetGroup(subnetGroupInput); err != nil {
+		return errorUtil.Wrap(err, "unable to create cache subnet group")
+	}
+	return nil
+}
+
+/*
+getStandaloneVpc will return a vpc type or error
+
+
+Standalone VPCs are tagged with with the name `<organizationTag>/clusterID`.
+By default, `integreatly.org/clusterID`.
+
+This tag is used to identify a standalone vpc
+ */
 func getStandaloneVpc(ec2Svc ec2iface.EC2API, logger *logrus.Entry, clusterID, organizationTag string) (*ec2.Vpc, error) {
-	// get vpcs
+	// get all vpcs
 	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpcs")
 	}
 
-	//there will be a tags associated with the seperate vpc
-	//Name='RHMI Cloud Resource VPC' and integreatly.org/clusterID=<infrastructure-id>
-	//use these in order to pick up the correct one.
 	// find associated vpc to tag
 	var foundVPC *ec2.Vpc
 	for _, vpc := range vpcs.Vpcs {
@@ -322,9 +505,14 @@ func getStandaloneVpc(ec2Svc ec2iface.EC2API, logger *logrus.Entry, clusterID, o
 		}
 	}
 	return foundVPC, nil
-
 }
 
+/*
+getVPCAssociatedSubnets will return a list of subnets or an error
+
+this is used twice, to find all subnets associated with a vpc in order to remove all subnets on deletion
+it is also used as a helper function when we filter private associated subnets
+ */
 func getVPCAssociatedSubnets(ec2Svc ec2iface.EC2API, logger *logrus.Entry, vpc *ec2.Vpc) ([]*ec2.Subnet, error) {
 	logger.Info("gathering cluster vpc and subnet information")
 	// poll subnets to ensure credentials have reconciled
@@ -333,9 +521,11 @@ func getVPCAssociatedSubnets(ec2Svc ec2iface.EC2API, logger *logrus.Entry, vpc *
 		return nil, errorUtil.Wrap(err, "error getting subnets")
 	}
 
+	// in the rare chance no vpc is found we should return an error to avoid an unexpected nil pointer
 	if vpc == nil {
 		return nil, errorUtil.Wrap(err, "vpc is nil, need vpc to find associated subnets")
 	}
+
 	// find associated subnets
 	var associatedSubs []*ec2.Subnet
 	for _, sub := range subs {
@@ -344,11 +534,15 @@ func getVPCAssociatedSubnets(ec2Svc ec2iface.EC2API, logger *logrus.Entry, vpc *
 			associatedSubs = append(associatedSubs, sub)
 		}
 	}
-
 	return associatedSubs, nil
 }
 
-func isValidCIDR(CIDR *net.IPNet) bool {
+/*
+isValidCIDRRange returns a bool denoting if a cidr mask is valid
+
+we accept cidr mask ranges from \16 to \26
+ */
+func isValidCIDRRange(CIDR *net.IPNet) bool {
 	mask, _ := CIDR.Mask.Size()
 	return mask > 15 && mask < 27
 
