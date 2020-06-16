@@ -135,7 +135,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		resource vpc and cluster vpc
 	*/
 	if isEnabled {
-		// todo handle getting vpc cidr block from _network strat
+		// todo handle getting vpc cidr block from _network strat - https://issues.redhat.com/browse/INTLY-8103
 		logger.Debug("using temp cidr block")
 		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
 		if err != nil {
@@ -178,9 +178,10 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
-
-	errMsg := "we don;t wanna create other stufff and thngs"
-	return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
+	// uncomment lines 183 and 184 for development/verification
+	// TODO Will be removed in https://issues.redhat.com/browse/INTLY-8103
+	//errMsg := "we don;t wanna create other stufff and thngs"
+	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// verify and build elasticache create config
 	if err := p.buildElasticacheCreateStrategy(ctx, r, ec2Svc, elasticacheConfig); err != nil {
@@ -442,8 +443,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 
 	// check if replication group does not exist and delete finalizer
 	if foundCache == nil {
-		//TODO Manual testing only - should be removed
-		//will be handled properly in https://issues.redhat.com/browse/INTLY-8163
+		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)

@@ -129,6 +129,10 @@ func (m *mockElasticacheClient) CreateCacheSubnetGroup(*elasticache.CreateCacheS
 	return &elasticache.CreateCacheSubnetGroupOutput{}, nil
 }
 
+func (m *mockElasticacheClient) DeleteCacheSubnetGroup(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+	return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+}
+
 // mock sts get caller identity
 func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
 	return &sts.GetCallerIdentityOutput{

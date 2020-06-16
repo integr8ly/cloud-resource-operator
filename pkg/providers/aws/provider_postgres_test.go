@@ -122,6 +122,10 @@ func (m *mockRdsClient) CreateDBSubnetGroup(*rds.CreateDBSubnetGroupInput) (*rds
 	return &rds.CreateDBSubnetGroupOutput{}, nil
 }
 
+func (m *mockRdsClient) DeleteDBSubnetGroup(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+	return &rds.DeleteDBSubnetGroupOutput{}, nil
+}
+
 func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 	return &ec2.DescribeSubnetsOutput{
 		Subnets: m.subnets,

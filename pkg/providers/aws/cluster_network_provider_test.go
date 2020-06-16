@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -53,6 +52,7 @@ func buildSubnet(vpcID string) *ec2.Subnet {
 		SubnetId:         aws.String("test-id"),
 		VpcId:            aws.String(vpcID),
 		AvailabilityZone: aws.String("test"),
+		CidrBlock:        aws.String("test"),
 		Tags: []*ec2.Tag{
 			{
 				Key:   aws.String(defaultAWSPrivateSubnetTagKey),
@@ -162,6 +162,7 @@ func buildStandaloneVPCAssociatedSubnets() []*ec2.Subnet {
 			SubnetId:         aws.String("test-id-1"),
 			VpcId:            aws.String(defaultStandaloneVPCID),
 			AvailabilityZone: aws.String("test"),
+			CidrBlock:        aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
 					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
@@ -173,6 +174,7 @@ func buildStandaloneVPCAssociatedSubnets() []*ec2.Subnet {
 			SubnetId:         aws.String("test-id-2"),
 			VpcId:            aws.String(defaultStandaloneVPCID),
 			AvailabilityZone: aws.String("test"),
+			CidrBlock:        aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
 					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
@@ -254,6 +256,7 @@ func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
 	return []*rds.DBSubnetGroup{
 		{
 			DBSubnetGroupName: aws.String(buildSubnetGroupID()),
+			VpcId:             aws.String("test"),
 		},
 	}
 }
@@ -262,6 +265,7 @@ func buildElasticacheSubnetGroup() []*elasticache.CacheSubnetGroup {
 	return []*elasticache.CacheSubnetGroup{
 		{
 			CacheSubnetGroupName: aws.String(buildSubnetGroupID()),
+			VpcId:                aws.String("test"),
 		},
 	}
 }
@@ -396,7 +400,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 	}
 	type fields struct {
 		Client         client.Client
-		Session        *session.Session
 		RdsApi         rdsiface.RDSAPI
 		Ec2Api         ec2iface.EC2API
 		ElasticacheApi elasticacheiface.ElastiCacheAPI
@@ -417,7 +420,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network - CIDR /15",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC()},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -433,7 +435,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network  - CIDR /16",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(), vpc: buildValidStandaloneVPC(validCIDRSixteen)},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -450,7 +451,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network - CIDR /26",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(), vpc: buildValidStandaloneVPC(validCIDRTwentySix)},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -467,7 +467,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network - CIDR /27",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC()},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -483,7 +482,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "fail if unable to get cluster id",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -499,7 +497,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "unable to get vpc",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{wantErrList: true},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -514,9 +511,8 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "successfully reconcile on standalone vpc",
 			fields: fields{
-				Client:  fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session: nil,
-				RdsApi:  &mockRdsClient{},
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
 				Ec2Api: &mockEc2Client{
 					vpcs:    []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
 					vpc:     buildValidStandaloneVPC(validCIDRTwentySix),
@@ -537,9 +533,8 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "successfully reconcile on non tagged standalone vpc",
 			fields: fields{
-				Client:  fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session: nil,
-				RdsApi:  &mockRdsClient{},
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
 				Ec2Api: &mockEc2Client{
 					vpcs:    buildVpcs(),
 					vpc:     buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
@@ -562,9 +557,8 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "successfully reconcile on already created rds subnet groups for standalone vpc",
 			fields: fields{
-				Client:  fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session: nil,
-				RdsApi:  &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
 				Ec2Api: &mockEc2Client{
 					vpcs:    []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
 					vpc:     buildValidStandaloneVPC(validCIDRTwentySix),
@@ -587,7 +581,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
 				Client:         tt.fields.Client,
-				Session:        tt.fields.Session,
 				RdsApi:         tt.fields.RdsApi,
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
@@ -612,7 +605,6 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 	}
 	type fields struct {
 		Client         client.Client
-		Session        *session.Session
 		RdsApi         rdsiface.RDSAPI
 		Ec2Api         ec2iface.EC2API
 		ElasticacheApi elasticacheiface.ElastiCacheAPI
@@ -631,7 +623,6 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - no vpc found",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -646,7 +637,6 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - of standalone vpc",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}},
 				ElasticacheApi: &mockElasticacheClient{},
@@ -661,10 +651,23 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - of standalone vpc and associated subnets",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Session:        nil,
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}, subnets: buildStandaloneSubnets()},
 				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "verify deletion - of standalone vpc and associated subnets and subnet groups",
+			fields: fields{
+				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi:         &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
+				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}, subnets: buildStandaloneSubnets()},
+				ElasticacheApi: &mockElasticacheClient{cacheSubnetGroup: buildElasticacheSubnetGroup()},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -677,7 +680,6 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
 				Client:         tt.fields.Client,
-				Session:        tt.fields.Session,
 				RdsApi:         tt.fields.RdsApi,
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,

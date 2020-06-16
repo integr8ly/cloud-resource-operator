@@ -152,7 +152,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	// if a standalone network is required configure the network
 	// (standalone vpc, private subnets, subnet groups, security groups, vpc peering)
 	if isEnabled {
-		// todo handle getting vpc cidr block from _network strat
+		// todo handle getting vpc cidr block from _network strat - https://issues.redhat.com/browse/INTLY-8103
 		logger.Debug("using temp cidr block")
 		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
 		if err != nil {
@@ -198,6 +198,8 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		}
 	}
 
+	// uncomment lines 183 and 184 for development/verification
+	// TODO Will be removed in https://issues.redhat.com/browse/INTLY-8103
 	//errMsg := "we don;t wanna create other stufff and thngs"
 	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
@@ -423,8 +425,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 
 	// check if instance does not exist, delete finalizer and credential secret
 	if foundInstance == nil {
-		//TODO Manual testing only - should be removed
-		//will be handled properly in https://issues.redhat.com/browse/INTLY-8163
+		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)

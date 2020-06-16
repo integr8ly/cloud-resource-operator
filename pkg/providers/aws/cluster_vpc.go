@@ -253,13 +253,16 @@ func createPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 		subnet = createOutput.Subnet
 		break
 	}
+	if subnet == nil {
 
+	}
+	fmt.Println("moopy boop", subnet)
 	return subnet, nil
 }
 
 // tags a private subnet with the default aws private subnet tag
 func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, sub *ec2.Subnet, logger *logrus.Entry) error {
-	logger.Infof("tagging cloud resource subnets %s", *sub.SubnetId)
+	logger.Infof("tagging cloud resource subnet %s", *sub.SubnetId)
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -278,6 +281,9 @@ func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2A
 			}, {
 				Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
 				Value: aws.String(clusterID),
+			}, {
+				Key:   aws.String("Name"),
+				Value: aws.String(DefaultRHMISubnetNameTagValue),
 			},
 		},
 	})
@@ -456,19 +462,9 @@ func getSubnets(ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (*ec2.Vpc, error) {
 	// first call to aws api from the network provider is to get cluster vpc
 	// polling to allow credential minter time to reconcile credentials
-	var vpcs []*ec2.Vpc
-	var pollErr error
-	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
-		vpcOutput, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
-		if err != nil {
-			pollErr = err
-			return false, nil
-		}
-		vpcs = vpcOutput.Vpcs
-		return true, nil
-	})
+	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "error while polling for vpcs %v", pollErr)
+		return nil, errorUtil.Wrap(err, "error getting vpcs")
 	}
 
 	// get cluster id
@@ -480,7 +476,7 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 	// find associated vpc to cluster
 	var foundVPC *ec2.Vpc
 	logger.Infof("searching for cluster %s vpc", clusterID)
-	for _, vpc := range vpcs {
+	for _, vpc := range vpcs.Vpcs {
 		for _, tag := range vpc.Tags {
 			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID) {
 				foundVPC = vpc
