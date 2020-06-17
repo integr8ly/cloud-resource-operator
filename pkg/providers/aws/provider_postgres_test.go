@@ -471,7 +471,6 @@ func buildSecurityGroups(groupName string) []*ec2.SecurityGroup {
 	}
 }
 
-// todo tests should be extended when createNetwork is implemented, we should ensure creation of both vpc implementations
 func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	scheme, err := buildTestSchemePostgresql()
 	testIdentifier := "test-identifier"
@@ -654,6 +653,34 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				TCPPinger:         buildMockConnectionTester(),
 			},
 			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "test rds is exists and is available (valid cluster standalone subnets)",
+			args: args{
+				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{secGroups: buildSecurityGroups(secName)},
+				ctx:    context.TODO(),
+				cr:     buildTestPostgresCR(),
+				postgresCfg: &rds.CreateDBInstanceInput{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+				standaloneNetworkExists: true,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
+				Username: defaultAwsPostgresUser,
+				Password: "test",
+				Host:     "blob",
+				Database: defaultAwsEngine,
+				Port:     defaultAwsPostgresPort,
+			}},
 			wantErr: false,
 		},
 	}

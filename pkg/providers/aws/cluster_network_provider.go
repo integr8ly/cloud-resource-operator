@@ -25,6 +25,7 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -35,6 +36,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"net"
@@ -899,4 +901,37 @@ func subnetExists(subnets []*ec2.Subnet, cidr string) bool {
 func isValidCIDRRange(CIDR *net.IPNet) bool {
 	mask, _ := CIDR.Mask.Size()
 	return mask > 15 && mask < 27
+}
+
+// getNetworkProviderConfig return parsed ipNet cidr block
+// a _network resource type strategy, is expected to have the same tier as either postgres or redis resource type
+// ie. for a postgres tier X there should be a corresponding _network tier X
+//
+// the _network strategy config is unmarshalled into a ec2 create vpc input struct
+// from the struct the cidr block is parsed to ensure validity
+func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, logger *logrus.Entry, tier string) (*net.IPNet, error) {
+	logger.Infof("fetching _network strategy config for tier %s", tier)
+
+	stratCfg, err := configManager.ReadStorageStrategy(ctx, providers.NetworkResourceType, tier)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to read _network strategy config")
+	}
+
+	vpcCreateConfig := &ec2.CreateVpcInput{}
+	if err := json.Unmarshal(stratCfg.CreateStrategy, vpcCreateConfig); err != nil {
+		return nil, errorUtil.Wrap(err, "failed to unmarshal aws vpc create config")
+	}
+
+	if vpcCreateConfig.CidrBlock == nil {
+		return nil, errorUtil.New(fmt.Sprintf("CidrBlock in _network strategy tier %s can not be nil", tier))
+	}
+
+	_, vpcCidr, err := net.ParseCIDR(*vpcCreateConfig.CidrBlock)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to parse cidr block from _network strategy")
+	}
+	cidrMask, _ := vpcCidr.Mask.Size()
+
+	logger.Infof("found vpc cidr block %s/%d in network strategy tier %s", vpcCidr.IP.String(), cidrMask, tier)
+	return vpcCidr, nil
 }

@@ -196,7 +196,6 @@ func buildTestRedisCluster() *providers.RedisCluster {
 	}}
 }
 
-// todo tests should be extended when createNetwork is implemented, we should ensure creation of both vpc implementations
 func Test_createRedisCluster(t *testing.T) {
 	scheme, err := buildTestSchemeRedis()
 	if err != nil {
@@ -335,6 +334,28 @@ func Test_createRedisCluster(t *testing.T) {
 				},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+		{
+			name: "test elasticache already exists and status is available (valid standalone rhmi subnets)",
+			args: args{
+				ctx:                     context.TODO(),
+				cacheSvc:                &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+				ec2Svc:                  &mockEc2Client{secGroups: buildSecurityGroups(secName)},
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
 			},
 			fields: fields{
 				ConfigManager:     nil,
