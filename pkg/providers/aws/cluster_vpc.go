@@ -256,7 +256,6 @@ func createPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 	if subnet == nil {
 
 	}
-	fmt.Println("moopy boop", subnet)
 	return subnet, nil
 }
 

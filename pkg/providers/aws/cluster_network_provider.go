@@ -20,20 +20,20 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	"net"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
+	"net"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sort"
 
 	errorUtil "github.com/pkg/errors"
 )
@@ -47,7 +47,8 @@ const (
 
 // wrapper for ec2 vpcs, to allow for extensibility
 type Network struct {
-	Vpc *ec2.Vpc
+	Vpc     *ec2.Vpc
+	Subnets []*ec2.Subnet
 }
 
 // used to map expected ip addresses to availability zones
@@ -145,7 +146,8 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		}
 
 		return &Network{
-			Vpc: createVpcOutput.Vpc,
+			Vpc:     createVpcOutput.Vpc,
+			Subnets: nil,
 		}, nil
 	}
 
@@ -161,17 +163,18 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 	}
 
 	// create rds subnet group
-	if err = n.reconcileStandaloneRDSVpc(ctx, privateSubnets, clusterID); err != nil {
+	if err = n.reconcileRDSVPCConfiguration(ctx, privateSubnets, clusterID); err != nil {
 		return nil, errorUtil.Wrap(err, "unexpected error reconciling standalone rds vpc networking")
 	}
 
 	// create elasticache subnet groups
-	if err = n.reconcileStandaloneElasticacheVpc(ctx, privateSubnets); err != nil {
+	if err = n.reconcileElasticacheVPCConfiguration(ctx, privateSubnets); err != nil {
 		return nil, errorUtil.Wrap(err, "unexpected error reconciling standalone elasticache vpc networking")
 	}
 
 	return &Network{
-		Vpc: foundVpc,
+		Vpc:     foundVpc,
+		Subnets: privateSubnets,
 	}, nil
 }
 
@@ -349,7 +352,10 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting availability zones")
 	}
-	// we only require two az's for cro networking
+
+	// sort the azs first
+	sort.Sort(azByZoneName(azs.AvailabilityZones))
+
 	for index, az := range azs.AvailabilityZones {
 		validAzs = append(validAzs, az)
 		if index == 1 {
@@ -360,7 +366,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		return nil, errorUtil.New(fmt.Sprintf("expected 2 availability zones, found %s", validAzs))
 	}
 
-	// validSubnets and validAzs contain the same index
+	// validSubnets and validAzs contain the same index (2 items)
 	// to mitigate the chance of a nil pointer during subnet creation,
 	// both azs and subnets are mapped to type `NetworkAZSubnet`
 	var expectedAZSubnets []*NetworkAZSubnet
@@ -383,7 +389,6 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
 	}
-
 	// for create a subnet for every expected subnet to exist
 	for _, expectedAZSubnet := range expectedAZSubnets {
 		if !subnetExists(subs, expectedAZSubnet.IP.String()) {
@@ -396,8 +401,10 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 			})
 			ec2err, isAwsErr := err.(awserr.Error)
 			if err != nil && isAwsErr && ec2err.Code() == "InvalidSubnet.Conflict" {
-				logger.Infof("%s conflicts with a current subnet, trying again", expectedAZSubnet.IP.String())
-				continue
+				// if two or more crs are created at the same time the network provider may run in parallel
+				// in this case it's expected that there will be a conflict, as they will each be reconciling the required subnets
+				// one will get in first and the following ones will see the expected conflict as the subnet is already created
+				logger.Debugf("%s conflicts with a current subnet", expectedAZSubnet.IP.String())
 			}
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "error creating new subnet")
@@ -457,9 +464,9 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 
 //an rds subnet group is required to be in place when provisioning rds resources
 //
-//reconcileStandaloneRDSVpc ensures that an rds subnet group is created with 2 private subnets
-func (n *NetworkProvider) reconcileStandaloneRDSVpc(ctx context.Context, privateVPCSubnets []*ec2.Subnet, clusterID string) error {
-	logger := n.Logger.WithField("action", "reconcileStandaloneRDSVpc")
+//reconcileRDSVPCConfiguration ensures that an rds subnet group is created with 2 private subnets
+func (n *NetworkProvider) reconcileRDSVPCConfiguration(ctx context.Context, privateVPCSubnets []*ec2.Subnet, clusterID string) error {
+	logger := n.Logger.WithField("action", "reconcileRDSVPCConfiguration")
 	logger.Info("ensuring rds subnet groups in vpc are as expected")
 	// get subnet group id
 	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
@@ -505,11 +512,11 @@ func (n *NetworkProvider) reconcileStandaloneRDSVpc(ctx context.Context, private
 	return nil
 }
 
-//It is required to have an elasticache subnet group in place when provisioning rds resources
+//It is required to have an elasticache subnet group in place when provisioning elasticache resources
 //
-//reconcileStandaloneElasticacheVpc ensures that an rds subnet group is created with 2 private subnets
-func (n *NetworkProvider) reconcileStandaloneElasticacheVpc(ctx context.Context, privateVPCSubnets []*ec2.Subnet) error {
-	logger := n.Logger.WithField("action", "configureElasticacheVpc")
+//reconcileElasticacheVPCConfiguration ensures that an elasticache subnet group is created with 2 private subnets
+func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Context, privateVPCSubnets []*ec2.Subnet) error {
+	logger := n.Logger.WithField("action", "reconcileElasticacheVPCConfiguration")
 	logger.Info("ensuring elasticache subnet groups in vpc are as expected")
 	// get subnet group id
 	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)

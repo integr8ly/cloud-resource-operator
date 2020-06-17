@@ -50,13 +50,15 @@ type mockRdsClient struct {
 
 type mockEc2Client struct {
 	ec2iface.EC2API
-	subnet      *ec2.Subnet
-	subnets     []*ec2.Subnet
-	vpcs        []*ec2.Vpc
-	vpc         *ec2.Vpc
-	secGroups   []*ec2.SecurityGroup
-	azs         []*ec2.AvailabilityZone
-	wantErrList bool
+	firstSubnet     *ec2.Subnet
+	secondSubnet    *ec2.Subnet
+	subnets         []*ec2.Subnet
+	vpcs            []*ec2.Vpc
+	vpc             *ec2.Vpc
+	secGroups       []*ec2.SecurityGroup
+	azs             []*ec2.AvailabilityZone
+	wantErrList     bool
+	returnSecondSub bool
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -156,8 +158,18 @@ func (m *mockEc2Client) CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput,
 }
 
 func (m *mockEc2Client) CreateSubnet(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+	if m.returnSecondSub {
+		return &ec2.CreateSubnetOutput{
+			Subnet: m.secondSubnet,
+		}, nil
+	}
+	return m.returnFirstSubnet()
+}
+
+func (m *mockEc2Client) returnFirstSubnet() (*ec2.CreateSubnetOutput, error) {
+	m.returnSecondSub = true
 	return &ec2.CreateSubnetOutput{
-		Subnet: m.subnet,
+		Subnet: m.firstSubnet,
 	}, nil
 }
 

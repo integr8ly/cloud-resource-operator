@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"errors"
-	"fmt"
 	crov1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -83,7 +82,6 @@ func (s *mockS3Svc) ListBuckets(lbi *s3.ListBucketsInput) (*s3.ListBucketsOutput
 			Name: aws.String(bName),
 		})
 	}
-	fmt.Println("Setting buckets", buckets)
 	cbo := &s3.ListBucketsOutput{
 		Buckets: buckets,
 	}

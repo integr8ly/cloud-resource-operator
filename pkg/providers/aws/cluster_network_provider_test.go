@@ -21,12 +21,22 @@ import (
 )
 
 const (
-	defaultRHMISubnetTag   = "integreatly.org/clusterID"
-	defaultStandaloneVPCID = "standaloneID"
-	validCIDRFifteen       = "10.0.0.0/15"
-	validCIDRSixteen       = "10.0.0.0/16"
-	validCIDRTwentySix     = "10.0.0.0/26"
-	validCIDRTwentySeven   = "10.0.0.0/27"
+	defaultRHMISubnetTag       = "integreatly.org/clusterID"
+	defaultStandaloneVPCID     = "standaloneID"
+	validCIDRFifteen           = "10.0.0.0/15"
+	validCIDRSixteen           = "10.0.0.0/16"
+	validCIDREighteen          = "10.0.0.0/18"
+	validCIDRTwentySix         = "10.0.0.0/26"
+	validCIDRTwentySeven       = "10.0.0.0/27"
+	validCIDRTwentyThree       = "10.0.50.0/23"
+	defaultValidSubnetMaskTwoA = "10.0.50.0/24"
+	defaultValidSubnetMaskTwoB = "10.0.51.0/24"
+	defaultSubnetIdOne         = "test-id-1"
+	defaultSubnetIdTwo         = "test-id-2"
+	defaultAzIdOne             = "test-zone-1"
+	defaultAzIdTwo             = "test-zone-2"
+	defaultValidSubnetMaskOneA = "10.0.0.0/27"
+	defaultValidSubnetMaskOneB = "10.0.0.32/27"
 )
 
 type mockNetworkManager struct {
@@ -47,12 +57,12 @@ func (m mockNetworkManager) IsEnabled(context.Context) (bool, error) {
 	return false, nil
 }
 
-func buildSubnet(vpcID string) *ec2.Subnet {
+func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 	return &ec2.Subnet{
-		SubnetId:         aws.String("test-id"),
+		SubnetId:         aws.String(subnetId),
 		VpcId:            aws.String(vpcID),
-		AvailabilityZone: aws.String("test"),
-		CidrBlock:        aws.String("test"),
+		AvailabilityZone: aws.String(azId),
+		CidrBlock:        aws.String(cidrBlock),
 		Tags: []*ec2.Tag{
 			{
 				Key:   aws.String(defaultAWSPrivateSubnetTagKey),
@@ -64,41 +74,21 @@ func buildSubnet(vpcID string) *ec2.Subnet {
 
 func buildStandaloneSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
-		{
-			SubnetId:         aws.String("test-id"),
-			VpcId:            aws.String(defaultStandaloneVPCID),
-			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
-				},
-			},
-		},
+		buildSubnet(defaultStandaloneVPCID, "test-id", "test", "test"),
 	}
 }
 
-func buildClusterSubnets() []*ec2.Subnet {
+func buildBundledSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
-		{
-			SubnetId:         aws.String("test-id"),
-			VpcId:            aws.String(defaultVPCID),
-			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
-				},
-			},
-		},
+		buildSubnet(defaultVPCID, "test-id", "test", "test"),
 	}
 }
 
-func buildClusterVpc() []*ec2.Vpc {
+func buildClusterVpc(cidrBlock string) []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
 			VpcId:     aws.String(defaultVPCID),
-			CidrBlock: aws.String("10.0.0.0/16"),
+			CidrBlock: aws.String(cidrBlock),
 			Tags: []*ec2.Tag{
 				{
 					Key:   aws.String("test-vpc"),
@@ -156,40 +146,18 @@ func buildMultipleValidBundleSubnets() []*ec2.Subnet {
 	}
 }
 
-func buildStandaloneVPCAssociatedSubnets() []*ec2.Subnet {
+func buildStandaloneVPCAssociatedSubnets(subnetOne, subnetTwo string) []*ec2.Subnet {
 	return []*ec2.Subnet{
-		{
-			SubnetId:         aws.String("test-id-1"),
-			VpcId:            aws.String(defaultStandaloneVPCID),
-			AvailabilityZone: aws.String("test"),
-			CidrBlock:        aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
-				},
-			},
-		},
-		{
-			SubnetId:         aws.String("test-id-2"),
-			VpcId:            aws.String(defaultStandaloneVPCID),
-			AvailabilityZone: aws.String("test"),
-			CidrBlock:        aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
-				},
-			},
-		},
+		buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, subnetOne),
+		buildSubnet(defaultStandaloneVPCID, defaultSubnetIdTwo, defaultAzIdTwo, subnetTwo),
 	}
 }
 
-func buildValidClusterVPC() []*ec2.Vpc {
+func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
 			VpcId:     aws.String(defaultVPCID),
-			CidrBlock: aws.String("10.0.0.0/18"),
+			CidrBlock: aws.String(cidrBlock),
 		},
 	}
 }
@@ -222,23 +190,68 @@ func buildValidNonTaggedStandaloneVPC(cidr string) *ec2.Vpc {
 	}
 }
 
-func buildValidNetworkResponse(cidr, vpcID string) *Network {
+// the two below functions handle two cases inside CreateNetwork
+// buildValidNetworkResponseVPCExists is used when we want to test case where the vpc
+// already exists, i.e. go create subnets, subnet groups etc.
+// buildValidNetworkResponseCreateVPC is used when we want to test case where no vpc exists
+// i.e. create the vpc and return network response with vpc and all other resources are nil
+func buildValidNetworkResponseVPCExists(cidr, vpcID, subnetOne, subnetTwo string) *Network {
 	return &Network{
 		Vpc: &ec2.Vpc{
 			CidrBlock: aws.String(cidr),
 			VpcId:     aws.String(vpcID),
 			Tags:      buildValidStandaloneVPCTags(),
 		},
+		Subnets: buildStandaloneVPCAssociatedSubnets(subnetOne, subnetTwo),
 	}
 }
 
-func buildStandaloneAZs() []*ec2.AvailabilityZone {
+func buildValidNetworkResponseCreateVPC(cidr, vpcID string) *Network {
+	return &Network{
+		Vpc: &ec2.Vpc{
+			CidrBlock: aws.String(cidr),
+			VpcId:     aws.String(vpcID),
+			Tags:      buildValidStandaloneVPCTags(),
+		},
+		Subnets: nil,
+	}
+}
+
+func buildSortedStandaloneAZs() []*ec2.AvailabilityZone {
 	return []*ec2.AvailabilityZone{
 		{
-			ZoneName: aws.String("test-zone-1"),
+			ZoneName: aws.String(defaultAzIdOne),
 		},
 		{
-			ZoneName: aws.String("test-zone-2"),
+			ZoneName: aws.String(defaultAzIdTwo),
+		},
+	}
+}
+
+func buildUnsortedStandaloneAZs() []*ec2.AvailabilityZone {
+	return []*ec2.AvailabilityZone{
+		{
+			ZoneName: aws.String(defaultAzIdTwo),
+		},
+		{
+			ZoneName: aws.String(defaultAzIdOne),
+		},
+	}
+}
+
+func buildLargeUnsortedStandaloneAZs() []*ec2.AvailabilityZone {
+	return []*ec2.AvailabilityZone{
+		{
+			ZoneName: aws.String("test-zone-3"),
+		},
+		{
+			ZoneName: aws.String("test-zone-4"),
+		},
+		{
+			ZoneName: aws.String(defaultAzIdTwo),
+		},
+		{
+			ZoneName: aws.String(defaultAzIdOne),
 		},
 	}
 }
@@ -299,7 +312,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Ec2Svc: &mockEc2Client{vpcs: buildClusterVpc(), subnets: buildClusterSubnets()},
+				Ec2Svc: &mockEc2Client{vpcs: buildClusterVpc(validCIDRSixteen), subnets: buildBundledSubnets()},
 			},
 			want:    true,
 			wantErr: false,
@@ -369,7 +382,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildStandaloneVPCAssociatedSubnets()},
+				Ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)},
 			},
 			wantErr: true,
 		},
@@ -421,7 +434,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC()},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -436,7 +449,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(), vpc: buildValidStandaloneVPC(validCIDRSixteen)},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen), vpc: buildValidStandaloneVPC(validCIDRSixteen)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -444,7 +457,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				ctx:  context.TODO(),
 				CIDR: buildValidCIDR(validCIDRSixteen),
 			},
-			want:    buildValidNetworkResponse(validCIDRSixteen, defaultStandaloneVPCID),
+			want:    buildValidNetworkResponseCreateVPC(validCIDRSixteen, defaultStandaloneVPCID),
 			wantErr: false,
 		},
 		{
@@ -452,7 +465,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(), vpc: buildValidStandaloneVPC(validCIDRTwentySix)},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen), vpc: buildValidStandaloneVPC(validCIDRTwentySix)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -460,7 +473,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				ctx:  context.TODO(),
 				CIDR: buildValidCIDR(validCIDRTwentySix),
 			},
-			want:    buildValidNetworkResponse(validCIDRTwentySix, defaultStandaloneVPCID),
+			want:    buildValidNetworkResponseCreateVPC(validCIDRTwentySix, defaultStandaloneVPCID),
 			wantErr: false,
 		},
 		{
@@ -468,7 +481,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC()},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -514,12 +527,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: &mockEc2Client{
-					vpcs:    []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
-					vpc:     buildValidStandaloneVPC(validCIDRTwentySix),
-					subnets: buildStandaloneVPCAssociatedSubnets(),
-					azs:     buildStandaloneAZs(),
-					subnet:  buildSubnet(defaultStandaloneVPCID),
-				},
+					vpcs:        []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
+					vpc:         buildValidStandaloneVPC(validCIDRTwentySix),
+					subnets:     buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+					azs:         buildSortedStandaloneAZs(),
+					firstSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -528,7 +540,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				CIDR: buildValidCIDR(validCIDRTwentySix),
 			},
 			wantErr: false,
-			want:    buildValidNetworkResponse(validCIDRTwentySix, defaultStandaloneVPCID),
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentySix, defaultStandaloneVPCID, defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
 		},
 		{
 			name: "successfully reconcile on non tagged standalone vpc",
@@ -536,12 +548,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: &mockEc2Client{
-					vpcs:    buildVpcs(),
-					vpc:     buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
-					subnets: buildStandaloneVPCAssociatedSubnets(),
-					azs:     buildStandaloneAZs(),
-					subnet:  buildSubnet(defaultStandaloneVPCID),
-				},
+					vpcs:        buildVpcs(),
+					vpc:         buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
+					subnets:     buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+					azs:         buildSortedStandaloneAZs(),
+					firstSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -560,12 +571,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
 				Ec2Api: &mockEc2Client{
-					vpcs:    []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
-					vpc:     buildValidStandaloneVPC(validCIDRTwentySix),
-					subnets: buildStandaloneVPCAssociatedSubnets(),
-					azs:     buildStandaloneAZs(),
-					subnet:  buildSubnet(defaultStandaloneVPCID),
-				},
+					vpcs:        []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
+					vpc:         buildValidStandaloneVPC(validCIDRTwentySix),
+					subnets:     buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+					azs:         buildSortedStandaloneAZs(),
+					firstSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)},
 				ElasticacheApi: &mockElasticacheClient{cacheSubnetGroup: buildElasticacheSubnetGroup()},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -574,7 +584,76 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				CIDR: buildValidCIDR(validCIDRTwentySix),
 			},
 			wantErr: false,
-			want:    buildValidNetworkResponse(validCIDRTwentySix, defaultStandaloneVPCID),
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentySix, defaultStandaloneVPCID, defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+		},
+		{
+			name: "successfully reconcile on standalone vpc - create subnets in correct azs",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: &mockEc2Client{
+					vpcs:         []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
+					vpc:          buildValidStandaloneVPC(validCIDRTwentySix),
+					subnets:      []*ec2.Subnet{},
+					azs:          buildUnsortedStandaloneAZs(),
+					firstSubnet:  buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+					secondSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB),
+				},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySix),
+			},
+			wantErr: false,
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentySix, defaultStandaloneVPCID, defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+		},
+		{
+			name: "successfully reconcile on standalone vpc - create subnets in large unsorted az zones list - zone one and two",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: &mockEc2Client{
+					vpcs:         []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
+					vpc:          buildValidStandaloneVPC(validCIDRTwentySix),
+					subnets:      []*ec2.Subnet{},
+					azs:          buildLargeUnsortedStandaloneAZs(),
+					firstSubnet:  buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+					secondSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB),
+				},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySix),
+			},
+			wantErr: false,
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentySix, defaultStandaloneVPCID, defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+		},
+		{
+			name: "successfully reconcile on standalone vpc - create correct subnets for vpc cidr block 10.0.50.0/23",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: &mockEc2Client{
+					vpcs:         []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentyThree)},
+					vpc:          buildValidStandaloneVPC(validCIDRTwentyThree),
+					subnets:      []*ec2.Subnet{},
+					azs:          buildSortedStandaloneAZs(),
+					firstSubnet:  buildSubnet(defaultStandaloneVPCID, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskTwoA),
+					secondSubnet: buildSubnet(defaultStandaloneVPCID, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskTwoB),
+				},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentyThree),
+			},
+			wantErr: false,
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentyThree, defaultStandaloneVPCID, defaultValidSubnetMaskTwoA, defaultValidSubnetMaskTwoB),
 		},
 	}
 	for _, tt := range tests {
