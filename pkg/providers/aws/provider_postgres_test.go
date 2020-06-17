@@ -2,10 +2,11 @@ package aws
 
 import (
 	"context"
-	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"reflect"
 	"testing"
 	"time"
+
+	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -19,6 +20,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
+	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,6 +35,7 @@ const (
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
 	defaultVPCID                   = "testID"
+	dafaultInfraName               = "test"
 )
 
 type mockRdsClient struct {
@@ -42,14 +45,20 @@ type mockRdsClient struct {
 	wantErrDelete bool
 	wantEmpty     bool
 	dbInstances   []*rds.DBInstance
+	subnetGroups  []*rds.DBSubnetGroup
 }
 
 type mockEc2Client struct {
 	ec2iface.EC2API
-	subnets   []*ec2.Subnet
-	vpcs      []*ec2.Vpc
-	secGroups []*ec2.SecurityGroup
-	azs       []*ec2.AvailabilityZone
+	firstSubnet     *ec2.Subnet
+	secondSubnet    *ec2.Subnet
+	subnets         []*ec2.Subnet
+	vpcs            []*ec2.Vpc
+	vpc             *ec2.Vpc
+	secGroups       []*ec2.SecurityGroup
+	azs             []*ec2.AvailabilityZone
+	wantErrList     bool
+	returnSecondSub bool
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -106,11 +115,17 @@ func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMa
 }
 
 func (m *mockRdsClient) DescribeDBSubnetGroups(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-	return &rds.DescribeDBSubnetGroupsOutput{}, nil
+	return &rds.DescribeDBSubnetGroupsOutput{
+		DBSubnetGroups: m.subnetGroups,
+	}, nil
 }
 
 func (m *mockRdsClient) CreateDBSubnetGroup(*rds.CreateDBSubnetGroupInput) (*rds.CreateDBSubnetGroupOutput, error) {
 	return &rds.CreateDBSubnetGroupOutput{}, nil
+}
+
+func (m *mockRdsClient) DeleteDBSubnetGroup(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+	return &rds.DeleteDBSubnetGroupOutput{}, nil
 }
 
 func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
@@ -120,9 +135,46 @@ func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.Describ
 }
 
 func (m *mockEc2Client) DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+	if m.wantErrList {
+		return nil, errorUtil.New("ec2 get vpcs error")
+	}
 	return &ec2.DescribeVpcsOutput{
 		Vpcs: m.vpcs,
 	}, nil
+}
+
+func (m *mockEc2Client) CreateVpc(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+	return &ec2.CreateVpcOutput{
+		Vpc: m.vpc,
+	}, nil
+}
+
+func (m *mockEc2Client) DeleteVpc(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
+	return &ec2.DeleteVpcOutput{}, nil
+}
+
+func (m *mockEc2Client) CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return &ec2.CreateTagsOutput{}, nil
+}
+
+func (m *mockEc2Client) CreateSubnet(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+	if m.returnSecondSub {
+		return &ec2.CreateSubnetOutput{
+			Subnet: m.secondSubnet,
+		}, nil
+	}
+	return m.returnFirstSubnet()
+}
+
+func (m *mockEc2Client) returnFirstSubnet() (*ec2.CreateSubnetOutput, error) {
+	m.returnSecondSub = true
+	return &ec2.CreateSubnetOutput{
+		Subnet: m.firstSubnet,
+	}, nil
+}
+
+func (m *mockEc2Client) DeleteSubnet(*ec2.DeleteSubnetInput) (*ec2.DeleteSubnetOutput, error) {
+	return &ec2.DeleteSubnetOutput{}, nil
 }
 
 func (m *mockEc2Client) DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
@@ -140,7 +192,9 @@ func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGrou
 }
 
 func (m *mockEc2Client) DescribeAvailabilityZones(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-	return &ec2.DescribeAvailabilityZonesOutput{}, nil
+	return &ec2.DescribeAvailabilityZonesOutput{
+		AvailabilityZones: m.azs,
+	}, nil
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
@@ -167,7 +221,7 @@ func buildTestInfra() *v12.Infrastructure {
 			Name: "cluster",
 		},
 		Status: v12.InfrastructureStatus{
-			InfrastructureName: "test",
+			InfrastructureName: dafaultInfraName,
 		},
 	}
 }
@@ -342,6 +396,7 @@ func buildVpcs() []*ec2.Vpc {
 			CidrBlock: aws.String("10.0.0.0/16"),
 			Tags: []*ec2.Tag{
 				{
+					Key:   aws.String("test-vpc"),
 					Value: aws.String("test-vpc"),
 				},
 			},
@@ -368,6 +423,7 @@ func buildAZ() []*ec2.AvailabilityZone {
 	return []*ec2.AvailabilityZone{
 		{
 			ZoneName: aws.String("test"),
+			State:    aws.String("available"),
 		},
 	}
 }
@@ -402,11 +458,12 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		TCPPinger         ConnectionTester
 	}
 	type args struct {
-		ctx         context.Context
-		cr          *v1alpha1.Postgres
-		rdsSvc      rdsiface.RDSAPI
-		ec2Svc      ec2iface.EC2API
-		postgresCfg *rds.CreateDBInstanceInput
+		ctx                     context.Context
+		cr                      *v1alpha1.Postgres
+		rdsSvc                  rdsiface.RDSAPI
+		ec2Svc                  ec2iface.EC2API
+		postgresCfg             *rds.CreateDBInstanceInput
+		standaloneNetworkExists bool
 	}
 	tests := []struct {
 		name    string
@@ -416,13 +473,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test rds CreateReplicationGroup is called (valid cluster rhmi subnets)",
+			name: "test rds CreateReplicationGroup is called (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:      &mockRdsClient{dbInstances: []*rds.DBInstance{}},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:         context.TODO(),
-				cr:          buildTestPostgresCR(),
-				postgresCfg: &rds.CreateDBInstanceInput{},
+				rdsSvc:                  &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             &rds.CreateDBInstanceInput{},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -435,15 +493,16 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is available (valid cluster rhmi subnets)",
+			name: "test rds is exists and is available (valid cluster bundle subnets)",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -462,15 +521,16 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is not available (valid cluster rhmi subnets)",
+			name: "test rds is exists and is not available (valid cluster bundle subnets)",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildPendingDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -483,13 +543,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds exists and status is available and needs to be modified (valid cluster rhmi subnets)",
+			name: "test rds exists and status is available and needs to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:      &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:         context.TODO(),
-				cr:          buildTestPostgresCR(),
-				postgresCfg: buildRequiresModificationsCreateInput(testIdentifier),
+				rdsSvc:                  &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -502,13 +563,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds exists and status is available and does not need to be modified (valid cluster rhmi subnets)",
+			name: "test rds exists and status is available and does not need to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:      &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:         context.TODO(),
-				cr:          buildTestPostgresCR(),
-				postgresCfg: buildAvailableCreateInput(testIdentifier),
+				rdsSvc:                  &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildAvailableCreateInput(testIdentifier),
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -521,13 +583,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds exists and status is available and needs to be modified but maintenance is pending (valid cluster rhmi subnets)",
+			name: "test rds exists and status is available and needs to be modified but maintenance is pending (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:      &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:         context.TODO(),
-				cr:          buildTestPostgresCR(),
-				postgresCfg: buildRequiresModificationsCreateInput(testIdentifier),
+				rdsSvc:                  &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -540,13 +603,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds exists and status is available and needs to update pending maintenance (valid cluster rhmi subnets)",
+			name: "test rds exists and status is available and needs to update pending maintenance (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:      &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
-				ec2Svc:      &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:         context.TODO(),
-				cr:          buildTestPostgresCR(),
-				postgresCfg: buildNewRequiresModificationsCreateInput(testIdentifier),
+				rdsSvc:                  &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildNewRequiresModificationsCreateInput(testIdentifier),
+				standaloneNetworkExists: false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -568,7 +632,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg)
+			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -596,6 +660,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 	type args struct {
 		ctx                  context.Context
 		pg                   *v1alpha1.Postgres
+		networkManager       NetworkManager
 		instanceSvc          rdsiface.RDSAPI
 		postgresCreateConfig *rds.CreateDBInstanceInput
 		postgresDeleteConfig *rds.DeleteDBInstanceInput
@@ -613,6 +678,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
+				networkManager:       &mockNetworkManager{},
 				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
 			},
 			fields: fields{
@@ -629,6 +695,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
+				networkManager:       &mockNetworkManager{},
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
 			},
 			fields: fields{
@@ -645,6 +712,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
+				networkManager:       &mockNetworkManager{},
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
 			},
 			fields: fields{
@@ -661,6 +729,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
+				networkManager:       &mockNetworkManager{},
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
 			},
 			fields: fields{
@@ -681,7 +750,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -896,94 +965,6 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestPostgresProvider_reconcileRDSNetworking(t *testing.T) {
-	scheme, err := buildTestSchemePostgresql()
-	if err != nil {
-		t.Error("failed to build scheme", err)
-		return
-	}
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-		TCPPinger         ConnectionTester
-	}
-	type args struct {
-		ctx    context.Context
-		rdsSvc rdsiface.RDSAPI
-		ec2Svc ec2iface.EC2API
-	}
-	tests := []struct {
-		name                   string
-		fields                 fields
-		args                   args
-		want                   interface{}
-		wantErr                bool
-		getSubnetConfiguration func() ([]*ec2.Subnet, error)
-	}{
-		{
-			name: "verify cluster vpc and rhmi valid subnets exists and remain",
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			args: args{
-				ctx:    context.TODO(),
-				rdsSvc: &mockRdsClient{},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidRHMISubnets()},
-			},
-			getSubnetConfiguration: func() ([]*ec2.Subnet, error) {
-				api := &mockEc2Client{
-					subnets: buildValidRHMISubnets(),
-				}
-				subnetOutput, err := api.DescribeSubnets(&ec2.DescribeSubnetsInput{})
-				if err != nil {
-					t.Fatalf("could not get mock subnets : %v", err)
-				}
-				var clusterVPCSubnets []*ec2.Subnet
-				for _, subnet := range subnetOutput.Subnets {
-					if *subnet.VpcId == defaultVPCID {
-						clusterVPCSubnets = append(clusterVPCSubnets, subnet)
-					}
-				}
-				return clusterVPCSubnets, nil
-			},
-			want:    buildValidRHMISubnets(),
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := &PostgresProvider{
-				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-				TCPPinger:         tt.fields.TCPPinger,
-			}
-			err := p.reconcileRDSNetworking(tt.args.ctx, tt.args.rdsSvc, tt.args.ec2Svc)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("reconcileRDSNetworking() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				return
-			}
-			got, err := tt.getSubnetConfiguration()
-			if err != nil {
-				t.Error("unexpected error while getting mock subnets", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("reconcileRDSNetworking() \n got = %+v, \n want = %+v", got, tt.want)
-
 			}
 		})
 	}
