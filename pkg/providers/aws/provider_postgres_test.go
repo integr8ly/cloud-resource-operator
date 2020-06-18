@@ -59,6 +59,24 @@ type mockEc2Client struct {
 	azs             []*ec2.AvailabilityZone
 	wantErrList     bool
 	returnSecondSub bool
+	// new approach for manually defined mocks
+	// to allow for simple overrides in test table declarations
+	createTagsFn                   func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+	describeVpcPeeringConnectionFn func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
+	createVpcPeeringConnectionFn   func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
+	acceptVpcPeeringConnectionFn   func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
+	deleteVpcPeeringConnectionFn   func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
+}
+
+func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
+	mock := &mockEc2Client{}
+	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+		return &ec2.CreateTagsOutput{}, nil
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
@@ -153,10 +171,6 @@ func (m *mockEc2Client) DeleteVpc(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, er
 	return &ec2.DeleteVpcOutput{}, nil
 }
 
-func (m *mockEc2Client) CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-	return &ec2.CreateTagsOutput{}, nil
-}
-
 func (m *mockEc2Client) CreateSubnet(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
 	if m.returnSecondSub {
 		return &ec2.CreateSubnetOutput{
@@ -195,6 +209,26 @@ func (m *mockEc2Client) DescribeAvailabilityZones(*ec2.DescribeAvailabilityZones
 	return &ec2.DescribeAvailabilityZonesOutput{
 		AvailabilityZones: m.azs,
 	}, nil
+}
+
+func (m *mockEc2Client) DescribeVpcPeeringConnections(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+	return m.describeVpcPeeringConnectionFn(input)
+}
+
+func (m *mockEc2Client) CreateVpcPeeringConnection(input *ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
+	return m.createVpcPeeringConnectionFn(input)
+}
+
+func (m *mockEc2Client) CreateTags(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return m.createTagsFn(input)
+}
+
+func (m *mockEc2Client) AcceptVpcPeeringConnection(input *ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
+	return m.acceptVpcPeeringConnectionFn(input)
+}
+
+func (m *mockEc2Client) DeleteVpcPeeringConnection(input *ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
+	return m.deleteVpcPeeringConnectionFn(input)
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {

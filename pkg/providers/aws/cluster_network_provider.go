@@ -4,8 +4,14 @@
 // as they will not allow multi-az cloud resources to be created in single-az openshift clusters due to the single-az
 // cluster subnets taking up all networking addresses in the cluster vpc.
 //
-// any openshift clusters that have used the cloud resource operator before this utility was added will be using the old approach,
-// which is bundling cloud resources in with the cluster vpc. backwards compatibility for this approach must be maintained.
+// any openshift clusters that have used the cloud resource operator before this utility was added will be using the
+// old approach, which is bundling cloud resources in with the cluster vpc. backwards compatibility for this approach
+// must be maintained.
+//
+// the cloud resource vpc will be peered to the openshift cluster vpc. this peering will allow networking between the
+// two vpcs e.g. a product in openshift connecting to a database created by the cloud resource operator. the peering
+// should be the last element to be removed as it will block an openshift ocm cluster from being torn down which will
+// allow for easier alerting with aws resources not being cleaned up successfully.
 //
 // see [1] for more details.
 //
@@ -39,10 +45,18 @@ import (
 )
 
 const (
-	DefaultRHMIVpcNameTagKey       = "Name"
 	DefaultRHMIVpcNameTagValue     = "RHMI Cloud Resource VPC"
 	DefaultRHMISubnetNameTagValue  = "RHMI Cloud Resource Subnet"
 	defaultNumberOfExpectedSubnets = 2
+)
+
+// vpc/network peering
+const (
+	tagVpcPeeringNameValue = "RHMI Cloud Resource Peering Connection"
+	// filter names for vpc peering connections
+	// see https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVpcPeeringConnections.html
+	filterVpcPeeringRequesterId = "requester-vpc-info.vpc-id"
+	filterVpcPeeringAccepterId  = "accepter-vpc-info.vpc-id"
 )
 
 // wrapper for ec2 vpcs, to allow for extensibility
@@ -57,9 +71,21 @@ type NetworkAZSubnet struct {
 	AZ *ec2.AvailabilityZone
 }
 
+// wrapper for ec2 vpc peering connections, to allow for extensibility
+type NetworkPeering struct {
+	PeeringConnection *ec2.VpcPeeringConnection
+}
+
+func (np *NetworkPeering) IsReady() bool {
+	return aws.StringValue(np.PeeringConnection.Status.Code) == ec2.VpcPeeringConnectionStateReasonCodeActive
+}
+
 type NetworkManager interface {
 	CreateNetwork(context.Context, *net.IPNet) (*Network, error)
 	DeleteNetwork(context.Context) error
+	CreateNetworkPeering(context.Context, *Network) (*NetworkPeering, error)
+	GetClusterNetworkPeering(context.Context) (*NetworkPeering, error)
+	DeleteNetworkPeering(context.Context, *NetworkPeering) error
 	IsEnabled(context.Context) (bool, error)
 }
 
@@ -74,6 +100,9 @@ type NetworkProvider struct {
 }
 
 func NewNetworkManager(session *session.Session, client client.Client, logger *logrus.Entry) *NetworkProvider {
+	if logger == nil {
+		logger = logrus.NewEntry(logrus.StandardLogger())
+	}
 	return &NetworkProvider{
 		Client:         client,
 		RdsApi:         rds.New(session),
@@ -265,6 +294,208 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	return nil
 }
 
+// creates a peering connection between a provided vpc and the openshift cluster vpc
+// used to enable network connectivity between the vpcs, so services in the openshift cluster can reach databases in
+// the provided vpc
+func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Network) (*NetworkPeering, error) {
+	logger := resources.NewActionLogger(n.Logger, "CreateNetworkPeering")
+
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, n.Logger)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+	}
+
+	peeringConnection, err := n.getNetworkPeering(ctx, network)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get peering connection")
+	}
+
+	// create the vpc, we make an assumption they're in the same aws account and use the aws region in the aws client
+	// provided to the NetworkProvider struct
+	if peeringConnection == nil {
+		logger.Infof("creating cluster peering connection for vpc %s", aws.StringValue(network.Vpc.VpcId))
+		createPeeringConnOutput, err := n.Ec2Api.CreateVpcPeeringConnection(&ec2.CreateVpcPeeringConnectionInput{
+			PeerVpcId: clusterVpc.VpcId,
+			VpcId:     network.Vpc.VpcId,
+		})
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to create vpc peering connection")
+		}
+		logger.Info("successfully peered vpc")
+		peeringConnection = createPeeringConnOutput.VpcPeeringConnection
+	}
+
+	// once we have the peering connection, tag it so it's identifiable as belonging to this operator
+	// this helps with cleaning up resources
+	logger.Info("getting cluster identifier")
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster id")
+	}
+	organizationTag := resources.GetOrganizationTag()
+	clusterIDTagName := fmt.Sprintf("%sclusterID", organizationTag)
+
+	logger.Infof("checking tags on peering connection")
+	peeringConnectionTags := ec2TagsToGeneric(peeringConnection.Tags)
+	if !tagsContains(peeringConnectionTags, tagDisplayName, tagVpcPeeringNameValue) ||
+		!tagsContains(peeringConnectionTags, clusterIDTagName, clusterID) {
+		logger.Info("creating tags on peering connection")
+		_, err = n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
+			Resources: []*string{peeringConnection.VpcPeeringConnectionId},
+			Tags: []*ec2.Tag{
+				{
+					Key:   aws.String(tagDisplayName),
+					Value: aws.String(tagVpcPeeringNameValue),
+				},
+				{
+					Key:   aws.String(clusterIDTagName),
+					Value: aws.String(clusterID),
+				},
+			},
+		})
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to tag peering connection")
+		}
+	} else {
+		logger.Info("expected tags found on peering connection")
+	}
+
+	// peering connection now exists, we need to accept it to complete the setup
+	logger.Infof("handling peering connection status %s", aws.StringValue(peeringConnection.Status.Code))
+	switch aws.StringValue(peeringConnection.Status.Code) {
+	case ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance:
+		logger.Info("accepting peering connection")
+		_, err = n.Ec2Api.AcceptVpcPeeringConnection(&ec2.AcceptVpcPeeringConnectionInput{
+			VpcPeeringConnectionId: peeringConnection.VpcPeeringConnectionId,
+		})
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to accept vpc peering connection")
+		}
+		logger.Infof("accepted peering connection")
+	case ec2.VpcPeeringConnectionStateReasonCodeActive, ec2.VpcPeeringConnectionStateReasonCodeProvisioning, ec2.VpcPeeringConnectionStateReasonCodeInitiatingRequest:
+	default:
+		return nil, errorUtil.New(fmt.Sprintf("vpc peering connection %s is in an invalid state '%s' with message '%s'", aws.StringValue(peeringConnection.VpcPeeringConnectionId), aws.StringValue(peeringConnection.Status.Code), aws.StringValue(peeringConnection.Status.Message)))
+	}
+
+	// return a wrapped vpc peering connection
+	return &NetworkPeering{
+		PeeringConnection: peeringConnection,
+	}, nil
+}
+
+func (n *NetworkProvider) GetClusterNetworkPeering(ctx context.Context) (*NetworkPeering, error) {
+	logger := resources.NewActionLogger(n.Logger, "GetClusterNetworkPeering")
+
+	logger.Info("getting cluster id")
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster id")
+	}
+
+	logger.Info("getting organization tag")
+	orgTag := resources.GetOrganizationTag()
+
+	logger.Info("getting standalone vpc")
+	vpc, err := getStandaloneVpc(n.Ec2Api, n.Logger, clusterID, orgTag)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get standalone vpc")
+	}
+
+	logger.Info("getting cluster network vpc peering")
+	networkPeering, err := n.getNetworkPeering(ctx, &Network{
+		Vpc: vpc,
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get network peering")
+	}
+
+	return &NetworkPeering{PeeringConnection: networkPeering}, nil
+}
+
+func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Network) (*ec2.VpcPeeringConnection, error) {
+	logger := resources.NewActionLogger(n.Logger, "getNetworkPeering")
+	// we will always peer with the openshift/kubernetes cluster vpc that this operator is running on
+	logger.Info("getting cluster vpc")
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, logger)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+	}
+	logger.Infof("found cluster vpc %s", aws.StringValue(clusterVpc.VpcId))
+
+	// the peering connection will either be found or created below
+	var peeringConnection *ec2.VpcPeeringConnection
+
+	// check if a peering connection already exists between the two networks
+	logger.Info("checking for an existing peering connection")
+	describeVpcPeerOutput, err := n.Ec2Api.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{
+		DryRun: nil,
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String(filterVpcPeeringRequesterId),
+				Values: []*string{network.Vpc.VpcId},
+			},
+			{
+				Name:   aws.String(filterVpcPeeringAccepterId),
+				Values: []*string{clusterVpc.VpcId},
+			},
+		},
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to describe peering connections")
+	}
+	if len(describeVpcPeerOutput.VpcPeeringConnections) > 0 {
+		// vpc peering connections exist between the two vpcs, now find one in a healthy state
+		for peeringConnIdx, peeringConn := range describeVpcPeerOutput.VpcPeeringConnections {
+			// deleted peering connections can stay around for quite a while, ignore them
+			if aws.StringValue(peeringConn.Status.Code) != ec2.VpcPeeringConnectionStateReasonCodeDeleted &&
+				aws.StringValue(peeringConn.Status.Code) != ec2.VpcPeeringConnectionStateReasonCodeDeleting {
+				peeringConnection = describeVpcPeerOutput.VpcPeeringConnections[peeringConnIdx]
+				logger.Infof("existing vpc peering connection found %s", aws.StringValue(peeringConnection.VpcPeeringConnectionId))
+				break
+			}
+		}
+	}
+	return peeringConnection, nil
+}
+
+// deletes a provided vpc peering connection
+// this will remove network connectivity between the vpcs that are part of the provided peering connection
+func (n *NetworkProvider) DeleteNetworkPeering(ctx context.Context, peering *NetworkPeering) error {
+	logger := resources.NewActionLogger(n.Logger, "DeleteNetworkPeering")
+	logger = logger.WithField("vpc_peering", aws.StringValue(peering.PeeringConnection.VpcPeeringConnectionId))
+
+	// describe the vpc peering connection first, it could be possible that the peering connection is already in a
+	// deleting state or is already deleted due to the way aws performs caching
+	// get the vpc peering connection so we can have a look at it first to decide if a deletion request is required
+	logger.Info("getting vpc peering")
+	describePeeringOutput, err := n.Ec2Api.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{
+		VpcPeeringConnectionIds: []*string{peering.PeeringConnection.VpcPeeringConnectionId},
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to get vpc")
+	}
+	// we expect the describe function to return up to one vpc peering connection
+	if len(describePeeringOutput.VpcPeeringConnections) == 0 {
+		logger.Info("could not find peering connection, assuming already removed")
+		return nil
+	}
+	logger.Infof("found %d vpc peering connections, taking first", len(describePeeringOutput.VpcPeeringConnections))
+	toDelete := describePeeringOutput.VpcPeeringConnections[0]
+	// if the vpc peering connection is in a deleting/deleted state, ignore it as aws will handle it
+	switch aws.StringValue(toDelete.Status.Code) {
+	case ec2.VpcPeeringConnectionStateReasonCodeDeleting, ec2.VpcPeeringConnectionStateReasonCodeDeleted:
+		logger.Infof("vpc peering is in state %s, assuming deletion in progress, skipping", aws.StringValue(toDelete.Status.Code))
+		return nil
+	}
+	_, err = n.Ec2Api.DeleteVpcPeeringConnection(&ec2.DeleteVpcPeeringConnectionInput{
+		VpcPeeringConnectionId: toDelete.VpcPeeringConnectionId,
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to delete vpc peering connection")
+	}
+	return nil
+}
+
 //IsEnabled returns true when no bundled subnets are found in the openshift cluster vpc.
 //
 //All subnets created by the cloud resource operator are identified by having a tag with the name `<organizationTag>/clusterID`.
@@ -281,6 +512,11 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
 	}
 
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return false, errorUtil.Wrap(err, "unable to get cluster id")
+	}
+
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
 	vpcSubnets, err := GetVPCSubnets(n.Ec2Api, logger, foundVpc)
@@ -289,11 +525,13 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	}
 
 	// iterate all cluster vpc's checking for valid bundled vpc subnets
+	n.Logger.Infof("checking cluster vpc subnets for cluster id tag, %s", clusterID)
 	organizationTag := resources.GetOrganizationTag()
 	var validBundledVPCSubnets []*ec2.Subnet
 	for _, subnet := range vpcSubnets {
 		for _, tag := range subnet.Tags {
-			if aws.StringValue(tag.Key) == fmt.Sprintf("%sclusterID", organizationTag) {
+			if aws.StringValue(tag.Key) == fmt.Sprintf("%sclusterID", organizationTag) &&
+				aws.StringValue(tag.Value) == clusterID {
 				validBundledVPCSubnets = append(validBundledVPCSubnets, subnet)
 				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", *subnet.SubnetId, *subnet.VpcId)
 			}
@@ -440,7 +678,7 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
 
 	vpcTags := ec2TagsToGeneric(vpc.Tags)
-	if !tagsContains(vpcTags, DefaultRHMIVpcNameTagKey, DefaultRHMIVpcNameTagValue) ||
+	if !tagsContains(vpcTags, tagDisplayName, DefaultRHMIVpcNameTagValue) ||
 		!tagsContains(vpcTags, *clusterIDTag.Key, *clusterIDTag.Value) {
 
 		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
@@ -449,7 +687,7 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 			},
 			Tags: []*ec2.Tag{
 				{
-					Key:   aws.String(DefaultRHMIVpcNameTagKey),
+					Key:   aws.String(tagDisplayName),
 					Value: aws.String(DefaultRHMIVpcNameTagValue),
 				}, clusterIDTag,
 			},

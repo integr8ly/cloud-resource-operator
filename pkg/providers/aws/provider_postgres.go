@@ -161,11 +161,21 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 		}
 
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
+		standaloneNetwork, err := networkManager.CreateNetwork(ctx, tempCIDR)
 		if err != nil {
 			errMsg := "failed to create resource network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
+		logger.Infof("created standalone network %s", aws.StringValue(standaloneNetwork.Vpc.VpcId))
+
+		// we've created the standalone vpc, now we peer it to the cluster vpc
+		logger.Infof("creating network peering")
+		networkPeering, err := networkManager.CreateNetworkPeering(ctx, standaloneNetwork)
+		if err != nil {
+			errMsg := "failed to peer standalone network"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		logger.Infof("created network peering %s", aws.StringValue(networkPeering.PeeringConnection.VpcPeeringConnectionId))
 	}
 
 	// create the aws RDS instance
@@ -426,6 +436,16 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	// check if instance does not exist, delete finalizer and credential secret
 	if foundInstance == nil {
 		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
+		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+		if err != nil {
+			msg := "failed to get cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+
+		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
