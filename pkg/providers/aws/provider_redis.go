@@ -137,7 +137,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		}
 
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		standaloneNetwork, err := networkManager.CreateNetwork(ctx, tempCIDR)
+		standaloneNetwork, err := networkManager.CreateNetwork(ctx, vpcCidrBlock)
 		if err != nil {
 			errMsg := "failed to create resource network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)

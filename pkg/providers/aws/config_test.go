@@ -20,6 +20,20 @@ import (
 
 var configMapNameSpace, _ = k8sutil.GetWatchNamespace()
 
+type mockConfigManager struct{
+	ConfigManager
+	createStrategy json.RawMessage
+}
+
+var _ ConfigManager = (*mockConfigManager) (nil)
+
+func (m *mockConfigManager) ReadStorageStrategy(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+	return &StrategyConfig{
+		CreateStrategy: m.createStrategy,
+	}, nil
+}
+
+
 func newFakeInfrastructure() *configv1.Infrastructure {
 	return &configv1.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{

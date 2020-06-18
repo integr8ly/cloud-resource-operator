@@ -2,16 +2,18 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"reflect"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	"net"
-	"reflect"
-	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -319,6 +321,23 @@ func buildElasticacheSubnetGroup() []*elasticache.CacheSubnetGroup {
 			VpcId:                aws.String("test"),
 		},
 	}
+}
+
+func buildValidCreateStrategy() json.RawMessage {
+	return json.RawMessage("{ \"CidrBlock\": \"10.0.0.0/16\" }")
+}
+
+func buildInvalidCreateStrategy() json.RawMessage {
+	return json.RawMessage("{ \"CidrBlock\": \"malformed string\" }")
+}
+
+func buildNilCreateStrategy() json.RawMessage {
+	return json.RawMessage("{ }")
+}
+
+func buildValidIpNet(CIDR string) *net.IPNet {
+	_, ip, _ := net.ParseCIDR(CIDR)
+	return ip
 }
 
 func TestNetworkProvider_IsEnabled(t *testing.T) {
@@ -806,6 +825,75 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			}
 			if err := n.DeleteNetwork(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetwork() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_getNetworkProviderConfig(t *testing.T) {
+	type args struct {
+		ctx           context.Context
+		configManager ConfigManager
+		logger        *logrus.Entry
+		tier          string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *net.IPNet
+		wantErr bool
+	}{
+		{
+			name: "verify successful parse",
+			args: args{
+				ctx:           context.TODO(),
+				configManager: &mockConfigManager{createStrategy: buildValidCreateStrategy()},
+				logger:        logrus.NewEntry(logrus.StandardLogger()),
+				tier:          "test",
+			},
+			wantErr: false,
+			want:    buildValidIpNet("10.0.0.0/16"),
+		},
+		{
+			name: "verify error on nil CIDR Block",
+			args: args{
+				ctx:           context.TODO(),
+				configManager: &mockConfigManager{createStrategy: buildNilCreateStrategy()},
+				logger:        logrus.NewEntry(logrus.StandardLogger()),
+				tier:          "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "verify invalid CIDR",
+			args: args{
+				ctx:           context.TODO(),
+				configManager: &mockConfigManager{createStrategy: buildInvalidCreateStrategy()},
+				logger:        logrus.NewEntry(logrus.StandardLogger()),
+				tier:          "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "verify unmarshal error",
+			args: args{
+				ctx:           context.TODO(),
+				configManager: &mockConfigManager{},
+				logger:        logrus.NewEntry(logrus.StandardLogger()),
+				tier:          "test",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.logger, tt.args.tier)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getNetworkProviderConfig() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
