@@ -87,7 +87,7 @@ type NetworkManager interface {
 	DeleteNetwork(context.Context) error
 	CreateNetworkPeering(context.Context, *Network) (*NetworkPeering, error)
 	GetClusterNetworkPeering(context.Context) (*NetworkPeering, error)
-	DeleteNetworkPeering(context.Context, *NetworkPeering) error
+	DeleteNetworkPeering(*NetworkPeering) error
 	IsEnabled(context.Context) (bool, error)
 }
 
@@ -148,10 +148,14 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		//By default, `integreatly.org/clusterID`.
 		//
 		//NOTE - Once a VPC is created we do not want to update it. To avoid changing cidr block
-		if !isValidCIDRRange(vpcCidrBlock) {
-			return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
-		}
 
+		// standalone vpc cidr block can not overlap with existing cluster vpc cidr block
+		// issue arises when trying to peer both vpcs with invalid vpc error - `overlapping CIDR range`
+		// we need to ensure both cidr ranges do not intersect before creating the standalone vpc
+		// as the creation of a standalone vpc is designed to be a one shot pass and not to be updated after the fact
+		if err := validateStandaloneCidrBlock(ctx, n.Client, n.Ec2Api, logger, vpcCidrBlock); err != nil {
+			return nil, errorUtil.Wrap(err, "vpc validation failure")
+		}
 		logger.Infof("cidr %s is valid 👍", vpcCidrBlock.String())
 
 		// create vpc using cidr string from _network
@@ -385,6 +389,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 	}, nil
 }
 
+//GetClusterNetworking returns an active Net
 func (n *NetworkProvider) GetClusterNetworkPeering(ctx context.Context) (*NetworkPeering, error) {
 	logger := resources.NewActionLogger(n.Logger, "GetClusterNetworkPeering")
 
@@ -462,8 +467,12 @@ func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Networ
 
 // deletes a provided vpc peering connection
 // this will remove network connectivity between the vpcs that are part of the provided peering connection
-func (n *NetworkProvider) DeleteNetworkPeering(ctx context.Context, peering *NetworkPeering) error {
+func (n *NetworkProvider) DeleteNetworkPeering(peering *NetworkPeering) error {
 	logger := resources.NewActionLogger(n.Logger, "DeleteNetworkPeering")
+	if peering.PeeringConnection == nil {
+		logger.Info("networking peering connection nil, skipping delete network peering")
+		return nil
+	}
 	logger = logger.WithField("vpc_peering", aws.StringValue(peering.PeeringConnection.VpcPeeringConnectionId))
 
 	// describe the vpc peering connection first, it could be possible that the peering connection is already in a
@@ -903,13 +912,43 @@ func isValidCIDRRange(CIDR *net.IPNet) bool {
 	return mask > 15 && mask < 27
 }
 
+// validateStandaloneCidrBlock validates the standalone cidr block before creation, returning an error if the cidr is not valid
+// checks carried out :
+// 		* has a cidr range between \16 and \26
+// 		* does not overlap with cluster vpc cidr block
+func validateStandaloneCidrBlock(ctx context.Context, client client.Client, ec2Api ec2iface.EC2API, logger *logrus.Entry, vpcCidrBlock *net.IPNet) error {
+	// validate has a cidr range between \16 and \26
+	if !isValidCIDRRange(vpcCidrBlock) {
+		return errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
+	}
+
+	clusterVPC, err := getClusterVpc(ctx, client, ec2Api, logger)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to get cluster vpc")
+	}
+
+	_, clusterVPCCidr, err := net.ParseCIDR(*clusterVPC.CidrBlock)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to parse cluster vpc cidr block")
+	}
+
+	// standalone vpc cidr block can not overlap with existing cluster vpc cidr block
+	// issue arises when trying to peer both vpcs with invalid vpc error - `overlapping CIDR range`
+	// this utility function returns true if either cidr range intersect
+	if clusterVPCCidr.Contains(vpcCidrBlock.IP) || vpcCidrBlock.Contains(clusterVPCCidr.IP) {
+		return errorUtil.New(fmt.Sprintf("standalone vpc creation failed: standalone cidr block %s overlaps with cluster vpc cidr block %s, update _network strategy to continue vpc creation", vpcCidrBlock.String(), *clusterVPC.CidrBlock))
+
+	}
+	return nil
+}
+
 // getNetworkProviderConfig return parsed ipNet cidr block
 // a _network resource type strategy, is expected to have the same tier as either postgres or redis resource type
 // ie. for a postgres tier X there should be a corresponding _network tier X
 //
 // the _network strategy config is unmarshalled into a ec2 create vpc input struct
 // from the struct the cidr block is parsed to ensure validity
-func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, logger *logrus.Entry, tier string) (*net.IPNet, error) {
+func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string, logger *logrus.Entry) (*net.IPNet, error) {
 	logger.Infof("fetching _network strategy config for tier %s", tier)
 
 	stratCfg, err := configManager.ReadStorageStrategy(ctx, providers.NetworkResourceType, tier)

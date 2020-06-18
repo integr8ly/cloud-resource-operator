@@ -157,7 +157,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from postgres cr
-		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, logger, pg.Spec.Tier)
+		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, pg.Spec.Tier, logger)
 		if err != nil {
 			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -443,7 +443,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
-		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
 			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}

@@ -130,7 +130,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from redis cr
-		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, logger, r.Spec.Tier)
+		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
 		if err != nil {
 			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -171,7 +171,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	// this check is to ensure backward compatibility with <= 4.4.5 openshift clusters
 	// creating bundled (in cluster vpc) subnets, subnet groups, security groups
 	//
-	// standaloneNetworkExists if no bundled resources are found in the cluster vpc
+	// standaloneNetworkExists if no bundled subnets (created by this operator) are found in the cluster vpc
 	if !standaloneNetworkExists {
 		// setup networking in cluster vpc
 		if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
@@ -452,7 +452,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			msg := "failed to get cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
 			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
