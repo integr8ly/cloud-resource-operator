@@ -144,11 +144,19 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		}
 
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		_, err = networkManager.CreateNetwork(ctx, tempCIDR)
+		standaloneNetwork, err := networkManager.CreateNetwork(ctx, tempCIDR)
 		if err != nil {
 			errMsg := "failed to create resource network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
+		// we've created the standalone vpc, now we peer it to the cluster vpc
+		logger.Infof("creating network peering")
+		networkPeering, err := networkManager.CreateNetworkPeering(ctx, standaloneNetwork)
+		if err != nil {
+			errMsg := "failed to peer standalone network"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		logger.Infof("created network peering %s", aws.StringValue(networkPeering.PeeringConnection.VpcPeeringConnectionId))
 	}
 	// create the aws elasticache cluster
 	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg, isEnabled)
@@ -444,6 +452,15 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 	// check if replication group does not exist and delete finalizer
 	if foundCache == nil {
 		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
+		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+		if err != nil {
+			msg := "failed to get cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
