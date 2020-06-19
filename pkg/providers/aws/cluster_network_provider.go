@@ -48,10 +48,10 @@ import (
 )
 
 const (
-	DefaultRHMIVpcNameTagValue     = "RHMI Cloud Resource VPC"
-	DefaultRHMISubnetNameTagValue  = "RHMI Cloud Resource Subnet"
+	DefaultRHMIVpcNameTagValue           = "RHMI Cloud Resource VPC"
+	DefaultRHMISubnetNameTagValue        = "RHMI Cloud Resource Subnet"
 	DefaultRHMISecurityGroupNameTagValue = "RHMI Cloud Resource Security Group"
-	defaultNumberOfExpectedSubnets = 2
+	defaultNumberOfExpectedSubnets       = 2
 	//network peering
 	tagVpcPeeringNameValue = "RHMI Cloud Resource Peering Connection"
 	// filter names for vpc peering connections
@@ -550,7 +550,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 			if aws.StringValue(tag.Key) == fmt.Sprintf("%sclusterID", organizationTag) &&
 				aws.StringValue(tag.Value) == clusterID {
 				validBundledVPCSubnets = append(validBundledVPCSubnets, subnet)
-				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", subnet.SubnetId, *subnet.VpcId)
+				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", *subnet.SubnetId, *subnet.VpcId)
 			}
 		}
 	}
@@ -608,6 +608,9 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	standaloneVpc, err := getStandaloneVpc(n.Ec2Api, n.Logger, clusterID, orgTag)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get standalone vpc")
+	}
+	if standaloneVpc == nil {
+		return nil, errorUtil.New("standalone vpc can not be nil")
 	}
 
 	// get the cluster bundled vpc

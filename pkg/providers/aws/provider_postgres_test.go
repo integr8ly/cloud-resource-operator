@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	errorUtil "github.com/pkg/errors"
 	"reflect"
 	"testing"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
-	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -34,7 +34,7 @@ import (
 const (
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
-	defaultVPCID                   = "testID"
+	defaultVpcId                   = "testID"
 	dafaultInfraName               = "test"
 )
 
@@ -62,6 +62,8 @@ type mockEc2Client struct {
 	// new approach for manually defined mocks
 	// to allow for simple overrides in test table declarations
 	createTagsFn                   func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+	describeVpcsFn                 func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+	describeSecurityGroupsFn       func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
 	describeVpcPeeringConnectionFn func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
 	createVpcPeeringConnectionFn   func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
 	acceptVpcPeeringConnectionFn   func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
@@ -152,13 +154,16 @@ func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.Describ
 	}, nil
 }
 
-func (m *mockEc2Client) DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	if m.wantErrList {
-		return nil, errorUtil.New("ec2 get vpcs error")
+func (m *mockEc2Client) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+	if m.vpcs != nil {
+		if m.wantErrList {
+			return nil, errorUtil.New("ec2 get vpcs error")
+		}
+		return &ec2.DescribeVpcsOutput{
+			Vpcs: m.vpcs,
+		}, nil
 	}
-	return &ec2.DescribeVpcsOutput{
-		Vpcs: m.vpcs,
-	}, nil
+	return m.describeVpcsFn(input)
 }
 
 func (m *mockEc2Client) CreateVpc(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
@@ -191,10 +196,13 @@ func (m *mockEc2Client) DeleteSubnet(*ec2.DeleteSubnetInput) (*ec2.DeleteSubnetO
 	return &ec2.DeleteSubnetOutput{}, nil
 }
 
-func (m *mockEc2Client) DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-	return &ec2.DescribeSecurityGroupsOutput{
-		SecurityGroups: m.secGroups,
-	}, nil
+func (m *mockEc2Client) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+	if m.secGroups != nil {
+		return &ec2.DescribeSecurityGroupsOutput{
+			SecurityGroups: m.secGroups,
+		}, nil
+	}
+	return m.describeSecurityGroupsFn(input)
 }
 
 func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
@@ -426,7 +434,7 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 func buildVpcs() []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
-			VpcId:     aws.String(defaultVPCID),
+			VpcId:     aws.String(defaultVpcId),
 			CidrBlock: aws.String("10.0.0.0/16"),
 			Tags: []*ec2.Tag{
 				{
