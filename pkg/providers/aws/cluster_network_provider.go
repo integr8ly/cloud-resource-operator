@@ -40,6 +40,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"net"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sort"
 
@@ -49,11 +50,9 @@ import (
 const (
 	DefaultRHMIVpcNameTagValue     = "RHMI Cloud Resource VPC"
 	DefaultRHMISubnetNameTagValue  = "RHMI Cloud Resource Subnet"
+	DefaultRHMISecurityGroupNameTagValue = "RHMI Cloud Resource Security Group"
 	defaultNumberOfExpectedSubnets = 2
-)
-
-// vpc/network peering
-const (
+	//network peering
 	tagVpcPeeringNameValue = "RHMI Cloud Resource Peering Connection"
 	// filter names for vpc peering connections
 	// see https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVpcPeeringConnections.html
@@ -78,6 +77,10 @@ type NetworkPeering struct {
 	PeeringConnection *ec2.VpcPeeringConnection
 }
 
+type NetworkConnection struct {
+	StandaloneSecurityGroup *ec2.SecurityGroup
+}
+
 func (np *NetworkPeering) IsReady() bool {
 	return aws.StringValue(np.PeeringConnection.Status.Code) == ec2.VpcPeeringConnectionStateReasonCodeActive
 }
@@ -85,6 +88,8 @@ func (np *NetworkPeering) IsReady() bool {
 type NetworkManager interface {
 	CreateNetwork(context.Context, *net.IPNet) (*Network, error)
 	DeleteNetwork(context.Context) error
+	CreateNetworkConnection(context.Context) (*NetworkConnection, error)
+	DeleteNetworkConnection(context.Context) error
 	CreateNetworkPeering(context.Context, *Network) (*NetworkPeering, error)
 	GetClusterNetworkPeering(context.Context) (*NetworkPeering, error)
 	DeleteNetworkPeering(*NetworkPeering) error
@@ -172,9 +177,9 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		logger.Infof("creating vpc: %s for clusterID: %s", *createVpcOutput.Vpc.VpcId, clusterID)
 
 		// ensure standalone vpc has correct tags
-		clusterIDTag := &ec2.Tag{
-			Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
-			Value: aws.String(clusterID),
+		clusterIDTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
 		}
 		if err = n.reconcileVPCTags(createVpcOutput.Vpc, clusterIDTag); err != nil {
 			return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
@@ -462,6 +467,7 @@ func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Networ
 			}
 		}
 	}
+
 	return peeringConnection, nil
 }
 
@@ -544,12 +550,177 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 			if aws.StringValue(tag.Key) == fmt.Sprintf("%sclusterID", organizationTag) &&
 				aws.StringValue(tag.Value) == clusterID {
 				validBundledVPCSubnets = append(validBundledVPCSubnets, subnet)
-				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", *subnet.SubnetId, *subnet.VpcId)
+				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", subnet.SubnetId, *subnet.VpcId)
 			}
 		}
 	}
 	logger.Infof("found %d bundled vpc subnets in cluster vpc", len(validBundledVPCSubnets))
 	return len(validBundledVPCSubnets) == 0, nil
+}
+
+// CreateNetworkConnection handles the creation of a connection from the vpc provisioned by cro to the cluster vpc
+// here we handle :
+// 		* the standalone security group
+//		* cro standalone vpc route table
+//		* cluster vpc route table
+func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context) (*NetworkConnection, error) {
+	logger := n.Logger.WithField("action", "CreateNetworkConnection")
+	logger.Info("preparing to configure network connection")
+
+	securityGroup, err := n.reconcileStandaloneSecurityGroup(ctx, logger)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failure while reconciling standalone security group")
+	}
+
+	return &NetworkConnection{
+		StandaloneSecurityGroup: securityGroup,
+	}, nil
+}
+
+// reconcileStandaloneSecurityGroup reconciles the standalone security group, ensuring correct tags and ip permissions
+// we require every resource (rds/elasticache) provisioned by cro in the cro standalone vpc to have a security group
+// this security group should allow all ingress traffic from the cluster
+// as the cluster vpc and the standalone vpc are peered we need to use the cluster cidr block as an ip permission to allow ingress traffic
+// see -> https://docs.aws.amazon.com/vpc/latest/peering/vpc-peering-security-groups.html
+func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, logger *logrus.Entry) (*ec2.SecurityGroup, error) {
+
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting cluster id")
+	}
+	orgTag := resources.GetOrganizationTag()
+
+	// build security group name
+	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	logger.Info(fmt.Sprintf("setting resource security group %s", standaloneSecurityGroupName))
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// get standalone security group
+	standaloneSecGroup, err := getSecurityGroup(n.Ec2Api, standaloneSecurityGroupName)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to find standalone security group")
+	}
+
+	// get the cro standalone vpc
+	standaloneVpc, err := getStandaloneVpc(n.Ec2Api, n.Logger, clusterID, orgTag)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get standalone vpc")
+	}
+
+	// get the cluster bundled vpc
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, logger)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+	}
+
+	// if no security group exists in standalone vpc create it
+	if standaloneSecGroup == nil {
+		// create security group
+		logger.Infof("creating security group for standalone vpc %s", clusterID)
+		if _, err := n.Ec2Api.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
+			Description: aws.String(fmt.Sprintf("security group for cluster %s", clusterID)),
+			GroupName:   aws.String(standaloneSecurityGroupName),
+			VpcId:       standaloneVpc.VpcId,
+		}); err != nil {
+			return nil, errorUtil.Wrap(err, "error creating security group")
+		}
+		return nil, nil
+
+	}
+	logger.Infof("found security group %s for cluster %s", *standaloneSecGroup.GroupId, clusterID)
+
+	// ensure standalone vpc has correct tags
+	// we require the subnet group to be tagged with the cro owner tag
+	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
+	}
+	securityGroupTags := ec2TagsToGeneric(standaloneSecGroup.Tags)
+	if !tagsContains(securityGroupTags, tagDisplayName, DefaultRHMISecurityGroupNameTagValue) ||
+		!tagsContains(securityGroupTags, *croOwnerTag.Key, *croOwnerTag.Value) {
+
+		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
+			Resources: []*string{
+				standaloneSecGroup.GroupId,
+			},
+			Tags: []*ec2.Tag{
+				{
+					Key:   aws.String(tagDisplayName),
+					Value: aws.String(DefaultRHMIVpcNameTagValue),
+				}, croOwnerTag,
+			},
+		})
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "unable to tag vpc")
+		}
+		logger.Infof("successfully tagged security group: %s for vpcid: %s", *standaloneSecGroup.GroupId, *standaloneSecGroup.VpcId)
+	}
+
+	// we need to ensure permissions for standalone security group will accept traffic from the cluster vpc
+	// currently we can not use the cluster vpc security group, this is a limitation from aws
+	// see for more -> https://docs.aws.amazon.com/vpc/latest/peering/vpc-peering-security-groups.html
+	// it is recommended by aws docs to use the cidr block from the peered vpc
+
+	// build ip permission
+	ipPermission := &ec2.IpPermission{
+		IpProtocol: aws.String("-1"),
+		IpRanges: []*ec2.IpRange{
+			{
+				CidrIp: clusterVpc.CidrBlock,
+			},
+		},
+	}
+
+	// ensure ip permission correct and valid in the standalone security group
+	for _, perm := range standaloneSecGroup.IpPermissions {
+		if reflect.DeepEqual(perm, ipPermission) {
+			logger.Infof("ip permissions are correct for security group %s", *standaloneSecGroup.GroupName)
+			return standaloneSecGroup, nil
+		}
+	}
+
+	// authorize the seucrity group ingres if it is not as expected
+	if _, err := n.Ec2Api.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+		GroupId: aws.String(*standaloneSecGroup.GroupId),
+		IpPermissions: []*ec2.IpPermission{
+			ipPermission,
+		},
+	}); err != nil {
+		return nil, errorUtil.Wrap(err, "error authorizing security group ingress")
+	}
+	logger.Infof("ip permissions have been updated to expected permissions for security group %s", *standaloneSecGroup.GroupName)
+	return standaloneSecGroup, nil
+}
+
+// DeleteNetworkConnection removes the security group created by cro
+func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context) error {
+	logger := n.Logger.WithField("action", "DeleteNetworkConnection")
+	// build security group name
+	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	logger.Info(fmt.Sprintf("setting resource security group %s", standaloneSecurityGroupName))
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
+
+	// get standalone security group
+	standaloneSecGroup, err := getSecurityGroup(n.Ec2Api, standaloneSecurityGroupName)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to find standalone security group")
+	}
+
+	if standaloneSecGroup != nil {
+		if _, err := n.Ec2Api.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{
+			GroupId: standaloneSecGroup.GroupId,
+		}); err != nil {
+			return errorUtil.Wrap(err, "failed to delete standalone security group")
+		}
+	}
+
+	logger.Info("standalone security group deleted")
+	return nil
 }
 
 //reconcileStandaloneVPCSubnets returns an array list of private subnets associated with a vpc or an error
@@ -973,4 +1144,19 @@ func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, 
 
 	logger.Infof("found vpc cidr block %s/%d in network strategy tier %s", vpcCidr.IP.String(), cidrMask, tier)
 	return vpcCidr, nil
+}
+
+// all network provider resources are to be tagged with a cloud resource operator owner tag
+// denoted -> `integreatly.org/clusterID=<infrastructure-id>`
+// this utility function returns a build owner tag
+func getCloudResourceOperatorOwnerTag(ctx context.Context, client client.Client) (*ec2.Tag, error) {
+	clusterID, err := resources.GetClusterID(ctx, client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+	organizationTag := resources.GetOrganizationTag()
+	return &ec2.Tag{
+		Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
+		Value: aws.String(clusterID),
+	}, nil
 }
