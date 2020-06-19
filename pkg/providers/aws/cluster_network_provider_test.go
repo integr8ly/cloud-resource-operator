@@ -2,16 +2,19 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"net"
+	"reflect"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	"net"
-	"reflect"
-	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -32,6 +35,7 @@ const (
 	validCIDRTwentyThree       = "10.0.50.0/23"
 	defaultValidSubnetMaskTwoA = "10.0.50.0/24"
 	defaultValidSubnetMaskTwoB = "10.0.51.0/24"
+	defaultNonOverlappingCidr  = "192.0.0.0/20"
 	defaultSubnetIdOne         = "test-id-1"
 	defaultSubnetIdTwo         = "test-id-2"
 	defaultAzIdOne             = "test-zone-1"
@@ -67,6 +71,14 @@ func buildMockVpcPeeringConnection(modifyFn func(*ec2.VpcPeeringConnection)) *ec
 	return mock
 }
 
+func buildTestConfigManager(modifyFn func(m *ConfigManagerMock)) *ConfigManagerMock {
+	mock := &ConfigManagerMock{}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
 type mockNetworkManager struct {
 	NetworkManager
 }
@@ -93,7 +105,7 @@ func (m mockNetworkManager) GetClusterNetworkPeering(context.Context) (*NetworkP
 	return &NetworkPeering{}, nil
 }
 
-func (m mockNetworkManager) DeleteNetworkPeering(context.Context, *NetworkPeering) error {
+func (m mockNetworkManager) DeleteNetworkPeering(*NetworkPeering) error {
 	return nil
 }
 
@@ -121,19 +133,6 @@ func buildStandaloneSubnets() []*ec2.Subnet {
 func buildBundledSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		buildSubnet(defaultVPCID, "test-id", "test", "test"),
-	}
-}
-
-func buildClusterVpc(cidrBlock string) *ec2.Vpc {
-	return &ec2.Vpc{
-		VpcId:     aws.String(defaultVPCID),
-		CidrBlock: aws.String(cidrBlock),
-		Tags: []*ec2.Tag{
-			{
-				Key:   aws.String("test-vpc"),
-				Value: aws.String("test-vpc"),
-			},
-		},
 	}
 }
 
@@ -196,6 +195,12 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 		{
 			VpcId:     aws.String(defaultVPCID),
 			CidrBlock: aws.String(cidrBlock),
+			Tags: []*ec2.Tag{
+				{
+					Key:   aws.String("test-vpc"),
+					Value: aws.String("test-vpc"),
+				},
+			},
 		},
 	}
 }
@@ -321,6 +326,11 @@ func buildElasticacheSubnetGroup() []*elasticache.CacheSubnetGroup {
 	}
 }
 
+func buildValidIpNet(CIDR string) *net.IPNet {
+	_, ip, _ := net.ParseCIDR(CIDR)
+	return ip
+}
+
 func TestNetworkProvider_IsEnabled(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -350,7 +360,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				Ec2Svc: &mockEc2Client{vpcs: []*ec2.Vpc{buildClusterVpc(validCIDRSixteen)}, subnets: buildBundledSubnets()},
+				Ec2Svc: &mockEc2Client{vpcs: buildValidClusterVPC(validCIDRSixteen), subnets: buildBundledSubnets()},
 			},
 			want:    true,
 			wantErr: false,
@@ -467,7 +477,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "successfully build standalone vpc network - CIDR /15",
+			name: "successfully error on invalid cidr params standalone vpc network - CIDR /15",
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
@@ -486,7 +496,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen), vpc: buildValidStandaloneVPC(validCIDRSixteen)},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(defaultNonOverlappingCidr), vpc: buildValidStandaloneVPC(validCIDRSixteen)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -502,7 +512,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen), vpc: buildValidStandaloneVPC(validCIDRTwentySix)},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(defaultNonOverlappingCidr), vpc: buildValidStandaloneVPC(validCIDRTwentySix)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -518,7 +528,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			fields: fields{
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(validCIDREighteen)},
+				Ec2Api:         &mockEc2Client{vpcs: buildValidClusterVPC(defaultNonOverlappingCidr)},
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -586,7 +596,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.vpc = buildValidNonTaggedStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
 					ec2Client.azs = buildSortedStandaloneAZs()
@@ -694,6 +704,24 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			},
 			wantErr: false,
 			want:    buildValidNetworkResponseVPCExists(validCIDRTwentyThree, defaultStandaloneVPCID, defaultValidSubnetMaskTwoA, defaultValidSubnetMaskTwoB),
+		},
+		{
+			name: "verify cluster vpc cidr block and standalone vpc cidr block overlaps return an error",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: &mockEc2Client{
+					vpcs:    []*ec2.Vpc{buildValidClusterVPC(validCIDRSixteen)[0]},
+					subnets: []*ec2.Subnet{},
+				},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySeven),
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -806,6 +834,99 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			}
 			if err := n.DeleteNetwork(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetwork() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_getNetworkProviderConfig(t *testing.T) {
+	type args struct {
+		ctx           context.Context
+		configManager ConfigManager
+		logger        *logrus.Entry
+		tier          string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *net.IPNet
+		wantErr bool
+	}{
+		{
+			name: "verify successful parse",
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ \"CidrBlock\": \"10.0.0.0/16\" }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: false,
+			want:    buildValidIpNet("10.0.0.0/16"),
+		},
+		{
+			name: "verify error on nil CIDR Block",
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "verify invalid CIDR",
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ \"CidrBlock\": \"malformed string\" }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "verify unmarshal error",
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(""),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, tt.args.logger)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getNetworkProviderConfig() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1051,7 +1172,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDREighteen), buildClusterVpc(validCIDREighteen)}
+					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDREighteen), buildValidClusterVPC(validCIDREighteen)[0]}
 					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
 						return &ec2.DescribeVpcPeeringConnectionsOutput{
 							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
@@ -1125,7 +1246,6 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx:     context.TODO(),
 				peering: &NetworkPeering{PeeringConnection: buildMockVpcPeeringConnection(nil)},
 			},
 			wantErr: "failed to get vpc: test",
@@ -1147,7 +1267,6 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx:     context.TODO(),
 				peering: &NetworkPeering{PeeringConnection: buildMockVpcPeeringConnection(nil)},
 			},
 			wantErr: "failed to delete vpc peering connection: test",
@@ -1173,7 +1292,6 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx:     context.TODO(),
 				peering: &NetworkPeering{PeeringConnection: buildMockVpcPeeringConnection(nil)},
 			},
 		},
@@ -1194,7 +1312,6 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx:     context.TODO(),
 				peering: &NetworkPeering{PeeringConnection: buildMockVpcPeeringConnection(nil)},
 			},
 		},
@@ -1208,7 +1325,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
 			}
-			if err := n.DeleteNetworkPeering(tt.args.ctx, tt.args.peering); err != nil && err.Error() != tt.wantErr {
+			if err := n.DeleteNetworkPeering(tt.args.peering); err != nil && err.Error() != tt.wantErr {
 				t.Errorf("DeleteNetworkPeering() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

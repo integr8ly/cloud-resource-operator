@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"time"
 
@@ -149,19 +148,23 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 		errMsg := "failed to check cluster vpc subnets"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	// if a standalone network is required configure the network
-	// (standalone vpc, private subnets, subnet groups, security groups, vpc peering)
+
+	//networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
+	//when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+	//was created in a cluster with a cluster version <= 4.4.5
+	//
+	//when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
-		// todo handle getting vpc cidr block from _network strat - https://issues.redhat.com/browse/INTLY-8103
-		logger.Debug("using temp cidr block")
-		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
+		// get cidr block from _network strat map, based on tier from postgres cr
+		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, pg.Spec.Tier, logger)
 		if err != nil {
-			errMsg := "failed to parse vpc cidr"
+			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		standaloneNetwork, err := networkManager.CreateNetwork(ctx, tempCIDR)
+		standaloneNetwork, err := networkManager.CreateNetwork(ctx, vpcCidrBlock)
 		if err != nil {
 			errMsg := "failed to create resource network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -192,8 +195,11 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, croType.StatusMessage(msg), err
 	}
 
-	// we should handle networking higher up for installs on >= 4.4.6 openshift cluster
+	// we handle standalone networking in CreatePostgres() for installs on >= 4.4.6 openshift cluster
 	// this check is to ensure backward compatibility with <= 4.4.5 openshift cluster
+	// creating bundled (in cluster vpc) subnets, subnet groups, security groups
+	//
+	// standaloneNetworkExists if no bundled resources are found in the cluster vpc
 	if !standaloneNetworkExists {
 		// setup networking in cluster vpc rds vpc
 		if err := p.configureRDSVpc(ctx, rdsSvc, ec2Svc); err != nil {
@@ -207,11 +213,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
-
-	// uncomment lines 183 and 184 for development/verification
-	// TODO Will be removed in https://issues.redhat.com/browse/INTLY-8103
-	//errMsg := "we don;t wanna create other stufff and thngs"
-	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// getting postgres user password from created secret
 	credSec := &v1.Secret{}
@@ -404,7 +405,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	// network manager required for cleaning up network.
+	// network manager required for cleaning up network vpc, subnet and subnet groups.
 	networkManager := NewNetworkManager(sess, p.Client, logger)
 
 	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), rdsCreateConfig, rdsDeleteConfig)
@@ -442,7 +443,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
-		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
 			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}

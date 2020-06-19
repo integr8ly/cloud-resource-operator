@@ -1,3 +1,7 @@
+// a helper utility for the cluster network provider.
+// the network provider provisions subnets in two availability zones.
+// to ensure a mapping between subnets and availability zones this sort utility,
+// allows for deterministic sorting of availability zones based on the zone names
 package aws
 
 import "github.com/aws/aws-sdk-go/service/ec2"

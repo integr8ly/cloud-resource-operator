@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
 	"time"
 
@@ -123,28 +122,22 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	/*
-		reconcileElasticacheNetworking configures networking required for cro resources (postgres)
-
-		networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
-		when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
-		was created in a cluster with a cluster version <= 4.4.5
-
-		when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
-		and we should create a new vpc for all resources to be deployed in and we should peer the
-		resource vpc and cluster vpc
-	*/
+	//networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
+	//when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+	//was created in a cluster with a cluster version <= 4.4.5
+	//
+	//when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
-		// todo handle getting vpc cidr block from _network strat - https://issues.redhat.com/browse/INTLY-8103
-		logger.Debug("using temp cidr block")
-		_, tempCIDR, err := net.ParseCIDR("10.0.0.0/26")
+		// get cidr block from _network strat map, based on tier from redis cr
+		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
 		if err != nil {
-			errMsg := "failed to parse vpc cidr"
+			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
-		standaloneNetwork, err := networkManager.CreateNetwork(ctx, tempCIDR)
+		standaloneNetwork, err := networkManager.CreateNetwork(ctx, vpcCidrBlock)
 		if err != nil {
 			errMsg := "failed to create resource network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -158,6 +151,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		}
 		logger.Infof("created network peering %s", aws.StringValue(networkPeering.PeeringConnection.VpcPeeringConnectionId))
 	}
+
 	// create the aws elasticache cluster
 	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg, isEnabled)
 }
@@ -173,6 +167,11 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
+	// we handle standalone networking in CreateRedis() for installs on >= 4.4.6 openshift clusters
+	// this check is to ensure backward compatibility with <= 4.4.5 openshift clusters
+	// creating bundled (in cluster vpc) subnets, subnet groups, security groups
+	//
+	// standaloneNetworkExists if no bundled subnets (created by this operator) are found in the cluster vpc
 	if !standaloneNetworkExists {
 		// setup networking in cluster vpc
 		if err := p.configureElasticacheVpc(ctx, cacheSvc, ec2Svc); err != nil {
@@ -186,10 +185,6 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
-	// uncomment lines 183 and 184 for development/verification
-	// TODO Will be removed in https://issues.redhat.com/browse/INTLY-8103
-	//errMsg := "we don;t wanna create other stufff and thngs"
-	//return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 
 	// verify and build elasticache create config
 	if err := p.buildElasticacheCreateStrategy(ctx, r, ec2Svc, elasticacheConfig); err != nil {
@@ -457,7 +452,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			msg := "failed to get cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
 			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
