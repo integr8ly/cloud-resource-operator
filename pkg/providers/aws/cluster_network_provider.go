@@ -713,7 +713,6 @@ func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context) error {
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to find standalone security group")
 	}
-
 	if standaloneSecGroup != nil {
 		if _, err := n.Ec2Api.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{
 			GroupId: standaloneSecGroup.GroupId,

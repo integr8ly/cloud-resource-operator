@@ -209,6 +209,10 @@ func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2
 	return &ec2.CreateSecurityGroupOutput{}, nil
 }
 
+func (m *mockEc2Client) DeleteSecurityGroup(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+	return &ec2.DeleteSecurityGroupOutput{}, nil
+}
+
 func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
 	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
 }

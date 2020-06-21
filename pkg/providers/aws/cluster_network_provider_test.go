@@ -1634,3 +1634,116 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 		})
 	}
 }
+
+func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client         client.Client
+		RdsApi         rdsiface.RDSAPI
+		Ec2Api         ec2iface.EC2API
+		ElasticacheApi elasticacheiface.ElastiCacheAPI
+		Logger         *logrus.Entry
+	}
+	type args struct {
+		ctx context.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "ensure no error return if security group is nil",
+			fields: fields{
+				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi:         &mockRdsClient{},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "ensure ec2 delete security group is called if security group is not nil and is a security group provisioned by cro",
+			fields: fields{
+				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi:         &mockRdsClient{},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+									group.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {}),
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String(tagDisplayName)
+											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										}),
+									}
+									group.IpPermissions = []*ec2.IpPermission{
+										buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
+									}
+								}),
+							},
+						}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "ensure ec2 delete security group is not called if security groups are found but not a cro provisioned security group",
+			fields: fields{
+				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi:         &mockRdsClient{},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+									group.GroupName = aws.String("not a cro security group")
+								}),
+							},
+						}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &NetworkProvider{
+				Client:         tt.fields.Client,
+				RdsApi:         tt.fields.RdsApi,
+				Ec2Api:         tt.fields.Ec2Api,
+				ElasticacheApi: tt.fields.ElasticacheApi,
+				Logger:         tt.fields.Logger,
+			}
+			if err := n.DeleteNetworkConnection(tt.args.ctx); (err != nil) != tt.wantErr {
+				t.Errorf("DeleteNetworkConnection() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
