@@ -457,7 +457,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
-		if err = networkManager.DeleteNetworkConnection(ctx); err != nil {
+		if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
 			msg := "failed to delete network connection"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}

@@ -42,7 +42,7 @@ var _ NetworkManager = &NetworkManagerMock{}
 //             DeleteNetworkFunc: func(in1 context.Context) error {
 // 	               panic("mock out the DeleteNetwork method")
 //             },
-//             DeleteNetworkConnectionFunc: func(in1 context.Context) error {
+//             DeleteNetworkConnectionFunc: func(in1 context.Context, in2 *NetworkPeering) error {
 // 	               panic("mock out the DeleteNetworkConnection method")
 //             },
 //             DeleteNetworkPeeringFunc: func(in1 *NetworkPeering) error {
@@ -74,7 +74,7 @@ type NetworkManagerMock struct {
 	DeleteNetworkFunc func(in1 context.Context) error
 
 	// DeleteNetworkConnectionFunc mocks the DeleteNetworkConnection method.
-	DeleteNetworkConnectionFunc func(in1 context.Context) error
+	DeleteNetworkConnectionFunc func(in1 context.Context, in2 *NetworkPeering) error
 
 	// DeleteNetworkPeeringFunc mocks the DeleteNetworkPeering method.
 	DeleteNetworkPeeringFunc func(in1 *NetworkPeering) error
@@ -117,6 +117,8 @@ type NetworkManagerMock struct {
 		DeleteNetworkConnection []struct {
 			// In1 is the in1 argument value.
 			In1 context.Context
+			// In2 is the in2 argument value.
+			In2 *NetworkPeering
 		}
 		// DeleteNetworkPeering holds details about calls to the DeleteNetworkPeering method.
 		DeleteNetworkPeering []struct {
@@ -273,19 +275,21 @@ func (mock *NetworkManagerMock) DeleteNetworkCalls() []struct {
 }
 
 // DeleteNetworkConnection calls DeleteNetworkConnectionFunc.
-func (mock *NetworkManagerMock) DeleteNetworkConnection(in1 context.Context) error {
+func (mock *NetworkManagerMock) DeleteNetworkConnection(in1 context.Context, in2 *NetworkPeering) error {
 	if mock.DeleteNetworkConnectionFunc == nil {
 		panic("NetworkManagerMock.DeleteNetworkConnectionFunc: method is nil but NetworkManager.DeleteNetworkConnection was just called")
 	}
 	callInfo := struct {
 		In1 context.Context
+		In2 *NetworkPeering
 	}{
 		In1: in1,
+		In2: in2,
 	}
 	lockNetworkManagerMockDeleteNetworkConnection.Lock()
 	mock.calls.DeleteNetworkConnection = append(mock.calls.DeleteNetworkConnection, callInfo)
 	lockNetworkManagerMockDeleteNetworkConnection.Unlock()
-	return mock.DeleteNetworkConnectionFunc(in1)
+	return mock.DeleteNetworkConnectionFunc(in1, in2)
 }
 
 // DeleteNetworkConnectionCalls gets all the calls that were made to DeleteNetworkConnection.
@@ -293,9 +297,11 @@ func (mock *NetworkManagerMock) DeleteNetworkConnection(in1 context.Context) err
 //     len(mockedNetworkManager.DeleteNetworkConnectionCalls())
 func (mock *NetworkManagerMock) DeleteNetworkConnectionCalls() []struct {
 	In1 context.Context
+	In2 *NetworkPeering
 } {
 	var calls []struct {
 		In1 context.Context
+		In2 *NetworkPeering
 	}
 	lockNetworkManagerMockDeleteNetworkConnection.RLock()
 	calls = mock.calls.DeleteNetworkConnection

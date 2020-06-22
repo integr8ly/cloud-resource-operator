@@ -162,6 +162,17 @@ func buildMockEc2RouteTable(modifyFn func(*ec2.RouteTable)) *ec2.RouteTable {
 	return mock
 }
 
+func buildMockEc2Route(modifyFn func(*ec2.Route)) *ec2.Route {
+	mock := &ec2.Route{
+		DestinationCidrBlock:   aws.String(validCIDRTwentySix),
+		VpcPeeringConnectionId: aws.String(mockVpcPeeringConnectionID),
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
 func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 	return &ec2.Subnet{
 		SubnetId:         aws.String(subnetId),
@@ -594,9 +605,13 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "fail if unable to get cluster id",
 			fields: fields{
-				Client:         fake.NewFakeClientWithScheme(scheme),
-				RdsApi:         &mockRdsClient{},
-				Ec2Api:         &mockEc2Client{},
+				Client: fake.NewFakeClientWithScheme(scheme),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -823,13 +838,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.VpcId = aws.String("not standalone id")
-								}),
-							},
-						}, nil
+						return &ec2.DescribeRouteTablesOutput{RouteTables: []*ec2.RouteTable{}}, nil
 					}
 				}),
 				ElasticacheApi: &mockElasticacheClient{},
@@ -1878,7 +1887,8 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		Logger         *logrus.Entry
 	}
 	type args struct {
-		ctx context.Context
+		ctx            context.Context
+		networkPeering *NetworkPeering
 	}
 	tests := []struct {
 		name    string
@@ -1897,10 +1907,45 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 						return &ec2.DescribeSecurityGroupsOutput{}, nil
 					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String("kubernetes.io/cluster/test")
+											e.Value = aws.String("owned")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
 				}),
 			},
 			args: args{
 				ctx: context.TODO(),
+				networkPeering: &NetworkPeering{
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+
+					}),
+				},
 			},
 			wantErr: false,
 		},
@@ -1930,10 +1975,45 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String("kubernetes.io/cluster/test")
+											e.Value = aws.String("owned")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
 				}),
 			},
 			args: args{
 				ctx: context.TODO(),
+				networkPeering: &NetworkPeering{
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+
+					}),
+				},
 			},
 			wantErr: false,
 		},
@@ -1954,10 +2034,119 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String("kubernetes.io/cluster/test")
+											e.Value = aws.String("owned")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
 				}),
 			},
 			args: args{
 				ctx: context.TODO(),
+				networkPeering: &NetworkPeering{
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+
+					}),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "ensure ec2 delete routes is called",
+			fields: fields{
+				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi:         &mockRdsClient{},
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+									group.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {}),
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String(tagDisplayName)
+											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										}),
+									}
+									group.IpPermissions = []*ec2.IpPermission{
+										buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Routes = []*ec2.Route{
+										buildMockEc2Route(nil),
+									}
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String("kubernetes.io/cluster/test")
+											e.Value = aws.String("owned")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
+					ec2Client.deleteRouteFn = func(input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
+						return &ec2.DeleteRouteOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+				networkPeering: &NetworkPeering{
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+
+					}),
+				},
 			},
 			wantErr: false,
 		},
@@ -1971,7 +2160,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
 			}
-			if err := n.DeleteNetworkConnection(tt.args.ctx); (err != nil) != tt.wantErr {
+			if err := n.DeleteNetworkConnection(tt.args.ctx, tt.args.networkPeering); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetworkConnection() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

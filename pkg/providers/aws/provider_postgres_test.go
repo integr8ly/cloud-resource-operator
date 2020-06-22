@@ -76,6 +76,7 @@ type mockEc2Client struct {
 	deleteVpcPeeringConnectionFn   func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
 	describeRouteTablesFn          func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
 	createRouteFn                  func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
+	deleteRouteFn                  func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
 
 	calls struct {
 		DescribeRouteTables []struct {
@@ -219,6 +220,10 @@ func (m *mockEc2Client) CreateRoute(input *ec2.CreateRouteInput) (*ec2.CreateRou
 	return m.createRouteFn(input)
 }
 
+func (m *mockEc2Client) DeleteRoute(input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
+	return m.deleteRouteFn(input)
+}
+
 func (m *mockEc2Client) DescribeRouteTables(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 	if m.describeRouteTablesFn == nil {
 		panic("mockEc2Client.DescribeRouteTables: method is nil")
@@ -327,16 +332,16 @@ func (m *mockEc2Client) DeleteVpcPeeringConnection(input *ec2.DeleteVpcPeeringCo
 
 func buildMockNetworkManager() *NetworkManagerMock {
 	return &NetworkManagerMock{
-		DeleteNetworkConnectionFunc: func(in1 context.Context) error {
+		DeleteNetworkConnectionFunc: func(ctx context.Context, np *NetworkPeering) error {
 			return nil
 		},
-		GetClusterNetworkPeeringFunc: func(in1 context.Context) (*NetworkPeering, error) {
+		GetClusterNetworkPeeringFunc: func(ctx context.Context) (*NetworkPeering, error) {
 			return &NetworkPeering{}, nil
 		},
-		DeleteNetworkPeeringFunc: func(in1 *NetworkPeering) error {
+		DeleteNetworkPeeringFunc: func(np *NetworkPeering) error {
 			return nil
 		},
-		DeleteNetworkFunc: func(in1 context.Context) error {
+		DeleteNetworkFunc: func(ctx context.Context) error {
 			return nil
 		},
 	}
