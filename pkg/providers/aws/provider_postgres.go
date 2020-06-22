@@ -182,7 +182,7 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 		logger.Infof("created network peering %s", aws.StringValue(networkPeering.PeeringConnection.VpcPeeringConnectionId))
 
 		// we have created the peering connection we must now create the security groups and update the route tables
-		securityGroup, err := networkManager.CreateNetworkConnection(ctx)
+		securityGroup, err := networkManager.CreateNetworkConnection(ctx, standaloneNetwork)
 		if err != nil {
 			errMsg := "failed to create standalone network"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)

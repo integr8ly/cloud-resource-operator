@@ -59,6 +59,8 @@ var (
 				"ec2:DescribeVpcPeeringConnections",
 				"ec2:AcceptVpcPeeringConnection",
 				"ec2:DeleteVpcPeeringConnection",
+				"ec2:DescribeRouteTables",
+				"ec2:CreateRoute",
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",
