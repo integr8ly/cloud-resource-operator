@@ -422,7 +422,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 			args: args{
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{},
-				networkManager:    &mockNetworkManager{},
+				networkManager:    buildMockNetworkManager(),
 				redis:             buildTestRedisCR(),
 			},
 			fields: fields{
@@ -437,7 +437,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing unavailable redis",
 			args: args{
-				networkManager:    &mockNetworkManager{},
+				networkManager:    buildMockNetworkManager(),
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redis:             buildTestRedisCR(),
@@ -454,7 +454,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing available redis",
 			args: args{
-				networkManager:    &mockNetworkManager{},
+				networkManager:    buildMockNetworkManager(),
 				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				redis:             buildTestRedisCR(),
