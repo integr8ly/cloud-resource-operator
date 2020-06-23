@@ -372,11 +372,16 @@ func buildSubnetGroupID() string {
 	return resources.ShortenString(fmt.Sprintf("%s-%s", dafaultInfraName, "subnet-group"), DefaultAwsIdentifierLength)
 }
 
+func buildSubnetGroupDescription() string {
+	return fmt.Sprintf("%s-%s", defaultSubnetGroupDesc, "test")
+}
+
 func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
 	return []*rds.DBSubnetGroup{
 		{
 			DBSubnetGroupName: aws.String(buildSubnetGroupID()),
 			VpcId:             aws.String("test"),
+			DBSubnetGroupArn:  aws.String("subnetarn"),
 		},
 	}
 }
@@ -384,8 +389,9 @@ func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
 func buildElasticacheSubnetGroup() []*elasticache.CacheSubnetGroup {
 	return []*elasticache.CacheSubnetGroup{
 		{
-			CacheSubnetGroupName: aws.String(buildSubnetGroupID()),
-			VpcId:                aws.String("test"),
+			CacheSubnetGroupName:        aws.String(buildSubnetGroupID()),
+			VpcId:                       aws.String("test"),
+			CacheSubnetGroupDescription: aws.String(buildSubnetGroupDescription()),
 		},
 	}
 }
@@ -640,7 +646,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
@@ -669,7 +675,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on non tagged standalone vpc",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.vpc = buildValidNonTaggedStandaloneVPC(validCIDRTwentySix)
@@ -690,10 +696,28 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			},
 		},
 		{
-			name: "successfully reconcile on already created rds subnet groups for standalone vpc",
+			name: "successfully reconcile on already created rds and elasticache subnet groups for standalone vpc",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.subnetGroups = buildRDSSubnetGroup()
+					rdsClient.modifyDBSubnetGroupFn = func(input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
+						return &rds.ModifyDBSubnetGroupOutput{}, nil
+					}
+					rdsClient.listTagsForResourceFn = func(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
+						return &rds.ListTagsForResourceOutput{
+							TagList: []*rds.Tag{
+								{
+									Key:   aws.String("something"),
+									Value: aws.String("something value"),
+								},
+							},
+						}, nil
+					}
+					rdsClient.removeTagsFromResourceFn = func(input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
+						return nil, nil
+					}
+				}),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
@@ -708,8 +732,13 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{cacheSubnetGroup: buildElasticacheSubnetGroup()},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.cacheSubnetGroup = buildElasticacheSubnetGroup()
+					elasticacheClient.modifyCacheSubnetGroupFn = func(input *elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error) {
+						return &elasticache.ModifyCacheSubnetGroupOutput{}, nil
+					}
+				}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -722,7 +751,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create subnets in correct azs",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
@@ -752,7 +781,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create subnets in large unsorted az zones list - zone one and two",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
@@ -782,7 +811,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create correct subnets for vpc cidr block 10.0.50.0/23",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentyThree)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentyThree)
@@ -812,7 +841,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "verify cluster vpc cidr block and standalone vpc cidr block overlaps return an error",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: &mockEc2Client{
 					vpcs:    []*ec2.Vpc{buildValidClusterVPC(validCIDRSixteen)[0]},
 					subnets: []*ec2.Subnet{},
@@ -830,7 +859,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully error if vpc route table does not exist",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
+				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)

@@ -379,7 +379,7 @@ func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context, network *
 
 	// get standalone vpc route table using cro owner tag
 	logger.Info("finding standalone route table(s)")
-	standAloneVpcRouteTables, err := n.getVPCRouteTable(croOwnerTag)
+	standAloneVpcRouteTables, err := n.getVPCRouteTable(genericToEc2Tag(croOwnerTag))
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting standalone vpc route tables")
 	}
@@ -805,7 +805,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	}
 	securityGroupTags := ec2TagsToGeneric(standaloneSecGroup.Tags)
 	if !tagsContains(securityGroupTags, tagDisplayName, DefaultRHMISecurityGroupNameTagValue) ||
-		!tagsContains(securityGroupTags, *croOwnerTag.Key, *croOwnerTag.Value) {
+		!tagsContains(securityGroupTags, croOwnerTag.key, croOwnerTag.value) {
 		logger.Infof("tagging security group %s", aws.StringValue(standaloneSecGroup.GroupId))
 		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 			Resources: []*string{
@@ -815,7 +815,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 				{
 					Key:   aws.String(tagDisplayName),
 					Value: aws.String(DefaultRHMISecurityGroupNameTagValue),
-				}, croOwnerTag,
+				}, genericToEc2Tag(croOwnerTag),
 			},
 		})
 		if err != nil {
@@ -890,7 +890,7 @@ func (n *NetworkProvider) reconcileStandaloneRouteTableTags(ctx context.Context,
 	for _, routeTable := range routeTables {
 		routeTableTags := ec2TagsToGeneric(routeTable.Tags)
 		if !tagsContains(routeTableTags, tagDisplayName, DefaultRHMIVpcRouteTableNameTagValue) ||
-			!tagsContains(routeTableTags, aws.StringValue(croOwnerTag.Key), aws.StringValue(croOwnerTag.Value)) {
+			!tagsContains(routeTableTags, croOwnerTag.key, croOwnerTag.value) {
 			_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{
 					aws.String(*routeTable.RouteTableId),
@@ -899,13 +899,13 @@ func (n *NetworkProvider) reconcileStandaloneRouteTableTags(ctx context.Context,
 					{
 						Key:   aws.String(tagDisplayName),
 						Value: aws.String(DefaultRHMIVpcRouteTableNameTagValue),
-					}, croOwnerTag,
+					}, genericToEc2Tag(croOwnerTag),
 				},
 			})
 			if err != nil {
 				return errorUtil.Wrap(err, "unable to tag route table")
 			}
-			logger.Infof("successfully tagged route table: %s for clusterID: %s", aws.StringValue(routeTable.RouteTableId), aws.StringValue(croOwnerTag.Value))
+			logger.Infof("successfully tagged route table: %s for clusterID: %s", aws.StringValue(routeTable.RouteTableId), croOwnerTag.value)
 		}
 	}
 	return nil
@@ -1035,7 +1035,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	for _, sub := range subs {
 		logger.Infof("validating subnet %s", *sub.SubnetId)
 		if !tagsContains(ec2TagsToGeneric(sub.Tags), defaultAWSPrivateSubnetTagKey, "1") ||
-			!tagsContains(ec2TagsToGeneric(sub.Tags), aws.StringValue(croClusterOwnerTag.Key), aws.StringValue(croClusterOwnerTag.Value)) ||
+			!tagsContains(ec2TagsToGeneric(sub.Tags), croClusterOwnerTag.key, croClusterOwnerTag.value) ||
 			!tagsContains(ec2TagsToGeneric(sub.Tags), "Name", DefaultRHMISubnetNameTagValue) {
 			if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Api, sub, logger); err != nil {
 				return nil, errorUtil.Wrap(err, "failed to tag subnet")
@@ -1072,12 +1072,12 @@ func (n *NetworkProvider) getVPCRouteTable(routeTableTag *ec2.Tag) ([]*ec2.Route
 //
 //VPCs are tagged with with the name `<organizationTag>/clusterID`.
 //By default, `integreatly.org/clusterID`.
-func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) error {
+func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *tag) error {
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
 
 	vpcTags := ec2TagsToGeneric(vpc.Tags)
 	if !tagsContains(vpcTags, tagDisplayName, DefaultRHMIVpcNameTagValue) ||
-		!tagsContains(vpcTags, *clusterIDTag.Key, *clusterIDTag.Value) {
+		!tagsContains(vpcTags, clusterIDTag.key, clusterIDTag.value) {
 
 		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 			Resources: []*string{
@@ -1087,13 +1087,13 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *ec2.Tag) 
 				{
 					Key:   aws.String(tagDisplayName),
 					Value: aws.String(DefaultRHMIVpcNameTagValue),
-				}, clusterIDTag,
+				}, genericToEc2Tag(clusterIDTag),
 			},
 		})
 		if err != nil {
 			return errorUtil.Wrap(err, "unable to tag vpc")
 		}
-		logger.Infof("successfully tagged vpc: %s for clusterID: %s", *vpc.VpcId, *clusterIDTag.Value)
+		logger.Infof("successfully tagged vpc: %s for clusterID: %s", *vpc.VpcId, clusterIDTag.value)
 	}
 	return nil
 }
@@ -1110,14 +1110,10 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
 
-	foundSubnet, err := getRDSSubnetGroup(n.RdsApi, subnetGroupName)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed getting rds subnet group")
-	}
-	if foundSubnet != nil {
-		logger.Infof("subnet group %s found", *foundSubnet.DBSubnetGroupName)
-		// todo ensure subnets and tags are correct
-		return nil
+	// build array list of all vpc private subnets
+	var subnetIDs []*string
+	for _, subnet := range privateVPCSubnets {
+		subnetIDs = append(subnetIDs, subnet.SubnetId)
 	}
 
 	// in the case of no private subnets being found, we return a less verbose error message compared to obscure aws error message
@@ -1125,15 +1121,40 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		return errorUtil.New("no private subnets found, can not create subnet group for rds")
 	}
 
-	// build array list of all vpc private subnets
-	var subnetIDs []*string
-	for _, subnet := range privateVPCSubnets {
-		subnetIDs = append(subnetIDs, subnet.SubnetId)
+	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build cro owner tag")
 	}
 
-	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	foundSubnet, err := getRDSSubnetGroup(n.RdsApi, subnetGroupName)
 	if err != nil {
-		return errorUtil.Wrap(err, "error getting clusterID")
+		return errorUtil.Wrap(err, "failed getting rds subnet group")
+	}
+	if foundSubnet != nil {
+		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnet.DBSubnetGroupName)
+		if foundSubnet.DBSubnetGroupDescription != aws.String(defaultSubnetGroupDesc) {
+			if _, err := n.RdsApi.ModifyDBSubnetGroup(&rds.ModifyDBSubnetGroupInput{
+				DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
+				DBSubnetGroupName:        foundSubnet.DBSubnetGroupName,
+				SubnetIds:                subnetIDs,
+			}); err != nil {
+				return errorUtil.Wrap(err, "error updating db subnet group description")
+			}
+		}
+		tags, err := n.RdsApi.ListTagsForResource(&rds.ListTagsForResourceInput{
+			ResourceName: foundSubnet.DBSubnetGroupArn,
+		})
+		if err != nil {
+			return errorUtil.Wrap(err, "error getting subnet group tags")
+		}
+		subnetTags := rdsTagstoGeneric(tags.TagList)
+		if !tagsContains(subnetTags, croOwnerTag.key, croOwnerTag.value) {
+			err := n.updateRdsSubnetGroupTags(foundSubnet, genericToRdsTag(croOwnerTag), logger)
+			if err != nil {
+				return errorUtil.Wrap(err, "error updating subnet group tags")
+			}
+		}
+		return nil
 	}
 
 	// build subnet group input
@@ -1142,10 +1163,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		DBSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                subnetIDs,
 		Tags: []*rds.Tag{
-			{
-				Key:   aws.String("cluster"),
-				Value: aws.String(clusterID),
-			},
+			genericToRdsTag(croOwnerTag),
 		},
 	}
 
@@ -1153,6 +1171,29 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 	logger.Infof("creating resource subnet group %s", *subnetGroupInput.DBSubnetGroupName)
 	if _, err := n.RdsApi.CreateDBSubnetGroup(subnetGroupInput); err != nil {
 		return errorUtil.Wrap(err, "unable to create db subnet group")
+	}
+	return nil
+}
+
+//this function removes tags and reads them to an rds subnet group
+func (n *NetworkProvider) updateRdsSubnetGroupTags(foundSubnet *rds.DBSubnetGroup, croOwnerTag *rds.Tag, logger *logrus.Entry) error {
+	_, err := n.RdsApi.RemoveTagsFromResource(&rds.RemoveTagsFromResourceInput{
+		ResourceName: foundSubnet.DBSubnetGroupArn,
+		TagKeys: []*string{
+			croOwnerTag.Key,
+		},
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "error updating db subnet group tags")
+	}
+	_, err = n.RdsApi.AddTagsToResource(&rds.AddTagsToResourceInput{
+		ResourceName: foundSubnet.DBSubnetGroupArn,
+		Tags: []*rds.Tag{
+			croOwnerTag,
+		},
+	})
+	if err != nil {
+		return errorUtil.Wrap(err, "error updating db subnet group tags")
 	}
 	return nil
 }
@@ -1169,14 +1210,37 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
 
+	// build array list of all vpc private subnets
+	var subnetIDs []*string
+	for _, subnet := range privateVPCSubnets {
+		subnetIDs = append(subnetIDs, subnet.SubnetId)
+	}
+
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting clusterID")
+	}
+
+	elasticacheSubnetGroupDescription := fmt.Sprintf("%s for cluster %s", defaultSubnetGroupDesc, clusterID)
+
+	// build subnet group input
+
 	// check if group exists
-	subnetGroup, err := getElasticacheSubnetByGroup(n.ElasticacheApi, subnetGroupName)
+	foundSubnet, err := getElasticacheSubnetByGroup(n.ElasticacheApi, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting elasticache subnet group on reconcile")
 	}
-	if subnetGroup != nil {
-		logger.Infof("subnet group %s found", *subnetGroup.CacheSubnetGroupName)
-		// todo ensure subnets and tags are correct in the subnet group
+	if foundSubnet != nil {
+		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnet.CacheSubnetGroupName)
+		if *foundSubnet.CacheSubnetGroupDescription != elasticacheSubnetGroupDescription {
+			if _, err = n.ElasticacheApi.ModifyCacheSubnetGroup(&elasticache.ModifyCacheSubnetGroupInput{
+				CacheSubnetGroupDescription: aws.String(elasticacheSubnetGroupDescription),
+				CacheSubnetGroupName:        foundSubnet.CacheSubnetGroupName,
+				SubnetIds:                   subnetIDs,
+			}); err != nil {
+				return errorUtil.Wrap(err, "error updating elasticache subnet group description")
+			}
+		}
 		return nil
 	}
 
@@ -1185,15 +1249,8 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 		return errorUtil.New("no private subnets found, can not create subnet group for rds")
 	}
 
-	// build array list of all vpc private subnets
-	var subnetIDs []*string
-	for _, subnet := range privateVPCSubnets {
-		subnetIDs = append(subnetIDs, subnet.SubnetId)
-	}
-
-	// build subnet group input
 	subnetGroupInput := &elasticache.CreateCacheSubnetGroupInput{
-		CacheSubnetGroupDescription: aws.String("subnet group created by the cloud resource operator"),
+		CacheSubnetGroupDescription: aws.String(elasticacheSubnetGroupDescription),
 		CacheSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                   subnetIDs,
 	}
@@ -1228,7 +1285,7 @@ func getStandaloneVpc(ctx context.Context, client client.Client, ec2Svc ec2iface
 	var foundVPC *ec2.Vpc
 	for _, vpc := range vpcs.Vpcs {
 		for _, tag := range vpc.Tags {
-			if *tag.Key == aws.StringValue(croOwnerTag.Key) && *tag.Value == aws.StringValue(croOwnerTag.Value) {
+			if *tag.Key == croOwnerTag.key && *tag.Value == croOwnerTag.value {
 				logger.Infof("found vpc: %s", *vpc.VpcId)
 				foundVPC = vpc
 			}
@@ -1381,16 +1438,17 @@ func validateStandaloneCidrBlock(ctx context.Context, client client.Client, ec2A
 // all network provider resources are to be tagged with a cloud resource operator owner tag
 // denoted -> `integreatly.org/clusterID=<infrastructure-id>`
 // this utility function returns a build owner tag
-func getCloudResourceOperatorOwnerTag(ctx context.Context, client client.Client) (*ec2.Tag, error) {
+func getCloudResourceOperatorOwnerTag(ctx context.Context, client client.Client) (*tag, error) {
 	clusterID, err := resources.GetClusterID(ctx, client)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
 	}
 	organizationTag := resources.GetOrganizationTag()
-	return &ec2.Tag{
+	genericTag := ec2TagToGeneric(&ec2.Tag{
 		Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
 		Value: aws.String(clusterID),
-	}, nil
+	})
+	return genericTag, nil
 }
 
 // resources such as cluster vpc route tables are tagged with a cluster owner tag

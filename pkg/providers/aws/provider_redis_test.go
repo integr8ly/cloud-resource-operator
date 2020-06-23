@@ -47,6 +47,18 @@ type mockElasticacheClient struct {
 	wantEmpty         bool
 	replicationGroups []*elasticache.ReplicationGroup
 	cacheSubnetGroup  []*elasticache.CacheSubnetGroup
+
+	// new approach for manually defined mocks
+	// to allow for simple overrides in test table declarations
+	modifyCacheSubnetGroupFn func(*elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error)
+}
+
+func buildMockElasticacheClient(modifyFn func(*mockElasticacheClient)) *mockElasticacheClient {
+	mock := &mockElasticacheClient{}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
 }
 
 type mockStsClient struct {
@@ -131,6 +143,10 @@ func (m *mockElasticacheClient) CreateCacheSubnetGroup(*elasticache.CreateCacheS
 
 func (m *mockElasticacheClient) DeleteCacheSubnetGroup(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
 	return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+}
+
+func (m *mockElasticacheClient) ModifyCacheSubnetGroup(input *elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error) {
+	return m.modifyCacheSubnetGroupFn(input)
 }
 
 // mock sts get caller identity

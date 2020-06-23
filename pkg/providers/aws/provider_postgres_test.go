@@ -52,6 +52,11 @@ type mockRdsClient struct {
 	wantEmpty     bool
 	dbInstances   []*rds.DBInstance
 	subnetGroups  []*rds.DBSubnetGroup
+	// new approach for manually defined mocks
+	// to allow for simple overrides in test table declarations
+	modifyDBSubnetGroupFn    func(*rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error)
+	listTagsForResourceFn    func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
+	removeTagsFromResourceFn func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
 }
 
 type mockEc2Client struct {
@@ -95,6 +100,14 @@ func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
 	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 		return &ec2.CreateTagsOutput{}, nil
 	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
+func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
+	mock := &mockRdsClient{}
 	if modifyFn != nil {
 		modifyFn(mock)
 	}
@@ -166,6 +179,18 @@ func (m *mockRdsClient) CreateDBSubnetGroup(*rds.CreateDBSubnetGroupInput) (*rds
 
 func (m *mockRdsClient) DeleteDBSubnetGroup(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
 	return &rds.DeleteDBSubnetGroupOutput{}, nil
+}
+
+func (m *mockRdsClient) ModifyDBSubnetGroup(input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
+	return m.modifyDBSubnetGroupFn(input)
+}
+
+func (m *mockRdsClient) ListTagsForResource(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
+	return m.listTagsForResourceFn(input)
+}
+
+func (m *mockRdsClient) RemoveTagsFromResource(input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
+	return m.removeTagsFromResourceFn(input)
 }
 
 func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
@@ -642,9 +667,11 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is available (valid cluster bundle subnets)",
+			name: "test rds exists and is available (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.dbInstances = buildAvailableDBInstance(testIdentifier)
+				}),
 				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
@@ -670,7 +697,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is not available (valid cluster bundle subnets)",
+			name: "test rds exists and is not available (valid cluster bundle subnets)",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildPendingDBInstance(testIdentifier)},
 				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
