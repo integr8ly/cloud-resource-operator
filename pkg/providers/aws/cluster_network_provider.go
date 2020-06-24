@@ -130,10 +130,10 @@ func NewNetworkManager(session *session.Session, client client.Client, logger *l
 //
 //CreateNetwork does:
 //    * create a VPC with CIDR block and tag it, if a VPC does not exist,
-//	* reconcile on subnets and subnet groups
+//	  * reconcile on subnets and subnet groups
 //
 //CreateNetwork does not:
-//	* reconcile the vpc if the VPC already exist (this is to avoid potential changes to the CIDR range and unwanted/unexpected behaviour)
+//	  * reconcile the vpc if the VPC already exist (this is to avoid potential changes to the CIDR range and unwanted/unexpected behaviour)
 func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.IPNet) (*Network, error) {
 	logger := n.Logger.WithField("action", "CreateNetwork")
 	logger.Debug("CreateNetwork called")
@@ -1111,9 +1111,9 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 	}
 
 	// build array list of all vpc private subnets
-	var subnetIDs []*string
+	var subnetIds []*string
 	for _, subnet := range privateVPCSubnets {
-		subnetIDs = append(subnetIDs, subnet.SubnetId)
+		subnetIds = append(subnetIds, subnet.SubnetId)
 	}
 
 	// in the case of no private subnets being found, we return a less verbose error message compared to obscure aws error message
@@ -1126,30 +1126,45 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		return errorUtil.Wrap(err, "failed to build cro owner tag")
 	}
 
-	foundSubnet, err := getRDSSubnetGroup(n.RdsApi, subnetGroupName)
+	foundSubnetGroup, err := getRDSSubnetGroup(n.RdsApi, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed getting rds subnet group")
 	}
-	if foundSubnet != nil {
-		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnet.DBSubnetGroupName)
-		if foundSubnet.DBSubnetGroupDescription != aws.String(defaultSubnetGroupDesc) {
+	if foundSubnetGroup != nil {
+		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnetGroup.DBSubnetGroupName)
+
+		// ensure all subnets exist in subnet group
+		subnetExists := true
+		for _, subnet := range foundSubnetGroup.Subnets {
+			if !contains(subnetIds, subnet.SubnetIdentifier) {
+				subnetExists = false
+				break
+			}
+		}
+
+		if !subnetExists || aws.StringValue(foundSubnetGroup.DBSubnetGroupDescription) != defaultSubnetGroupDesc {
+			logger.Info("rds subnet group not as expected, updating.")
 			if _, err := n.RdsApi.ModifyDBSubnetGroup(&rds.ModifyDBSubnetGroupInput{
 				DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
-				DBSubnetGroupName:        foundSubnet.DBSubnetGroupName,
-				SubnetIds:                subnetIDs,
+				DBSubnetGroupName:        foundSubnetGroup.DBSubnetGroupName,
+				SubnetIds:                subnetIds,
 			}); err != nil {
 				return errorUtil.Wrap(err, "error updating db subnet group description")
 			}
 		}
+
+		// get tags for rds subnet group
 		tags, err := n.RdsApi.ListTagsForResource(&rds.ListTagsForResourceInput{
-			ResourceName: foundSubnet.DBSubnetGroupArn,
+			ResourceName: foundSubnetGroup.DBSubnetGroupArn,
 		})
 		if err != nil {
 			return errorUtil.Wrap(err, "error getting subnet group tags")
 		}
+
+		// ensure tags exist on rds subnet group
 		subnetTags := rdsTagstoGeneric(tags.TagList)
 		if !tagsContains(subnetTags, croOwnerTag.key, croOwnerTag.value) {
-			err := n.updateRdsSubnetGroupTags(foundSubnet, genericToRdsTag(croOwnerTag), logger)
+			err := n.updateRdsSubnetGroupTags(foundSubnetGroup, genericToRdsTag(croOwnerTag))
 			if err != nil {
 				return errorUtil.Wrap(err, "error updating subnet group tags")
 			}
@@ -1161,7 +1176,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 	subnetGroupInput := &rds.CreateDBSubnetGroupInput{
 		DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		DBSubnetGroupName:        aws.String(subnetGroupName),
-		SubnetIds:                subnetIDs,
+		SubnetIds:                subnetIds,
 		Tags: []*rds.Tag{
 			genericToRdsTag(croOwnerTag),
 		},
@@ -1176,7 +1191,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 }
 
 //this function removes tags and reads them to an rds subnet group
-func (n *NetworkProvider) updateRdsSubnetGroupTags(foundSubnet *rds.DBSubnetGroup, croOwnerTag *rds.Tag, logger *logrus.Entry) error {
+func (n *NetworkProvider) updateRdsSubnetGroupTags(foundSubnet *rds.DBSubnetGroup, croOwnerTag *rds.Tag) error {
 	_, err := n.RdsApi.RemoveTagsFromResource(&rds.RemoveTagsFromResourceInput{
 		ResourceName: foundSubnet.DBSubnetGroupArn,
 		TagKeys: []*string{
@@ -1216,26 +1231,29 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 		subnetIDs = append(subnetIDs, subnet.SubnetId)
 	}
 
-	clusterID, err := resources.GetClusterID(ctx, n.Client)
-	if err != nil {
-		return errorUtil.Wrap(err, "error getting clusterID")
-	}
-
-	elasticacheSubnetGroupDescription := fmt.Sprintf("%s for cluster %s", defaultSubnetGroupDesc, clusterID)
-
-	// build subnet group input
-
 	// check if group exists
-	foundSubnet, err := getElasticacheSubnetByGroup(n.ElasticacheApi, subnetGroupName)
+	foundSubnetGroup, err := getElasticacheSubnetByGroup(n.ElasticacheApi, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting elasticache subnet group on reconcile")
 	}
-	if foundSubnet != nil {
-		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnet.CacheSubnetGroupName)
-		if *foundSubnet.CacheSubnetGroupDescription != elasticacheSubnetGroupDescription {
+
+	if foundSubnetGroup != nil {
+		logger.Infof("subnet group %s found, verifying it is in the expected state", *foundSubnetGroup.CacheSubnetGroupName)
+
+		// ensure all subnets exist in subnet group
+		subnetExists := true
+		for _, subnet := range foundSubnetGroup.Subnets {
+			if !contains(subnetIDs, subnet.SubnetIdentifier) {
+				subnetExists = false
+				break
+			}
+		}
+
+		if !subnetExists || aws.StringValue(foundSubnetGroup.CacheSubnetGroupDescription) != defaultSubnetGroupDesc {
+			logger.Infof("elasticache subnet group not as expected, updating.")
 			if _, err = n.ElasticacheApi.ModifyCacheSubnetGroup(&elasticache.ModifyCacheSubnetGroupInput{
-				CacheSubnetGroupDescription: aws.String(elasticacheSubnetGroupDescription),
-				CacheSubnetGroupName:        foundSubnet.CacheSubnetGroupName,
+				CacheSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
+				CacheSubnetGroupName:        foundSubnetGroup.CacheSubnetGroupName,
 				SubnetIds:                   subnetIDs,
 			}); err != nil {
 				return errorUtil.Wrap(err, "error updating elasticache subnet group description")
@@ -1250,7 +1268,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 	}
 
 	subnetGroupInput := &elasticache.CreateCacheSubnetGroupInput{
-		CacheSubnetGroupDescription: aws.String(elasticacheSubnetGroupDescription),
+		CacheSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		CacheSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                   subnetIDs,
 	}
@@ -1430,7 +1448,6 @@ func validateStandaloneCidrBlock(ctx context.Context, client client.Client, ec2A
 	// this utility function returns true if either cidr range intersect
 	if clusterVPCCidr.Contains(vpcCidrBlock.IP) || vpcCidrBlock.Contains(clusterVPCCidr.IP) {
 		return errorUtil.New(fmt.Sprintf("standalone vpc creation failed: standalone cidr block %s overlaps with cluster vpc cidr block %s, update _network strategy to continue vpc creation", vpcCidrBlock.String(), *clusterVPC.CidrBlock))
-
 	}
 	return nil
 }
@@ -1475,6 +1492,15 @@ func routeExists(routes []*ec2.Route, checkRoute *ec2.Route) bool {
 			continue
 		}
 		if aws.StringValue(route.DestinationCidrBlock) == aws.StringValue(checkRoute.DestinationCidrBlock) && aws.StringValue(route.VpcPeeringConnectionId) == aws.StringValue(checkRoute.VpcPeeringConnectionId) {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(strs []*string, str *string) bool {
+	for _, s := range strs {
+		if aws.StringValue(str) == aws.StringValue(s) {
 			return true
 		}
 	}
