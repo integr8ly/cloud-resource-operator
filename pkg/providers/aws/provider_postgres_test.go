@@ -862,12 +862,14 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx                  context.Context
-		pg                   *v1alpha1.Postgres
-		networkManager       NetworkManager
-		instanceSvc          rdsiface.RDSAPI
-		postgresCreateConfig *rds.CreateDBInstanceInput
-		postgresDeleteConfig *rds.DeleteDBInstanceInput
+		ctx                     context.Context
+		pg                      *v1alpha1.Postgres
+		networkManager          NetworkManager
+		instanceSvc             rdsiface.RDSAPI
+		postgresCreateConfig    *rds.CreateDBInstanceInput
+		postgresDeleteConfig    *rds.DeleteDBInstanceInput
+		standaloneNetworkExists bool
+		isLastResource          bool
 	}
 	tests := []struct {
 		name    string
@@ -879,11 +881,13 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		{
 			name: "test successful delete with no postgres",
 			args: args{
-				postgresDeleteConfig: &rds.DeleteDBInstanceInput{},
-				postgresCreateConfig: &rds.CreateDBInstanceInput{},
-				pg:                   buildTestPostgresCR(),
-				networkManager:       buildMockNetworkManager(),
-				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{},
+				postgresCreateConfig:    &rds.CreateDBInstanceInput{},
+				pg:                      buildTestPostgresCR(),
+				networkManager:          buildMockNetworkManager(),
+				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -896,11 +900,13 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		}, {
 			name: "test successful delete with existing unavailable postgres",
 			args: args{
-				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				pg:                   buildTestPostgresCR(),
-				networkManager:       buildMockNetworkManager(),
-				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
+				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig:    &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                      buildTestPostgresCR(),
+				networkManager:          buildMockNetworkManager(),
+				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -913,11 +919,13 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		}, {
 			name: "test successful delete with existing available postgres",
 			args: args{
-				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				pg:                   buildTestPostgresCR(),
-				networkManager:       buildMockNetworkManager(),
-				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
+				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig:    &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                      buildTestPostgresCR(),
+				networkManager:          buildMockNetworkManager(),
+				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -930,11 +938,13 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		}, {
 			name: "test successful delete with existing available postgres and deletion protection",
 			args: args{
-				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				pg:                   buildTestPostgresCR(),
-				networkManager:       buildMockNetworkManager(),
-				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
+				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				postgresCreateConfig:    &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
+				pg:                      buildTestPostgresCR(),
+				networkManager:          buildMockNetworkManager(),
+				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
@@ -943,6 +953,26 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 			},
 			want:    croType.StatusMessage("deletion protection detected, modifyDBInstance() in progress, current aws rds status is available"),
+			wantErr: false,
+		},
+		{
+			name: "test successful delete with no postgres and deletion of standalone network",
+			args: args{
+				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{},
+				postgresCreateConfig:    &rds.CreateDBInstanceInput{},
+				pg:                      buildTestPostgresCR(),
+				networkManager:          buildMockNetworkManager(),
+				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				standaloneNetworkExists: true,
+				isLastResource:          true,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    croType.StatusMessage(""),
 			wantErr: false,
 		},
 	}
@@ -954,7 +984,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig, tt.args.standaloneNetworkExists, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return

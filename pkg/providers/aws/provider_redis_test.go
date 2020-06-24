@@ -420,12 +420,14 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		CacheSvc          elasticacheiface.ElastiCacheAPI
 	}
 	type args struct {
-		cacheSvc          elasticacheiface.ElastiCacheAPI
-		networkManager    NetworkManager
-		redisCreateConfig *elasticache.CreateReplicationGroupInput
-		redisDeleteConfig *elasticache.DeleteReplicationGroupInput
-		ctx               context.Context
-		redis             *v1alpha1.Redis
+		cacheSvc                elasticacheiface.ElastiCacheAPI
+		networkManager          NetworkManager
+		redisCreateConfig       *elasticache.CreateReplicationGroupInput
+		redisDeleteConfig       *elasticache.DeleteReplicationGroupInput
+		ctx                     context.Context
+		redis                   *v1alpha1.Redis
+		standaloneNetworkExists bool
+		isLastResource          bool
 	}
 	tests := []struct {
 		name    string
@@ -436,10 +438,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with no redis",
 			args: args{
-				redisCreateConfig: &elasticache.CreateReplicationGroupInput{},
-				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{},
-				networkManager:    buildMockNetworkManager(),
-				redis:             buildTestRedisCR(),
+				redisCreateConfig:       &elasticache.CreateReplicationGroupInput{},
+				redisDeleteConfig:       &elasticache.DeleteReplicationGroupInput{},
+				networkManager:          buildMockNetworkManager(),
+				redis:                   buildTestRedisCR(),
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
@@ -453,10 +457,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing unavailable redis",
 			args: args{
-				networkManager:    buildMockNetworkManager(),
-				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redis:             buildTestRedisCR(),
+				networkManager:          buildMockNetworkManager(),
+				redisCreateConfig:       &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redisDeleteConfig:       &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:                   buildTestRedisCR(),
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
@@ -470,10 +476,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "test successful delete with existing available redis",
 			args: args{
-				networkManager:    buildMockNetworkManager(),
-				redisCreateConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redisDeleteConfig: &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
-				redis:             buildTestRedisCR(),
+				networkManager:          buildMockNetworkManager(),
+				redisCreateConfig:       &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redisDeleteConfig:       &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:                   buildTestRedisCR(),
+				standaloneNetworkExists: false,
+				isLastResource:          false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
@@ -481,6 +489,25 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				CacheSvc:          &mockElasticacheClient{replicationGroups: buildReplicationGroupReady()},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test successful delete with no existing redis but with standalone network",
+			args: args{
+				networkManager:          buildMockNetworkManager(),
+				redisCreateConfig:       &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redisDeleteConfig:       &elasticache.DeleteReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				redis:                   buildTestRedisCR(),
+				standaloneNetworkExists: true,
+				isLastResource:          true,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				CacheSvc:          &mockElasticacheClient{replicationGroups: buildReplicationGroupReady(), wantEmpty: true},
 			},
 			wantErr: false,
 		},
@@ -494,7 +521,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis); (err != nil) != tt.wantErr {
+			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis, tt.args.standaloneNetworkExists, tt.args.isLastResource); (err != nil) != tt.wantErr {
 				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

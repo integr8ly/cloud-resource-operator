@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"strconv"
 	"time"
 
@@ -21,7 +23,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -222,7 +223,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, resourceIdentifierAnnotation) {
-			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache instance was found",
+			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
 				r.Name, r.Namespace, resourceIdentifierAnnotation, r.ObjectMeta.Annotations[resourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
 		}
@@ -245,7 +246,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
 		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
 	}
-	logger.Infof("found existing elasticache instance %s", *foundCache.ReplicationGroupId)
+	logger.Infof("found existing elasticache cluster %s", *foundCache.ReplicationGroupId)
 
 	cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
 	if err != nil {
@@ -427,11 +428,31 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	// network manager required for cleaning up network.
 	networkManager := NewNetworkManager(sess, p.Client, logger)
 
+	isEnabled, err := networkManager.IsEnabled(ctx)
+	if err != nil {
+		errMsg := "failed to check cluster vpc subnets"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	namespace, err := k8sutil.GetWatchNamespace()
+	if err != nil {
+		errMsg := "Failed to get watch namespace"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	isLastResource, err := p.isLastResource(ctx, namespace)
+	if err != nil {
+		errMsg := "failed to check if this cr is the last cr of type postgres and redis"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
 	// delete the elasticache cluster
-	return p.deleteElasticacheCluster(ctx, networkManager, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r)
+	return p.deleteElasticacheCluster(ctx, networkManager, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r, isEnabled, isLastResource)
 }
 
-func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis) (croType.StatusMessage, error) {
+func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "deleteElasticacheCluster")
+
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
 	if err != nil {
@@ -454,16 +475,30 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 	}
 
 	// check if replication group does not exist and delete finalizer
-	if foundCache == nil {
-		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
+	if foundCache != nil {
+		// set status metric
+		p.exposeRedisMetrics(ctx, r, foundCache)
+
+		// if status is not available return
+		if *foundCache.Status != "available" {
+			return croType.StatusMessage(fmt.Sprintf("delete detected, deleteReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
+		}
+
+		// delete elasticache cluster
+		_, err = cacheSvc.DeleteReplicationGroup(elasticacheDeleteConfig)
+		elasticacheErr, isAwsErr := err.(awserr.Error)
+		if err != nil && (!isAwsErr || elasticacheErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault) {
+			errMsg := fmt.Sprintf("failed to delete elasticache cluster : %s", err)
+			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+
+		return "delete detected, deleteReplicationGroup started", nil
+	}
+	if standaloneNetworkExists && isLastResource {
+		logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
 		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
 		if err != nil {
 			msg := "failed to get cluster network peering"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
-
-		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
-			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
@@ -472,36 +507,23 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		// remove the finalizer added by the provider
-		resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, r); err != nil {
-			errMsg := "failed to update instance as part of finalizer reconcile"
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-		}
-		return croType.StatusEmpty, nil
 	}
-
-	// set status metric
-	p.exposeRedisMetrics(ctx, r, foundCache)
-
-	// if status is not available return
-	if *foundCache.Status != "available" {
-		return croType.StatusMessage(fmt.Sprintf("delete detected, deleteReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
-	}
-
-	// delete elasticache cluster
-	_, err = cacheSvc.DeleteReplicationGroup(elasticacheDeleteConfig)
-	elasticacheErr, isAwsErr := err.(awserr.Error)
-	if err != nil && (!isAwsErr || elasticacheErr.Code() != elasticache.ErrCodeReplicationGroupNotFoundFault) {
-		errMsg := fmt.Sprintf("failed to delete elasticache cluster : %s", err)
+	// remove the finalizer added by the provider
+	resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
+	if err := p.Client.Update(ctx, r); err != nil {
+		errMsg := "failed to update instance as part of finalizer reconcile"
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
-
-	return "delete detected, deleteReplicationGroup started", nil
+	return croType.StatusEmpty, nil
 }
 
 // poll for replication groups
@@ -547,6 +569,23 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration")
 	}
 	return elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, nil
+}
+
+func (p *RedisProvider) isLastResource(ctx context.Context, namespace string) (bool, error) {
+	listOptions := client.ListOptions{
+		Namespace: namespace,
+	}
+	var postgresList = &v1alpha1.PostgresList{}
+	if err := p.Client.List(ctx, postgresList, &listOptions); err != nil {
+		msg := "failed to retrieve postgres cr(s)"
+		return false, errorUtil.Wrap(err, msg)
+	}
+	var redisList = &v1alpha1.RedisList{}
+	if err := p.Client.List(ctx, redisList, &listOptions); err != nil {
+		msg := "failed to retrieve redis cr(s)"
+		return false, errorUtil.Wrap(err, msg)
+	}
+	return len(postgresList.Items) == 0 && len(redisList.Items) == 1, nil
 }
 
 // checks found config vs user strategy for changes, if found returns a modify replication group

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"strconv"
 	"time"
 
@@ -12,8 +14,6 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
-
-	"github.com/aws/aws-sdk-go/aws/awserr"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -417,10 +417,28 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	// network manager required for cleaning up network vpc, subnet and subnet groups.
 	networkManager := NewNetworkManager(sess, p.Client, logger)
 
-	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), rdsCreateConfig, rdsDeleteConfig)
+	isEnabled, err := networkManager.IsEnabled(ctx)
+	if err != nil {
+		errMsg := "failed to check cluster vpc subnets"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	namespace, err := k8sutil.GetWatchNamespace()
+	if err != nil {
+		errMsg := "Failed to get watch namespace"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	isLastResource, err := p.isLastResource(ctx, namespace)
+	if err != nil {
+		errMsg := "failed to check if this cr is the last cr of type postgres and redis"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), rdsCreateConfig, rdsDeleteConfig, isEnabled, isLastResource)
 }
 
-func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
@@ -444,16 +462,47 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// check if instance does not exist, delete finalizer and credential secret
-	if foundInstance == nil {
-		//TODO will be implemented and tested correctly in - https://issues.redhat.com/browse/INTLY-8103
-		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+	if foundInstance != nil {
+		// set status metric
+		p.exposePostgresMetrics(ctx, pg, foundInstance)
+
+		// return if rds instance is not available
+		if *foundInstance.DBInstanceStatus != "available" {
+			statusMessage := fmt.Sprintf("delete detected, deleteDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)
+			logger.Info(statusMessage)
+			return croType.StatusMessage(statusMessage), nil
+		}
+
+		// delete rds instance if deletion protection is false
+		if !*foundInstance.DeletionProtection {
+			_, err = instanceSvc.DeleteDBInstance(rdsDeleteConfig)
+			rdsErr, isAwsErr := err.(awserr.Error)
+			if err != nil && (!isAwsErr || rdsErr.Code() != rds.ErrCodeDBInstanceNotFoundFault) {
+				msg := fmt.Sprintf("failed to delete rds instance : %s", err)
+				return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			}
+			return "delete detected, deleteDBInstance() started", nil
+		}
+
+		// modify rds instance to turn off deletion protection
+		_, err = instanceSvc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
+			DBInstanceIdentifier: rdsDeleteConfig.DBInstanceIdentifier,
+			DeletionProtection:   aws.Bool(false),
+		})
 		if err != nil {
-			msg := "failed to get cluster network peering"
+			msg := "failed to remove deletion protection"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
-		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
-			msg := "failed to delete cluster network peering"
+		return croType.StatusMessage(fmt.Sprintf("deletion protection detected, modifyDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
+	}
+
+	// standaloneNetworkExists if no bundled resources are found in the cluster vpc
+	if standaloneNetworkExists && isLastResource {
+		logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
+		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+		if err != nil {
+			msg := "failed to get cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
@@ -462,64 +511,36 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 
+		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		// delete credential secret
-		logger.Info("deleting rds secret")
-		sec := &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pg.Name + defaultCredSecSuffix,
-				Namespace: pg.Namespace,
-			},
-		}
-		err = p.Client.Delete(ctx, sec)
-		if err != nil && !k8serr.IsNotFound(err) {
-			msg := "failed to deleted rds secrets"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
-
-		resources.RemoveFinalizer(&pg.ObjectMeta, DefaultFinalizer)
-		if err := p.Client.Update(ctx, pg); err != nil {
-			msg := "failed to update instance as part of finalizer reconcile"
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-		}
-		return croType.StatusEmpty, nil
 	}
-
-	// set status metric
-	p.exposePostgresMetrics(ctx, pg, foundInstance)
-
-	// return if rds instance is not available
-	if *foundInstance.DBInstanceStatus != "available" {
-		statusMessage := fmt.Sprintf("delete detected, deleteDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)
-		logger.Info(statusMessage)
-		return croType.StatusMessage(statusMessage), nil
+	// delete credential secret
+	logger.Info("deleting rds secret")
+	sec := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pg.Name + defaultCredSecSuffix,
+			Namespace: pg.Namespace,
+		},
 	}
-
-	// delete rds instance if deletion protection is false
-	if !*foundInstance.DeletionProtection {
-		_, err = instanceSvc.DeleteDBInstance(rdsDeleteConfig)
-		rdsErr, isAwsErr := err.(awserr.Error)
-		if err != nil && (!isAwsErr || rdsErr.Code() != rds.ErrCodeDBInstanceNotFoundFault) {
-			msg := fmt.Sprintf("failed to delete rds instance : %s", err)
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-		}
-		return "delete detected, deleteDBInstance() started", nil
-	}
-
-	// modify rds instance to turn off deletion protection
-	_, err = instanceSvc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
-		DBInstanceIdentifier: rdsDeleteConfig.DBInstanceIdentifier,
-		DeletionProtection:   aws.Bool(false),
-	})
-	if err != nil {
-		msg := "failed to remove deletion protection"
+	err = p.Client.Delete(ctx, sec)
+	if err != nil && !k8serr.IsNotFound(err) {
+		msg := "failed to deleted rds secrets"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	return croType.StatusMessage(fmt.Sprintf("deletion protection detected, modifyDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
+	resources.RemoveFinalizer(&pg.ObjectMeta, DefaultFinalizer)
+	if err := p.Client.Update(ctx, pg); err != nil {
+		msg := "failed to update instance as part of finalizer reconcile"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+	}
+	return croType.StatusEmpty, nil
 }
 
 // function to get rds instances, used to check/wait on AWS credentials
@@ -565,6 +586,23 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws rds cluster configuration")
 	}
 	return rdsCreateConfig, rdsDeleteConfig, stratCfg, nil
+}
+
+func (p *PostgresProvider) isLastResource(ctx context.Context, namespace string) (bool, error) {
+	listOptions := client.ListOptions{
+		Namespace: namespace,
+	}
+	var postgresList = &v1alpha1.PostgresList{}
+	if err := p.Client.List(ctx, postgresList, &listOptions); err != nil {
+		msg := "failed to retrieve postgres cr(s)"
+		return false, errorUtil.Wrap(err, msg)
+	}
+	var redisList = &v1alpha1.RedisList{}
+	if err := p.Client.List(ctx, redisList, &listOptions); err != nil {
+		msg := "failed to retrieve redis cr(s)"
+		return false, errorUtil.Wrap(err, msg)
+	}
+	return len(postgresList.Items) == 1 && len(redisList.Items) == 0, nil
 }
 
 // verifies if there is a change between a found instance and the configuration from the instance strat and verified the changes are not pending
