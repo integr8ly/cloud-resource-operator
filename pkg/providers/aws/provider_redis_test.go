@@ -635,6 +635,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					SnapshotRetentionLimit:     aws.Int64(30),
 					PreferredMaintenanceWindow: aws.String("test"),
 					SnapshotWindow:             aws.String("test"),
+					EngineVersion:              aws.String("3.2.6"),
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					ReplicationGroupId:     aws.String("test-id"),
@@ -643,7 +644,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				},
 				replicationGroupClusters: []elasticache.CacheCluster{
 					{
-						EngineVersion:              aws.String("3.2.6"),
+						EngineVersion: aws.String("3.2.6"),
+						//EngineVersion:              aws.String(defaultEngineVersion),
 						PreferredMaintenanceWindow: aws.String("test"),
 						SnapshotWindow:             aws.String("test"),
 					},
@@ -668,6 +670,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				},
 				replicationGroupClusters: []elasticache.CacheCluster{
 					{
+						EngineVersion:              aws.String("3.2.6"),
 						PreferredMaintenanceWindow: aws.String("test"),
 						SnapshotWindow:             aws.String("test"),
 					},
