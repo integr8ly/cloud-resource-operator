@@ -2,7 +2,9 @@ package aws
 
 import (
 	"context"
+	errorUtil "github.com/pkg/errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,7 +22,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
-	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -34,8 +35,13 @@ import (
 const (
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
-	defaultVPCID                   = "testID"
+	defaultVpcId                   = "testID"
 	dafaultInfraName               = "test"
+)
+
+var (
+	lockMockEc2ClientDescribeRouteTables    sync.RWMutex
+	lockMockEc2ClientDescribeSecurityGroups sync.RWMutex
 )
 
 type mockRdsClient struct {
@@ -46,6 +52,11 @@ type mockRdsClient struct {
 	wantEmpty     bool
 	dbInstances   []*rds.DBInstance
 	subnetGroups  []*rds.DBSubnetGroup
+	// new approach for manually defined mocks
+	// to allow for simple overrides in test table declarations
+	modifyDBSubnetGroupFn    func(*rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error)
+	listTagsForResourceFn    func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
+	removeTagsFromResourceFn func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
 }
 
 type mockEc2Client struct {
@@ -62,10 +73,26 @@ type mockEc2Client struct {
 	// new approach for manually defined mocks
 	// to allow for simple overrides in test table declarations
 	createTagsFn                   func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+	describeVpcsFn                 func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+	describeSecurityGroupsFn       func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
 	describeVpcPeeringConnectionFn func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
 	createVpcPeeringConnectionFn   func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
 	acceptVpcPeeringConnectionFn   func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
 	deleteVpcPeeringConnectionFn   func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
+	describeRouteTablesFn          func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
+	createRouteFn                  func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
+	deleteRouteFn                  func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
+
+	calls struct {
+		DescribeRouteTables []struct {
+			// tables is the describe route tables input
+			Tables *ec2.DescribeRouteTablesInput
+		}
+		DescribeSecurityGroups []struct {
+			// groups is the describe security groups input
+			Groups *ec2.DescribeSecurityGroupsInput
+		}
+	}
 }
 
 func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
@@ -73,6 +100,14 @@ func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
 	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 		return &ec2.CreateTagsOutput{}, nil
 	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
+func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
+	mock := &mockRdsClient{}
 	if modifyFn != nil {
 		modifyFn(mock)
 	}
@@ -146,19 +181,34 @@ func (m *mockRdsClient) DeleteDBSubnetGroup(*rds.DeleteDBSubnetGroupInput) (*rds
 	return &rds.DeleteDBSubnetGroupOutput{}, nil
 }
 
+func (m *mockRdsClient) ModifyDBSubnetGroup(input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
+	return m.modifyDBSubnetGroupFn(input)
+}
+
+func (m *mockRdsClient) ListTagsForResource(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
+	return m.listTagsForResourceFn(input)
+}
+
+func (m *mockRdsClient) RemoveTagsFromResource(input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
+	return m.removeTagsFromResourceFn(input)
+}
+
 func (m *mockEc2Client) DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 	return &ec2.DescribeSubnetsOutput{
 		Subnets: m.subnets,
 	}, nil
 }
 
-func (m *mockEc2Client) DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	if m.wantErrList {
-		return nil, errorUtil.New("ec2 get vpcs error")
+func (m *mockEc2Client) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+	if m.vpcs != nil {
+		if m.wantErrList {
+			return nil, errorUtil.New("ec2 get vpcs error")
+		}
+		return &ec2.DescribeVpcsOutput{
+			Vpcs: m.vpcs,
+		}, nil
 	}
-	return &ec2.DescribeVpcsOutput{
-		Vpcs: m.vpcs,
-	}, nil
+	return m.describeVpcsFn(input)
 }
 
 func (m *mockEc2Client) CreateVpc(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
@@ -191,14 +241,88 @@ func (m *mockEc2Client) DeleteSubnet(*ec2.DeleteSubnetInput) (*ec2.DeleteSubnetO
 	return &ec2.DeleteSubnetOutput{}, nil
 }
 
-func (m *mockEc2Client) DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-	return &ec2.DescribeSecurityGroupsOutput{
-		SecurityGroups: m.secGroups,
-	}, nil
+func (m *mockEc2Client) CreateRoute(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
+	return m.createRouteFn(input)
+}
+
+func (m *mockEc2Client) DeleteRoute(input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
+	return m.deleteRouteFn(input)
+}
+
+func (m *mockEc2Client) DescribeRouteTables(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+	if m.describeRouteTablesFn == nil {
+		panic("mockEc2Client.DescribeRouteTables: method is nil")
+	}
+	callInfo := struct {
+		Tables *ec2.DescribeRouteTablesInput
+	}{
+		Tables: input,
+	}
+
+	lockMockEc2ClientDescribeRouteTables.Lock()
+	m.calls.DescribeRouteTables = append(m.calls.DescribeRouteTables, callInfo)
+	lockMockEc2ClientDescribeRouteTables.Unlock()
+
+	return m.describeRouteTablesFn(input)
+}
+
+func (m *mockEc2Client) DescribeRouteTablesCalls() []struct {
+	Tables *ec2.DescribeRouteTablesInput
+} {
+	var calls []struct {
+		Tables *ec2.DescribeRouteTablesInput
+	}
+	lockMockEc2ClientDescribeRouteTables.RLock()
+	calls = m.calls.DescribeRouteTables
+	lockMockEc2ClientDescribeRouteTables.RUnlock()
+
+	return calls
+}
+
+func (m *mockEc2Client) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+	// old approach backward compatible to be removed
+	if m.secGroups != nil {
+		return &ec2.DescribeSecurityGroupsOutput{
+			SecurityGroups: m.secGroups,
+		}, nil
+	}
+	// new approach
+	if m.describeSecurityGroupsFn == nil {
+		panic("mockEc2Client.DescribeSecurityGroups: method is nil")
+	}
+	callInfo := struct {
+		Groups *ec2.DescribeSecurityGroupsInput
+	}{
+		Groups: input,
+	}
+
+	lockMockEc2ClientDescribeSecurityGroups.Lock()
+	m.calls.DescribeSecurityGroups = append(m.calls.DescribeSecurityGroups, callInfo)
+	lockMockEc2ClientDescribeSecurityGroups.Unlock()
+
+	return m.describeSecurityGroupsFn(input)
+}
+
+func (m *mockEc2Client) DescribeSecurityGroupsCalls() []struct {
+	Groups *ec2.DescribeSecurityGroupsInput
+} {
+	var calls []struct {
+		Groups *ec2.DescribeSecurityGroupsInput
+	}
+
+	lockMockEc2ClientDescribeSecurityGroups.RLock()
+	calls = m.calls.DescribeSecurityGroups
+	lockMockEc2ClientDescribeSecurityGroups.RUnlock()
+
+	return calls
 }
 
 func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
 	return &ec2.CreateSecurityGroupOutput{}, nil
+}
+
+func (m *mockEc2Client) DeleteSecurityGroup(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+	return &ec2.DeleteSecurityGroupOutput{}, nil
 }
 
 func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
@@ -229,6 +353,23 @@ func (m *mockEc2Client) AcceptVpcPeeringConnection(input *ec2.AcceptVpcPeeringCo
 
 func (m *mockEc2Client) DeleteVpcPeeringConnection(input *ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
 	return m.deleteVpcPeeringConnectionFn(input)
+}
+
+func buildMockNetworkManager() *NetworkManagerMock {
+	return &NetworkManagerMock{
+		DeleteNetworkConnectionFunc: func(ctx context.Context, np *NetworkPeering) error {
+			return nil
+		},
+		GetClusterNetworkPeeringFunc: func(ctx context.Context) (*NetworkPeering, error) {
+			return &NetworkPeering{}, nil
+		},
+		DeleteNetworkPeeringFunc: func(np *NetworkPeering) error {
+			return nil
+		},
+		DeleteNetworkFunc: func(ctx context.Context) error {
+			return nil
+		},
+	}
 }
 
 func buildTestPostgresqlPrometheusRule() *monitoringv1.PrometheusRule {
@@ -426,7 +567,7 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 func buildVpcs() []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
-			VpcId:     aws.String(defaultVPCID),
+			VpcId:     aws.String(defaultVpcId),
 			CidrBlock: aws.String("10.0.0.0/16"),
 			Tags: []*ec2.Tag{
 				{
@@ -526,9 +667,11 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is available (valid cluster bundle subnets)",
+			name: "test rds exists and is available (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.dbInstances = buildAvailableDBInstance(testIdentifier)
+				}),
 				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
 				ctx:    context.TODO(),
 				cr:     buildTestPostgresCR(),
@@ -554,7 +697,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test rds is exists and is not available (valid cluster bundle subnets)",
+			name: "test rds exists and is not available (valid cluster bundle subnets)",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildPendingDBInstance(testIdentifier)},
 				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
@@ -739,7 +882,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
-				networkManager:       &mockNetworkManager{},
+				networkManager:       buildMockNetworkManager(),
 				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
 			},
 			fields: fields{
@@ -756,7 +899,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
-				networkManager:       &mockNetworkManager{},
+				networkManager:       buildMockNetworkManager(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
 			},
 			fields: fields{
@@ -773,7 +916,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
-				networkManager:       &mockNetworkManager{},
+				networkManager:       buildMockNetworkManager(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
 			},
 			fields: fields{
@@ -790,7 +933,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresDeleteConfig: &rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
-				networkManager:       &mockNetworkManager{},
+				networkManager:       buildMockNetworkManager(),
 				instanceSvc:          &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
 			},
 			fields: fields{

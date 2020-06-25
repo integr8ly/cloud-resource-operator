@@ -490,6 +490,9 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 	return foundVPC, nil
 }
 
+// getSecurityGroup a utility function for returning cro resource security group
+// we filter security groups based on a pre-determined security group name
+// if a security group does not exist a nil object is returned
 func getSecurityGroup(ec2Svc ec2iface.EC2API, secName string) (*ec2.SecurityGroup, error) {
 	// get security groups
 	secGroups, err := ec2Svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{})

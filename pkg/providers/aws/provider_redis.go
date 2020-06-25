@@ -135,8 +135,9 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")
+
+		// create the standalone vpc, subnets and subnet groups
 		standaloneNetwork, err := networkManager.CreateNetwork(ctx, vpcCidrBlock)
 		if err != nil {
 			errMsg := "failed to create resource network"
@@ -150,6 +151,14 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		logger.Infof("created network peering %s", aws.StringValue(networkPeering.PeeringConnection.VpcPeeringConnectionId))
+
+		// we have created the peering connection we must now create the security groups and update the route tables
+		securityGroup, err := networkManager.CreateNetworkConnection(ctx, standaloneNetwork)
+		if err != nil {
+			errMsg := "failed to create standalone network"
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		logger.Infof("created security group %s", aws.StringValue(securityGroup.StandaloneSecurityGroup.GroupName))
 	}
 
 	// create the aws elasticache cluster
@@ -452,10 +461,17 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			msg := "failed to get cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
+
 		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
 			msg := "failed to delete cluster network peering"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
+
+		if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
+			msg := "failed to delete network connection"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
