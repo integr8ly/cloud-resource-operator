@@ -22,7 +22,7 @@ import (
 
 var _ providers.RedisSnapshotProvider = (*RedisSnapshotProvider)(nil)
 
-const redisSnapshotProviderName = "aws-rds-snapshots"
+const redisSnapshotProviderName = "aws-redis-snapshots"
 
 type RedisSnapshotProvider struct {
 	client            client.Client
@@ -129,9 +129,9 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 		}
 	}
 
-	// create snapshot of the rds instance
+	// create snapshot of the redis instance
 	if foundSnapshot == nil {
-		p.logger.Info("creating rds snapshot")
+		p.logger.Info("creating redis snapshot")
 		_, err = cacheSvc.CreateSnapshot(&elasticache.CreateSnapshotInput{
 			CacheClusterId: aws.String(cacheName),
 			SnapshotName:   aws.String(snapshotName),
@@ -211,8 +211,8 @@ func (p *RedisSnapshotProvider) findSnapshotInstance(cacheSvc elasticacheiface.E
 		SnapshotName: aws.String(snapshotName),
 	})
 	if err != nil {
-		rdsErr, isAwsErr := err.(awserr.Error)
-		if isAwsErr && rdsErr.Code() == "SnapshotNotFound" {
+		elasticacheErr, isAwsErr := err.(awserr.Error)
+		if isAwsErr && elasticacheErr.Code() == "SnapshotNotFound" {
 			return nil, nil
 		}
 		return nil, err
