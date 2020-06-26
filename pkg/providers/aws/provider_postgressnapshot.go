@@ -94,6 +94,8 @@ func (p *PostgresSnapshotProvider) DeletePostgresSnapshot(ctx context.Context, s
 }
 
 func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI) (*providers.PostgresSnapshotInstance, croType.StatusMessage, error) {
+	logger := resources.NewActionLogger(p.logger, "createPostgresSnapshot")
+
 	// generate snapshot name
 	snapshotName, err := BuildTimestampedInfraNameFromObjectCreation(ctx, p.client, snapshot.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
@@ -136,7 +138,7 @@ func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, s
 			errMsg := "cannot create snapshot when instance deletion is in progress"
 			return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
-		p.logger.Info("creating rds snapshot")
+		logger.Info("creating rds snapshot")
 		_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
 			DBInstanceIdentifier: aws.String(instanceName),
 			DBSnapshotIdentifier: aws.String(snapshotName),
@@ -157,7 +159,7 @@ func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, s
 
 	// creation in progress
 	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.Status)
-	p.logger.Info(msg)
+	logger.Info(msg)
 	return nil, croType.StatusMessage(msg), nil
 }
 
@@ -185,14 +187,12 @@ func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, s
 		DBSnapshotIdentifier: foundSnapshot.DBSnapshotIdentifier,
 	}
 
-	deleteSnapshotOutput, err := rdsSvc.DeleteDBSnapshot(deleteSnapshotInput)
+	_, err = rdsSvc.DeleteDBSnapshot(deleteSnapshotInput)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to delete snapshot %s in aws", snapshotName)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-
-	p.logger.Debugf("delete snapshot output %+v", deleteSnapshotOutput)
 
 	return "snapshot deletion started", nil
 }

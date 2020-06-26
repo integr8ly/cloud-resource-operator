@@ -80,6 +80,7 @@ func (p *RedisSnapshotProvider) CreateRedisSnapshot(ctx context.Context, snapsho
 }
 
 func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI) (*providers.RedisSnapshotInstance, croType.StatusMessage, error) {
+	logger := resources.NewActionLogger(p.logger, "createRedisSnapshot")
 	// generate snapshot name
 	snapshotName, err := BuildTimestampedInfraNameFromObjectCreation(ctx, p.client, snapshot.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
@@ -136,7 +137,7 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 
 	// create snapshot of the redis instance
 	if foundSnapshot == nil {
-		p.logger.Info("creating redis snapshot")
+		logger.Info("creating redis snapshot")
 		_, err = cacheSvc.CreateSnapshot(&elasticache.CreateSnapshotInput{
 			CacheClusterId: aws.String(cacheName),
 			SnapshotName:   aws.String(snapshotName),
@@ -157,7 +158,7 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 
 	// creation in progress
 	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.SnapshotStatus)
-	p.logger.Info(msg)
+	logger.Info(msg)
 	return nil, croType.StatusMessage(msg), nil
 }
 
@@ -198,14 +199,12 @@ func (p *RedisSnapshotProvider) deleteRedisSnapshot(ctx context.Context, snapsho
 		SnapshotName: aws.String(snapshotName),
 	}
 
-	deleteSnapshotOutput, err := cacheSvc.DeleteSnapshot(deleteSnapshotInput)
+	_, err = cacheSvc.DeleteSnapshot(deleteSnapshotInput)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to delete snapshot %s in aws", snapshotName)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-
-	p.logger.Debugf("delete snapshot output %+v", deleteSnapshotOutput)
 
 	return "snapshot deletion started", nil
 }
