@@ -12,7 +12,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
@@ -67,7 +66,7 @@ func (p *RedisSnapshotProvider) CreateRedisSnapshot(ctx context.Context, snapsho
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	session, err := p.getAwsSession(ctx, redis)
+	session, err := p.createSessionForResource(ctx, redis.Namespace, providers.RedisResourceType, redis.Spec.Tier)
 
 	if err != nil {
 		errMsg := "failed to create AWS session"
@@ -163,7 +162,8 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 }
 
 func (p *RedisSnapshotProvider) DeleteRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis) (croType.StatusMessage, error) {
-	session, err := p.getAwsSession(ctx, redis)
+
+	session, err := p.createSessionForResource(ctx, redis.Namespace, providers.RedisResourceType, redis.Spec.Tier)
 
 	if err != nil {
 		errMsg := "failed to create AWS session"
@@ -231,31 +231,20 @@ func (p *RedisSnapshotProvider) findSnapshotInstance(cacheSvc elasticacheiface.E
 	return foundSnapshot, nil
 }
 
-func (r *RedisSnapshotProvider) getAwsSession(ctx context.Context, redisCr *v1alpha1.Redis) (*session.Session, error) {
-	// get resource region
-	stratCfg, err := r.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, redisCr.Spec.Tier)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defRegion, err := GetRegionFromStrategyOrDefault(ctx, r.client, stratCfg)
-	if err != nil {
-		return nil, err
-	}
-	if stratCfg.Region == "" {
-		r.logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
-		stratCfg.Region = defRegion
-	}
+func (p *RedisSnapshotProvider) createSessionForResource(ctx context.Context, namespace string, resourceType providers.ResourceType, tier string) (*session.Session, error) {
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
-	providerCreds, err := r.CredentialManager.ReconcileProviderCredentials(ctx, redisCr.Namespace)
+	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, namespace)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to reconcile aws credentials")
 	}
 
-	return session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	})), nil
+	// get resource region
+	stratCfg, err := p.ConfigManager.ReadStorageStrategy(ctx, resourceType, tier)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateSessionFromStrategy(ctx, p.client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
 }
