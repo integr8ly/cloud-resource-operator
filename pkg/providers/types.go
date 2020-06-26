@@ -40,6 +40,14 @@ type PostgresInstance struct {
 	DeploymentDetails DeploymentDetails
 }
 
+type PostgresSnapshotInstance struct {
+	Name string
+}
+
+type RedisSnapshotInstance struct {
+	Name string
+}
+
 type BlobStorageProvider interface {
 	GetName() string
 	SupportsStrategy(s string) bool
@@ -62,6 +70,22 @@ type PostgresProvider interface {
 	GetReconcileTime(ps *v1alpha1.Postgres) time.Duration
 	CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*PostgresInstance, croType.StatusMessage, error)
 	DeletePostgres(ctx context.Context, ps *v1alpha1.Postgres) (croType.StatusMessage, error)
+}
+
+type PostgresSnapshotProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	GetReconcileTime(snapshot *v1alpha1.PostgresSnapshot) time.Duration
+	CreatePostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres) (*PostgresSnapshotInstance, croType.StatusMessage, error)
+	DeletePostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, posgres *v1alpha1.Postgres) (croType.StatusMessage, error)
+}
+
+type RedisSnapshotProvider interface {
+	GetName() string
+	SupportsStrategy(s string) bool
+	GetReconcileTime(snapshot *v1alpha1.RedisSnapshot) time.Duration
+	CreateRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis) (*RedisSnapshotInstance, croType.StatusMessage, error)
+	DeleteRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis) (croType.StatusMessage, error)
 }
 
 // RedisDeploymentDetails provider specific details about the AWS Redis Cluster created

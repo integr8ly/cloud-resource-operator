@@ -3,12 +3,6 @@ package postgressnapshot
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/rds"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
@@ -43,10 +37,12 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres_snapshot"})
+	provider := croAws.NewAWSPostgresSnapshotProvider(mgr.GetClient(), logger)
 	return &ReconcilePostgresSnapshot{
 		client:            mgr.GetClient(),
 		scheme:            mgr.GetScheme(),
 		logger:            logger,
+		provider:          provider,
 		ConfigManager:     croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 		CredentialManager: croAws.NewCredentialMinterCredentialManager(mgr.GetClient()),
 	}
@@ -88,6 +84,7 @@ type ReconcilePostgresSnapshot struct {
 	client            client.Client
 	scheme            *runtime.Scheme
 	logger            *logrus.Entry
+	provider          providers.PostgresSnapshotProvider
 	ConfigManager     croAws.ConfigManager
 	CredentialManager croAws.CredentialManager
 }
@@ -115,12 +112,6 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	// set info metric
 	defer r.exposePostgresSnapshotMetrics(ctx, instance)
 
-	// check status, if complete return
-	if instance.Status.Phase == croType.PhaseComplete {
-		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
-	}
-
 	// get postgres cr
 	postgresCr := &integreatlyv1alpha1.Postgres{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, postgresCr)
@@ -133,7 +124,7 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	}
 
 	// check postgres deployment strategy is aws
-	if postgresCr.Status.Strategy != providers.AWSDeploymentStrategy {
+	if !r.provider.SupportsStrategy(postgresCr.Status.Strategy) {
 		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, postgresCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
@@ -141,109 +132,52 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
 	}
 
-	// get resource region
-	stratCfg, err := r.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, postgresCr.Spec.Tier)
-	if err != nil {
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(err.Error())); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+	if instance.DeletionTimestamp != nil {
+		msg, err := r.provider.DeletePostgresSnapshot(ctx, instance, postgresCr)
+		if err != nil {
+			if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+			}
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.Wrapf(err, "failed to delete postgres snapshot")
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
-	}
 
-	defRegion, err := croAws.GetRegionFromStrategyOrDefault(ctx, r.client, stratCfg)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
-	}
-	if stratCfg.Region == "" {
-		r.logger.Debugf("region not set in deployment strategy configuration, using default region %s", defRegion)
-		stratCfg.Region = defRegion
-	}
-
-	// create the credentials to be used by the aws resource providers, not to be used by end-user
-	providerCreds, err := r.CredentialManager.ReconcileProviderCredentials(ctx, postgresCr.Namespace)
-	if err != nil {
-		errMsg := "failed to reconcile rds credentials"
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+		r.logger.Info("waiting on postgres snapshot to successfully delete")
+		if err = resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseDeleteInProgress, msg); err != nil {
+			return reconcile.Result{}, err
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.Wrap(err, errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
 	}
 
-	// setup aws rds session
-	rdsSvc := rds.New(session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(stratCfg.Region),
-		Credentials: credentials.NewStaticCredentials(providerCreds.AccessKeyID, providerCreds.SecretAccessKey, ""),
-	})))
+	// check status, if complete return
+	if instance.Status.Phase == croType.PhaseComplete {
+		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+	}
 
 	// create the snapshot and return the phase
-	phase, msg, err := r.createSnapshot(ctx, rdsSvc, instance, postgresCr)
-	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, phase, msg); updateErr != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
-	}
+	snap, msg, err := r.provider.CreatePostgresSnapshot(ctx, instance, postgresCr)
+
+	// error trying to create snapshot
 	if err != nil {
+		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg); updateErr != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+		}
 		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
 	}
+
+	// no error but the snapshot doesn't exist yet
+	if snap == nil {
+		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, msg); updateErr != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+	}
+
+	// no error, snapshot exists
+	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, msg); updateErr != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+	}
 	return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
-}
-
-func (r *ReconcilePostgresSnapshot) createSnapshot(ctx context.Context, rdsSvc rdsiface.RDSAPI, snapshot *integreatlyv1alpha1.PostgresSnapshot, postgres *integreatlyv1alpha1.Postgres) (croType.StatusPhase, croType.StatusMessage, error) {
-	// generate snapshot name
-	snapshotName, err := croAws.BuildTimestampedInfraNameFromObjectCreation(ctx, r.client, snapshot.ObjectMeta, croAws.DefaultAwsIdentifierLength)
-	if err != nil {
-		errMsg := "failed to generate snapshot name"
-		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
-	// update cr with snapshot name
-	snapshot.Status.SnapshotID = snapshotName
-
-	if err = r.client.Status().Update(ctx, snapshot); err != nil {
-		errMsg := fmt.Sprintf("failed to update instance %s in namespace %s", snapshot.Name, snapshot.Namespace)
-		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
-	// get instance name
-	instanceName, err := croAws.BuildInfraNameFromObject(ctx, r.client, postgres.ObjectMeta, croAws.DefaultAwsIdentifierLength)
-	if err != nil {
-		errMsg := "failed to get cluster name"
-		return croType.PhaseFailed, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
-	// check snapshot exists
-	listOutput, err := rdsSvc.DescribeDBSnapshots(&rds.DescribeDBSnapshotsInput{
-		DBSnapshotIdentifier: aws.String(snapshotName),
-	})
-	var foundSnapshot *rds.DBSnapshot
-	for _, c := range listOutput.DBSnapshots {
-		if *c.DBSnapshotIdentifier == snapshotName {
-			foundSnapshot = c
-			break
-		}
-	}
-
-	// create snapshot of the rds instance
-	if foundSnapshot == nil {
-		r.logger.Info("creating rds snapshot")
-		_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
-			DBInstanceIdentifier: aws.String(instanceName),
-			DBSnapshotIdentifier: aws.String(snapshotName),
-		})
-		if err != nil {
-			errMsg := "error creating rds snapshot"
-			return croType.PhaseFailed, croType.StatusMessage(fmt.Sprintf("error creating rds snapshot %s", errMsg)), errorUtil.Wrap(err, errMsg)
-		}
-		return croType.PhaseInProgress, "snapshot started", nil
-	}
-
-	// if snapshot status complete update status
-	if *foundSnapshot.Status == "available" {
-		return croType.PhaseComplete, "snapshot created", nil
-	}
-
-	// creation in progress
-	msg := fmt.Sprintf("current snapshot status : %s", *foundSnapshot.Status)
-	r.logger.Info(msg)
-	return croType.PhaseInProgress, croType.StatusMessage(msg), nil
 }
 
 func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
