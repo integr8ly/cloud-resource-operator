@@ -1,3 +1,8 @@
+// utility to manage the creation and deletion of snapshots (backups) of Postgres instances in AWS RDS.
+//
+// used by the postgres snapshot controller to reconcile PostgresSnapshot custom resources
+// A snapshot CR must reference an existing Postgres CR
+
 package aws
 
 import (

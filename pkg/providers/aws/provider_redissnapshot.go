@@ -1,3 +1,8 @@
+// utility to manage the creation and deletion of snapshots (backups) of Redis clusters in AWS Elasticache.
+//
+// used by the redis snapshot controller to reconcile RedisSnapshot custom resources
+// A snapshot CR must reference an existing Redis CR
+
 package aws
 
 import (
