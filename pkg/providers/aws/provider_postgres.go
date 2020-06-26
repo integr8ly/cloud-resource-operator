@@ -48,7 +48,7 @@ const (
 	defaultAwsMaxAllocatedStorage        = 100
 	defaultAwsPostgresDatabase           = "postgres"
 	defaultAwsBackupRetentionPeriod      = 31
-	defaultAwsDBInstanceClass            = "db.t2.small"
+	defaultAwsDBInstanceClass            = "db.t3.small"
 	defaultAwsEngine                     = "postgres"
 	defaultAwsEngineVersion              = "10.6"
 	defaultAwsPubliclyAccessible         = false

@@ -36,9 +36,9 @@ import (
 const (
 	redisProviderName = "aws-elasticache"
 	// default create params
-	defaultCacheNodeType = "cache.t2.micro"
+	defaultCacheNodeType = "cache.t3.micro"
 	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
-	defaultEngineVersion     = "3.2.6"
+	defaultEngineVersion     = "5.0.6"
 	defaultDescription       = "A Redis replication group"
 	defaultNumCacheClusters  = 2
 	defaultSnapshotRetention = 31
@@ -566,6 +566,10 @@ func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplica
 	}
 
 	for _, foundCacheCluster := range replicationGroupClusters {
+		if elasticacheConfig.EngineVersion != nil && *elasticacheConfig.EngineVersion != *foundCacheCluster.EngineVersion {
+			modifyInput.EngineVersion = elasticacheConfig.EngineVersion
+			updateFound = true
+		}
 		if elasticacheConfig.PreferredMaintenanceWindow != nil && *elasticacheConfig.PreferredMaintenanceWindow != *foundCacheCluster.PreferredMaintenanceWindow {
 			modifyInput.PreferredMaintenanceWindow = elasticacheConfig.PreferredMaintenanceWindow
 			updateFound = true
