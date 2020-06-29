@@ -121,27 +121,27 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get redis cr : %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+			return reconcile.Result{}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.New(errMsg)
+		return reconcile.Result{}, errorUtil.New(errMsg)
 	}
 
 	// check redis cr deployment type is aws
 	if !r.provider.SupportsStrategy(redisCr.Status.Strategy) {
 		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, redisCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+			return reconcile.Result{}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.New(errMsg)
+		return reconcile.Result{}, errorUtil.New(errMsg)
 	}
 
 	if instance.DeletionTimestamp != nil {
 		msg, err := r.provider.DeleteRedisSnapshot(ctx, instance, redisCr)
 		if err != nil {
 			if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
-				return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+				return reconcile.Result{}, updateErr
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.Wrapf(err, "failed to delete redis snapshot")
+			return reconcile.Result{}, errorUtil.Wrapf(err, "failed to delete redis snapshot")
 		}
 
 		r.logger.Info("waiting on redis snapshot to successfully delete")
@@ -163,22 +163,22 @@ func (r *ReconcileRedisSnapshot) Reconcile(request reconcile.Request) (reconcile
 	// error trying to create snapshot
 	if err != nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+			return reconcile.Result{}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, err
+		return reconcile.Result{}, err
 	}
 
 	// no error but the snapshot doesn't exist yet
 	if snap == nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, msg); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 	}
 
 	// no error, snapshot exists
 	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, msg); updateErr != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+		return reconcile.Result{}, updateErr
 	}
 	return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 }
