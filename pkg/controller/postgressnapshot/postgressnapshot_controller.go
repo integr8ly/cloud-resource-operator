@@ -118,40 +118,40 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get postgres resource: %s", err.Error())
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.New(errMsg)
 	}
 
 	// check postgres deployment strategy is aws
 	if !r.provider.SupportsStrategy(postgresCr.Status.Strategy) {
 		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, postgresCr.Status.Strategy)
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.New(errMsg)
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.New(errMsg)
 	}
 
 	if instance.DeletionTimestamp != nil {
 		msg, err := r.provider.DeletePostgresSnapshot(ctx, instance, postgresCr)
 		if err != nil {
 			if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
-				return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+				return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 			}
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, errorUtil.Wrapf(err, "failed to delete postgres snapshot")
+			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, errorUtil.Wrapf(err, "failed to delete postgres snapshot")
 		}
 
 		r.logger.Info("waiting on postgres snapshot to successfully delete")
 		if err = resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseDeleteInProgress, msg); err != nil {
 			return reconcile.Result{}, err
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 	}
 
 	// check status, if complete return
 	if instance.Status.Phase == croType.PhaseComplete {
 		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 	}
 
 	// create the snapshot and return the phase
@@ -160,24 +160,24 @@ func (r *ReconcilePostgresSnapshot) Reconcile(request reconcile.Request) (reconc
 	// error trying to create snapshot
 	if err != nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseFailed, msg); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, err
 	}
 
 	// no error but the snapshot doesn't exist yet
 	if snap == nil {
 		if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseInProgress, msg); updateErr != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+			return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 	}
 
 	// no error, snapshot exists
 	if updateErr := resources.UpdateSnapshotPhase(ctx, r.client, instance, croType.PhaseComplete, msg); updateErr != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: resources.ErrorReconcileTime}, updateErr
+		return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
 	}
-	return reconcile.Result{Requeue: true, RequeueAfter: resources.SuccessReconcileTime}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
 }
 
 func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
