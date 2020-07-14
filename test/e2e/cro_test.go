@@ -57,7 +57,7 @@ func TestCRO(t *testing.T) {
 // setup openshift postgres test env and executes subtests
 func OpenshiftPostgresTestCluster(t *testing.T) {
 	t.Parallel()
-	ctx := framework.NewTestCtx(t)
+	ctx := framework.NewContext(t)
 	defer ctx.Cleanup()
 	err := ctx.InitializeClusterResources(getCleanupOptions(t))
 	if err != nil {
@@ -112,7 +112,7 @@ func OpenshiftPostgresTestCluster(t *testing.T) {
 // setup openshift redis environment and executes sub tests
 func OpenshiftRedisTestCluster(t *testing.T) {
 	t.Parallel()
-	ctx := framework.NewTestCtx(t)
+	ctx := framework.NewContext(t)
 	defer ctx.Cleanup()
 	err := ctx.InitializeClusterResources(getCleanupOptions(t))
 	if err != nil {
@@ -156,7 +156,7 @@ func OpenshiftRedisTestCluster(t *testing.T) {
 
 func OpenshiftBlobstorageTestCluster(t *testing.T) {
 	t.Parallel()
-	ctx := framework.NewTestCtx(t)
+	ctx := framework.NewContext(t)
 	defer ctx.Cleanup()
 	err := ctx.InitializeClusterResources(getCleanupOptions(t))
 	if err != nil {
@@ -175,7 +175,7 @@ func OpenshiftBlobstorageTestCluster(t *testing.T) {
 // returns cleanup options
 func getCleanupOptions(t *testing.T) *framework.CleanupOptions {
 	return &framework.CleanupOptions{
-		TestContext:   framework.NewTestCtx(t),
+		TestContext:   framework.NewContext(t),
 		Timeout:       timeout,
 		RetryInterval: retryInterval,
 	}

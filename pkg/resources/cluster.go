@@ -125,5 +125,5 @@ func GetK8Client() (*kubernetes.Clientset, error) {
 	if err != nil {
 		return nil, err
 	}
-	return kubernetes.NewForConfig(cfg)
+	return kubernetes.NewForConfig(cfg), nil
 }

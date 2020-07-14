@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func OpenshiftRedisBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftRedisBasicTest(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -48,7 +48,7 @@ func OpenshiftRedisBasicTest(t *testing.T, f *framework.Framework, ctx framework
 }
 
 // verifies a connection can be made to a postgres resource
-func OpenshiftVerifyRedisConnection(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyRedisConnection(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -78,7 +78,7 @@ func OpenshiftVerifyRedisConnection(t *testing.T, f *framework.Framework, ctx fr
 }
 
 // tests deployment recovery on manual delete of deployment
-func OpenshiftVerifyRedisDeploymentRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyRedisDeploymentRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -113,7 +113,7 @@ func OpenshiftVerifyRedisDeploymentRecovery(t *testing.T, f *framework.Framework
 }
 
 // test service recovery on manual delete of service
-func OpenshiftVerifyRedisServiceRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyRedisServiceRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -148,7 +148,7 @@ func OpenshiftVerifyRedisServiceRecovery(t *testing.T, f *framework.Framework, c
 }
 
 // test pvc recovery on manual delete of pvc
-func OpenshiftVerifyRedisPVCRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyRedisPVCRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -183,7 +183,7 @@ func OpenshiftVerifyRedisPVCRecovery(t *testing.T, f *framework.Framework, ctx f
 }
 
 // test manual updates to redis deployment image, waits to see if cro reconciles and returns image to what is expected
-func OpenshiftVerifyRedisDeploymentUpdate(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyRedisDeploymentUpdate(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get redis")
@@ -323,8 +323,8 @@ func verifySuccessfulRedisDeploymentStatus(f *framework.Framework, namespace str
 	return nil
 }
 
-func getBasicTestRedis(ctx framework.TestCtx) (*v1alpha1.Redis, string, error) {
-	namespace, err := ctx.GetNamespace()
+func getBasicTestRedis(ctx framework.Context) (*v1alpha1.Redis, string, error) {
+	namespace, err := ctx.GetOperatorNamespace()
 	if err != nil {
 		return nil, "", errorUtil.Wrapf(err, "could not get namespace")
 	}
