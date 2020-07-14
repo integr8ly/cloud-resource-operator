@@ -24,7 +24,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.18.4
 	k8s.io/apimachinery v0.18.4
-	k8s.io/apiserver v0.0.0 // indirect
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kube-openapi v0.0.0-20200410145947-61e04a5be9a6
 	sigs.k8s.io/controller-runtime v0.6.1
@@ -34,11 +33,11 @@ require (
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	k8s.io/api => k8s.io/api v0.18.4
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191016113550-5357c4baaf65
+	//k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191016113550-5357c4baaf65
 	k8s.io/apimachinery => k8s.io/apimachinery v0.18.4
 	k8s.io/apiserver => k8s.io/apiserver v0.0.0-20191016112112-5190913f932d
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.0.0-20191016114015-74ad18325ed5
-	k8s.io/client-go => k8s.io/client-go v0.17.4 // Required by prometheus-operator
+	k8s.io/client-go => k8s.io/client-go v0.18.4 // Required by prometheus-operator
 	k8s.io/cloud-provider => k8s.io/cloud-provider v0.0.0-20191016115326-20453efc2458
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.0.0-20191016115129-c07a134afb42
 	k8s.io/code-generator => k8s.io/code-generator v0.0.0-20191004115455-8e001e5d1894

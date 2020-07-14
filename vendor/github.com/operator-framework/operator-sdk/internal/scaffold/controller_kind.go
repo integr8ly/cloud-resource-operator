@@ -98,7 +98,8 @@ func getCustomAPIImportPathAndIdent(m string) (p string, id string, err error) {
 	}
 	if id == "" {
 		if len(sm) == 2 {
-			return "", "", fmt.Errorf(`custom import "%s" identifier is empty, remove "=" from passed string`, m)
+			return "", "",
+				fmt.Errorf(`custom import "%s" identifier is empty, remove "=" from passed string`, m)
 		}
 		sp := strings.Split(p, "/")
 		if len(sp) > 1 {

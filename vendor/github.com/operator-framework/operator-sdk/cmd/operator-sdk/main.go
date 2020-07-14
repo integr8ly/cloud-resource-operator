@@ -15,28 +15,51 @@
 package main
 
 import (
-	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that `run` and `up local` can make use of them.
+	// to ensure that `exec-entrypoint` and `run` can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/operator-framework/operator-sdk/cmd/operator-sdk/cli"
-	"github.com/operator-framework/operator-sdk/internal/flags"
+	kbutil "github.com/operator-framework/operator-sdk/internal/util/kubebuilder"
+	"github.com/operator-framework/operator-sdk/internal/util/projutil"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 )
 
 func main() {
-	root := cli.GetCLIRoot()
-
-	root.PersistentFlags().Bool(flags.VerboseOpt, false, "Enable verbose logging")
-	if err := viper.BindPFlags(root.PersistentFlags()); err != nil {
-		log.Fatalf("Failed to bind root flags: %v", err)
+	// Use the new KB CLI when running inside a Kubebuilder project with an existing PROJECT file.
+	if kbutil.HasProjectFile() {
+		if err := cli.Run(); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
-	if err := root.Execute(); err != nil {
-		os.Exit(1)
+	// Use the legacy CLI if inside of a Go/Helm/Ansible legacy project
+	operatorType := projutil.GetOperatorType()
+	switch operatorType {
+	case projutil.OperatorTypeGo, projutil.OperatorTypeHelm, projutil.OperatorTypeAnsible:
+		// Deprecation warning for Go projects
+		// TODO/Discuss: UX wise, is displaying this notice on every command that runs
+		// in the legacy Go projects too loud.
+		if operatorType == projutil.OperatorTypeGo {
+			depMsg := "Operator SDK has a new CLI and project layout that is aligned with Kubebuilder.\n" +
+				"See `operator-sdk init -h` and the following doc on how to scaffold a new project:\n" +
+				"https://sdk.operatorframework.io/docs/golang/quickstart/\n" +
+				"To migrate existing projects to the new layout see:\n" +
+				"https://sdk.operatorframework.io/docs/golang/migration/project_migration_guide/\n"
+			projutil.PrintDeprecationWarning(depMsg)
+		}
+		if err := cli.RunLegacy(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	// Run the KB CLI when not running in either legacy or new projects
+	// The new CLI still supports "operator-sdk new --type=Ansible/Helm"
+	if err := cli.Run(); err != nil {
+		log.Fatal(err)
 	}
 }

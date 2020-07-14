@@ -33,7 +33,6 @@ const (
 )
 
 // ScorecardTestResult contains the results of an individual scorecard test.
-// +k8s:openapi-gen=true
 type ScorecardTestResult struct {
 	// Name is the name of the test
 	Name string `json:"name"`
@@ -43,16 +42,19 @@ type ScorecardTestResult struct {
 	Labels map[string]string `json:"labels,omitempty"`
 	// State is the final state of the test
 	State State `json:"state,omitempty"`
-	// Errors is a list of the errors that occured during the test (this can include both fatal and non-fatal errors)
+	// Errors is a list of the errors that occurred during the test (this can include both fatal and non-fatal errors)
 	Errors []string `json:"errors,omitempty"`
 	// Suggestions is a list of suggestions for the user to improve their score (if applicable)
 	Suggestions []string `json:"suggestions,omitempty"`
+	// Log holds a log produced from the test (if applicable)
+	Log string `json:"log,omitempty"`
+	// CRName holds the CR name this test was run with (if applicable)
+	CRName string `json:"crname,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ScorecardOutput is the schema for the scorecard API
-// +k8s:openapi-gen=true
 type ScorecardOutput struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional

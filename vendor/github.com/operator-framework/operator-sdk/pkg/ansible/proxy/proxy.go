@@ -27,12 +27,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/operator-framework/operator-sdk/pkg/ansible/proxy/controllermap"
-	"github.com/operator-framework/operator-sdk/pkg/ansible/proxy/kubeconfig"
-	k8sRequest "github.com/operator-framework/operator-sdk/pkg/ansible/proxy/requestfactory"
-	osdkHandler "github.com/operator-framework/operator-sdk/pkg/handler"
-	"github.com/operator-framework/operator-sdk/pkg/internal/predicates"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -42,7 +38,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/operator-framework/operator-sdk/pkg/ansible/proxy/controllermap"
+	"github.com/operator-framework/operator-sdk/pkg/ansible/proxy/kubeconfig"
+	k8sRequest "github.com/operator-framework/operator-sdk/pkg/ansible/proxy/requestfactory"
+	osdkHandler "github.com/operator-framework/operator-sdk/pkg/handler"
+	"github.com/operator-framework/operator-sdk/pkg/internal/predicate"
 )
+
+// This is the default timeout to wait for the cache to respond
+// todo(shawn-hurley): Eventually this should be configurable
+const cacheEstablishmentTimeout = 6 * time.Second
+const AutoSkipCacheREList = "^/api/.*/pods/.*/exec,^/api/.*/pods/.*/attach"
 
 // RequestLogHandler - log the requests that come through the proxy.
 func RequestLogHandler(h http.Handler) http.Handler {
@@ -72,14 +79,14 @@ type Options struct {
 	Address           string
 	Port              int
 	Handler           HandlerChain
-	OwnerInjection    bool
-	LogRequests       bool
 	KubeConfig        *rest.Config
 	Cache             cache.Cache
 	RESTMapper        meta.RESTMapper
 	ControllerMap     *controllermap.ControllerMap
 	WatchedNamespaces []string
 	DisableCache      bool
+	OwnerInjection    bool
+	LogRequests       bool
 }
 
 // Run will start a proxy server in a go routine that returns on the error
@@ -158,6 +165,10 @@ func Run(done chan error, o Options) error {
 		server.Handler = RequestLogHandler(server.Handler)
 	}
 	if !o.DisableCache {
+		autoSkipCacheRegexp, err := MakeRegexpArray(AutoSkipCacheREList)
+		if err != nil {
+			log.Error(err, "Failed to parse cache skip regular expression")
+		}
 		server.Handler = &cacheResponseHandler{
 			next:              server.Handler,
 			informerCache:     o.Cache,
@@ -166,6 +177,7 @@ func Run(done chan error, o Options) error {
 			cMap:              o.ControllerMap,
 			injectOwnerRef:    o.OwnerInjection,
 			apiResources:      resources,
+			skipPathRegexp:    autoSkipCacheRegexp,
 		}
 	}
 
@@ -181,8 +193,10 @@ func Run(done chan error, o Options) error {
 }
 
 // Helper function used by cache response and owner injection
-func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *controllermap.ControllerMap, resource *unstructured.Unstructured, restMapper meta.RESTMapper, useOwnerRef bool) error {
-	dataMapping, err := restMapper.RESTMapping(resource.GroupVersionKind().GroupKind(), resource.GroupVersionKind().Version)
+func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *controllermap.ControllerMap,
+	resource *unstructured.Unstructured, restMapper meta.RESTMapper, useOwnerRef bool) error {
+	dataMapping, err := restMapper.RESTMapping(resource.GroupVersionKind().GroupKind(),
+		resource.GroupVersionKind().Version)
 	if err != nil {
 		m := fmt.Sprintf("Could not get rest mapping for: %v", resource.GroupVersionKind())
 		log.Error(err, m)
@@ -191,11 +205,12 @@ func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *contr
 	}
 	ownerGV, err := schema.ParseGroupVersion(owner.APIVersion)
 	if err != nil {
-		m := fmt.Sprintf("could not get broup version for: %v", owner)
+		m := fmt.Sprintf("could not get group version for: %v", owner)
 		log.Error(err, m)
 		return err
 	}
-	ownerMapping, err := restMapper.RESTMapping(schema.GroupKind{Kind: owner.Kind, Group: ownerGV.Group}, ownerGV.Version)
+	ownerMapping, err := restMapper.RESTMapping(schema.GroupKind{Kind: owner.Kind, Group: ownerGV.Group},
+		ownerGV.Version)
 	if err != nil {
 		m := fmt.Sprintf("could not get rest mapping for: %v", owner)
 		log.Error(err, m)
@@ -212,11 +227,8 @@ func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *contr
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(ownerMapping.GroupVersionKind)
 
-	// Adding dependentPredicate for avoiding reconciles when dependent objects are not changed by user
-	dependentPredicate := predicates.DependentPredicateFuncs()
-
 	// Add a watch to controller
-	if contents.WatchDependentResources {
+	if contents.WatchDependentResources && !contents.Blacklist[resource.GroupVersionKind()] {
 		// Store watch in map
 		// Use EnqueueRequestForOwner unless user has configured watching cluster scoped resources and we have to
 		switch {
@@ -228,10 +240,14 @@ func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *contr
 			}
 
 			owMap.Store(resource.GroupVersionKind())
-			log.Info("Watching child resource", "kind", resource.GroupVersionKind(), "enqueue_kind", u.GroupVersionKind())
-			err := contents.Controller.Watch(&source.Kind{Type: resource}, &handler.EnqueueRequestForOwner{OwnerType: u}, dependentPredicate)
+			log.Info("Watching child resource", "kind", resource.GroupVersionKind(),
+				"enqueue_kind", u.GroupVersionKind())
+			err := contents.Controller.Watch(&source.Kind{Type: resource},
+				&handler.EnqueueRequestForOwner{OwnerType: u}, predicate.DependentPredicate{})
 			// Store watch in map
 			if err != nil {
+				log.Error(err, "Failed to watch child resource",
+					"kind", resource.GroupVersionKind(), "enqueue_kind", u.GroupVersionKind())
 				return err
 			}
 		case (!useOwnerRef && dataNamespaceScoped) || contents.WatchClusterScopedResources:
@@ -242,12 +258,18 @@ func addWatchToController(owner kubeconfig.NamespacedOwnerReference, cMap *contr
 			}
 			awMap.Store(resource.GroupVersionKind())
 			typeString := fmt.Sprintf("%v.%v", owner.Kind, ownerGV.Group)
-			log.Info("Watching child resource", "kind", resource.GroupVersionKind(), "enqueue_annotation_type", typeString)
-			err = contents.Controller.Watch(&source.Kind{Type: resource}, &osdkHandler.EnqueueRequestForAnnotation{Type: typeString}, dependentPredicate)
+			log.Info("Watching child resource", "kind", resource.GroupVersionKind(),
+				"enqueue_annotation_type", typeString)
+			err = contents.Controller.Watch(&source.Kind{Type: resource},
+				&osdkHandler.EnqueueRequestForAnnotation{Type: typeString}, predicate.DependentPredicate{})
 			if err != nil {
+				log.Error(err, "Failed to watch child resource",
+					"kind", resource.GroupVersionKind(), "enqueue_kind", u.GroupVersionKind())
 				return err
 			}
 		}
+	} else {
+		log.Info("Resource will not be watched/cached.", "GVK", resource.GroupVersionKind())
 	}
 	return nil
 }
@@ -260,29 +282,28 @@ func removeAuthorizationHeader(h http.Handler) http.Handler {
 }
 
 // Helper function used by recovering dependent watches and owner ref injection.
-func getRequestOwnerRef(req *http.Request) (kubeconfig.NamespacedOwnerReference, error) {
+func getRequestOwnerRef(req *http.Request) (*kubeconfig.NamespacedOwnerReference, error) {
 	owner := kubeconfig.NamespacedOwnerReference{}
 	user, _, ok := req.BasicAuth()
 	if !ok {
-		return owner, errors.New("basic auth header not found")
+		return nil, nil
 	}
 	authString, err := base64.StdEncoding.DecodeString(user)
 	if err != nil {
 		m := "Could not base64 decode username"
 		log.Error(err, m)
-		return owner, err
+		return &owner, err
 	}
 	// Set owner to NamespacedOwnerReference, which has metav1.OwnerReference
 	// as a subset along with the Namespace of the owner. Please see the
 	// kubeconfig.NamespacedOwnerReference type for more information. The
 	// namespace is required when creating the reconcile requests.
-	json.Unmarshal(authString, &owner)
 	if err := json.Unmarshal(authString, &owner); err != nil {
 		m := "Could not unmarshal auth string"
 		log.Error(err, m)
-		return owner, err
+		return &owner, err
 	}
-	return owner, err
+	return &owner, err
 }
 
 func getGVKFromRequestInfo(r *k8sRequest.RequestInfo, restMapper meta.RESTMapper) (schema.GroupVersionKind, error) {
@@ -303,7 +324,8 @@ type apiResources struct {
 func (a *apiResources) resetResources() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	apisResourceList, err := a.discoveryClient.ServerResources()
+
+	_, apisResourceList, err := a.discoveryClient.ServerGroupsAndResources()
 	if err != nil {
 		return err
 	}
