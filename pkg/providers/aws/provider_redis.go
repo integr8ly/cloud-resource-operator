@@ -406,6 +406,10 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	// resolve elasticache information for elasticache created by provider
 	logger := p.Logger.WithField("action", "DeleteRedis")
 	logger.Infof("reconciling delete redis %s", r.Name)
+
+	// expose metrics about the redis being deleted
+	p.setRedisDeletionTimestampMetric(ctx, r)
+
 	elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
@@ -453,9 +457,6 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 
 func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteElasticacheCluster")
-
-	// expose metrics about the redis being deleted
-	p.setRedisDeletionTimestampMetric(ctx, r)
 
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	rgs, err := getReplicationGroups(cacheSvc)
