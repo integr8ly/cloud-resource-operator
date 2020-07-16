@@ -608,13 +608,23 @@ func buildAZ() []*ec2.AvailabilityZone {
 		},
 	}
 }
+func buildSecurityGroup(modifyFn func(cluster *ec2.SecurityGroup)) *ec2.SecurityGroup {
+	mock := &ec2.SecurityGroup{
+		GroupName: aws.String("test"),
+		GroupId:   aws.String("testID"),
+	}
+
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
 
 func buildSecurityGroups(groupName string) []*ec2.SecurityGroup {
 	return []*ec2.SecurityGroup{
-		{
-			GroupName: aws.String(groupName),
-			GroupId:   aws.String("testID"),
-		},
+		buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+			mock.GroupName = aws.String(groupName)
+		}),
 	}
 }
 

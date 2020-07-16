@@ -344,7 +344,7 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 									}
 								},
-							)},
+								)},
 						}, nil
 					}
 				}),
