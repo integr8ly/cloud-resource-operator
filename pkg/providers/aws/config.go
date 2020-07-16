@@ -30,7 +30,7 @@ const (
 
 	defaultReconcileTime = time.Second * 30
 
-	resourceIdentifierAnnotation = "resourceIdentifier"
+	ResourceIdentifierAnnotation = "resourceIdentifier"
 )
 
 //DefaultConfigMapNamespace is the default namespace that Configmaps will be created in

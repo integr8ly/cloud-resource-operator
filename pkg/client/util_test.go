@@ -69,8 +69,8 @@ func TestReconcileBlobStorage(t *testing.T) {
 			},
 			want: &v1alpha1.BlobStorage{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
@@ -108,8 +108,8 @@ func TestReconcileBlobStorage(t *testing.T) {
 			},
 			want: &v1alpha1.BlobStorage{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",
@@ -154,7 +154,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-					t.Errorf("ReconcileBlobStorage() got = %v, want %v", got, tt.want)
+				t.Errorf("ReconcileBlobStorage() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -200,8 +200,8 @@ func TestReconcilePostgres(t *testing.T) {
 			},
 			want: &v1alpha1.Postgres{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
@@ -239,8 +239,8 @@ func TestReconcilePostgres(t *testing.T) {
 			},
 			want: &v1alpha1.Postgres{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",
@@ -330,8 +330,8 @@ func TestReconcileRedis(t *testing.T) {
 			},
 			want: &v1alpha1.Redis{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
@@ -369,8 +369,8 @@ func TestReconcileRedis(t *testing.T) {
 			},
 			want: &v1alpha1.Redis{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
+					Name:            "test",
+					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",

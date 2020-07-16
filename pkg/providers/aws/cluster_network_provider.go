@@ -136,7 +136,6 @@ func NewNetworkManager(session *session.Session, client client.Client, logger *l
 //	  * reconcile the vpc if the VPC already exist (this is to avoid potential changes to the CIDR range and unwanted/unexpected behaviour)
 func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.IPNet) (*Network, error) {
 	logger := n.Logger.WithField("action", "CreateNetwork")
-	logger.Debug("CreateNetwork called")
 
 	// check if there is cluster specific vpc already created.
 	foundVpc, err := getStandaloneVpc(ctx, n.Client, n.Ec2Api, logger)

@@ -223,9 +223,9 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
-		if annotations.Has(r, resourceIdentifierAnnotation) {
+		if annotations.Has(r, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
-				r.Name, r.Namespace, resourceIdentifierAnnotation, r.ObjectMeta.Annotations[resourceIdentifierAnnotation])
+				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
 		}
 
@@ -235,7 +235,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 
-		annotations.Add(r, resourceIdentifierAnnotation, *elasticacheConfig.ReplicationGroupId)
+		annotations.Add(r, ResourceIdentifierAnnotation, *elasticacheConfig.ReplicationGroupId)
 		if err := p.Client.Update(ctx, r); err != nil {
 			return nil, croType.StatusMessage("failed to add annotation"), err
 		}

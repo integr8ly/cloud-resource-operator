@@ -119,3 +119,38 @@ func (d *PostgresDeploymentDetails) Data() map[string][]byte {
 		"port":     []byte(strconv.Itoa(d.Port)),
 	}
 }
+
+// GenericCloudMetric is a wrapper to represent provider specific metrics generically
+type GenericCloudMetric struct {
+	Name   string
+	Labels map[string]string
+	Value  float64
+}
+
+// CloudProviderMetricType is used to declare a generic type of metric
+// it maps provider specific metrics to metrics we expose in prometheus
+type CloudProviderMetricType struct {
+	//PromethuesMetricName the name of the metric exposed via cro
+	PromethuesMetricName string
+	//ProviderMetricName the metric we scrape from the cloud provider
+	ProviderMetricName string
+	//Statistic the type of metric value we return e.g. Average, Sum, Max, Min etc.
+	Statistic string
+}
+
+// ScrapeMetricsData is a wrapper for output of scrape metrics
+type ScrapeMetricsData struct {
+	// Metrics is an array of built cloud metrics from scraping a provider
+	Metrics []*GenericCloudMetric
+}
+
+type RedisMetricsProvider interface {
+	SupportsStrategy(s string) bool
+	ScrapeRedisMetrics(ctx context.Context, redis *v1alpha1.Redis) (*ScrapeMetricsData, error)
+}
+
+type PostgresMetricsProvider interface {
+	SupportsStrategy(s string) bool
+	ScrapeRDSMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*ScrapeMetricsData, error)
+}
+
