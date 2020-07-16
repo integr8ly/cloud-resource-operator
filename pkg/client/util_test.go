@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"errors"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 
@@ -71,6 +71,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
 					},
@@ -78,7 +79,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				Spec: v1alpha1.BlobStorageSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -109,6 +110,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",
 					},
@@ -116,7 +118,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				Spec: v1alpha1.BlobStorageSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -152,7 +154,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ReconcileBlobStorage() got = %v, want %v", got, tt.want)
+					t.Errorf("ReconcileBlobStorage() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -200,6 +202,7 @@ func TestReconcilePostgres(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
 					},
@@ -207,7 +210,7 @@ func TestReconcilePostgres(t *testing.T) {
 				Spec: v1alpha1.PostgresSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -238,6 +241,7 @@ func TestReconcilePostgres(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",
 					},
@@ -245,7 +249,7 @@ func TestReconcilePostgres(t *testing.T) {
 				Spec: v1alpha1.PostgresSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -328,6 +332,7 @@ func TestReconcileRedis(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
 					},
@@ -335,7 +340,7 @@ func TestReconcileRedis(t *testing.T) {
 				Spec: v1alpha1.RedisSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},
@@ -366,6 +371,7 @@ func TestReconcileRedis(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"cro": "test",
 					},
@@ -373,7 +379,7 @@ func TestReconcileRedis(t *testing.T) {
 				Spec: v1alpha1.RedisSpec{
 					Type: "managed",
 					Tier: "production",
-					SecretRef: &types.SecretRef{
+					SecretRef: &croType.SecretRef{
 						Name:      "test",
 						Namespace: "test",
 					},

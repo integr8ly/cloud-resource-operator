@@ -26,10 +26,15 @@ import (
 	"strings"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	yaml "gopkg.in/yaml.v2"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	// todo(camila): replace it for yaml "sigs.k8s.io/yaml"
+	// See that the unmarshaling JSON will be affected
+	yaml "gopkg.in/yaml.v3"
+
+	"github.com/operator-framework/operator-sdk/internal/util/projutil"
 )
 
 var log = logf.Log.WithName("watches")
@@ -37,20 +42,22 @@ var log = logf.Log.WithName("watches")
 // Watch - holds data used to create a mapping of GVK to ansible playbook or role.
 // The mapping is used to compose an ansible operator.
 type Watch struct {
-	GroupVersionKind            schema.GroupVersionKind `yaml:",inline"`
-	Playbook                    string                  `yaml:"playbook"`
-	Role                        string                  `yaml:"role"`
-	Vars                        map[string]interface{}  `yaml:"vars"`
-	MaxRunnerArtifacts          int                     `yaml:"maxRunnerArtifacts"`
-	ReconcilePeriod             time.Duration           `yaml:"reconcilePeriod"`
-	ManageStatus                bool                    `yaml:"manageStatus"`
-	WatchDependentResources     bool                    `yaml:"watchDependentResources"`
-	WatchClusterScopedResources bool                    `yaml:"watchClusterScopedResources"`
-	Finalizer                   *Finalizer              `yaml:"finalizer"`
+	GroupVersionKind            schema.GroupVersionKind   `yaml:",inline"`
+	Blacklist                   []schema.GroupVersionKind `yaml:"blacklist"`
+	Playbook                    string                    `yaml:"playbook"`
+	Role                        string                    `yaml:"role"`
+	Vars                        map[string]interface{}    `yaml:"vars"`
+	MaxRunnerArtifacts          int                       `yaml:"maxRunnerArtifacts"`
+	ReconcilePeriod             time.Duration             `yaml:"reconcilePeriod"`
+	Finalizer                   *Finalizer                `yaml:"finalizer"`
+	ManageStatus                bool                      `yaml:"manageStatus"`
+	WatchDependentResources     bool                      `yaml:"watchDependentResources"`
+	WatchClusterScopedResources bool                      `yaml:"watchClusterScopedResources"`
+	Selector                    metav1.LabelSelector      `yaml:"selector"`
 
 	// Not configurable via watches.yaml
-	MaxWorkers       int `yaml:"maxWorkers"`
-	AnsibleVerbosity int `yaml:"ansibleVerbosity"`
+	MaxWorkers       int `yaml:"-"`
+	AnsibleVerbosity int `yaml:"-"`
 }
 
 // Finalizer - Expose finalizer to be used by a user.
@@ -63,36 +70,71 @@ type Finalizer struct {
 
 // Default values for optional fields on Watch
 var (
+	blacklistDefault                   = []schema.GroupVersionKind{}
 	maxRunnerArtifactsDefault          = 20
 	reconcilePeriodDefault             = "0s"
 	manageStatusDefault                = true
 	watchDependentResourcesDefault     = true
 	watchClusterScopedResourcesDefault = false
+	selectorDefault                    = metav1.LabelSelector{}
 
 	// these are overridden by cmdline flags
 	maxWorkersDefault       = 1
 	ansibleVerbosityDefault = 2
 )
 
+// Creates, populates and returns Label Selector object during UnmarshalYAML
+func parseLabelSelector(dls tempLabelSelector) metav1.LabelSelector {
+	obj := metav1.LabelSelector{}
+	obj.MatchLabels = dls.MatchLabels
+
+	for _, v := range dls.MatchExpressions {
+		requirement := metav1.LabelSelectorRequirement{
+			Key:      v.Key,
+			Operator: v.Operator,
+			Values:   v.Values,
+		}
+
+		obj.MatchExpressions = append(obj.MatchExpressions, requirement)
+	}
+
+	return obj
+}
+
+// Temporary structs created to store yaml parsing
+type tempLabelSelector struct {
+	MatchLabels      map[string]string `yaml:"matchLabels,omitempty"`
+	MatchExpressions []tempRequirement `yaml:"matchExpressions,omitempty"`
+}
+
+type tempRequirement struct {
+	Key      string                       `yaml:"key"`
+	Operator metav1.LabelSelectorOperator `yaml:"operator"`
+	Values   []string                     `yaml:"values,omitempty"`
+}
+
 // UnmarshalYAML - implements the yaml.Unmarshaler interface for Watch.
 // This makes it possible to verify, when loading, that the GroupVersionKind
 // specified for a given watch is valid as well as provide sensible defaults
-// for values that were ommitted.
+// for values that were omitted.
 func (w *Watch) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Use an alias struct to handle complex types
+
 	type alias struct {
-		Group                       string                 `yaml:"group"`
-		Version                     string                 `yaml:"version"`
-		Kind                        string                 `yaml:"kind"`
-		Playbook                    string                 `yaml:"playbook"`
-		Role                        string                 `yaml:"role"`
-		Vars                        map[string]interface{} `yaml:"vars"`
-		MaxRunnerArtifacts          int                    `yaml:"maxRunnerArtifacts"`
-		ReconcilePeriod             string                 `yaml:"reconcilePeriod"`
-		ManageStatus                bool                   `yaml:"manageStatus"`
-		WatchDependentResources     bool                   `yaml:"watchDependentResources"`
-		WatchClusterScopedResources bool                   `yaml:"watchClusterScopedResources"`
-		Finalizer                   *Finalizer             `yaml:"finalizer"`
+		Group                       string                    `yaml:"group"`
+		Version                     string                    `yaml:"version"`
+		Kind                        string                    `yaml:"kind"`
+		Playbook                    string                    `yaml:"playbook"`
+		Role                        string                    `yaml:"role"`
+		Vars                        map[string]interface{}    `yaml:"vars"`
+		MaxRunnerArtifacts          int                       `yaml:"maxRunnerArtifacts"`
+		ReconcilePeriod             string                    `yaml:"reconcilePeriod"`
+		ManageStatus                bool                      `yaml:"manageStatus"`
+		WatchDependentResources     bool                      `yaml:"watchDependentResources"`
+		WatchClusterScopedResources bool                      `yaml:"watchClusterScopedResources"`
+		Blacklist                   []schema.GroupVersionKind `yaml:"blacklist"`
+		Finalizer                   *Finalizer                `yaml:"finalizer"`
+		Selector                    tempLabelSelector         `yaml:"selector"`
 	}
 	var tmp alias
 
@@ -103,6 +145,8 @@ func (w *Watch) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	tmp.MaxRunnerArtifacts = maxRunnerArtifactsDefault
 	tmp.ReconcilePeriod = reconcilePeriodDefault
 	tmp.WatchClusterScopedResources = watchClusterScopedResourcesDefault
+	tmp.Blacklist = blacklistDefault
+	tmp.Selector = tempLabelSelector{}
 
 	if err := unmarshal(&tmp); err != nil {
 		return err
@@ -110,7 +154,7 @@ func (w *Watch) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	reconcilePeriod, err := time.ParseDuration(tmp.ReconcilePeriod)
 	if err != nil {
-		return fmt.Errorf("failed to parse '%s' to time.Duration: %v", tmp.ReconcilePeriod, err)
+		return fmt.Errorf("failed to parse '%s' to time.Duration: %w", tmp.ReconcilePeriod, err)
 	}
 
 	gvk := schema.GroupVersionKind{
@@ -120,7 +164,7 @@ func (w *Watch) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 	err = verifyGVK(gvk)
 	if err != nil {
-		return fmt.Errorf("invalid GVK: %v - %s", gvk.String(), err)
+		return fmt.Errorf("invalid GVK: %s: %w", gvk, err)
 	}
 
 	// Rewrite values to struct being unmarshalled
@@ -136,8 +180,85 @@ func (w *Watch) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	w.WatchClusterScopedResources = tmp.WatchClusterScopedResources
 	w.Finalizer = tmp.Finalizer
 	w.AnsibleVerbosity = getAnsibleVerbosity(gvk, ansibleVerbosityDefault)
+	w.Blacklist = tmp.Blacklist
+	w.addRolePlaybookPaths()
+	w.Selector = parseLabelSelector(tmp.Selector)
 
 	return nil
+}
+
+// addRolePlaybookPaths will add the full path based on the current dir
+func (w *Watch) addRolePlaybookPaths() {
+	if len(w.Playbook) > 0 {
+		w.Playbook = getFullPath(w.Playbook)
+	}
+
+	if len(w.Role) > 0 {
+		possibleRolePaths := getPossibleRolePaths(w.Role)
+		for _, possiblePath := range possibleRolePaths {
+			if _, err := os.Stat(possiblePath); err == nil {
+				w.Role = possiblePath
+				break
+			}
+		}
+	}
+	if w.Finalizer != nil && len(w.Finalizer.Role) > 0 {
+		possibleRolePaths := getPossibleRolePaths(w.Finalizer.Role)
+		for _, possiblePath := range possibleRolePaths {
+			if _, err := os.Stat(possiblePath); err == nil {
+				w.Finalizer.Role = possiblePath
+				break
+			}
+		}
+	}
+	if w.Finalizer != nil && len(w.Finalizer.Playbook) > 0 {
+		w.Finalizer.Playbook = getFullPath(w.Finalizer.Playbook)
+	}
+}
+
+// getFullPath returns an absolute path for the playbook
+func getFullPath(path string) string {
+	if len(path) > 0 && !filepath.IsAbs(path) {
+		return filepath.Join(projutil.MustGetwd(), path)
+	}
+	return path
+}
+
+// getPossibleRolePaths returns list of possible absolute paths derived from a user provided value.
+func getPossibleRolePaths(path string) []string {
+	possibleRolePaths := []string{}
+	if filepath.IsAbs(path) || len(path) == 0 {
+		return append(possibleRolePaths, path)
+	}
+	fqcn := strings.Split(path, ".")
+	// If fqcn is a valid fully qualified collection name, it is <namespace>.<collectionName>.<roleName>
+	if len(fqcn) == 3 {
+		ansibleCollectionsPathEnv, ok := os.LookupEnv("ANSIBLE_COLLECTIONS_PATH")
+		if !ok || len(ansibleCollectionsPathEnv) == 0 {
+			ansibleCollectionsPathEnv = "/usr/share/ansible/collections"
+			home, err := os.UserHomeDir()
+			if err == nil {
+				homeCollections := filepath.Join(home, ".ansible/collections")
+				ansibleCollectionsPathEnv = ansibleCollectionsPathEnv + ":" + homeCollections
+			}
+		}
+		for _, possiblePathParent := range strings.Split(ansibleCollectionsPathEnv, ":") {
+			possiblePath := filepath.Join(possiblePathParent, "ansible_collections", fqcn[0], fqcn[1], "roles", fqcn[2])
+			possibleRolePaths = append(possibleRolePaths, possiblePath)
+		}
+	}
+
+	// Check for the role where Ansible would. If it exists, use it.
+	ansibleRolesPathEnv, ok := os.LookupEnv("ANSIBLE_ROLES_PATH")
+	if ok && len(ansibleRolesPathEnv) > 0 {
+		for _, possiblePathParent := range strings.Split(ansibleRolesPathEnv, ":") {
+			// "roles" is optionally a part of the path. Check with, and without.
+			possibleRolePaths = append(possibleRolePaths, filepath.Join(possiblePathParent, path))
+			possibleRolePaths = append(possibleRolePaths, filepath.Join(possiblePathParent, "roles", path))
+		}
+	}
+	// Roles can also live in the current working directory.
+	return append(possibleRolePaths, getFullPath(filepath.Join("roles", path)))
 }
 
 // Validate - ensures that a Watch is valid
@@ -160,7 +281,8 @@ func (w *Watch) Validate() error {
 		// only fail if Vars not set
 		err = verifyAnsiblePath(w.Finalizer.Playbook, w.Finalizer.Role)
 		if err != nil && len(w.Finalizer.Vars) == 0 {
-			log.Error(err, fmt.Sprintf("Invalid ansible path on Finalizer for GVK: %v", w.GroupVersionKind.String()))
+			log.Error(err, fmt.Sprintf("Invalid ansible path on Finalizer for GVK: %v",
+				w.GroupVersionKind.String()))
 			return err
 		}
 	}
@@ -172,6 +294,7 @@ func (w *Watch) Validate() error {
 func New(gvk schema.GroupVersionKind, role, playbook string, vars map[string]interface{}, finalizer *Finalizer) *Watch {
 	reconcilePeriod, _ := time.ParseDuration(reconcilePeriodDefault)
 	return &Watch{
+		Blacklist:                   blacklistDefault,
 		GroupVersionKind:            gvk,
 		Playbook:                    playbook,
 		Role:                        role,
@@ -184,6 +307,7 @@ func New(gvk schema.GroupVersionKind, role, playbook string, vars map[string]int
 		WatchClusterScopedResources: watchClusterScopedResourcesDefault,
 		Finalizer:                   finalizer,
 		AnsibleVerbosity:            ansibleVerbosityDefault,
+		Selector:                    selectorDefault,
 	}
 }
 
@@ -210,6 +334,7 @@ func Load(path string, maxWorkers, ansibleVerbosity int) ([]Watch, error) {
 		if _, ok := watchesMap[watch.GroupVersionKind]; ok {
 			return nil, fmt.Errorf("duplicate GVK: %v", watch.GroupVersionKind.String())
 		}
+
 		watchesMap[watch.GroupVersionKind] = true
 
 		err = watch.Validate()
@@ -240,18 +365,12 @@ func verifyGVK(gvk schema.GroupVersionKind) error {
 func verifyAnsiblePath(playbook string, role string) error {
 	switch {
 	case playbook != "":
-		if !filepath.IsAbs(playbook) {
-			return fmt.Errorf("playbook path must be absolute")
-		}
 		if _, err := os.Stat(playbook); err != nil {
 			return fmt.Errorf("playbook: %v was not found", playbook)
 		}
 	case role != "":
-		if !filepath.IsAbs(role) {
-			return fmt.Errorf("role path must be absolute")
-		}
 		if _, err := os.Stat(role); err != nil {
-			return fmt.Errorf("role path: %v was not found", role)
+			return fmt.Errorf("role: %v was not found", role)
 		}
 	default:
 		return fmt.Errorf("must specify Role or Playbook")
@@ -272,13 +391,7 @@ func getMaxWorkers(gvk schema.GroupVersionKind, defValue int) int {
 		"_",
 		-1,
 	))
-	maxWorkers, err := strconv.Atoi(os.Getenv(envVar))
-	if err != nil {
-		// we don't care why we couldn't parse it just use default
-		log.Info("Failed to parse %v from environment. Using default %v", envVar, defValue)
-		return defValue
-	}
-
+	maxWorkers := getIntegerEnvWithDefault(envVar, defValue)
 	if maxWorkers <= 0 {
 		log.Info("Value %v not valid. Using default %v", maxWorkers, defValue)
 		return defValue
@@ -295,12 +408,7 @@ func getAnsibleVerbosity(gvk schema.GroupVersionKind, defValue int) int {
 		"_",
 		-1,
 	))
-	ansibleVerbosity, err := strconv.Atoi(os.Getenv(envVar))
-	if err != nil {
-		log.Info("Failed to parse %v from environment. Using default %v", envVar, defValue)
-		return defValue
-	}
-
+	ansibleVerbosity := getIntegerEnvWithDefault(envVar, defValue)
 	// Use default value when value doesn't make sense
 	if ansibleVerbosity < 0 {
 		log.Info("Value %v not valid. Using default %v", ansibleVerbosity, defValue)
@@ -311,4 +419,22 @@ func getAnsibleVerbosity(gvk schema.GroupVersionKind, defValue int) int {
 		return defValue
 	}
 	return ansibleVerbosity
+}
+
+// getIntegerEnvWithDefault returns value for MaxWorkers/Ansibleverbosity based on if envVar is set
+// sor a defvalue is used.
+func getIntegerEnvWithDefault(envVar string, defValue int) int {
+	val := defValue
+	if envVal, ok := os.LookupEnv(envVar); ok {
+		if i, err := strconv.Atoi(envVal); err != nil {
+			log.Info("Could not parse environment variable as an integer; using default value",
+				"envVar", envVar, "default", defValue)
+		} else {
+			val = i
+		}
+	} else if !ok {
+		log.Info("Environment variable not set; using default value", "envVar", envVar,
+			"default", defValue)
+	}
+	return val
 }

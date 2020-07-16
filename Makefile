@@ -9,7 +9,7 @@ COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
 # otherwise use it through "go run" (slower but will always work and will use correct version)
-OPERATOR_SDK_VERSION=0.12.0
+OPERATOR_SDK_VERSION=0.19.0
 ifeq ($(shell operator-sdk version 2> /dev/null | sed -e 's/", .*/"/' -e 's/.* //'), "v$(OPERATOR_SDK_VERSION)")
 	OPERATOR_SDK ?= operator-sdk
 else
@@ -31,7 +31,7 @@ build:
 
 .PHONY: run
 run:
-	RECTIME=30 $(OPERATOR_SDK) up local --namespace=$(NAMESPACE)
+	RECTIME=30 $(OPERATOR_SDK) run --local --operator-namespace=$(NAMESPACE)
 
 .PHONY: setup/service_account
 setup/service_account:

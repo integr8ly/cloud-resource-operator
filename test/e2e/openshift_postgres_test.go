@@ -24,7 +24,7 @@ import (
 
 // basic test, creates postgres resource, checks deployment has been created, the status has been updated.
 // the secret has been created and populated, deletes the postgres resource and checks all resources has been deleted
-func OpenshiftPostgresBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftPostgresBasicTest(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -49,7 +49,7 @@ func OpenshiftPostgresBasicTest(t *testing.T, f *framework.Framework, ctx framew
 }
 
 // tests to verify the postgres string created from secret is valid
-func OpenshiftVerifyPostgresSecretTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresSecretTest(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -79,7 +79,7 @@ func OpenshiftVerifyPostgresSecretTest(t *testing.T, f *framework.Framework, ctx
 }
 
 // verifies a connection can be made to a postgres resource
-func OpenshiftVerifyPostgresConnection(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresConnection(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -109,7 +109,7 @@ func OpenshiftVerifyPostgresConnection(t *testing.T, f *framework.Framework, ctx
 }
 
 // verifies postgres user has permissions
-func OpenshiftVerifyPostgresPermission(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresPermission(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -140,7 +140,7 @@ func OpenshiftVerifyPostgresPermission(t *testing.T, f *framework.Framework, ctx
 }
 
 // tests deployment recovery on manual delete of deployment
-func OpenshiftVerifyPostgresDeploymentRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresDeploymentRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -175,7 +175,7 @@ func OpenshiftVerifyPostgresDeploymentRecovery(t *testing.T, f *framework.Framew
 }
 
 // test service recovery on manual delete of service
-func OpenshiftVerifyPostgresServiceRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresServiceRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -210,7 +210,7 @@ func OpenshiftVerifyPostgresServiceRecovery(t *testing.T, f *framework.Framework
 }
 
 // tests pvc recovery on manual delete of pvc
-func OpenshiftVerifyPostgresPVCRecovery(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresPVCRecovery(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -245,7 +245,7 @@ func OpenshiftVerifyPostgresPVCRecovery(t *testing.T, f *framework.Framework, ct
 }
 
 // test manually updates postgres deployment image, waits to see if cro reconciles and returns image to what is expected
-func OpenshiftVerifyPostgresDeploymentUpdate(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftVerifyPostgresDeploymentUpdate(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testPostgres, namespace, err := getBasicTestPostgres(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get postgres")
@@ -389,8 +389,8 @@ func verifySuccessfulPostgresDeploymentStatus(f *framework.Framework, namespace 
 	return nil
 }
 
-func getBasicTestPostgres(ctx framework.TestCtx) (*v1alpha1.Postgres, string, error) {
-	namespace, err := ctx.GetNamespace()
+func getBasicTestPostgres(ctx framework.Context) (*v1alpha1.Postgres, string, error) {
+	namespace, err := ctx.GetOperatorNamespace()
 	if err != nil {
 		return nil, "", errorUtil.Wrapf(err, "could not get namespace")
 	}

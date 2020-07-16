@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func OpenshiftBlobstorageBasicTest(t *testing.T, f *framework.Framework, ctx framework.TestCtx) error {
+func OpenshiftBlobstorageBasicTest(t *testing.T, f *framework.Framework, ctx framework.Context) error {
 	testBlobstorage, namespace, err := getBasicBlobstorage(ctx)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get blobstorage")
@@ -100,8 +100,8 @@ func blobstorageDeleteTest(t *testing.T, f *framework.Framework, testBlobstorage
 	return nil
 }
 
-func getBasicBlobstorage(ctx framework.TestCtx) (*v1alpha1.BlobStorage, string, error) {
-	namespace, err := ctx.GetNamespace()
+func getBasicBlobstorage(ctx framework.Context) (*v1alpha1.BlobStorage, string, error) {
+	namespace, err := ctx.GetOperatorNamespace()
 	if err != nil {
 		return nil, "", errorUtil.Wrapf(err, "could not get namespace")
 	}

@@ -16,15 +16,41 @@ package generate
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/operator-framework/operator-sdk/cmd/operator-sdk/generate/bundle"
+	"github.com/operator-framework/operator-sdk/cmd/operator-sdk/generate/kustomize"
+	"github.com/operator-framework/operator-sdk/cmd/operator-sdk/generate/packagemanifests"
 )
 
-func NewCmd() *cobra.Command {
-	cmd := &cobra.Command{
+func newCmd() *cobra.Command {
+	return &cobra.Command{
 		Use:   "generate <generator>",
-		Short: "Invokes specific generator",
-		Long:  `The operator-sdk generate command invokes specific generator to generate code as needed.`,
+		Short: "Invokes a specific generator",
+		Long: `The 'operator-sdk generate' command invokes a specific generator to generate
+code or manifests.`,
 	}
-	cmd.AddCommand(newGenerateK8SCmd())
-	cmd.AddCommand(newGenerateOpenAPICmd())
+}
+
+// NewCmd returns the 'generate' command configured for the new project layout.
+func NewCmd() *cobra.Command {
+	cmd := newCmd()
+	cmd.AddCommand(
+		kustomize.NewCmd(),
+		bundle.NewCmd(),
+		packagemanifests.NewCmd(),
+	)
+	return cmd
+}
+
+// NewCmdLegacy returns the 'generate' command configured for the legacy project layout.
+func NewCmdLegacy() *cobra.Command {
+	cmd := newCmd()
+	cmd.AddCommand(
+		newGenerateK8SCmd(),
+		newGenerateCRDsCmd(),
+		newGenerateCSVCmd(),
+		bundle.NewCmdLegacy(),
+		packagemanifests.NewCmdLegacy(),
+	)
 	return cmd
 }

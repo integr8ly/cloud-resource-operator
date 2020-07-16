@@ -15,10 +15,12 @@
 package v1alpha2
 
 import (
+	"bufio"
 	"fmt"
-	"github.com/mattn/go-isatty"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-isatty"
 )
 
 const (
@@ -53,8 +55,10 @@ func (s ScorecardOutput) MarshalText() (string, error) {
 		} else if result.State == FailState {
 			sb.WriteString(fmt.Sprintf(failColor, FailState))
 		} else {
-			sb.WriteString(fmt.Sprintf("\n"))
+			sb.WriteString("\n")
 		}
+
+		sb.WriteString(fmt.Sprintf("\tCR: %s\n", result.CRName))
 
 		sb.WriteString("\tLabels: \n")
 		for labelKey, labelValue := range result.Labels {
@@ -76,7 +80,16 @@ func (s ScorecardOutput) MarshalText() (string, error) {
 		for _, err := range result.Errors {
 			sb.WriteString(fmt.Sprintf("\t\t%s\n", err))
 		}
-		sb.WriteString(fmt.Sprintf("\n"))
+
+		if result.Log != "" {
+			sb.WriteString("\tLog:\n")
+			scanner := bufio.NewScanner(strings.NewReader(result.Log))
+			for scanner.Scan() {
+				sb.WriteString(fmt.Sprintf("\t\t%s\n", scanner.Text()))
+			}
+		}
+
+		sb.WriteString("\n")
 	}
 
 	return sb.String(), nil

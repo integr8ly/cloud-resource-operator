@@ -111,7 +111,7 @@ func getDeploymentPod(cl *kubernetes.Clientset, dpl *appsv1.Deployment) (podName
 	listOptions := metav1.ListOptions{
 		LabelSelector: "deployment=" + name,
 	}
-	podList, _ := api.Pods(ns).List(listOptions)
+	podList, _ := api.Pods(ns).List(context.Background(),listOptions)
 	podListItems := podList.Items
 	if len(podListItems) == 0 {
 		return "", err
@@ -119,6 +119,7 @@ func getDeploymentPod(cl *kubernetes.Clientset, dpl *appsv1.Deployment) (podName
 	podName = podListItems[0].Name
 	return podName, nil
 }
+
 
 func GetK8Client() (*kubernetes.Clientset, error) {
 	cfg, err := config.GetConfig()
