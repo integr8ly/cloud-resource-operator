@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"strconv"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -405,6 +406,10 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	// resolve elasticache information for elasticache created by provider
 	logger := p.Logger.WithField("action", "DeleteRedis")
 	logger.Infof("reconciling delete redis %s", r.Name)
+
+	// expose metrics about the redis being deleted
+	p.setRedisDeletionTimestampMetric(ctx, r)
+
 	elasticacheCreateConfig, elasticacheDeleteConfig, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
@@ -831,6 +836,29 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
 	} else {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
+	}
+}
+
+// set metrics about the redis instance being deleted
+// works in a similar way to kube_pod_deletion_timestamp
+// https://github.com/kubernetes/kube-state-metrics/blob/0bfc2981f9c281c78e33052abdc2d621630562b9/internal/store/pod.go#L200-L218
+func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, cr *v1alpha1.Redis) {
+	if cr.DeletionTimestamp != nil && !cr.DeletionTimestamp.IsZero() {
+		// build cache name
+		cacheName, err := p.buildCacheName(ctx, cr)
+		if err != nil {
+			logrus.Errorf("error occurred while building instance name while exposing redis metrics: %v", err)
+		}
+
+		logrus.Info("setting redis information metric")
+		clusterID, err := resources.GetClusterID(ctx, p.Client)
+		if err != nil {
+			logrus.Errorf("failed to get cluster id while exposing information metrics for %s : %v", cacheName, err)
+			return
+		}
+
+		labels := buildRedisStatusMetricsLabels(cr, clusterID, cacheName, cr.Status.Phase)
+		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(cr.DeletionTimestamp.Unix()))
 	}
 }
 

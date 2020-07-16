@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"strconv"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -394,6 +395,8 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "DeletePostgres")
 	logger.Infof("reconciling postgres %s", r.Name)
+	p.setPostgresDeletionTimestampMetric(ctx, r)
+
 	// resolve postgres information for postgres created by provider
 	rdsCreateConfig, rdsDeleteConfig, stratCfg, err := p.getRDSConfig(ctx, r)
 	if err != nil {
@@ -440,6 +443,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 
 func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
+
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	pgs, err := getRDSInstances(instanceSvc)
 	if err != nil {
@@ -962,6 +966,30 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
 	} else {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
+	}
+}
+
+// set metrics about the postgres instance being deleted
+// works in a similar way to kube_pod_deletion_timestamp
+// https://github.com/kubernetes/kube-state-metrics/blob/0bfc2981f9c281c78e33052abdc2d621630562b9/internal/store/pod.go#L200-L218
+func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Context, cr *v1alpha1.Postgres) {
+	if cr.DeletionTimestamp != nil && !cr.DeletionTimestamp.IsZero() {
+		// build instance name
+		instanceName, err := p.buildInstanceName(ctx, cr)
+		if err != nil {
+			logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
+		}
+
+		// get Cluster Id
+		logrus.Info("setting postgres information metric")
+		clusterID, err := resources.GetClusterID(ctx, p.Client)
+		if err != nil {
+			logrus.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
+			return
+		}
+
+		labels := buildPostgresStatusMetricsLabels(cr, clusterID, instanceName, cr.Status.Phase)
+		resources.SetMetric(resources.DefaultPostgresDeletionMetricName, labels, float64(cr.DeletionTimestamp.Unix()))
 	}
 }
 
