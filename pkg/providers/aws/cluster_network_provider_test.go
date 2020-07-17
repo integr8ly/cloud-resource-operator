@@ -5,20 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"net"
 	"reflect"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -386,14 +386,16 @@ func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
 	}
 }
 
-func buildElasticacheSubnetGroup() []*elasticache.CacheSubnetGroup {
-	return []*elasticache.CacheSubnetGroup{
-		{
-			CacheSubnetGroupName:        aws.String(buildSubnetGroupID()),
-			VpcId:                       aws.String("test"),
-			CacheSubnetGroupDescription: aws.String(buildSubnetGroupDescription()),
-		},
+func buildElasticacheSubnetGroup(modifyFn func(*elasticache.CacheSubnetGroup)) *elasticache.CacheSubnetGroup {
+	mock := &elasticache.CacheSubnetGroup{
+		CacheSubnetGroupName:        aws.String(buildSubnetGroupID()),
+		VpcId:                       aws.String("test"),
+		CacheSubnetGroupDescription: aws.String(buildSubnetGroupDescription()),
 	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
 }
 
 func buildValidIpNet(CIDR string) *net.IPNet {
@@ -656,12 +658,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {}),
+								buildMockEc2RouteTable(nil),
 							},
 						}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -727,15 +729,21 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {}),
+								buildMockEc2RouteTable(nil),
 							},
 						}, nil
 					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.cacheSubnetGroup = buildElasticacheSubnetGroup()
 					elasticacheClient.modifyCacheSubnetGroupFn = func(input *elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error) {
 						return &elasticache.ModifyCacheSubnetGroupOutput{}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								buildElasticacheSubnetGroup(nil),
+							},
+						}, nil
 					}
 				}),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
@@ -762,12 +770,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {}),
+								buildMockEc2RouteTable(nil),
 							},
 						}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -792,12 +800,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {}),
+								buildMockEc2RouteTable(nil),
 							},
 						}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -822,12 +830,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {}),
+								buildMockEc2RouteTable(nil),
 							},
 						}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -846,7 +854,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					vpcs:    []*ec2.Vpc{buildValidClusterVPC(validCIDRSixteen)[0]},
 					subnets: []*ec2.Subnet{},
 				},
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -870,7 +878,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						return &ec2.DescribeRouteTablesOutput{RouteTables: []*ec2.RouteTable{}}, nil
 					}
 				}),
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -928,7 +936,7 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{}},
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -942,7 +950,7 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi:         &mockRdsClient{},
 				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}},
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -953,10 +961,14 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 		{
 			name: "verify deletion - of standalone vpc and associated subnets",
 			fields: fields{
-				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{},
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
 				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}, subnets: buildStandaloneSubnets()},
-				ElasticacheApi: &mockElasticacheClient{},
+				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -967,11 +979,25 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 		{
 			name: "verify deletion - of standalone vpc and associated subnets and subnet groups",
 			fields: fields{
-				Client:         fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{subnetGroups: buildRDSSubnetGroup()},
-				Ec2Api:         &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}, subnets: buildStandaloneSubnets()},
-				ElasticacheApi: &mockElasticacheClient{cacheSubnetGroup: buildElasticacheSubnetGroup()},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}), Ec2Api: &mockEc2Client{vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)}, subnets: buildStandaloneSubnets()},
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								buildElasticacheSubnetGroup(nil),
+							},
+						}, nil
+					}
+				}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1933,6 +1959,9 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
 					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 						return &ec2.DescribeSecurityGroupsOutput{}, nil
 					}
@@ -1986,6 +2015,9 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
 					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 						return &ec2.DescribeSecurityGroupsOutput{
 							SecurityGroups: []*ec2.SecurityGroup{
@@ -2113,6 +2145,9 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
 					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 						return &ec2.DescribeSecurityGroupsOutput{
 							SecurityGroups: []*ec2.SecurityGroup{
@@ -2191,6 +2226,275 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 			}
 			if err := n.DeleteNetworkConnection(tt.args.ctx, tt.args.networkPeering); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetworkConnection() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client         client.Client
+		RdsApi         rdsiface.RDSAPI
+		Ec2Api         ec2iface.EC2API
+		ElasticacheApi elasticacheiface.ElastiCacheAPI
+		Logger         *logrus.Entry
+	}
+	type args struct {
+		ctx context.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "successfully delete subnet groups (rds and elasticache) and ec2 security group",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+									mock.GroupName = aws.String("testsecuritygroup")
+									mock.VpcId = aws.String("testID")
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildValidClusterVPC("10.0.0.0/23"),
+						}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "return error when the cluster vpc is nil",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+									mock.GroupName = aws.String("testsecuritygroup")
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "ensure that no error is returned if elasticache.ErrCodeCacheSubnetGroupNotFoundFault is returned on delete request",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, awserr.New(elasticache.ErrCodeCacheSubnetGroupNotFoundFault, "", errors.New(elasticache.ErrCodeCacheSubnetGroupNotFoundFault))
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "ensure that no error is returned if rds.ErrCodeDBSubnetGroupNotFoundFault is returned on delete request",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, awserr.New(rds.ErrCodeDBSubnetGroupNotFoundFault, "", errors.New(rds.ErrCodeDBSubnetGroupNotFoundFault))
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "return error when aws error returned on deletecachesubnetgroup",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, awserr.New(elasticache.ErrCodeAuthorizationNotFoundFault, "", errors.New(elasticache.ErrCodeAuthorizationNotFoundFault))
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "return error when aws error returned on deletedbsubnetgroup",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, awserr.New(rds.ErrCodeAuthorizationNotFoundFault, "", errors.New(rds.ErrCodeAuthorizationNotFoundFault))
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &NetworkProvider{
+				Client:         tt.fields.Client,
+				RdsApi:         tt.fields.RdsApi,
+				Ec2Api:         tt.fields.Ec2Api,
+				ElasticacheApi: tt.fields.ElasticacheApi,
+				Logger:         tt.fields.Logger,
+			}
+			if err := n.DeleteBundledCloudResources(tt.args.ctx); (err != nil) != tt.wantErr {
+				t.Errorf("NetworkProvider.DeleteBundledCloudResources() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

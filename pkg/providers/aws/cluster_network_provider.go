@@ -27,6 +27,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"reflect"
+	"sort"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -39,10 +43,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
-	"net"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
 
 	errorUtil "github.com/pkg/errors"
 )
@@ -98,6 +99,7 @@ type NetworkManager interface {
 	GetClusterNetworkPeering(context.Context) (*NetworkPeering, error)
 	DeleteNetworkPeering(*NetworkPeering) error
 	IsEnabled(context.Context) (bool, error)
+	DeleteBundledCloudResources(context.Context) error
 }
 
 var _ NetworkManager = (*NetworkProvider)(nil)
@@ -683,6 +685,69 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	}
 	logger.Infof("found %d bundled vpc subnets in cluster vpc", len(validBundledVPCSubnets))
 	return len(validBundledVPCSubnets) == 0, nil
+}
+
+// DeleteBundledCloudResources returns an error on any error deleting of the following resources
+// * elasticache subnet group
+// * rds subnet group
+// * ec2 security group
+//
+// it has been located under the cluster network provider as it requires 3 different aws sessions
+// (elasticache, rds and ec2) to delete the required resources even though it deals with bundled
+// resources. The majority of the functionality in this file relates to standalone aws vpc and it's
+// resources.
+func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error {
+	logger := n.Logger.WithField("action", "deleteBundledCloudResources")
+
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, "subnetgroup", DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building bundle subnet group resource name on deletion")
+	}
+	logger.Infof("deleting bundled elasticache subnet group %s, if it's not found it's already deleted and will continue", subnetGroupName)
+	_, err = n.ElasticacheApi.DeleteCacheSubnetGroup(&elasticache.DeleteCacheSubnetGroupInput{
+		CacheSubnetGroupName: aws.String(subnetGroupName),
+	})
+	cacheSubnetErr, isAwsErr := err.(awserr.Error)
+	if err != nil && isAwsErr && cacheSubnetErr.Code() != elasticache.ErrCodeCacheSubnetGroupNotFoundFault {
+		return errorUtil.Wrap(err, "error deleting elasticache subnet group")
+	}
+	logger.Infof("deleting bundled rds subnet group %s, if it's not found it's already deleted and will continue", subnetGroupName)
+	_, err = n.RdsApi.DeleteDBSubnetGroup(&rds.DeleteDBSubnetGroupInput{
+		DBSubnetGroupName: aws.String(subnetGroupName),
+	})
+	dbSubnetErr, isAwsErr := err.(awserr.Error)
+	if err != nil && isAwsErr && dbSubnetErr.Code() != rds.ErrCodeDBSubnetGroupNotFoundFault {
+		return errorUtil.Wrap(err, "error deleting rds subnet group")
+	}
+
+	securityGroupName, err := BuildInfraName(ctx, n.Client, "securitygroup", DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building bundle security group resource name on deletion")
+	}
+	logger.Infof("Deleting bundled ec2 security group %s, if it's not found it's already deleted and will continue", securityGroupName)
+	// in the case of the security group the Group Id is required in order to delete security groups
+	// not connected with the default vpc. In order to delete it it is required to describe them
+	// all in the account and then find the one with the correct group name and then request deletion
+	// using the group id of the matched security group
+	securityGroup, err := getSecurityGroup(n.Ec2Api, securityGroupName)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting ec2 security group")
+	}
+	if securityGroup == nil {
+		return nil
+	}
+	vpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, logger)
+	if err != nil {
+		return errorUtil.Wrap(err, "error getting cluster vpc")
+	}
+	if securityGroup.VpcId != nil && vpc.VpcId != nil && aws.StringValue(securityGroup.VpcId) == aws.StringValue(vpc.VpcId) {
+		if _, err = n.Ec2Api.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{
+			GroupId: securityGroup.GroupId,
+		}); err != nil {
+			return errorUtil.Wrap(err, "error deleting bundled security group")
+		}
+	}
+	return nil
 }
 
 func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Network) (*ec2.VpcPeeringConnection, error) {

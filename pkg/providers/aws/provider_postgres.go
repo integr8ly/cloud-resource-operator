@@ -465,7 +465,8 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 		}
 	}
 
-	// check if instance does not exist, delete finalizer and credential secret
+	// check if instance exists, if it does attempt to delete it
+	// if not delete finalizer and credential secret
 	if foundInstance != nil {
 		// set status metric
 		p.exposePostgresMetrics(ctx, pg, foundInstance)
@@ -522,6 +523,17 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 
 		if err = networkManager.DeleteNetwork(ctx); err != nil {
 			msg := "failed to delete aws networking"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+	}
+
+	// in the case of standalone network not existing and the last resource is being deleted the
+	// bundled networking resources should be cleaned up similarly to standalone networking resources
+	// this involves the deletion of bundled elasticace and rds subnet group and ec2 security group
+	if !standaloneNetworkExists && isLastResource {
+		err := networkManager.DeleteBundledCloudResources(ctx)
+		if err != nil {
+			msg := "failed to delete bundled networking resources"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}

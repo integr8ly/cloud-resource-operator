@@ -522,6 +522,17 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
+
+	// in the case of standalone network not existing and the last resource is being deleted the
+	// bundled networking resources should be cleaned up similarly to standalone networking resources
+	// this involves the deletion of bundled elasticace and rds subnet group and ec2 security group
+	if !standaloneNetworkExists && isLastResource {
+		err := networkManager.DeleteBundledCloudResources(ctx)
+		if err != nil {
+			msg := "failed to delete bundled networking resources"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+	}
 	// remove the finalizer added by the provider
 	resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, r); err != nil {

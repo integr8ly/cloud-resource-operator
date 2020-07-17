@@ -10,14 +10,15 @@ import (
 )
 
 var (
-	lockNetworkManagerMockCreateNetwork            sync.RWMutex
-	lockNetworkManagerMockCreateNetworkConnection  sync.RWMutex
-	lockNetworkManagerMockCreateNetworkPeering     sync.RWMutex
-	lockNetworkManagerMockDeleteNetwork            sync.RWMutex
-	lockNetworkManagerMockDeleteNetworkConnection  sync.RWMutex
-	lockNetworkManagerMockDeleteNetworkPeering     sync.RWMutex
-	lockNetworkManagerMockGetClusterNetworkPeering sync.RWMutex
-	lockNetworkManagerMockIsEnabled                sync.RWMutex
+	lockNetworkManagerMockCreateNetwork               sync.RWMutex
+	lockNetworkManagerMockCreateNetworkConnection     sync.RWMutex
+	lockNetworkManagerMockCreateNetworkPeering        sync.RWMutex
+	lockNetworkManagerMockDeleteBundledCloudResources sync.RWMutex
+	lockNetworkManagerMockDeleteNetwork               sync.RWMutex
+	lockNetworkManagerMockDeleteNetworkConnection     sync.RWMutex
+	lockNetworkManagerMockDeleteNetworkPeering        sync.RWMutex
+	lockNetworkManagerMockGetClusterNetworkPeering    sync.RWMutex
+	lockNetworkManagerMockIsEnabled                   sync.RWMutex
 )
 
 // Ensure, that NetworkManagerMock does implement NetworkManager.
@@ -38,6 +39,9 @@ var _ NetworkManager = &NetworkManagerMock{}
 //             },
 //             CreateNetworkPeeringFunc: func(in1 context.Context, in2 *Network) (*NetworkPeering, error) {
 // 	               panic("mock out the CreateNetworkPeering method")
+//             },
+//             DeleteBundledCloudResourcesFunc: func(in1 context.Context) error {
+// 	               panic("mock out the DeleteBundledCloudResources method")
 //             },
 //             DeleteNetworkFunc: func(in1 context.Context) error {
 // 	               panic("mock out the DeleteNetwork method")
@@ -69,6 +73,9 @@ type NetworkManagerMock struct {
 
 	// CreateNetworkPeeringFunc mocks the CreateNetworkPeering method.
 	CreateNetworkPeeringFunc func(in1 context.Context, in2 *Network) (*NetworkPeering, error)
+
+	// DeleteBundledCloudResourcesFunc mocks the DeleteBundledCloudResources method.
+	DeleteBundledCloudResourcesFunc func(in1 context.Context) error
 
 	// DeleteNetworkFunc mocks the DeleteNetwork method.
 	DeleteNetworkFunc func(in1 context.Context) error
@@ -107,6 +114,11 @@ type NetworkManagerMock struct {
 			In1 context.Context
 			// In2 is the in2 argument value.
 			In2 *Network
+		}
+		// DeleteBundledCloudResources holds details about calls to the DeleteBundledCloudResources method.
+		DeleteBundledCloudResources []struct {
+			// In1 is the in1 argument value.
+			In1 context.Context
 		}
 		// DeleteNetwork holds details about calls to the DeleteNetwork method.
 		DeleteNetwork []struct {
@@ -240,6 +252,37 @@ func (mock *NetworkManagerMock) CreateNetworkPeeringCalls() []struct {
 	lockNetworkManagerMockCreateNetworkPeering.RLock()
 	calls = mock.calls.CreateNetworkPeering
 	lockNetworkManagerMockCreateNetworkPeering.RUnlock()
+	return calls
+}
+
+// DeleteBundledCloudResources calls DeleteBundledCloudResourcesFunc.
+func (mock *NetworkManagerMock) DeleteBundledCloudResources(in1 context.Context) error {
+	if mock.DeleteBundledCloudResourcesFunc == nil {
+		panic("NetworkManagerMock.DeleteBundledCloudResourcesFunc: method is nil but NetworkManager.DeleteBundledCloudResources was just called")
+	}
+	callInfo := struct {
+		In1 context.Context
+	}{
+		In1: in1,
+	}
+	lockNetworkManagerMockDeleteBundledCloudResources.Lock()
+	mock.calls.DeleteBundledCloudResources = append(mock.calls.DeleteBundledCloudResources, callInfo)
+	lockNetworkManagerMockDeleteBundledCloudResources.Unlock()
+	return mock.DeleteBundledCloudResourcesFunc(in1)
+}
+
+// DeleteBundledCloudResourcesCalls gets all the calls that were made to DeleteBundledCloudResources.
+// Check the length with:
+//     len(mockedNetworkManager.DeleteBundledCloudResourcesCalls())
+func (mock *NetworkManagerMock) DeleteBundledCloudResourcesCalls() []struct {
+	In1 context.Context
+} {
+	var calls []struct {
+		In1 context.Context
+	}
+	lockNetworkManagerMockDeleteBundledCloudResources.RLock()
+	calls = mock.calls.DeleteBundledCloudResources
+	lockNetworkManagerMockDeleteBundledCloudResources.RUnlock()
 	return calls
 }
 
