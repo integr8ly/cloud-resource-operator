@@ -5,6 +5,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
+	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -14,24 +16,10 @@ import (
 	"time"
 )
 
-//todo update the providermetricnames to match the elasticache specific ones
-var redisCloudWatchMetricTypes = []providers.CloudProviderMetricType{
-	{
-		PromethuesMetricName: "cro_elasticache_free_storage_average",
-		//ProviderMetricName:   "FreeStorageSpace",
-		Statistic: "Average",
-	},
-	{
-		PromethuesMetricName: "cro_elasticache_free_storage_average_maximum",
-		//ProviderMetricName:   "FreeStorageSpace",
-		Statistic: "Maximum",
-	},
-	{
-		PromethuesMetricName: "cro_elasticache_free_storage_average_minimum",
-		//ProviderMetricName:   "FreeStorageSpace",
-		Statistic: "Minimum",
-	},
-}
+const (
+	redisMetricProviderName        = "aws elasticache metrics provider"
+	cloudWatchElastiCacheDimension = "CacheClusterId"
+)
 
 var _ providers.RedisMetricsProvider = (*RedisMetricsProvider)(nil)
 
@@ -45,7 +33,7 @@ type RedisMetricsProvider struct {
 func NewAWSRedisMetricsProvider(client client.Client, logger *logrus.Entry) *RedisMetricsProvider {
 	return &RedisMetricsProvider{
 		Client:            client,
-		Logger:            logger.WithFields(logrus.Fields{"providers": redisProviderName}),
+		Logger:            logger.WithFields(logrus.Fields{"providers": redisMetricProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
@@ -55,7 +43,7 @@ func (r *RedisMetricsProvider) SupportsStrategy(strategy string) bool {
 	return strategy == providers.AWSDeploymentStrategy
 }
 
-func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1alpha1.Redis) (*providers.ScrapeMetricsData, error) {
+func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1alpha1.Redis, metricTypes []providers.CloudProviderMetricType) (*providers.ScrapeMetricsData, error) {
 	logger := resources.NewActionLoggerWithFields(r.Logger, map[string]interface{}{
 		resources.LoggingKeyAction: "ScrapeMetrics",
 		"Resource":                 redis.Name,
@@ -82,7 +70,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}
 
 	// scrape metric data from cloud watch
-	cloudMetrics, err := r.scrapeRedisCloudWatchMetricData(ctx, cloudwatch.New(sess), redis)
+	cloudMetrics, err := r.scrapeRedisCloudWatchMetricData(ctx, cloudwatch.New(sess), redis, elasticache.New(sess), metricTypes)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to scrape elasticache cloud watch metrics")
 	}
@@ -92,7 +80,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}, nil
 }
 
-func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, redis *v1alpha1.Redis) ([]*providers.GenericCloudMetric, error) {
+func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, redis *v1alpha1.Redis, elastiCacheApi elasticacheiface.ElastiCacheAPI, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
 	resourceID, err := BuildInfraNameFromObject(ctx, r.Client, redis.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)
@@ -102,58 +90,100 @@ func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Conte
 	// for more info see https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_GetMetricData.html
 	logger := resources.NewActionLogger(r.Logger, "scrapeRedisCloudWatchMetricData")
 	logger.Infof("scraping redis instance %s cloud watch metrics", resourceID)
-	metricOutput, err := cloudWatchApi.GetMetricData(&cloudwatch.GetMetricDataInput{
-		// build metric data query array from `elasticacheCloudWatchMetricTypes`
-		MetricDataQueries: buildRedisMetricDataQuery(resourceID),
-		// metrics gathered from start time to end time
-		StartTime: aws.Time(time.Now().Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration))),
-		EndTime:   aws.Time(time.Now()),
-	})
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting metric for elasticache")
-	}
 
-	// get cluster if for use in metric labels
-	clusterID, err := resources.GetClusterID(ctx, r.Client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting clusterID")
-	}
-
-	// ensure metric data results are not nil
-	if metricOutput.MetricDataResults == nil {
-		return nil, errorUtil.New("no metric data returned from elasticache cloudwatch")
-	}
-
-	logger.Infof("parsing elasticache cloud watch metrics for redis %s", resourceID)
-	// parse the returned data from the cloudwatch to a GenericCloudMetric
 	var metrics []*providers.GenericCloudMetric
-	for _, metricData := range metricOutput.MetricDataResults {
-		// status code complete ensures all metrics have been successful
-		if *metricData.StatusCode != cloudwatch.StatusCodeComplete {
-			continue
+	listOutput, err := elastiCacheApi.DescribeReplicationGroups(&elasticache.DescribeReplicationGroupsInput{})
+    if err != nil {
+    	logrus.Error("failed to describe replicationGroups",err)
+	}
+	replicationGroups := listOutput.ReplicationGroups
+	// Metrics are returned per node for ElastiCache
+	var foundCache *elasticache.ReplicationGroup
+	for _, c := range replicationGroups {
+		if *c.ReplicationGroupId == resourceID {
+			foundCache = c
+			break
 		}
-		// depending on the number of data points, several values can be returned
-		for _, value := range metricData.Values {
-			// convert aws metric data to generic cloud metric data
-			metrics = append(metrics, &providers.GenericCloudMetric{
-				Name: *metricData.Id,
-				Labels: map[string]string{
-					"clusterID":   clusterID,
-					"resourceID":  redis.Name,
-					"namespace":   redis.Namespace,
-					"instanceID":  resourceID,
-					"productName": redis.Labels["productName"],
-					"strategy":    redisProviderName,
-				},
-				Value: *value,
-			})
+	}
+	// poll MemberCluster array for CacheClusterId
+	for _, cacheClusterId := range foundCache.MemberClusters {
+		//cast string pointer to string
+		cacheClusterIdString := "" + *cacheClusterId
+		metricOutput, err := cloudWatchApi.GetMetricData(&cloudwatch.GetMetricDataInput{
+			// build metric data query array from `metricType`
+			MetricDataQueries: buildRedisMetricDataQuery(cacheClusterIdString, metricTypes),
+			// metrics gathered from start time to end time
+			StartTime: aws.Time(time.Now().Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration))),
+			EndTime:   aws.Time(time.Now()),
+		})
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "error getting metric for elasticache")
 		}
+
+		// get cluster if for use in metric labels
+		clusterID, err := resources.GetClusterID(ctx, r.Client)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "error getting clusterID")
+		}
+
+		// ensure metric data results are not nil
+		if metricOutput.MetricDataResults == nil {
+			return nil, errorUtil.New("no metric data returned from elasticache cloudwatch")
+		}
+
+		logger.Infof("parsing elasticache cloud watch metrics for redis %s", resourceID)
+		// parse the returned data from the cloudwatch to a GenericCloudMetric
+
+		for _, metricData := range metricOutput.MetricDataResults {
+			// status code complete ensures all metrics have been successful
+			if *metricData.StatusCode != cloudwatch.StatusCodeComplete {
+				continue
+			}
+			// depending on the number of data points, several values can be returned
+			for _, value := range metricData.Values {
+				// convert aws metric data to generic cloud metric data
+				metrics = append(metrics, &providers.GenericCloudMetric{
+					Name: *metricData.Id,
+					Labels: map[string]string{
+						"clusterID":   clusterID,
+						"resourceID":  redis.Name,
+						"namespace":   redis.Namespace,
+						"instanceID":  cacheClusterIdString,
+						"productName": redis.Labels["productName"],
+						"strategy":    redisProviderName,
+					},
+					Value: *value,
+				})
+			}
+		}
+
 	}
 	return metrics, nil
 
 }
 
-func buildRedisMetricDataQuery(resourceID string) []*cloudwatch.MetricDataQuery {
-	//todo build this out
-	return nil
+func buildRedisMetricDataQuery(cacheClusterId string, metricTypes []providers.CloudProviderMetricType) []*cloudwatch.MetricDataQuery {
+	var metricDataQueries []*cloudwatch.MetricDataQuery
+	for _, metricType := range metricTypes {
+		metricDataQueries = append(metricDataQueries, &cloudwatch.MetricDataQuery{
+			// id needs to be unique, and is built from the metric name and type, and the CacheClusterId number
+			// the metric name is converted from camel case to snake case to allow it to be easily reused when exposing the metrics
+			Id: aws.String(metricType.PromethuesMetricName),
+			MetricStat: &cloudwatch.MetricStat{
+				Metric: &cloudwatch.Metric{
+					MetricName: aws.String(metricType.ProviderMetricName),
+					Namespace:  aws.String("AWS/ElastiCache"),
+					Dimensions: []*cloudwatch.Dimension{
+						{
+							Name:  aws.String(cloudWatchElastiCacheDimension),
+							Value: aws.String(cacheClusterId),
+						},
+					},
+				},
+				Stat:   aws.String(metricType.Statistic),
+				Period: aws.Int64(int64(resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration).Seconds())),
+			},
+		})
+	}
+	return metricDataQueries
 }

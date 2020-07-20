@@ -1,0 +1,248 @@
+package aws
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
+	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/moq/moq_aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/sirupsen/logrus"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"testing"
+)
+
+const (
+	testRedisMetricName  = "mock_result_id"
+	testRedisMetricValue = 1.11111
+)
+
+func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup {
+	var (
+		cacheClusterId1 = "test-001"
+		cacheClusterId2 = "test-002"
+	)
+	return []*elasticache.ReplicationGroup{
+		{
+			ReplicationGroupId:     aws.String("testtesttest"),
+			Status:                 aws.String("available"),
+			CacheNodeType:          aws.String("test"),
+			SnapshotRetentionLimit: aws.Int64(20),
+			MemberClusters:         []*string{&cacheClusterId1, &cacheClusterId2},
+			NodeGroups: []*elasticache.NodeGroup{
+				{
+					NodeGroupId:      aws.String("primary-node"),
+					NodeGroupMembers: nil,
+					PrimaryEndpoint: &elasticache.Endpoint{
+						Address: testAddress,
+						Port:    testPort,
+					},
+					Status: aws.String("available"),
+				},
+			},
+		},
+	}
+}
+
+var testRedisMetricLabels1 = map[string]string{
+	"clusterID":   "test",
+	"instanceID":  "test-001",
+	"namespace":   "test",
+	"productName": "",
+	"resourceID":  "test",
+	"strategy":    "aws-elasticache",
+}
+var testRedisMetricLabels2 = map[string]string{
+	"clusterID":   "test",
+	"instanceID":  "test-002",
+	"namespace":   "test",
+	"productName": "",
+	"resourceID":  "test",
+	"strategy":    "aws-elasticache",
+}
+
+func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx               context.Context
+		cloudWatchApi     cloudwatchiface.CloudWatchAPI
+		redis             *v1alpha1.Redis
+		elastiCacheApi	  elasticacheiface.ElastiCacheAPI
+		metricTypes       []providers.CloudProviderMetricType
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    []*providers.GenericCloudMetric
+		wantErr bool
+	}{
+		{
+			name: "test successful scrape of cloud watch metrics",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
+					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
+						return &cloudwatch.GetMetricDataOutput{
+							MetricDataResults: []*cloudwatch.MetricDataResult{
+								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
+									result.Id = aws.String(testMetricName)
+									result.Values = []*float64{
+										aws.Float64(testMetricValue),
+									}
+								}),
+							},
+						}, nil
+					}
+				}),
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
+						}, nil
+					}
+				}),
+				redis:             buildTestRedisCR(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
+			},
+			want: []*providers.GenericCloudMetric{
+				{
+					Name:   testRedisMetricName,
+					Value:  testRedisMetricValue,
+					Labels: testRedisMetricLabels1,
+				},
+				{
+					Name:   testRedisMetricName,
+					Value:  testRedisMetricValue,
+					Labels: testRedisMetricLabels2,
+				},
+
+			},
+			wantErr: false,
+		},
+		{
+			name: "test successful scrape of cloud watch metrics, with 1 not complete metric",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
+					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
+						return &cloudwatch.GetMetricDataOutput{
+							MetricDataResults: []*cloudwatch.MetricDataResult{
+								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
+									result.Id = aws.String(testMetricName)
+									result.Values = []*float64{
+										aws.Float64(testMetricValue),
+									}
+								}),
+								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
+									result.StatusCode = aws.String(cloudwatch.StatusCodeInternalError)
+								}),
+							},
+						}, nil
+					}
+				}),
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
+						}, nil
+					}
+				}),
+				redis:             buildTestRedisCR(),
+				//replicationGroups: buildReplicationGroupReadyCacheClusterId(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
+			},
+			want: []*providers.GenericCloudMetric{
+				{
+					Name:   testRedisMetricName,
+					Value:  testRedisMetricValue,
+					Labels: testRedisMetricLabels1,
+				},
+				{
+					Name:   testRedisMetricName,
+					Value:  testRedisMetricValue,
+					Labels: testRedisMetricLabels2,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test no metrics have been returned from cloudwatch scrape",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
+					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
+						return &cloudwatch.GetMetricDataOutput{}, nil
+					}
+				}),
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
+						}, nil
+					}
+				}),
+				redis:             buildTestRedisCR(),
+				//replicationGroups: buildReplicationGroupReadyCacheClusterId(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RedisMetricsProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := r.scrapeRedisCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchApi, tt.args.redis, tt.args.elastiCacheApi, tt.args.metricTypes)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("scrapeRedisCloudWatchMetricData() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("scrapeRedisCloudWatchMetricData() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

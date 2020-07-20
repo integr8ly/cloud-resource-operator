@@ -29,6 +29,9 @@ const (
 	postgresCPUUtilizationAverage = "cro_postgres_cpu_utilization_average"
 	postgresFreeableMemoryAverage = "cro_postgres_freeable_memory_average"
 
+	redisMemoryUsagePercentageAverage = "cro_redis_memory_usage_percentage_average"
+	redisFreeableMemoryAverage        = "cro_redis_freeable_memory_average"
+
 	labelClusterIDKey   = "clusterID"
 	labelResourceIDKey  = "resourceID"
 	labelNamespaceKey   = "namespace"
@@ -109,7 +112,41 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 
 // redisGaugeMetrics stores a mapping between an exposed (redis) prometheus metric and multiple cloud provider specific metric
 // to add any addition metrics simply add to this mapping and it will be scraped and exposed
-var redisGaugeMetrics []CroGaugeMetric
+var redisGaugeMetrics = []CroGaugeMetric{
+	{
+		Name: redisMemoryUsagePercentageAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: redisMemoryUsagePercentageAverage,
+				Help: "The percentage of redis used memory. Units: Bytes",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: redisMemoryUsagePercentageAverage,
+				//calculated on used_memory/maxmemory from Redis INFO http://redis.io/commands/info
+				ProviderMetricName: "DatabaseMemoryUsagePercentage",
+				Statistic:          cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: redisFreeableMemoryAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: redisFreeableMemoryAverage,
+				Help: "The amount of available random access memory. Units: Bytes",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: redisFreeableMemoryAverage,
+				ProviderMetricName:   "FreeableMemory",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+}
 
 // Add creates a new CloudMetrics Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -206,16 +243,41 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 			if !p.SupportsStrategy(redis.Status.Strategy) {
 				continue
 			}
+			var redisMetricTypes []providers.CloudProviderMetricType
+			for _, gaugeMetric := range redisGaugeMetrics {
+				for provider, metricType := range gaugeMetric.ProviderType {
+					if provider == redis.Status.Strategy {
+						redisMetricTypes = append(redisMetricTypes, metricType)
+						continue
+					}
+				}
+			}
 
 			// all redis scrapedMetric providers inherit the same interface
 			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
-			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis)
+			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis, redisMetricTypes)
 			if err != nil {
 				r.logger.Errorf("failed to scrape metrics for redis %v", err)
 				continue
 			}
 
 			scrapedMetrics = append(scrapedMetrics, scrapedMetricsOutput.Metrics...)
+		}
+	}
+	// for each scraped metric value we check redisGaugeMetrics for a match and set the value and labels
+	for _, scrapedMetric := range scrapedMetrics {
+		for _, croMetric := range redisGaugeMetrics {
+			if scrapedMetric.Name == croMetric.Name {
+				croMetric.GaugeVec.WithLabelValues(
+					scrapedMetric.Labels[labelClusterIDKey],
+					scrapedMetric.Labels[labelResourceIDKey],
+					scrapedMetric.Labels[labelNamespaceKey],
+					scrapedMetric.Labels[labelInstanceIDKey],
+					scrapedMetric.Labels[labelProductNameKey],
+					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
+				r.logger.Infof("successfully set redis metric value for %s", croMetric.Name)
+				continue
+			}
 		}
 	}
 
@@ -268,7 +330,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 					scrapedMetric.Labels[labelInstanceIDKey],
 					scrapedMetric.Labels[labelProductNameKey],
 					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
-				r.logger.Infof("successfully set metric value for %s", croMetric.Name)
+				r.logger.Infof("successfully set postgres metric value for %s", croMetric.Name)
 				continue
 			}
 		}
