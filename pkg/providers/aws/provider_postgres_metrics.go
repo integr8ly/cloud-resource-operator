@@ -15,7 +15,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
@@ -25,7 +24,6 @@ import (
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 	"time"
 )
 
@@ -40,16 +38,6 @@ var rdsCloudWatchMetricTypes = []providers.CloudProviderMetricType{
 		PromethuesMetricName: "cro_postgres_free_storage_average",
 		ProviderMetricName:   "FreeStorageSpace",
 		Statistic:            "Average",
-	},
-	{
-		PromethuesMetricName: "cro_postgres_free_storage_average_maximum",
-		ProviderMetricName:   "FreeStorageSpace",
-		Statistic:            "Maximum",
-	},
-	{
-		PromethuesMetricName: "cro_postgres_free_storage_average_minimum",
-		ProviderMetricName:   "FreeStorageSpace",
-		Statistic:            "Minimum",
 	},
 }
 
@@ -76,7 +64,7 @@ func (p *PostgresMetricsProvider) SupportsStrategy(strategy string) bool {
 }
 
 // ScrapeMetrics returns scraped metrics to metric controller
-func (p PostgresMetricsProvider) ScrapeRDSMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*providers.ScrapeMetricsData, error) {
+func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*providers.ScrapeMetricsData, error) {
 	logger := resources.NewActionLoggerWithFields(p.Logger, map[string]interface{}{
 		resources.LoggingKeyAction: "ScrapeMetrics",
 		"Resource":                 postgres.Name,
@@ -143,7 +131,7 @@ func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Cont
 	}
 
 	// ensure metric data results are not nil
-	if metricOutput.MetricDataResults == nil {
+	if metricOutput.MetricDataResults == nil || len(metricOutput.MetricDataResults) == 0 {
 		return nil, errorUtil.New("no metric data returned from rds cloudwatch")
 	}
 
@@ -182,7 +170,7 @@ func buildRDSMetricDataQuery(resourceID string) []*cloudwatch.MetricDataQuery {
 		metricDataQueries = append(metricDataQueries, &cloudwatch.MetricDataQuery{
 			// id needs to be unique, and is built from the metric name and type
 			// the metric name is converted from camel case to snake case to allow it to be easily reused when exposing the metric
-			Id: aws.String(fmt.Sprintf("%s_%s", strings.ToLower(resources.ToSnakeCase(metricType.ProviderMetricName)), strings.ToLower(metricType.Statistic))),
+			Id: aws.String(metricType.PromethuesMetricName),
 			MetricStat: &cloudwatch.MetricStat{
 				Metric: &cloudwatch.Metric{
 					MetricName: aws.String(metricType.ProviderMetricName),

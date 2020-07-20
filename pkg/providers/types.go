@@ -151,6 +151,5 @@ type RedisMetricsProvider interface {
 
 type PostgresMetricsProvider interface {
 	SupportsStrategy(s string) bool
-	ScrapeRDSMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*ScrapeMetricsData, error)
+	ScrapePostgresMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*ScrapeMetricsData, error)
 }
-

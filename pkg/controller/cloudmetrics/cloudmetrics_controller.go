@@ -90,31 +90,61 @@ type ReconcileCloudMetrics struct {
 // The Controller will requeue the Request every 5 minutes constantly when RequeueAfter is set
 func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("reconciling CloudMetrics")
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Fetch all redis crs
 	redisInstances := &integreatlyv1alpha1.RedisList{}
-	err := r.client.List(context.TODO(), redisInstances)
+	err := r.client.List(ctx, redisInstances)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	for _, redis := range redisInstances.Items {
 		r.logger.Infof("beginning to reconcile cloud metrics for redis cr: %s", redis.Name)
-		if err := r.reconcileRedisMetrics(ctx, &redis); err != nil {
-			r.logger.Error(err)
+		for _, p := range r.redisProviderList {
+			// only scrape metrics on supported strategies
+			if !p.SupportsStrategy(redis.Status.Strategy) {
+				continue
+			}
+
+			// all redis metric providers inherit the same interface
+			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
+			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis)
+			if err != nil {
+				r.logger.Errorf("failed to scrape metrics for redis %v", err)
+				continue
+			}
+
+			for _, metricData := range scrapedMetricsOutput.Metrics {
+				r.logger.Debug(*metricData)
+			}
 		}
 	}
 
 	// Fetch all postgres crs
 	postgresInstances := &integreatlyv1alpha1.PostgresList{}
-	err = r.client.List(context.TODO(), postgresInstances)
+	err = r.client.List(ctx, postgresInstances)
 	if err != nil {
 		r.logger.Error(err)
 	}
 	for _, postgres := range postgresInstances.Items {
 		r.logger.Infof("beginning to reconcile cloud metrics for postgres cr: %s", postgres.Name)
-		if err := r.reconcilePostgresMetrics(ctx, &postgres); err != nil {
-			r.logger.Error(err)
+		for _, p := range r.postgresProviderList {
+			// only scrape metrics on supported strategies
+			if !p.SupportsStrategy(postgres.Status.Strategy) {
+				continue
+			}
+
+			// all postgres metric providers inherit the same interface
+			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
+			scrapedMetricsOutput, err := p.ScrapePostgresMetrics(ctx, &postgres)
+			if err != nil {
+				r.logger.Errorf("failed to scrape metrics for postgres %v", err)
+				continue
+			}
+
+			for _, metricData := range scrapedMetricsOutput.Metrics {
+				r.logger.Debug(*metricData)
+			}
 		}
 	}
 
@@ -125,48 +155,4 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 	return reconcile.Result{
 		RequeueAfter: resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration),
 	}, nil
-}
-
-func (r *ReconcileCloudMetrics) reconcilePostgresMetrics(ctx context.Context, postgres *integreatlyv1alpha1.Postgres) error {
-	for _, p := range r.postgresProviderList {
-		// only scrape metrics on supported strategies
-		if !p.SupportsStrategy(postgres.Status.Strategy) {
-			continue
-		}
-
-		// all postgres metric providers inherit the same interface
-		// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
-		scrapedMetricsOutput, err := p.ScrapeRDSMetrics(ctx, postgres)
-		if err != nil {
-			r.logger.Errorf("failed to scrape metrics for postgres %v", err)
-			continue
-		}
-
-		for _, metricData := range scrapedMetricsOutput.Metrics {
-			r.logger.Debug(*metricData)
-		}
-	}
-	return nil
-}
-
-func (r *ReconcileCloudMetrics) reconcileRedisMetrics(ctx context.Context, redis *integreatlyv1alpha1.Redis) error {
-	for _, p := range r.redisProviderList {
-		// only scrape metrics on supported strategies
-		if !p.SupportsStrategy(redis.Status.Strategy) {
-			continue
-		}
-
-		// all redis metric providers inherit the same interface
-		// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
-		scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, redis)
-		if err != nil {
-			r.logger.Errorf("failed to scrape metrics for redis %v", err)
-			continue
-		}
-
-		for _, metricData := range scrapedMetricsOutput.Metrics {
-			r.logger.Debug(*metricData)
-		}
-	}
-	return nil
 }

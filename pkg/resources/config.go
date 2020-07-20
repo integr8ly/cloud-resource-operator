@@ -15,11 +15,9 @@ const (
 	EnvForceReconcileTimeout   = "ENV_FORCE_RECONCILE_TIMEOUT"
 	EnvMetricsReconcileTimeout = "ENV_METRIC_RECONCILE_TIMEOUT"
 	DefaultTagKeyPrefix        = "integreatly.org/"
-	ErrorReconcileTime         = time.Second * 30
-	SuccessReconcileTime       = time.Second * 60
 	// Set the reconcile duration for this controller.
 	// Currently it will be called once every 5 minutes
-	MetricsWatchDuration = 60 * time.Minute
+	MetricsWatchDuration = 5 * time.Minute
 )
 
 //GetForcedReconcileTimeOrDefault returns envar for reconcile time else returns default time
