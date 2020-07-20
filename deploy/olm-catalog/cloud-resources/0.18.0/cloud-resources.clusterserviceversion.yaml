@@ -283,8 +283,8 @@ spec:
   - name: Cloud Resources
     url: https://cloud-resources.domain
   maintainers:
-  - email: your@email.com
-    name: Maintainer Name
+  - email: integreatly-support@redhat.com
+    name: Integreatly
   maturity: alpha
   provider:
     name: Provider Name
