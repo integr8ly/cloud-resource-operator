@@ -59,10 +59,9 @@ code/gen: operator-sdk-v0.10
 .PHONY: gen/csv
 gen/csv:
 	sed -i.bak 's/image:.*/image: quay\.io\/integreatly\/cloud-resource-operator:v$(VERSION)/g' deploy/operator.yaml && rm deploy/operator.yaml.bak
-	@$(OPERATOR_SDK) generate packagemanifests --operator-name=cloud-resources --version $(VERSION) --update-crds --channel=integreatly --default-channel --interactive=false
+	@$(OPERATOR_SDK) generate csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --make-manifests=false --update-crds --csv-channel=integreatly --default-channel --verbose
 	@sed -i.bak 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml && rm deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml.bak
-	@sed -i.bak s/cloud-resource-operator:v$(PREV_VERSION)/cloud-resource-operator:v$(VERSION)/g deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.clusterserviceversion.yaml && rm deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.clusterserviceversion.yaml.bak
-.PHONY: code/fix
+	@sed -i.bak s/cloud-resource-operator:v$(PREV_VERSION)/cloud-resource-operator:v$(VERSION)/g deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml && rm deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml.bak
 code/fix:
 	@go mod tidy
 	@gofmt -w `find . -type f -name '*.go' -not -path "./vendor/*"`
