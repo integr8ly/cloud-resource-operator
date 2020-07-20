@@ -263,9 +263,9 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// create rds instance if it doesn't exist
 	if foundInstance == nil {
-		if annotations.Has(cr, resourceIdentifierAnnotation) {
+		if annotations.Has(cr, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Postgres CR %s in %s namespace has %s annotation with value %s, but no corresponding RDS instance was found",
-				cr.Name, cr.Namespace, resourceIdentifierAnnotation, cr.ObjectMeta.Annotations[resourceIdentifierAnnotation])
+				cr.Name, cr.Namespace, ResourceIdentifierAnnotation, cr.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
 		}
 
@@ -274,7 +274,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 			return nil, croType.StatusMessage(fmt.Sprintf("error creating rds instance %s", err)), err
 		}
 
-		annotations.Add(cr, resourceIdentifierAnnotation, *rdsCfg.DBInstanceIdentifier)
+		annotations.Add(cr, ResourceIdentifierAnnotation, *rdsCfg.DBInstanceIdentifier)
 		if err := p.Client.Update(ctx, cr); err != nil {
 			return nil, croType.StatusMessage("failed to add annotation"), err
 		}

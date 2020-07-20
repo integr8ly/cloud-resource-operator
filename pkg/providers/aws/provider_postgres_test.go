@@ -392,6 +392,9 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
+			Labels: map[string]string{
+				"productName": "test_product",
+			},
 		},
 	}
 }

@@ -5,8 +5,9 @@ package cloudmetrics
 
 import (
 	"context"
-	"time"
-
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -20,10 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// Set the reconcile duration for this controller.
-// Currently it will be called once every 5 minutes
-const watchDuration = 600
-
 // Add creates a new CloudMetrics Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -32,12 +29,16 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+	c := mgr.GetClient()
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_cloudmetrics"})
-
+	postgresProviderList := []providers.PostgresMetricsProvider{aws.NewAWSPostgresMetricsProvider(c, logger)}
+	redisProviderList := []providers.RedisMetricsProvider{aws.NewAWSRedisMetricsProvider(c, logger)}
 	return &ReconcileCloudMetrics{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		logger: logger,
+		client:               mgr.GetClient(),
+		scheme:               mgr.GetScheme(),
+		logger:               logger,
+		postgresProviderList: postgresProviderList,
+		redisProviderList:    redisProviderList,
 	}
 }
 
@@ -77,47 +78,81 @@ var _ reconcile.Reconciler = &ReconcileCloudMetrics{}
 
 // ReconcileCloudMetrics reconciles a CloudMetrics object
 type ReconcileCloudMetrics struct {
-	client client.Client
-	scheme *runtime.Scheme
-	logger *logrus.Entry
+	client               client.Client
+	scheme               *runtime.Scheme
+	logger               *logrus.Entry
+	postgresProviderList []providers.PostgresMetricsProvider
+	redisProviderList    []providers.RedisMetricsProvider
 }
 
 // Reconcile reads all redis and postgres crs periodically and reconcile metrics for these
 // resources.
 // The Controller will requeue the Request every 5 minutes constantly when RequeueAfter is set
 func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling CloudMetrics")
+	r.logger.Info("reconciling CloudMetrics")
+	ctx := context.Background()
 
 	// Fetch all redis crs
 	redisInstances := &integreatlyv1alpha1.RedisList{}
-	err := r.client.List(context.TODO(), redisInstances)
+	err := r.client.List(ctx, redisInstances)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if len(redisInstances.Items) > 0 {
-		for _, redis := range redisInstances.Items {
-			r.logger.Infof("Found redis cr: %s", redis.Name)
+	for _, redis := range redisInstances.Items {
+		r.logger.Infof("beginning to reconcile cloud metrics for redis cr: %s", redis.Name)
+		for _, p := range r.redisProviderList {
+			// only scrape metrics on supported strategies
+			if !p.SupportsStrategy(redis.Status.Strategy) {
+				continue
+			}
+
+			// all redis metric providers inherit the same interface
+			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
+			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis)
+			if err != nil {
+				r.logger.Errorf("failed to scrape metrics for redis %v", err)
+				continue
+			}
+
+			for _, metricData := range scrapedMetricsOutput.Metrics {
+				r.logger.Debug(*metricData)
+			}
 		}
-	} else {
-		r.logger.Info("Found no redis instances")
 	}
 
 	// Fetch all postgres crs
 	postgresInstances := &integreatlyv1alpha1.PostgresList{}
-	err = r.client.List(context.TODO(), postgresInstances)
+	err = r.client.List(ctx, postgresInstances)
 	if err != nil {
-		return reconcile.Result{}, err
+		r.logger.Error(err)
 	}
-	if len(postgresInstances.Items) > 0 {
-		for _, postgres := range postgresInstances.Items {
-			r.logger.Infof("Found postgres cr: %s", postgres.Name)
+	for _, postgres := range postgresInstances.Items {
+		r.logger.Infof("beginning to reconcile cloud metrics for postgres cr: %s", postgres.Name)
+		for _, p := range r.postgresProviderList {
+			// only scrape metrics on supported strategies
+			if !p.SupportsStrategy(postgres.Status.Strategy) {
+				continue
+			}
+
+			// all postgres metric providers inherit the same interface
+			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
+			scrapedMetricsOutput, err := p.ScrapePostgresMetrics(ctx, &postgres)
+			if err != nil {
+				r.logger.Errorf("failed to scrape metrics for postgres %v", err)
+				continue
+			}
+
+			for _, metricData := range scrapedMetricsOutput.Metrics {
+				r.logger.Debug(*metricData)
+			}
 		}
-	} else {
-		r.logger.Info("Found no postgres instances")
 	}
 
-	// Requeue every 5 minutes
+	// we want full control over when we scrape metrics
+	// to allow for this we only have a single requeue
+	// this ensures regardless of errors or return times
+	// all metrics are scraped and exposed at the same time
 	return reconcile.Result{
-		RequeueAfter: watchDuration * time.Second,
+		RequeueAfter: resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration),
 	}, nil
 }
