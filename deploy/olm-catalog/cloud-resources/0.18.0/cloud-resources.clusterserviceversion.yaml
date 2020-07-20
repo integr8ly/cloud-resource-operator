@@ -105,7 +105,7 @@ spec:
       kind: RedisSnapshot
       name: redissnapshots.integreatly.org
       version: v1alpha1
-  description: Cloud Resources description. TODO.
+  description: Provision and manage in-cluster and cloud provider resources (Blob Storage, Postgres, Redis)
   displayName: Cloud Resources
   icon:
   - base64data: ""
