@@ -31,7 +31,7 @@ build:
 
 .PHONY: run
 run:
-	RECTIME=30 $(OPERATOR_SDK) run --local --operator-namespace=$(NAMESPACE)
+	RECTIME=30 $(OPERATOR_SDK) run local --watch-namespace=$(NAMESPACE)
 
 .PHONY: setup/service_account
 setup/service_account:
