@@ -25,7 +25,9 @@ import (
 )
 
 const (
-	postgresFreeStorageAverage = "cro_postgres_free_storage_average"
+	postgresFreeStorageAverage    = "cro_postgres_free_storage_average"
+	postgresCPUUtilizationAverage = "cro_postgres_cpu_utilization_average"
+	postgresFreeableMemoryAverage = "cro_postgres_freeable_memory_average"
 
 	labelClusterIDKey   = "clusterID"
 	labelResourceIDKey  = "resourceID"
@@ -60,13 +62,45 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: postgresFreeStorageAverage,
-				Help: "The amount of available storage space",
+				Help: "The amount of available storage space. Units: Bytes",
 			},
 			labels),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PromethuesMetricName: postgresFreeStorageAverage,
 				ProviderMetricName:   "FreeStorageSpace",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: postgresCPUUtilizationAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: postgresCPUUtilizationAverage,
+				Help: "The percentage of CPU utilization. Units: Percent",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: postgresCPUUtilizationAverage,
+				ProviderMetricName:   "CPUUtilization",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: postgresFreeableMemoryAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: postgresFreeableMemoryAverage,
+				Help: "The amount of available random access memory. Units: Bytes",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: postgresFreeableMemoryAverage,
+				ProviderMetricName:   "FreeableMemory",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 		},
@@ -181,9 +215,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 				continue
 			}
 
-			for _, metricData := range scrapedMetricsOutput.Metrics {
-				scrapedMetrics = append(scrapedMetrics, metricData)
-			}
+			scrapedMetrics = append(scrapedMetrics, scrapedMetricsOutput.Metrics...)
 		}
 	}
 
@@ -221,9 +253,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 			}
 
 			// add the returned scraped metrics to the list of metrics
-			for _, metricData := range scrapedMetricsOutput.Metrics {
-				scrapedMetrics = append(scrapedMetrics, metricData)
-			}
+			scrapedMetrics = append(scrapedMetrics, scrapedMetricsOutput.Metrics...)
 		}
 	}
 

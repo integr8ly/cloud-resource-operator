@@ -29,11 +29,11 @@ var testMetricLabels = map[string]string{
 	"strategy":    "aws-rds",
 }
 
-func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) providers.CloudProviderMetricType{
+func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) providers.CloudProviderMetricType {
 	mock := &providers.CloudProviderMetricType{
 		PromethuesMetricName: testMetricName,
-		ProviderMetricName: "test",
-		Statistic: "test",
+		ProviderMetricName:   "test",
+		Statistic:            "test",
 	}
 	if modifyFn != nil {
 		modifyFn(mock)
@@ -56,7 +56,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		ctx           context.Context
 		cloudWatchApi cloudwatchiface.CloudWatchAPI
 		postgres      *v1alpha1.Postgres
-		metricTypes  []providers.CloudProviderMetricType
+		metricTypes   []providers.CloudProviderMetricType
 	}
 	tests := []struct {
 		name    string
