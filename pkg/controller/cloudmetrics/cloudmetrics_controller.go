@@ -5,9 +5,11 @@ package cloudmetrics
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
@@ -17,9 +19,97 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	customMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+const (
+	postgresFreeStorageAverage    = "cro_postgres_free_storage_average"
+	postgresCPUUtilizationAverage = "cro_postgres_cpu_utilization_average"
+	postgresFreeableMemoryAverage = "cro_postgres_freeable_memory_average"
+
+	labelClusterIDKey   = "clusterID"
+	labelResourceIDKey  = "resourceID"
+	labelNamespaceKey   = "namespace"
+	labelInstanceIDKey  = "instanceID"
+	labelProductNameKey = "productName"
+	labelStrategyKey    = "strategy"
+)
+
+// generic list of label keys used for Gauge Vectors
+var labels = []string{
+	labelClusterIDKey,
+	labelResourceIDKey,
+	labelNamespaceKey,
+	labelInstanceIDKey,
+	labelProductNameKey,
+	labelStrategyKey,
+}
+
+// CroGaugeMetric allows for a mapping between an exposed prometheus metric and multiple cloud provider specific metric
+type CroGaugeMetric struct {
+	Name         string
+	GaugeVec     *prometheus.GaugeVec
+	ProviderType map[string]providers.CloudProviderMetricType
+}
+
+// postgresGaugeMetrics stores a mapping between an exposed (postgres) prometheus metric and multiple cloud provider specific metric
+// to add any addition metrics simply add to this mapping and it will be scraped and exposed
+var postgresGaugeMetrics = []CroGaugeMetric{
+	{
+		Name: postgresFreeStorageAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: postgresFreeStorageAverage,
+				Help: "The amount of available storage space. Units: Bytes",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: postgresFreeStorageAverage,
+				ProviderMetricName:   "FreeStorageSpace",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: postgresCPUUtilizationAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: postgresCPUUtilizationAverage,
+				Help: "The percentage of CPU utilization. Units: Percent",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: postgresCPUUtilizationAverage,
+				ProviderMetricName:   "CPUUtilization",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: postgresFreeableMemoryAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: postgresFreeableMemoryAverage,
+				Help: "The amount of available random access memory. Units: Bytes",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: postgresFreeableMemoryAverage,
+				ProviderMetricName:   "FreeableMemory",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+}
+
+// redisGaugeMetrics stores a mapping between an exposed (redis) prometheus metric and multiple cloud provider specific metric
+// to add any addition metrics simply add to this mapping and it will be scraped and exposed
+var redisGaugeMetrics []CroGaugeMetric
 
 // Add creates a new CloudMetrics Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -33,6 +123,12 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_cloudmetrics"})
 	postgresProviderList := []providers.PostgresMetricsProvider{aws.NewAWSPostgresMetricsProvider(c, logger)}
 	redisProviderList := []providers.RedisMetricsProvider{aws.NewAWSRedisMetricsProvider(c, logger)}
+
+	// we only wish to register metrics once when the new reconciler is created
+	// as the metrics we want to expose are known in advance we can register them all
+	// they will only be exposed if there is a value returned for the vector for a provider
+	registerGaugeVectorMetrics(logger)
+
 	return &ReconcileCloudMetrics{
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
@@ -85,28 +181,33 @@ type ReconcileCloudMetrics struct {
 	redisProviderList    []providers.RedisMetricsProvider
 }
 
-// Reconcile reads all redis and postgres crs periodically and reconcile metrics for these
+// reconcile reads all redis and postgres crs periodically and reconcile metrics for these
 // resources.
-// The Controller will requeue the Request every 5 minutes constantly when RequeueAfter is set
+// the Controller will requeue the Request every 5 minutes constantly when RequeueAfter is set
 func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	r.logger.Info("reconciling CloudMetrics")
 	ctx := context.Background()
 
-	// Fetch all redis crs
+	// scrapedMetrics stores the GenericCloudMetric which are returned from the providers
+	var scrapedMetrics []*providers.GenericCloudMetric
+
+	// fetch all redis crs
 	redisInstances := &integreatlyv1alpha1.RedisList{}
 	err := r.client.List(ctx, redisInstances)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	// loop through the redis crs and scrape the related provider specific metrics
 	for _, redis := range redisInstances.Items {
-		r.logger.Infof("beginning to reconcile cloud metrics for redis cr: %s", redis.Name)
+		r.logger.Infof("beginning to scrape metrics for redis cr: %s", redis.Name)
 		for _, p := range r.redisProviderList {
 			// only scrape metrics on supported strategies
 			if !p.SupportsStrategy(redis.Status.Strategy) {
 				continue
 			}
 
-			// all redis metric providers inherit the same interface
+			// all redis scrapedMetric providers inherit the same interface
 			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
 			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis)
 			if err != nil {
@@ -114,9 +215,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 				continue
 			}
 
-			for _, metricData := range scrapedMetricsOutput.Metrics {
-				r.logger.Debug(*metricData)
-			}
+			scrapedMetrics = append(scrapedMetrics, scrapedMetricsOutput.Metrics...)
 		}
 	}
 
@@ -127,23 +226,50 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 		r.logger.Error(err)
 	}
 	for _, postgres := range postgresInstances.Items {
-		r.logger.Infof("beginning to reconcile cloud metrics for postgres cr: %s", postgres.Name)
+		r.logger.Infof("beginning to scrape metrics for postgres cr: %s", postgres.Name)
 		for _, p := range r.postgresProviderList {
 			// only scrape metrics on supported strategies
 			if !p.SupportsStrategy(postgres.Status.Strategy) {
 				continue
 			}
 
-			// all postgres metric providers inherit the same interface
+			// filter out the provider specific metric from the postgresGaugeMetrics map which defines the metrics we want to scrape
+			var postgresMetricTypes []providers.CloudProviderMetricType
+			for _, gaugeMetric := range postgresGaugeMetrics {
+				for provider, metricType := range gaugeMetric.ProviderType {
+					if provider == postgres.Status.Strategy {
+						postgresMetricTypes = append(postgresMetricTypes, metricType)
+						continue
+					}
+				}
+			}
+
+			// all postgres scrapedMetric providers inherit the same interface
 			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
-			scrapedMetricsOutput, err := p.ScrapePostgresMetrics(ctx, &postgres)
+			scrapedMetricsOutput, err := p.ScrapePostgresMetrics(ctx, &postgres, postgresMetricTypes)
 			if err != nil {
 				r.logger.Errorf("failed to scrape metrics for postgres %v", err)
 				continue
 			}
 
-			for _, metricData := range scrapedMetricsOutput.Metrics {
-				r.logger.Debug(*metricData)
+			// add the returned scraped metrics to the list of metrics
+			scrapedMetrics = append(scrapedMetrics, scrapedMetricsOutput.Metrics...)
+		}
+	}
+
+	// for each scraped metric value we check postgresGaugeMetrics for a match and set the value and labels
+	for _, scrapedMetric := range scrapedMetrics {
+		for _, croMetric := range postgresGaugeMetrics {
+			if scrapedMetric.Name == croMetric.Name {
+				croMetric.GaugeVec.WithLabelValues(
+					scrapedMetric.Labels[labelClusterIDKey],
+					scrapedMetric.Labels[labelResourceIDKey],
+					scrapedMetric.Labels[labelNamespaceKey],
+					scrapedMetric.Labels[labelInstanceIDKey],
+					scrapedMetric.Labels[labelProductNameKey],
+					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
+				r.logger.Infof("successfully set metric value for %s", croMetric.Name)
+				continue
 			}
 		}
 	}
@@ -155,4 +281,15 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 	return reconcile.Result{
 		RequeueAfter: resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration),
 	}, nil
+}
+
+func registerGaugeVectorMetrics(logger *logrus.Entry) {
+	for _, metric := range postgresGaugeMetrics {
+		logger.Infof("registering metric: %s ", metric.Name)
+		customMetrics.Registry.MustRegister(metric.GaugeVec)
+	}
+	for _, metric := range redisGaugeMetrics {
+		logger.Infof("registering metric: %s ", metric.Name)
+		customMetrics.Registry.MustRegister(metric.GaugeVec)
+	}
 }

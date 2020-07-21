@@ -32,15 +32,6 @@ const (
 	cloudWatchRDSDBDimension   = "DBInstanceIdentifier"
 )
 
-// builds a list of the metric types and the corresponding metric statistics we want
-var rdsCloudWatchMetricTypes = []providers.CloudProviderMetricType{
-	{
-		PromethuesMetricName: "cro_postgres_free_storage_average",
-		ProviderMetricName:   "FreeStorageSpace",
-		Statistic:            "Average",
-	},
-}
-
 var _ providers.PostgresMetricsProvider = (*PostgresMetricsProvider)(nil)
 
 type PostgresMetricsProvider struct {
@@ -64,7 +55,7 @@ func (p *PostgresMetricsProvider) SupportsStrategy(strategy string) bool {
 }
 
 // ScrapeMetrics returns scraped metrics to metric controller
-func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, postgres *v1alpha1.Postgres) (*providers.ScrapeMetricsData, error) {
+func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) (*providers.ScrapeMetricsData, error) {
 	logger := resources.NewActionLoggerWithFields(p.Logger, map[string]interface{}{
 		resources.LoggingKeyAction: "ScrapeMetrics",
 		"Resource":                 postgres.Name,
@@ -91,7 +82,7 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 	}
 
 	// scrape metric data from cloud watch
-	cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, cloudwatch.New(sess), postgres)
+	cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, cloudwatch.New(sess), postgres, metricTypes)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to scrape rds cloud watch metrics")
 	}
@@ -103,7 +94,7 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 
 // scrapeRDSCloudWatchMetricData fetches cloud watch metrics for rds
 // and parses it to a GenericCloudMetric in order to return to the controller
-func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, postgres *v1alpha1.Postgres) ([]*providers.GenericCloudMetric, error) {
+func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
 	resourceID, err := BuildInfraNameFromObject(ctx, p.Client, postgres.ObjectMeta, DefaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)
@@ -114,8 +105,8 @@ func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Cont
 	logger := resources.NewActionLogger(p.Logger, "scrapeRDSCloudWatchMetricData")
 	logger.Infof("scraping rds instance %s cloud watch metrics", resourceID)
 	metricOutput, err := cloudWatchApi.GetMetricData(&cloudwatch.GetMetricDataInput{
-		// build metric data query array from `rdsCloudWatchMetricTypes`
-		MetricDataQueries: buildRDSMetricDataQuery(resourceID),
+		// build metric data query array from `metricTypes`
+		MetricDataQueries: buildRDSMetricDataQuery(metricTypes, resourceID),
 		// metrics gathered from start time to end time
 		StartTime: aws.Time(time.Now().Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration))),
 		EndTime:   aws.Time(time.Now()),
@@ -164,9 +155,9 @@ func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Cont
 }
 
 // buildRDSMetricDataQuery builds an aws query from wanted rds metric types
-func buildRDSMetricDataQuery(resourceID string) []*cloudwatch.MetricDataQuery {
+func buildRDSMetricDataQuery(metricTypes []providers.CloudProviderMetricType, resourceID string) []*cloudwatch.MetricDataQuery {
 	var metricDataQueries []*cloudwatch.MetricDataQuery
-	for _, metricType := range rdsCloudWatchMetricTypes {
+	for _, metricType := range metricTypes {
 		metricDataQueries = append(metricDataQueries, &cloudwatch.MetricDataQuery{
 			// id needs to be unique, and is built from the metric name and type
 			// the metric name is converted from camel case to snake case to allow it to be easily reused when exposing the metric
