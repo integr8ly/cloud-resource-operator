@@ -29,6 +29,18 @@ var testMetricLabels = map[string]string{
 	"strategy":    "aws-rds",
 }
 
+func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) providers.CloudProviderMetricType{
+	mock := &providers.CloudProviderMetricType{
+		PromethuesMetricName: testMetricName,
+		ProviderMetricName: "test",
+		Statistic: "test",
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return *mock
+}
+
 func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -44,6 +56,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		ctx           context.Context
 		cloudWatchApi cloudwatchiface.CloudWatchAPI
 		postgres      *v1alpha1.Postgres
+		metricTypes  []providers.CloudProviderMetricType
 	}
 	tests := []struct {
 		name    string
@@ -77,6 +90,9 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 					}
 				}),
 				postgres: buildTestPostgresCR(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
 			},
 			want: []*providers.GenericCloudMetric{
 				{
@@ -115,6 +131,9 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 					}
 				}),
 				postgres: buildTestPostgresCR(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
 			},
 			want: []*providers.GenericCloudMetric{
 				{
@@ -141,6 +160,9 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 					}
 				}),
 				postgres: buildTestPostgresCR(),
+				metricTypes: []providers.CloudProviderMetricType{
+					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
+				},
 			},
 			wantErr: true,
 		},
@@ -153,7 +175,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.scrapeRDSCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchApi, tt.args.postgres)
+			got, err := p.scrapeRDSCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchApi, tt.args.postgres, tt.args.metricTypes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("scrapeRDSCloudWatchMetricData() error = %v, wantErr %v", err, tt.wantErr)
 				return
