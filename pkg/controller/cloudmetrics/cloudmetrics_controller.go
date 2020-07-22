@@ -31,6 +31,7 @@ const (
 
 	redisMemoryUsagePercentageAverage = "cro_redis_memory_usage_percentage_average"
 	redisFreeableMemoryAverage        = "cro_redis_freeable_memory_average"
+	redisCPUUtilizationAverage = "cro_redis_cpu_utilization_average"
 
 	labelClusterIDKey   = "clusterID"
 	labelResourceIDKey  = "resourceID"
@@ -142,6 +143,22 @@ var redisGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PromethuesMetricName: redisFreeableMemoryAverage,
 				ProviderMetricName:   "FreeableMemory",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: redisCPUUtilizationAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: redisCPUUtilizationAverage,
+				Help: "The percentage of CPU utilization. Units: Percent",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: redisCPUUtilizationAverage,
+				ProviderMetricName:   "CPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 		},
@@ -265,21 +282,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 		}
 	}
 	// for each scraped metric value we check redisGaugeMetrics for a match and set the value and labels
-	for _, scrapedMetric := range scrapedMetrics {
-		for _, croMetric := range redisGaugeMetrics {
-			if scrapedMetric.Name == croMetric.Name {
-				croMetric.GaugeVec.WithLabelValues(
-					scrapedMetric.Labels[labelClusterIDKey],
-					scrapedMetric.Labels[labelResourceIDKey],
-					scrapedMetric.Labels[labelNamespaceKey],
-					scrapedMetric.Labels[labelInstanceIDKey],
-					scrapedMetric.Labels[labelProductNameKey],
-					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
-				r.logger.Infof("successfully set redis metric value for %s", croMetric.Name)
-				continue
-			}
-		}
-	}
+	r.setGaugeMetrics(redisGaugeMetrics, scrapedMetrics)
 
 	// Fetch all postgres crs
 	postgresInstances := &integreatlyv1alpha1.PostgresList{}
@@ -320,21 +323,7 @@ func (r *ReconcileCloudMetrics) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// for each scraped metric value we check postgresGaugeMetrics for a match and set the value and labels
-	for _, scrapedMetric := range scrapedMetrics {
-		for _, croMetric := range postgresGaugeMetrics {
-			if scrapedMetric.Name == croMetric.Name {
-				croMetric.GaugeVec.WithLabelValues(
-					scrapedMetric.Labels[labelClusterIDKey],
-					scrapedMetric.Labels[labelResourceIDKey],
-					scrapedMetric.Labels[labelNamespaceKey],
-					scrapedMetric.Labels[labelInstanceIDKey],
-					scrapedMetric.Labels[labelProductNameKey],
-					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
-				r.logger.Infof("successfully set postgres metric value for %s", croMetric.Name)
-				continue
-			}
-		}
-	}
+	r.setGaugeMetrics(postgresGaugeMetrics, scrapedMetrics)
 
 	// we want full control over when we scrape metrics
 	// to allow for this we only have a single requeue
@@ -353,5 +342,24 @@ func registerGaugeVectorMetrics(logger *logrus.Entry) {
 	for _, metric := range redisGaugeMetrics {
 		logger.Infof("registering metric: %s ", metric.Name)
 		customMetrics.Registry.MustRegister(metric.GaugeVec)
+	}
+}
+
+// func setGaugeMetrics sets the value on exposed metrics with labels
+func (r *ReconcileCloudMetrics) setGaugeMetrics( gaugeMetrics []CroGaugeMetric, scrapedMetrics []*providers.GenericCloudMetric) {
+	for _, scrapedMetric := range scrapedMetrics {
+		for _, croMetric := range gaugeMetrics {
+			if scrapedMetric.Name == croMetric.Name {
+				croMetric.GaugeVec.WithLabelValues(
+					scrapedMetric.Labels[labelClusterIDKey],
+					scrapedMetric.Labels[labelResourceIDKey],
+					scrapedMetric.Labels[labelNamespaceKey],
+					scrapedMetric.Labels[labelInstanceIDKey],
+					scrapedMetric.Labels[labelProductNameKey],
+					scrapedMetric.Labels[labelStrategyKey]).Set(scrapedMetric.Value)
+				r.logger.Infof("successfully set metric value for %s", croMetric.Name)
+				continue
+			}
+		}
 	}
 }

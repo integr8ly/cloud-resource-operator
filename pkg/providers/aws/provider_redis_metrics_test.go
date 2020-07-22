@@ -21,19 +21,20 @@ const (
 	testRedisMetricName  = "mock_result_id"
 	testRedisMetricValue = 1.11111
 )
+var (
+	testcacheClusterId1 = "test-001"
+	testcacheClusterId2 = "test-002"
+)
 
 func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup {
-	var (
-		cacheClusterId1 = "test-001"
-		cacheClusterId2 = "test-002"
-	)
+
 	return []*elasticache.ReplicationGroup{
 		{
 			ReplicationGroupId:     aws.String("testtesttest"),
 			Status:                 aws.String("available"),
 			CacheNodeType:          aws.String("test"),
 			SnapshotRetentionLimit: aws.Int64(20),
-			MemberClusters:         []*string{&cacheClusterId1, &cacheClusterId2},
+			MemberClusters:         []*string{&testcacheClusterId1, &testcacheClusterId2},
 			NodeGroups: []*elasticache.NodeGroup{
 				{
 					NodeGroupId:      aws.String("primary-node"),
@@ -49,23 +50,16 @@ func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup 
 	}
 }
 
-var testRedisMetricLabels1 = map[string]string{
-	"clusterID":   "test",
-	"instanceID":  "test-001",
-	"namespace":   "test",
-	"productName": "",
-	"resourceID":  "test",
-	"strategy":    "aws-elasticache",
+func moqRedisMetricLabels(instanceID string)(labels map[string]string){
+	return map[string]string{
+		"clusterID":   "test",
+		"instanceID":  instanceID,
+		"namespace":   "test",
+		"productName": "",
+		"resourceID":  "test",
+		"strategy":    "aws-elasticache",
+	}
 }
-var testRedisMetricLabels2 = map[string]string{
-	"clusterID":   "test",
-	"instanceID":  "test-002",
-	"namespace":   "test",
-	"productName": "",
-	"resourceID":  "test",
-	"strategy":    "aws-elasticache",
-}
-
 func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -131,12 +125,12 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 				{
 					Name:   testRedisMetricName,
 					Value:  testRedisMetricValue,
-					Labels: testRedisMetricLabels1,
+					Labels: moqRedisMetricLabels(testcacheClusterId1),
 				},
 				{
 					Name:   testRedisMetricName,
 					Value:  testRedisMetricValue,
-					Labels: testRedisMetricLabels2,
+					Labels: moqRedisMetricLabels(testcacheClusterId2),
 				},
 
 			},
@@ -177,7 +171,6 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 					}
 				}),
 				redis:             buildTestRedisCR(),
-				//replicationGroups: buildReplicationGroupReadyCacheClusterId(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
 				},
@@ -186,12 +179,12 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 				{
 					Name:   testRedisMetricName,
 					Value:  testRedisMetricValue,
-					Labels: testRedisMetricLabels1,
+					Labels: moqRedisMetricLabels(testcacheClusterId1),
 				},
 				{
 					Name:   testRedisMetricName,
 					Value:  testRedisMetricValue,
-					Labels: testRedisMetricLabels2,
+					Labels: moqRedisMetricLabels(testcacheClusterId2),
 				},
 			},
 			wantErr: false,
@@ -213,13 +206,10 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 				}),
 				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
 					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
-						return &elasticache.DescribeReplicationGroupsOutput{
-							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
-						}, nil
+						return &elasticache.DescribeReplicationGroupsOutput{}, nil
 					}
 				}),
 				redis:             buildTestRedisCR(),
-				//replicationGroups: buildReplicationGroupReadyCacheClusterId(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
 				},
