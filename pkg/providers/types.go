@@ -146,7 +146,7 @@ type ScrapeMetricsData struct {
 
 type RedisMetricsProvider interface {
 	SupportsStrategy(s string) bool
-	ScrapeRedisMetrics(ctx context.Context, redis *v1alpha1.Redis) (*ScrapeMetricsData, error)
+	ScrapeRedisMetrics(ctx context.Context, redis *v1alpha1.Redis, metricsTypes []CloudProviderMetricType) (*ScrapeMetricsData, error)
 }
 
 type PostgresMetricsProvider interface {
