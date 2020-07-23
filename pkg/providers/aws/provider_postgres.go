@@ -649,8 +649,8 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PubliclyAccessible = rdsConfig.PubliclyAccessible
 		updateFound = true
 	}
-	if *rdsConfig.AllocatedStorage != *foundConfig.AllocatedStorage {
-		mi.AllocatedStorage = rdsConfig.AllocatedStorage
+	if *rdsConfig.MaxAllocatedStorage != *foundConfig.MaxAllocatedStorage {
+		mi.MaxAllocatedStorage = rdsConfig.MaxAllocatedStorage
 		updateFound = true
 	}
 	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion {
@@ -693,11 +693,6 @@ func verifyPendingModification(mi *rds.ModifyDBInstanceInput, pm *rds.PendingMod
 	}
 	if mi.DBInstanceClass != nil && pm.DBInstanceClass != nil {
 		if *mi.DBInstanceClass == *pm.DBInstanceClass {
-			pendingModifications = false
-		}
-	}
-	if mi.AllocatedStorage != nil && pm.AllocatedStorage != nil {
-		if *mi.AllocatedStorage == *pm.AllocatedStorage {
 			pendingModifications = false
 		}
 	}

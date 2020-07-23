@@ -21,6 +21,7 @@ const (
 	testRedisMetricName  = "mock_result_id"
 	testRedisMetricValue = 1.11111
 )
+
 var (
 	testcacheClusterId1 = "test-001"
 	testcacheClusterId2 = "test-002"
@@ -50,7 +51,7 @@ func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup 
 	}
 }
 
-func moqRedisMetricLabels(instanceID string)(labels map[string]string){
+func moqRedisMetricLabels(instanceID string) (labels map[string]string) {
 	return map[string]string{
 		"clusterID":   "test",
 		"instanceID":  instanceID,
@@ -72,11 +73,11 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx               context.Context
-		cloudWatchApi     cloudwatchiface.CloudWatchAPI
-		redis             *v1alpha1.Redis
-		elastiCacheApi	  elasticacheiface.ElastiCacheAPI
-		metricTypes       []providers.CloudProviderMetricType
+		ctx            context.Context
+		cloudWatchApi  cloudwatchiface.CloudWatchAPI
+		redis          *v1alpha1.Redis
+		elastiCacheApi elasticacheiface.ElastiCacheAPI
+		metricTypes    []providers.CloudProviderMetricType
 	}
 	tests := []struct {
 		name    string
@@ -109,14 +110,14 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 						}, nil
 					}
 				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 						return &elasticache.DescribeReplicationGroupsOutput{
 							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
 						}, nil
 					}
 				}),
-				redis:             buildTestRedisCR(),
+				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
 				},
@@ -132,7 +133,6 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 					Value:  testRedisMetricValue,
 					Labels: moqRedisMetricLabels(testcacheClusterId2),
 				},
-
 			},
 			wantErr: false,
 		},
@@ -163,14 +163,14 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 						}, nil
 					}
 				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 						return &elasticache.DescribeReplicationGroupsOutput{
 							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
 						}, nil
 					}
 				}),
-				redis:             buildTestRedisCR(),
+				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
 				},
@@ -204,12 +204,12 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 						return &cloudwatch.GetMetricDataOutput{}, nil
 					}
 				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient){
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error) {
+				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
+					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 						return &elasticache.DescribeReplicationGroupsOutput{}, nil
 					}
 				}),
-				redis:             buildTestRedisCR(),
+				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
 				},

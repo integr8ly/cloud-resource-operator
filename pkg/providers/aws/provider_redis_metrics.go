@@ -99,8 +99,8 @@ func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Conte
 
 	var metrics []*providers.GenericCloudMetric
 	listOutput, err := elastiCacheApi.DescribeReplicationGroups(&elasticache.DescribeReplicationGroupsInput{})
-    if err != nil {
-    	return nil, errorUtil.Wrap(err,"failed redis metrics to describe replicationGroups")
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed redis metrics to describe replicationGroups")
 	}
 	replicationGroups := listOutput.ReplicationGroups
 	// Metrics are returned per node for ElastiCache
@@ -112,7 +112,7 @@ func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Conte
 		}
 	}
 	if foundCache == nil {
-		return nil, errorUtil.Errorf( "redis metrics failed to find cache in replication group")
+		return nil, errorUtil.Errorf("redis metrics failed to find cache in replication group")
 	}
 
 	// poll MemberCluster array for CacheClusterId
