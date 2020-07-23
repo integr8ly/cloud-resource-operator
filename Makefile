@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.17.0
-VERSION=0.18.0
+PREV_VERSION=0.18.0
+VERSION=0.19.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
@@ -62,6 +62,8 @@ gen/csv:
 	@$(OPERATOR_SDK) generate csv --operator-name=cloud-resources --csv-version $(VERSION) --from-version $(PREV_VERSION) --make-manifests=false --update-crds --csv-channel=integreatly --default-channel --verbose
 	@sed -i.bak 's/$(PREV_VERSION)/$(VERSION)/g' deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml && rm deploy/olm-catalog/cloud-resources/cloud-resources.package.yaml.bak
 	@sed -i.bak s/cloud-resource-operator:v$(PREV_VERSION)/cloud-resource-operator:v$(VERSION)/g deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml && rm deploy/olm-catalog/cloud-resources/$(VERSION)/cloud-resources.v$(VERSION).clusterserviceversion.yaml.bak
+
+.PHONY: code/fix
 code/fix:
 	@go mod tidy
 	@gofmt -w `find . -type f -name '*.go' -not -path "./vendor/*"`
