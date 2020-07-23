@@ -31,7 +31,7 @@ const (
 
 	redisMemoryUsagePercentageAverage = "cro_redis_memory_usage_percentage_average"
 	redisFreeableMemoryAverage        = "cro_redis_freeable_memory_average"
-	redisCPUUtilizationAverage = "cro_redis_cpu_utilization_average"
+	redisCPUUtilizationAverage        = "cro_redis_cpu_utilization_average"
 
 	labelClusterIDKey   = "clusterID"
 	labelResourceIDKey  = "resourceID"
@@ -346,7 +346,7 @@ func registerGaugeVectorMetrics(logger *logrus.Entry) {
 }
 
 // func setGaugeMetrics sets the value on exposed metrics with labels
-func (r *ReconcileCloudMetrics) setGaugeMetrics( gaugeMetrics []CroGaugeMetric, scrapedMetrics []*providers.GenericCloudMetric) {
+func (r *ReconcileCloudMetrics) setGaugeMetrics(gaugeMetrics []CroGaugeMetric, scrapedMetrics []*providers.GenericCloudMetric) {
 	for _, scrapedMetric := range scrapedMetrics {
 		for _, croMetric := range gaugeMetrics {
 			if scrapedMetric.Name == croMetric.Name {

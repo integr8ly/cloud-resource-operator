@@ -7,7 +7,7 @@ import (
 
 type MockElastiCacheClient struct {
 	elasticacheiface.ElastiCacheAPI
-	DescribeReplicationGroupsFn func(input *elasticache.DescribeReplicationGroupsInput)(*elasticache.DescribeReplicationGroupsOutput, error)
+	DescribeReplicationGroupsFn func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error)
 }
 
 func BuildMockElastiCacheClient(modifyFn func(client *MockElastiCacheClient)) *MockElastiCacheClient {
@@ -21,4 +21,3 @@ func BuildMockElastiCacheClient(modifyFn func(client *MockElastiCacheClient)) *M
 func (m *MockElastiCacheClient) DescribeReplicationGroups(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 	return m.DescribeReplicationGroupsFn(input)
 }
-
