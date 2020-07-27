@@ -974,6 +974,14 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	} else {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
 	}
+
+	// cloud watch only provides us with free storage space, we need to expose more metrics to allow for more accurate alerting
+	// as `predict_linear` is hard to predict on non-linear growth & results in false positives
+	// we should follow the approach AWS take to auto scaling, and alert when free storage space is less than 10%
+	if instance != nil && instance.AllocatedStorage != nil {
+		// convert allocated storage to bytes and expose as a metric
+		resources.SetMetric(resources.DefaultPostgresAllocatedStorageMetricName, genericLabels, float64(*instance.AllocatedStorage*resources.BytesInGibiBytes))
+	}
 }
 
 // set metrics about the postgres instance being deleted
