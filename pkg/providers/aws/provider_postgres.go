@@ -64,6 +64,25 @@ const (
 
 var (
 	defaultSupportedEngineVersions = []string{"10.6", "9.6", "9.5"}
+	healthyAWSDBInstanceStatuses   = []string{
+		"backtracking",
+		"available",
+		"backing-up",
+		"configuring-enhanced-monitoring",
+		"configuring-iam-database-auth",
+		"configuring-log-exports",
+		"converting-to-vpc",
+		"creating",
+		"deleting",
+		"maintenance",
+		"modifying",
+		"moving-to-vpc",
+		"renaming",
+		"resetting-master-credentials",
+		"starting",
+		"storage-optimization",
+		"upgrading",
+	}
 )
 
 var _ providers.PostgresProvider = (*PostgresProvider)(nil)
@@ -969,7 +988,7 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// consider available and backing-up as non-failure states as they don't cause connection failures.
 	// see https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html for possible status
 	// values.
-	if instance == nil || !resources.Contains([]string{"available", "backing-up"}, *instance.DBInstanceStatus) {
+	if instance == nil || !rdsInstanceStatusIsHealthy(instance) {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 0)
 	} else {
 		resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, 1)
@@ -1101,4 +1120,8 @@ func (p *PostgresProvider) buildInstanceName(ctx context.Context, pg *v1alpha1.P
 		return "", errorUtil.Errorf("error occurred building instance name: %v", err)
 	}
 	return instanceName, nil
+}
+
+func rdsInstanceStatusIsHealthy(instance *rds.DBInstance) bool {
+	return resources.Contains(healthyAWSDBInstanceStatuses, *instance.DBInstanceStatus)
 }
