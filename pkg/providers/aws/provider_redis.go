@@ -49,6 +49,14 @@ const (
 	defaultInTransitEncryption = false
 )
 
+var healthyAWSReplicationGroupStatuses = []string{
+	"creating",
+	"available",
+	"modifying",
+	"deleting",
+	"snapshotting",
+}
+
 var _ providers.RedisProvider = (*RedisProvider)(nil)
 
 // RedisProvider implementation for AWS Elasticache
@@ -843,7 +851,7 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	// consider available and snapshotting as non-failure states.
 	// see .ReplicationGroups.Status in https://docs.aws.amazon.com/cli/latest/reference/elasticache/describe-replication-groups.html#output
 	// for more details on possible status values.
-	if instance == nil || !resources.Contains([]string{"available", "snapshotting"}, *instance.Status) {
+	if instance == nil || !replicationGroupStatusIsHealthy(instance) {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 0)
 	} else {
 		resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, 1)
@@ -960,4 +968,8 @@ func (p *RedisProvider) buildCacheName(ctx context.Context, rd *v1alpha1.Redis) 
 		return "", errorUtil.Errorf("error occurred building cache name: %v", err)
 	}
 	return cacheName, nil
+}
+
+func replicationGroupStatusIsHealthy(cache *elasticache.ReplicationGroup) bool {
+	return resources.Contains(healthyAWSReplicationGroupStatuses, *cache.Status)
 }
