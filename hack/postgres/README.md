@@ -1,9 +1,10 @@
 # Postgres 
 
-Scripts to load postgres (AWS) with data to easily allow and test alerting
+Scripts and helpers for working with postgres 
 
-## Usage 
-### Prerequisites
+## Load Testing Postgres AWS (RDS)
+### Usage 
+#### Prerequisites
 ```
 export ns=cloud-resources-load-test
 # Spin up workshop `postgres` instance
@@ -22,7 +23,7 @@ export load_data_size=<number>
 # Get postgres workshop pod name
 export pod_name=$(oc get pods -n $ns -o jsonpath='{.items[0].metadata.name}')
 ```
-### Load Script
+#### Load Script
 
 Copy `load.sh` file to provisioned postgres workshop pod  
 ```
@@ -33,7 +34,7 @@ Run command
 oc exec $pod_name sh /var/lib/pgsql/load.sh $aws_rds_db_host $aws_rds_db_password $load_data_size -n $ns
 ```
 
-### Clean Script
+#### Clean Script
 Copy `clean.sh` file to provisioned postgres workshop pod  
 ```
  oc cp clean.sh $ns/$pod_name:/var/lib/pgsql
