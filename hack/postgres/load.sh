@@ -8,7 +8,7 @@ PG_DB=postgres
 
 calc_fill() {
   # 225000 entries required to fill 1GiB of storage
-  ONE_GIB=225000
+  ONE_GIB=300000
   PG_FILL=$(($PG_SIZE * $ONE_GIB))
 }
 
