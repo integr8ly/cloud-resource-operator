@@ -74,17 +74,18 @@ type mockEc2Client struct {
 	returnSecondSub bool
 	// new approach for manually defined mocks
 	// to allow for simple overrides in test table declarations
-	createTagsFn                   func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
-	describeVpcsFn                 func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
-	describeSecurityGroupsFn       func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
-	deleteSecurityGroupFn          func(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
-	describeVpcPeeringConnectionFn func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
-	createVpcPeeringConnectionFn   func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
-	acceptVpcPeeringConnectionFn   func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
-	deleteVpcPeeringConnectionFn   func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
-	describeRouteTablesFn          func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
-	createRouteFn                  func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
-	deleteRouteFn                  func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
+	createTagsFn                    func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+	describeVpcsFn                  func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+	describeSecurityGroupsFn        func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
+	deleteSecurityGroupFn           func(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
+	describeVpcPeeringConnectionFn  func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
+	createVpcPeeringConnectionFn    func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
+	acceptVpcPeeringConnectionFn    func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
+	deleteVpcPeeringConnectionFn    func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
+	describeRouteTablesFn           func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
+	createRouteFn                   func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
+	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
+	describeInstanceTypeOfferingsFn func(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
 
 	calls struct {
 		DescribeRouteTables []struct {
@@ -102,6 +103,18 @@ func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
 	mock := &mockEc2Client{}
 	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 		return &ec2.CreateTagsOutput{}, nil
+	}
+	mock.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+		return &ec2.DescribeInstanceTypeOfferingsOutput{
+			InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+				{
+					Location: aws.String(defaultAzIdOne),
+				},
+				{
+					Location: aws.String(defaultAzIdTwo),
+				},
+			},
+		}, nil
 	}
 	if modifyFn != nil {
 		modifyFn(mock)
@@ -356,6 +369,10 @@ func (m *mockEc2Client) AcceptVpcPeeringConnection(input *ec2.AcceptVpcPeeringCo
 
 func (m *mockEc2Client) DeleteVpcPeeringConnection(input *ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
 	return m.deleteVpcPeeringConnectionFn(input)
+}
+
+func (m *mockEc2Client) DescribeInstanceTypeOfferings(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error) {
+	return m.describeInstanceTypeOfferingsFn(input)
 }
 
 func buildMockNetworkManager() *NetworkManagerMock {

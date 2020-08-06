@@ -30,6 +30,7 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -1025,10 +1026,35 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		return nil, errorUtil.Wrap(err, "error getting availability zones")
 	}
 
-	// sort the azs first
-	sort.Sort(azByZoneName(azs.AvailabilityZones))
+	// get availability zones that support the current default rds and elasticache instance sizes.
+	describeInstanceTypeOfferingsOutput, err := n.Ec2Api.DescribeInstanceTypeOfferings(&ec2.DescribeInstanceTypeOfferingsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("instance-type"),
+				Values: aws.StringSlice([]string{strings.Replace(defaultCacheNodeType, "cache.", "", 1), strings.Replace(defaultAwsDBInstanceClass, "db.", "", 1)}),
+			},
+		},
+		LocationType: aws.String(ec2.LocationTypeAvailabilityZone),
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to list ")
+	}
 
-	for index, az := range azs.AvailabilityZones {
+	// filter the availability zones to only include ones that support the default instance types.
+	var supportedAzs []*ec2.AvailabilityZone
+	for _, az := range azs.AvailabilityZones {
+		for _, instanceTypeOffering := range describeInstanceTypeOfferingsOutput.InstanceTypeOfferings {
+			if aws.StringValue(instanceTypeOffering.Location) == aws.StringValue(az.ZoneName) {
+				supportedAzs = append(supportedAzs, az)
+				continue
+			}
+		}
+	}
+
+	// sort the azs first
+	sort.Sort(azByZoneName(supportedAzs))
+
+	for index, az := range supportedAzs {
 		validAzs = append(validAzs, az)
 		if index == 1 {
 			break
