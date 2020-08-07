@@ -804,6 +804,24 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String(defaultAzIdOne),
+								},
+								{
+									Location: aws.String(defaultAzIdTwo),
+								},
+								{
+									Location: aws.String("test-zone-3"),
+								},
+								{
+									Location: aws.String("test-zone-4"),
+								},
+							},
+						}, nil
+					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
@@ -876,6 +894,44 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{RouteTables: []*ec2.RouteTable{}}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(nil),
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySix),
+			},
+			wantErr: true,
+		},
+		{
+			name: "fail when not enough availability zones support default node types",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(nil),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
+					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
+					ec2Client.subnets = []*ec2.Subnet{}
+					ec2Client.azs = buildLargeUnsortedStandaloneAZs()
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String(defaultAzIdOne),
+								},
+							},
+						}, nil
 					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),

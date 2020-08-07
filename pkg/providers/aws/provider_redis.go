@@ -268,11 +268,18 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 			replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
 		}
 	}
-	//check if found cluster and user strategy differs, and modify instance
-	modifyInput := buildElasticacheUpdateStrategy(elasticacheConfig, foundCache, replicationGroupClusters)
+
+	// check if any modifications are required to bring the elasticache instance up to date with the strategy map.
+	modifyInput, err := buildElasticacheUpdateStrategy(ec2Svc, elasticacheConfig, foundCache, replicationGroupClusters, logger)
+	if err != nil {
+		errMsg := "failed to build elasticache modify strategy"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 	if modifyInput == nil {
 		logger.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
 	}
+
+	// modifications are required to bring the elasticache instance up to date with the strategy map, perform updates.
 	if modifyInput != nil {
 		logger.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
 		if _, err := cacheSvc.ModifyReplicationGroup(modifyInput); err != nil {
@@ -612,40 +619,109 @@ func (p *RedisProvider) isLastResource(ctx context.Context, namespace string) (b
 	return len(postgresList.Items) == 0 && len(redisList.Items) == 1, nil
 }
 
-// checks found config vs user strategy for changes, if found returns a modify replication group
-func buildElasticacheUpdateStrategy(elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup, replicationGroupClusters []elasticache.CacheCluster) *elasticache.ModifyReplicationGroupInput {
-	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.ReplicationGroupId)
+// buildElasticacheUpdateStrategy compare the current elasticache state to the proposed elasticache state from the
+// strategy map.
+//
+// if modifications are required, a modify input struct will be returned with all proposed changes.
+//
+// if no modifications are required, nil will be returned.
+func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup, replicationGroupClusters []elasticache.CacheCluster, logger *logrus.Entry) (*elasticache.ModifyReplicationGroupInput, error) {
+	// setup logger.
+	actionLogger := resources.NewActionLogger(logger, "buildElasticacheUpdateStrategy")
+	actionLogger.Infof("verifying that %s configuration is as expected", *foundConfig.ReplicationGroupId)
+
+	// indicates whether an update should be attempted or not.
 	updateFound := false
+
+	// contains the proposed modifications to be made.
 	modifyInput := &elasticache.ModifyReplicationGroupInput{}
 	modifyInput.ReplicationGroupId = foundConfig.ReplicationGroupId
 
+	// check to see if the cache node type requires a modification.
 	if *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
-		modifyInput.CacheNodeType = elasticacheConfig.CacheNodeType
-		updateFound = true
+		// we need to determine if the proposed cache node type is supported in the availability zones that the instance is
+		// deployed into.
+		//
+		// get the availability zones that support the proposed instance type.
+		describeInstanceTypeOfferingOutput, err := ec2Client.DescribeInstanceTypeOfferings(&ec2.DescribeInstanceTypeOfferingsInput{
+			Filters: []*ec2.Filter{
+				{
+					Name:   aws.String("instance-type"),
+					Values: []*string{elasticacheConfig.CacheNodeType},
+				},
+			},
+			LocationType: aws.String(ec2.LocationTypeAvailabilityZone),
+		})
+		if err != nil {
+			return nil, errorUtil.Wrapf(err, "failed to get instance type offerings for type %s", aws.StringValue(foundConfig.CacheNodeType))
+		}
+
+		// normalise returned instance type offerings to a list of availability zones, to make comparison easier.
+		var supportedAvailabilityZones []string
+		for _, instanceTypeOffering := range describeInstanceTypeOfferingOutput.InstanceTypeOfferings {
+			supportedAvailabilityZones = append(supportedAvailabilityZones, aws.StringValue(instanceTypeOffering.Location))
+		}
+
+		// get the availability zones of the instance.
+		var usedAvailabilityZones []string
+		for _, replicationGroupCluster := range replicationGroupClusters {
+			usedAvailabilityZones = append(usedAvailabilityZones, aws.StringValue(replicationGroupCluster.PreferredAvailabilityZone))
+		}
+
+		// ensure the availability zones of the instance support the instance type.
+		instanceTypeSupported := true
+		for _, usedAvailabilityZone := range usedAvailabilityZones {
+			if !resources.Contains(supportedAvailabilityZones, usedAvailabilityZone) {
+				instanceTypeSupported = false
+				break
+			}
+		}
+
+		// the instance type is supported, go ahead with the modification.
+		if instanceTypeSupported {
+			modifyInput.CacheNodeType = elasticacheConfig.CacheNodeType
+			updateFound = true
+		} else {
+			// the instance type isn't supported, log and skip.
+			actionLogger.Infof("cache node type %s is not supported, skipping cache node type modification", *elasticacheConfig.CacheNodeType)
+		}
 	}
+
+	// check if the amount of time snapshots should be kept for requires an update.
 	if *elasticacheConfig.SnapshotRetentionLimit != *foundConfig.SnapshotRetentionLimit {
 		modifyInput.SnapshotRetentionLimit = elasticacheConfig.SnapshotRetentionLimit
 		updateFound = true
 	}
 
+	// elasticache replication groups consist of a group of cache clusters. some information can only be retrieved from
+	// these cache clusters instead of the replication group itself.
+	//
+	// if any cache cluster requires an update, then the replication group itself requires an update. this will update
+	// the underlying cache clusters.
 	for _, foundCacheCluster := range replicationGroupClusters {
+		// check if the redis compatibility version requires an update.
 		if elasticacheConfig.EngineVersion != nil && *elasticacheConfig.EngineVersion != *foundCacheCluster.EngineVersion {
 			modifyInput.EngineVersion = elasticacheConfig.EngineVersion
 			updateFound = true
 		}
+
+		// check if the maintenance window requires an update.
 		if elasticacheConfig.PreferredMaintenanceWindow != nil && *elasticacheConfig.PreferredMaintenanceWindow != *foundCacheCluster.PreferredMaintenanceWindow {
 			modifyInput.PreferredMaintenanceWindow = elasticacheConfig.PreferredMaintenanceWindow
 			updateFound = true
 		}
+
+		// check if the time window in which elasticache snapshots can be taken requires an update.
 		if elasticacheConfig.SnapshotWindow != nil && *elasticacheConfig.SnapshotWindow != *foundCacheCluster.SnapshotWindow {
 			modifyInput.SnapshotWindow = elasticacheConfig.SnapshotWindow
 			updateFound = true
 		}
 	}
+
 	if updateFound {
-		return modifyInput
+		return modifyInput, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // verifyRedisConfig checks elasticache config, if none exist sets values to default

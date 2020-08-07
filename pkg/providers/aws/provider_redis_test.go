@@ -2,6 +2,8 @@ package aws
 
 import (
 	"context"
+	"errors"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"reflect"
 	"time"
 
@@ -348,7 +350,11 @@ func Test_createRedisCluster(t *testing.T) {
 						}, nil
 					}
 				}),
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildVpcs()
+					ec2Client.subnets = buildValidBundleSubnets()
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -381,7 +387,11 @@ func Test_createRedisCluster(t *testing.T) {
 						}, nil
 					}
 				}),
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildVpcs()
+					ec2Client.subnets = buildValidBundleSubnets()
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -430,9 +440,13 @@ func Test_createRedisCluster(t *testing.T) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
 					}
 				}),
-				r:                       buildTestRedisCR(),
-				stsSvc:                  &mockStsClient{},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				r:      buildTestRedisCR(),
+				stsSvc: &mockStsClient{},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildVpcs()
+					ec2Client.subnets = buildValidBundleSubnets()
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
@@ -481,7 +495,11 @@ func Test_createRedisCluster(t *testing.T) {
 				}),
 				r:      buildTestRedisCR(),
 				stsSvc: &mockStsClient{},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildVpcs()
+					ec2Client.subnets = buildValidBundleSubnets()
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
 					CacheNodeType:          aws.String("test"),
@@ -532,7 +550,9 @@ func Test_createRedisCluster(t *testing.T) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
 					}
 				}),
-				ec2Svc:                  &mockEc2Client{secGroups: buildSecurityGroups(secName)},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
@@ -884,20 +904,24 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 
 func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	type args struct {
+		ec2Client                ec2iface.EC2API
 		elasticacheConfig        *elasticache.CreateReplicationGroupInput
 		foundConfig              *elasticache.ReplicationGroup
 		replicationGroupClusters []elasticache.CacheCluster
+		logger                   *logrus.Entry
 	}
 	tests := []struct {
-		name string
-		args args
-		want *elasticache.ModifyReplicationGroupInput
+		name    string
+		args    args
+		want    *elasticache.ModifyReplicationGroupInput
+		wantErr string
 	}{
 		{
 			name: "test no modification required",
 			args: args{
+				ec2Client: buildMockEc2Client(nil),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
-					CacheNodeType:              aws.String("test"),
+					CacheNodeType:              aws.String("cache.test"),
 					SnapshotRetentionLimit:     aws.Int64(30),
 					PreferredMaintenanceWindow: aws.String("test"),
 					SnapshotWindow:             aws.String("test"),
@@ -905,34 +929,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					ReplicationGroupId:     aws.String("test-id"),
-					CacheNodeType:          aws.String("test"),
+					CacheNodeType:          aws.String("cache.test"),
 					SnapshotRetentionLimit: aws.Int64(30),
-				},
-				replicationGroupClusters: []elasticache.CacheCluster{
-					{
-						EngineVersion: aws.String("3.2.6"),
-						//EngineVersion:              aws.String(defaultEngineVersion),
-						PreferredMaintenanceWindow: aws.String("test"),
-						SnapshotWindow:             aws.String("test"),
-					},
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "test when modification is required",
-			args: args{
-				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
-					CacheNodeType:              aws.String("newValue"),
-					SnapshotRetentionLimit:     aws.Int64(50),
-					PreferredMaintenanceWindow: aws.String("newValue"),
-					SnapshotWindow:             aws.String("newValue"),
-					EngineVersion:              aws.String(defaultEngineVersion),
-				},
-				foundConfig: &elasticache.ReplicationGroup{
-					CacheNodeType:          aws.String("test"),
-					SnapshotRetentionLimit: aws.Int64(30),
-					ReplicationGroupId:     aws.String("test-id"),
 				},
 				replicationGroupClusters: []elasticache.CacheCluster{
 					{
@@ -941,9 +939,115 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						SnapshotWindow:             aws.String("test"),
 					},
 				},
+				logger: testLogger,
+			},
+			want: nil,
+		},
+		{
+			name: "test when modification is required",
+			args: args{
+				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String("test"),
+								},
+							},
+						}, nil
+					}
+				}),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.newValue"),
+					SnapshotRetentionLimit:     aws.Int64(50),
+					PreferredMaintenanceWindow: aws.String("newValue"),
+					SnapshotWindow:             aws.String("newValue"),
+					EngineVersion:              aws.String(defaultEngineVersion),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					CacheNodeType:          aws.String("cache.test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+					ReplicationGroupId:     aws.String("test-id"),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						EngineVersion:              aws.String("3.2.6"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+						PreferredAvailabilityZone:  aws.String("test"),
+					},
+				},
+				logger: testLogger,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
-				CacheNodeType:              aws.String("newValue"),
+				CacheNodeType:              aws.String("cache.newValue"),
+				SnapshotRetentionLimit:     aws.Int64(50),
+				PreferredMaintenanceWindow: aws.String("newValue"),
+				SnapshotWindow:             aws.String("newValue"),
+				ReplicationGroupId:         aws.String("test-id"),
+				EngineVersion:              aws.String(defaultEngineVersion),
+			},
+		},
+		{
+			name: "test failed aws instance type offering list results in error",
+			args: args{
+				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return nil, errors.New("test")
+					}
+				}),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType: aws.String("cache.test"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					CacheNodeType:          aws.String("cache.test2"),
+					ReplicationGroupId:     aws.String("test-id"),
+					SnapshotRetentionLimit: aws.Int64(50),
+					SnapshotWindow:         aws.String("newValue"),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{},
+				logger:                   testLogger,
+			},
+			want:    nil,
+			wantErr: "failed to get instance type offerings for type cache.test2: test",
+		},
+		{
+			name: "test unsupported instance types changes are not added to proposed modification",
+			args: args{
+				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String("current-cache-type"),
+								},
+							},
+						}, nil
+					}
+				}),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.unsupported-cache-type"),
+					SnapshotRetentionLimit:     aws.Int64(50),
+					PreferredMaintenanceWindow: aws.String("newValue"),
+					SnapshotWindow:             aws.String("newValue"),
+					EngineVersion:              aws.String(defaultEngineVersion),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("cache.current-cache-type"),
+					SnapshotRetentionLimit: aws.Int64(30),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						EngineVersion:              aws.String("3.2.6"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+						PreferredAvailabilityZone:  aws.String("test2"),
+					},
+				},
+				logger: testLogger,
+			},
+			want: &elasticache.ModifyReplicationGroupInput{
 				SnapshotRetentionLimit:     aws.Int64(50),
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
@@ -954,7 +1058,12 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildElasticacheUpdateStrategy(tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters); !reflect.DeepEqual(got, tt.want) {
+			got, err := buildElasticacheUpdateStrategy(tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger)
+			if tt.wantErr != "" && err.Error() != tt.wantErr {
+				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildElasticacheUpdateStrategy() = %v, want %v", got, tt.want)
 			}
 		})

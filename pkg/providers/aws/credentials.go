@@ -62,6 +62,7 @@ var (
 				"ec2:DescribeRouteTables",
 				"ec2:CreateRoute",
 				"ec2:DeleteRoute",
+				"ec2:DescribeInstanceTypeOfferings",
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",
