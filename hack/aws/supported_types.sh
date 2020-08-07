@@ -75,5 +75,6 @@ do
   get_instance_offerings
 done
 check_supported_offerings
-echo "finished checking supported offerings for $INSTANCE_TYPE"
+echo "finished checking supported offerings for $INSTANCE_TYPE in the following regions:"
+
 
