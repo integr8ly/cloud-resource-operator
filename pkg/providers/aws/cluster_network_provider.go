@@ -1041,13 +1041,18 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	}
 
 	// filter the availability zones to only include ones that support the default instance types.
+	// ensure if any duplicate regions are returned, they are removed.
 	var supportedAzs []*ec2.AvailabilityZone
 	for _, az := range azs.AvailabilityZones {
+		foundAz := false
 		for _, instanceTypeOffering := range describeInstanceTypeOfferingsOutput.InstanceTypeOfferings {
 			if aws.StringValue(instanceTypeOffering.Location) == aws.StringValue(az.ZoneName) {
-				supportedAzs = append(supportedAzs, az)
-				continue
+				foundAz = true
+				break
 			}
+		}
+		if foundAz {
+			supportedAzs = append(supportedAzs, az)
 		}
 	}
 
