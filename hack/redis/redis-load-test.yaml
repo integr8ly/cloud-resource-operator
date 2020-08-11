@@ -1,0 +1,51 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+  name: redis-load-template
+  annotations:
+    description: "load testing redis"
+    iconClass: "icon-redis"
+objects:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: redis-load
+    spec:
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: redis-load
+      replicas: 1
+      template:
+        metadata:
+          labels:
+            app: redis-load
+        spec:
+          containers:
+            - env:
+                - name: PORT
+                  value: ${PORT}
+                - name: HOST
+                  value: ${HOST}
+                - name: ENTRIES
+                  value: ${ENTRIES}
+                - name: USERS
+                  value: ${USERS}
+              name: redis-load
+              image: quay.io/croche/redis-load:latest
+              ports:
+                - containerPort: 80
+parameters:
+  - name: PORT
+    description: redis port
+
+  - name: HOST
+    description: redis host
+
+  - name: ENTRIES
+    description: number of entries you require to redis
+
+  - name: USERS
+    description: number of concurrent users you want to create entries to redis
