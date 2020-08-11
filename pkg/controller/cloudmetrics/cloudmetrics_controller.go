@@ -32,6 +32,7 @@ const (
 	redisMemoryUsagePercentageAverage = "cro_redis_memory_usage_percentage_average"
 	redisFreeableMemoryAverage        = "cro_redis_freeable_memory_average"
 	redisCPUUtilizationAverage        = "cro_redis_cpu_utilization_average"
+	redisEngineCPUUtilizationAverage  = "cro_redis_engine_cpu_utilization_average"
 
 	labelClusterIDKey   = "clusterID"
 	labelResourceIDKey  = "resourceID"
@@ -159,6 +160,22 @@ var redisGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PromethuesMetricName: redisCPUUtilizationAverage,
 				ProviderMetricName:   "CPUUtilization",
+				Statistic:            cloudwatch.StatisticAverage,
+			},
+		},
+	},
+	{
+		Name: redisEngineCPUUtilizationAverage,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: redisEngineCPUUtilizationAverage,
+				Help: "The percentage of CPU utilization. Units: Percent",
+			},
+			labels),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PromethuesMetricName: redisEngineCPUUtilizationAverage,
+				ProviderMetricName:   "EngineCPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 		},
