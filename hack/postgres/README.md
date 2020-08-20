@@ -17,23 +17,34 @@ make run NAMESPACE=$ns
 export ns=cloud-resources-load-test
 export aws_rds_db_host=<your-db-host.rds.amazonaws.com>
 export aws_rds_db_password=<password>
-# Size to fill in GiB
-export load_data_size=<number>
+
 
 # Get postgres workshop pod name
 export pod_name=$(oc get pods -n $ns -o jsonpath='{.items[0].metadata.name}')
 ```
 #### Load Script
 
-Copy `load.sh` file to provisioned postgres workshop pod  
+
 ```
+# Size to fill in GiB
+export load_data_size=<number>
+
+# Copy `load.sh` file to provisioned postgres workshop pod  
 oc cp load.sh $ns/$pod_name:/var/lib/pgsql
 ```
 Run command
 ``` 
 oc exec $pod_name sh /var/lib/pgsql/load.sh $aws_rds_db_host $aws_rds_db_password $load_data_size -n $ns
 ```
-
+#### CPU Util Script
+Copy Script 
+```
+oc cp cpuUtil.sh $ns/$pod_name:/var/lib/pgsql
+```
+Run command
+```
+oc exec $pod_name sh /var/lib/pgsql/cpuUtil.sh $aws_rds_db_host $aws_rds_db_password -n $ns
+```
 #### Clean Script
 Copy `clean.sh` file to provisioned postgres workshop pod  
 ```

@@ -16,5 +16,4 @@ PG_PORT=5432
 PG_DB=postgres
 
 PGPASSWORD=$PG_PASS psql --host=$PG_HOST --port=$PG_PORT --username=$PG_USER --dbname=$PG_DB -c 'DROP TABLE stuff'
-
-
+PGPASSWORD=$PG_PASS psql --host=$PG_HOST --port=$PG_PORT --username=$PG_USER --dbname=$PG_DB -c 'DROP TABLE stuff2'
