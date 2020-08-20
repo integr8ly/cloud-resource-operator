@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -647,7 +648,7 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 			Filters: []*ec2.Filter{
 				{
 					Name:   aws.String("instance-type"),
-					Values: []*string{elasticacheConfig.CacheNodeType},
+					Values: aws.StringSlice([]string{strings.Replace(*elasticacheConfig.CacheNodeType, "cache.", "", 1)}),
 				},
 			},
 			LocationType: aws.String(ec2.LocationTypeAvailabilityZone),
