@@ -27,6 +27,7 @@ const (
 	DefaultPostgresDeletionMetricName         = "cro_postgres_deletion_timestamp"
 	DefaultPostgresSnapshotStatusMetricName   = "cro_postgres_snapshot_status_phase"
 	DefaultPostgresAllocatedStorageMetricName = "cro_postgres_current_allocated_storage"
+	DefaultPostgresMaxMemoryMetricName        = "cro_postgres_max_memory"
 	DefaultRedisMaintenanceMetricName         = "cro_redis_service_maintenance"
 	DefaultRedisInfoMetricName                = "cro_redis_info"
 	DefaultRedisAvailMetricName               = "cro_redis_available"

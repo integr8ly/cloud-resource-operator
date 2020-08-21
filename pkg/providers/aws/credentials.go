@@ -45,6 +45,7 @@ var (
 				"ec2:DescribeVpcs",
 				"ec2:DescribeSubnets",
 				"ec2:DescribeSecurityGroups",
+				"ec2:DescribeInstanceTypes",
 				"ec2:CreateSecurityGroup",
 				"ec2:DeleteSecurityGroup",
 				"ec2:AuthorizeSecurityGroupIngress",

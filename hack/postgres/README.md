@@ -45,6 +45,25 @@ Run command
 ```
 oc exec $pod_name sh /var/lib/pgsql/cpuUtil.sh $aws_rds_db_host $aws_rds_db_password -n $ns
 ```
+####Memory Usage Scripts
+Copy Scripts
+```
+oc cp memUsageInsert.sh $ns/$pod_name:/var/lib/pgsql
+oc cp memUsageExec.sh $ns/$pod_name:/var/lib/pgsql
+```
+
+Insert Data
+```
+oc exec $pod_name sh /var/lib/pgsql/memUsageInsert.sh $aws_rds_db_host $aws_rds_db_password -n $ns
+```
+
+Increase Memory Usage
+```
+# this script will use up a lot of freeable memory, but takes only about
+# 5 minutes total to run which will not reliably trigger alerts 
+oc exec $pod_name sh /var/lib/pgsql/memUsageExec.sh $aws_rds_db_host $aws_rds_db_password -n $ns
+```
+
 #### Clean Script
 Copy `clean.sh` file to provisioned postgres workshop pod  
 ```
