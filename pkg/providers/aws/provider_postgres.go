@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/hashicorp/go-version"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -690,33 +689,20 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PreferredMaintenanceWindow = rdsConfig.PreferredMaintenanceWindow
 		updateFound = true
 	}
-	engineUpgradeNeeded, err := verifyEngineVersionUpgradeNeeded(*foundConfig.EngineVersion, *rdsConfig.EngineVersion)
-	if err != nil {
-		return nil, err
-	}
-	if engineUpgradeNeeded {
-		mi.EngineVersion = rdsConfig.EngineVersion
-		updateFound = true
+	if rdsConfig.EngineVersion != nil {
+		engineUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundConfig.EngineVersion, *rdsConfig.EngineVersion)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "invalid postgres version")
+		}
+		if engineUpgradeNeeded {
+			mi.EngineVersion = rdsConfig.EngineVersion
+			updateFound = true
+		}
 	}
 	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
 		return nil, nil
 	}
 	return mi, nil
-}
-
-func verifyEngineVersionUpgradeNeeded(currentVersion string, specifiedVersion string) (bool, error) {
-	current, err := version.NewVersion(currentVersion)
-
-	if err != nil {
-		return false, errorUtil.Wrap(err, "failed to parse current postgres engine version")
-	}
-	specified, err := version.NewVersion(specifiedVersion)
-
-	if err != nil {
-		return false, errorUtil.Wrap(err, "failed to parse desired postgres engine version")
-	}
-
-	return current.LessThan(specified), nil
 }
 
 // returns true if modify input is not pending

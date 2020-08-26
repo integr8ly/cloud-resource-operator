@@ -1294,6 +1294,40 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "test modification not required when no engine version found in rdsConfig",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					EngineVersion:              aws.String("11.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want: nil,
+		},
+		{
 			name: "test invalid version number in rdsConfig causes an error",
 			args: args{
 				rdsConfig: &rds.CreateDBInstanceInput{
@@ -1327,7 +1361,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				},
 			},
 			want:    nil,
-			wantErr: "failed to parse desired postgres engine version: Malformed version: broken version num",
+			wantErr: "invalid postgres version: failed to parse desired version: Malformed version: broken version num",
 		},
 		{
 			name: "test invalid version number on foundConfig causes an error",
@@ -1363,7 +1397,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				},
 			},
 			want:    nil,
-			wantErr: "failed to parse current postgres engine version: Malformed version: broken version num",
+			wantErr: "invalid postgres version: failed to parse current version: Malformed version: broken version num",
 		},
 	}
 	for _, tt := range tests {
