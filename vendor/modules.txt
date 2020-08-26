@@ -327,6 +327,8 @@ github.com/gosuri/uitable/util/wordwrap
 # github.com/gregjones/httpcache v0.0.0-20190203031600-7a902570cb17
 github.com/gregjones/httpcache
 github.com/gregjones/httpcache/diskcache
+# github.com/hashicorp/go-version v1.2.1
+github.com/hashicorp/go-version
 # github.com/hashicorp/golang-lru v0.5.4
 github.com/hashicorp/golang-lru
 github.com/hashicorp/golang-lru/simplelru

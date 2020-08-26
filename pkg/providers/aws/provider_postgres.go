@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/hashicorp/go-version"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -308,7 +309,12 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// check if found instance and user strategy differs, and modify instance
 	logger.Infof("found existing rds instance: %s", *foundInstance.DBInstanceIdentifier)
-	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+	mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("error building update config for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 	if mi == nil {
 		logger.Infof("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
 	}
@@ -641,7 +647,7 @@ func (p *PostgresProvider) isLastResource(ctx context.Context, namespace string)
 }
 
 // verifies if there is a change between a found instance and the configuration from the instance strat and verified the changes are not pending
-func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput {
+func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) (*rds.ModifyDBInstanceInput, error) {
 	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.DBInstanceIdentifier)
 	updateFound := false
 
@@ -672,10 +678,6 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.MaxAllocatedStorage = rdsConfig.MaxAllocatedStorage
 		updateFound = true
 	}
-	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion {
-		mi.EngineVersion = rdsConfig.EngineVersion
-		updateFound = true
-	}
 	if *rdsConfig.MultiAZ != *foundConfig.MultiAZ {
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
@@ -688,10 +690,33 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PreferredMaintenanceWindow = rdsConfig.PreferredMaintenanceWindow
 		updateFound = true
 	}
-	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
-		return nil
+	engineUpgradeNeeded, err := verifyEngineVersionUpgradeNeeded(*foundConfig.EngineVersion, *rdsConfig.EngineVersion)
+	if err != nil {
+		return nil, err
 	}
-	return mi
+	if engineUpgradeNeeded {
+		mi.EngineVersion = rdsConfig.EngineVersion
+		updateFound = true
+	}
+	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
+		return nil, nil
+	}
+	return mi, nil
+}
+
+func verifyEngineVersionUpgradeNeeded(currentVersion string, specifiedVersion string) (bool, error) {
+	current, err := version.NewVersion(currentVersion)
+
+	if err != nil {
+		return false, errorUtil.Wrap(err, "failed to parse current postgres engine version")
+	}
+	specified, err := version.NewVersion(specifiedVersion)
+
+	if err != nil {
+		return false, errorUtil.Wrap(err, "failed to parse desired postgres engine version")
+	}
+
+	return current.LessThan(specified), nil
 }
 
 // returns true if modify input is not pending
