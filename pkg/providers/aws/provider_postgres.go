@@ -308,7 +308,12 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 
 	// check if found instance and user strategy differs, and modify instance
 	logger.Infof("found existing rds instance: %s", *foundInstance.DBInstanceIdentifier)
-	mi := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+	mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("error building update config for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
 	if mi == nil {
 		logger.Infof("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
 	}
@@ -641,7 +646,7 @@ func (p *PostgresProvider) isLastResource(ctx context.Context, namespace string)
 }
 
 // verifies if there is a change between a found instance and the configuration from the instance strat and verified the changes are not pending
-func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) *rds.ModifyDBInstanceInput {
+func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *rds.DBInstance) (*rds.ModifyDBInstanceInput, error) {
 	logrus.Infof("verifying that %s configuration is as expected", *foundConfig.DBInstanceIdentifier)
 	updateFound := false
 
@@ -672,10 +677,6 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.MaxAllocatedStorage = rdsConfig.MaxAllocatedStorage
 		updateFound = true
 	}
-	if *rdsConfig.EngineVersion != *foundConfig.EngineVersion {
-		mi.EngineVersion = rdsConfig.EngineVersion
-		updateFound = true
-	}
 	if *rdsConfig.MultiAZ != *foundConfig.MultiAZ {
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
@@ -688,10 +689,20 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PreferredMaintenanceWindow = rdsConfig.PreferredMaintenanceWindow
 		updateFound = true
 	}
-	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
-		return nil
+	if rdsConfig.EngineVersion != nil {
+		engineUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundConfig.EngineVersion, *rdsConfig.EngineVersion)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "invalid postgres version")
+		}
+		if engineUpgradeNeeded {
+			mi.EngineVersion = rdsConfig.EngineVersion
+			updateFound = true
+		}
 	}
-	return mi
+	if !updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues) {
+		return nil, nil
+	}
+	return mi, nil
 }
 
 // returns true if modify input is not pending

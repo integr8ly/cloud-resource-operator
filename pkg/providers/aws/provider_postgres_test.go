@@ -1173,9 +1173,10 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 		foundConfig *rds.DBInstance
 	}
 	tests := []struct {
-		name string
-		args args
-		want *rds.ModifyDBInstanceInput
+		name    string
+		args    args
+		want    *rds.ModifyDBInstanceInput
+		wantErr string
 	}{
 		{
 			name: "test modification not required",
@@ -1187,7 +1188,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					PubliclyAccessible:         aws.Bool(true),
 					AllocatedStorage:           aws.Int64(1),
 					MaxAllocatedStorage:        aws.Int64(1),
-					EngineVersion:              aws.String("test"),
+					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
@@ -1200,7 +1201,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					PubliclyAccessible:         aws.Bool(true),
 					AllocatedStorage:           aws.Int64(1),
 					MaxAllocatedStorage:        aws.Int64(1),
-					EngineVersion:              aws.String("test"),
+					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
@@ -1221,7 +1222,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					DBInstanceClass:            aws.String("newValue"),
 					PubliclyAccessible:         aws.Bool(false),
 					MaxAllocatedStorage:        aws.Int64(0),
-					EngineVersion:              aws.String("newValue"),
+					EngineVersion:              aws.String("11.1"),
 					MultiAZ:                    aws.Bool(false),
 					PreferredBackupWindow:      aws.String("newValue"),
 					PreferredMaintenanceWindow: aws.String("newValue"),
@@ -1233,7 +1234,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
 					MaxAllocatedStorage:        aws.Int64(1),
-					EngineVersion:              aws.String("test"),
+					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
@@ -1248,7 +1249,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				BackupRetentionPeriod:      aws.Int64(0),
 				DBInstanceClass:            aws.String("newValue"),
 				PubliclyAccessible:         aws.Bool(false),
-				EngineVersion:              aws.String("newValue"),
+				EngineVersion:              aws.String("11.1"),
 				MaxAllocatedStorage:        aws.Int64(0),
 				MultiAZ:                    aws.Bool(false),
 				PreferredBackupWindow:      aws.String("newValue"),
@@ -1257,10 +1258,161 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				DBInstanceIdentifier:       aws.String("test"),
 			},
 		},
+		{
+			name: "test modification not required when instance engine version is higher than configured",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					EngineVersion:              aws.String("10.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					EngineVersion:              aws.String("11.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "test modification not required when no engine version found in rdsConfig",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					EngineVersion:              aws.String("11.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "test invalid version number in rdsConfig causes an error",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					EngineVersion:              aws.String("broken version num"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					EngineVersion:              aws.String("11.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want:    nil,
+			wantErr: "invalid postgres version: failed to parse desired version: Malformed version: broken version num",
+		},
+		{
+			name: "test invalid version number on foundConfig causes an error",
+			args: args{
+				rdsConfig: &rds.CreateDBInstanceInput{
+					EngineVersion:              aws.String("11.1"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				foundConfig: &rds.DBInstance{
+					EngineVersion:              aws.String("broken version num"),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Endpoint: &rds.Endpoint{
+						Port: aws.Int64(1),
+					},
+					DBInstanceIdentifier: aws.String("test"),
+				},
+			},
+			want:    nil,
+			wantErr: "invalid postgres version: failed to parse current version: Malformed version: broken version num",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig); !reflect.DeepEqual(got, tt.want) {
+			got, err := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig)
+
+			if err != nil {
+				if tt.wantErr == "" {
+					t.Errorf("buildRDSUpdateStrategy() error: %v", err)
+				} else if tt.wantErr != "" && err.Error() != tt.wantErr {
+					t.Errorf("buildRDSUpdateStrategy() wanted error %v, got error %v", tt.wantErr, err.Error())
+				}
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
 			}
 		})

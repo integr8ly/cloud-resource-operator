@@ -3,9 +3,10 @@ package aws
 import (
 	"context"
 	"errors"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"reflect"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/ec2"
 
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 
@@ -942,6 +943,89 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				logger: testLogger,
 			},
 			want: nil,
+		},
+		{
+			name: "test no modification required when current engine version higher than desired",
+			args: args{
+				ec2Client: buildMockEc2Client(nil),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.test"),
+					SnapshotRetentionLimit:     aws.Int64(30),
+					PreferredMaintenanceWindow: aws.String("test"),
+					SnapshotWindow:             aws.String("test"),
+					EngineVersion:              aws.String("3.2.6"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("cache.test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						EngineVersion:              aws.String("5.0.0"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+				logger: testLogger,
+			},
+			want: nil,
+		},
+		{
+			name: "test error when invalid desired engine version",
+			args: args{
+				ec2Client: buildMockEc2Client(nil),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.test"),
+					SnapshotRetentionLimit:     aws.Int64(30),
+					PreferredMaintenanceWindow: aws.String("test"),
+					SnapshotWindow:             aws.String("test"),
+					EngineVersion:              aws.String("some invalid value"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("cache.test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						EngineVersion:              aws.String("5.0.0"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+				logger: testLogger,
+			},
+			want:    nil,
+			wantErr: "invalid redis version: failed to parse desired version: Malformed version: some invalid value",
+		},
+		{
+			name: "test error when invalid current engine version",
+			args: args{
+				ec2Client: buildMockEc2Client(nil),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.test"),
+					SnapshotRetentionLimit:     aws.Int64(30),
+					PreferredMaintenanceWindow: aws.String("test"),
+					SnapshotWindow:             aws.String("test"),
+					EngineVersion:              aws.String("some invalid value"),
+				},
+				foundConfig: &elasticache.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("cache.test"),
+					SnapshotRetentionLimit: aws.Int64(30),
+				},
+				replicationGroupClusters: []elasticache.CacheCluster{
+					{
+						EngineVersion:              aws.String("some invalid value"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+				logger: testLogger,
+			},
+			want:    nil,
+			wantErr: "invalid redis version: failed to parse current version: Malformed version: some invalid value",
 		},
 		{
 			name: "test when modification is required",

@@ -13,6 +13,7 @@ require (
 	github.com/go-openapi/spec v0.19.3
 	github.com/google/uuid v1.1.1
 	github.com/gregjones/httpcache v0.0.0-20190203031600-7a902570cb17 // indirect
+	github.com/hashicorp/go-version v1.2.1
 	github.com/lib/pq v1.3.0
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
