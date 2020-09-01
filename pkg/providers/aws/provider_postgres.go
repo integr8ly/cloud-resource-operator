@@ -300,12 +300,6 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		return nil, "started rds provision", nil
 	}
 
-	// check rds instance phase
-	if *foundInstance.DBInstanceStatus != "available" {
-		logger.Infof("found instance %s current status %s", *foundInstance.DBInstanceIdentifier, *foundInstance.DBInstanceStatus)
-		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
-	}
-
 	// check if found instance and user strategy differs, and modify instance
 	logger.Infof("found existing rds instance: %s", *foundInstance.DBInstanceIdentifier)
 	mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance)
@@ -319,10 +313,23 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	}
 	if mi != nil {
 		if _, err = rdsSvc.ModifyDBInstance(mi); err != nil {
+			// AWS handles invalid state with the ErrCodeInvalidDBInstanceStateFault
+			if aerr, ok := err.(awserr.Error); ok {
+				if  aerr.Code() == rds.ErrCodeInvalidDBInstanceStateFault{
+					logger.Errorf("modifyRDSInstance() failed invalid state fault %s error : %s",rds.ErrCodeInvalidDBInstanceStateFault, aerr.Error())
+					return nil, croType.StatusMessage(fmt.Sprintf("modifyRDSInstance() failed, RDS can not be modified in current aws rds resource status %s", *foundInstance.DBInstanceStatus)), nil
+				}
+			}
 			errMsg := fmt.Sprintf("error experienced trying to modify db instance: %s", *foundInstance.DBInstanceIdentifier)
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		logger.Infof("set pending modifications for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+	}
+
+	// check rds instance phase
+	if *foundInstance.DBInstanceStatus != "available" {
+		logger.Infof("found instance %s current status %s", *foundInstance.DBInstanceIdentifier, *foundInstance.DBInstanceStatus)
+		return nil, croType.StatusMessage(fmt.Sprintf("createRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
 	// Add Tags to Aws Postgres resources
