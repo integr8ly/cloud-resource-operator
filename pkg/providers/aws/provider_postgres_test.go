@@ -503,15 +503,6 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 	}
 }
 
-func buildPendingDBInstance(testID string) []*rds.DBInstance {
-	return []*rds.DBInstance{
-		{
-			DBInstanceIdentifier: aws.String(testID),
-			DBInstanceStatus:     aws.String("pending"),
-		},
-	}
-}
-
 func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
 	return &rds.CreateDBInstanceInput{
 		DBInstanceIdentifier:       aws.String(testID),
@@ -735,28 +726,6 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Database: defaultAwsEngine,
 				Port:     defaultAwsPostgresPort,
 			}},
-			wantErr: false,
-		},
-		{
-			name: "test rds exists and is not available (valid cluster bundle subnets)",
-			args: args{
-				rdsSvc: &mockRdsClient{dbInstances: buildPendingDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:    context.TODO(),
-				cr:     buildTestPostgresCR(),
-				postgresCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-				},
-				standaloneNetworkExists: false,
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    nil,
 			wantErr: false,
 		},
 		{
