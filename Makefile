@@ -7,6 +7,8 @@ PREV_VERSION=0.20.0
 VERSION=0.21.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
+SHELL=/bin/bash
+
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
 # otherwise use it through "go run" (slower but will always work and will use correct version)
 OPERATOR_SDK_VERSION=0.19.0
@@ -70,8 +72,7 @@ code/fix:
 
 .PHONY: code/check
 code/check:
-	go fmt `go list ./... | grep -v /vendor/`
-	golint ./pkg/...
+	@diff -u <(echo -n) <(gofmt -d `find . -type f -name '*.go' -not -path "./vendor/*"`)
 
 .PHONY: code/audit
 code/audit:
