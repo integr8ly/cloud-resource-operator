@@ -664,7 +664,11 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.DeletionProtection = rdsConfig.DeletionProtection
 		updateFound = true
 	}
-	if *rdsConfig.Port != *foundConfig.Endpoint.Port {
+	config := *foundConfig
+	endpoint := config.Endpoint
+	if endpoint == nil {
+		// nil pointer check as *foundConfig.Endpoint doesn't exist on first run
+	} else if *rdsConfig.Port != *foundConfig.Endpoint.Port {
 		mi.DBPortNumber = rdsConfig.Port
 		updateFound = true
 	}
