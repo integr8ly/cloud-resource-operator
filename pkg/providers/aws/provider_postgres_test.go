@@ -506,8 +506,8 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 func buildPendingDBInstance(testID string) []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
-			DBInstanceIdentifier: aws.String(testID),
-			DBInstanceStatus:     aws.String("pending"),
+			DBInstanceIdentifier:       aws.String(testID),
+			DBInstanceStatus:           aws.String("pending"),
 			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
 			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
 			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),

@@ -315,8 +315,8 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 		if _, err = rdsSvc.ModifyDBInstance(mi); err != nil {
 			// AWS handles invalid state with the ErrCodeInvalidDBInstanceStateFault
 			if aerr, ok := err.(awserr.Error); ok {
-				if  aerr.Code() == rds.ErrCodeInvalidDBInstanceStateFault{
-					logger.Errorf("modifyRDSInstance() failed invalid state fault %s error : %s",rds.ErrCodeInvalidDBInstanceStateFault, aerr.Error())
+				if aerr.Code() == rds.ErrCodeInvalidDBInstanceStateFault {
+					logger.Errorf("modifyRDSInstance() failed invalid state fault %s error : %s", rds.ErrCodeInvalidDBInstanceStateFault, aerr.Error())
 					return nil, croType.StatusMessage(fmt.Sprintf("modifyRDSInstance() failed, RDS can not be modified in current aws rds resource status %s", *foundInstance.DBInstanceStatus)), nil
 				}
 			}
