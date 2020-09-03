@@ -375,6 +375,12 @@ func (m *mockEc2Client) DescribeInstanceTypeOfferings(input *ec2.DescribeInstanc
 	return m.describeInstanceTypeOfferingsFn(input)
 }
 
+// the only place this is called is the exposePostgresMetrics func which is not being tested
+// return empty result
+func (m *mockEc2Client) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
+	return &ec2.DescribeInstanceTypesOutput{}, nil
+}
+
 func buildMockNetworkManager() *NetworkManagerMock {
 	return &NetworkManagerMock{
 		DeleteNetworkConnectionFunc: func(ctx context.Context, np *NetworkPeering) error {
@@ -446,6 +452,7 @@ func buildDbInstanceGroupPending() []*rds.DBInstance {
 			DBInstanceIdentifier: aws.String("test-id"),
 			AvailabilityZone:     aws.String("test-availabilityZone"),
 			DBInstanceStatus:     aws.String("pending"),
+			DBInstanceClass:      aws.String(defaultAwsDBInstanceClass),
 		},
 	}
 }
@@ -459,6 +466,7 @@ func buildDbInstanceGroupAvailable() []*rds.DBInstance {
 			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 			DeletionProtection:         aws.Bool(false),
+			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 		},
 	}
 }
@@ -470,6 +478,7 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 			DBInstanceStatus:     aws.String("available"),
 			AvailabilityZone:     aws.String("test-availabilityZone"),
 			DeletionProtection:   aws.Bool(true),
+			DBInstanceClass:      aws.String(defaultAwsDBInstanceClass),
 		},
 	}
 }
@@ -508,6 +517,7 @@ func buildPendingDBInstance(testID string) []*rds.DBInstance {
 		{
 			DBInstanceIdentifier: aws.String(testID),
 			DBInstanceStatus:     aws.String("pending"),
+			DBInstanceClass:      aws.String(defaultAwsDBInstanceClass),
 		},
 	}
 }
@@ -907,6 +917,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		pg                      *v1alpha1.Postgres
 		networkManager          NetworkManager
 		instanceSvc             rdsiface.RDSAPI
+		ec2Svc                  ec2iface.EC2API
 		postgresCreateConfig    *rds.CreateDBInstanceInput
 		postgresDeleteConfig    *rds.DeleteDBInstanceInput
 		standaloneNetworkExists bool
@@ -927,6 +938,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -946,6 +958,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceGroupPending()},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -965,6 +978,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceGroupAvailable()},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -984,6 +998,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: buildDbInstanceDeletionProtection()},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -1004,6 +1019,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: true,
 				isLastResource:          true,
 			},
@@ -1024,6 +1040,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				pg:                      buildTestPostgresCR(),
 				networkManager:          buildMockNetworkManager(),
 				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc:                  &mockEc2Client{},
 				standaloneNetworkExists: false,
 				isLastResource:          true,
 			},
@@ -1045,7 +1062,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig, tt.args.standaloneNetworkExists, tt.args.isLastResource)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.ec2Svc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig, tt.args.standaloneNetworkExists, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
