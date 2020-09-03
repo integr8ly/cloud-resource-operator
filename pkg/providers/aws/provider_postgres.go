@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -275,7 +276,7 @@ func (p *PostgresProvider) createRDSInstance(ctx context.Context, cr *v1alpha1.P
 	defer p.setPostgresServiceMaintenanceMetric(ctx, rdsSvc, foundInstance)
 
 	// set status metric
-	defer p.exposePostgresMetrics(ctx, cr, foundInstance)
+	defer p.exposePostgresMetrics(ctx, cr, foundInstance, ec2Svc)
 
 	// create connection metric
 	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
@@ -462,10 +463,10 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), rdsCreateConfig, rdsDeleteConfig, isEnabled, isLastResource)
+	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), ec2.New(sess), rdsCreateConfig, rdsDeleteConfig, isEnabled, isLastResource)
 }
 
-func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
 
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
@@ -493,7 +494,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	// if not delete finalizer and credential secret
 	if foundInstance != nil {
 		// set status metric
-		p.exposePostgresMetrics(ctx, pg, foundInstance)
+		p.exposePostgresMetrics(ctx, pg, foundInstance, ec2Svc)
 
 		// return if rds instance is not available
 		if *foundInstance.DBInstanceStatus != "available" {
@@ -961,7 +962,7 @@ func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instance
 	return labels
 }
 
-func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance) {
+func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alpha1.Postgres, instance *rds.DBInstance, ec2Svc ec2iface.EC2API) {
 	// build instance name
 	instanceName, err := p.buildInstanceName(ctx, cr)
 	if err != nil {
@@ -1011,6 +1012,26 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	if instance != nil && instance.AllocatedStorage != nil {
 		// convert allocated storage to bytes and expose as a metric
 		resources.SetMetric(resources.DefaultPostgresAllocatedStorageMetricName, genericLabels, float64(*instance.AllocatedStorage*resources.BytesInGibiBytes))
+	}
+
+	if instance != nil {
+		//rds instance types are prefixed ex: db.t3.small
+		//need to remove db. prefix for DescribeInstanceTypes
+		instanceType := strings.TrimPrefix(*instance.DBInstanceClass, "db.")
+
+		input := &ec2.DescribeInstanceTypesInput{
+			InstanceTypes: []*string{&instanceType},
+		}
+		result, err := ec2Svc.DescribeInstanceTypes(input)
+		if err != nil {
+			logrus.Errorf("error occurred while describing instance types %v", err)
+			return
+		}
+		instanceTypes := result.InstanceTypes
+		if len(instanceTypes) > 0 {
+			MemorySize := instanceTypes[0].MemoryInfo.SizeInMiB
+			resources.SetMetric(resources.DefaultPostgresMaxMemoryMetricName, genericLabels, float64(*MemorySize))
+		}
 	}
 }
 
