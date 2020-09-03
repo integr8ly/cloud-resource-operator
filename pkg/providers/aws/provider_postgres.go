@@ -1003,7 +1003,6 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 		resources.SetMetric(resources.DefaultPostgresAllocatedStorageMetricName, genericLabels, float64(*instance.AllocatedStorage*resources.BytesInGibiBytes))
 	}
 
-	//
 	if instance != nil {
 		//rds instance types are prefixed ex: db.t3.small
 		//need to remove db. prefix for DescribeInstanceTypes
