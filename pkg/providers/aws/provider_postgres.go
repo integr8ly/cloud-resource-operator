@@ -1089,11 +1089,19 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 		for _, pma := range su.PendingMaintenanceActionDetails {
 
-			metricLabels["AutoAppliedAfterDate"] = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
-			metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
-			metricLabels["Description"] = *pma.Description
+			metricEpochTimestamp := time.Now().Unix()
 
-			metricEpochTimestamp := (*pma.AutoAppliedAfterDate).Unix()
+			if pma.AutoAppliedAfterDate != nil && !pma.AutoAppliedAfterDate.IsZero() {
+				metricLabels["AutoAppliedAfterDate"] = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
+				metricEpochTimestamp = (*pma.AutoAppliedAfterDate).Unix()
+			}
+
+			if pma.CurrentApplyDate != nil && !pma.CurrentApplyDate.IsZero() {
+				metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
+				metricEpochTimestamp = (*pma.CurrentApplyDate).Unix()
+			}
+
+			metricLabels["Description"] = *pma.Description
 
 			resources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 		}
