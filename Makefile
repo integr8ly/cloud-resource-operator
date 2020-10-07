@@ -3,8 +3,8 @@ IMAGE_ORG=integreatly
 IMAGE_NAME=cloud-resource-operator
 MANIFEST_NAME=cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.21.0
-VERSION=0.22.0
+PREV_VERSION=0.22.0
+VERSION=0.22.1
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 
 SHELL=/bin/bash
