@@ -50,7 +50,7 @@ const (
 	defaultAwsBackupRetentionPeriod      = 31
 	defaultAwsDBInstanceClass            = "db.t2.small"
 	defaultAwsEngine                     = "postgres"
-	defaultAwsEngineVersion              = "10.6"
+	defaultAwsEngineVersion              = "10.13"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
 	defaultAWSCopyTagsToSnapshot         = true
@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	defaultSupportedEngineVersions = []string{"10.6", "9.6", "9.5"}
+	defaultSupportedEngineVersions = []string{"10.13", "10.6", "9.6", "9.5"}
 )
 
 var _ providers.PostgresProvider = (*PostgresProvider)(nil)
