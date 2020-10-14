@@ -1085,10 +1085,17 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 		metricLabels := map[string]string{}
 
 		metricLabels["clusterID"] = clusterID
+
+		if su.ResourceIdentifier == nil {
+			logrus.Info("could not set pending maintenance metric as resource identifier null")
+		}
 		metricLabels["ResourceIdentifier"] = *su.ResourceIdentifier
 
 		for _, pma := range su.PendingMaintenanceActionDetails {
-
+			if pma.AutoAppliedAfterDate == nil || pma.CurrentApplyDate == nil || pma.Description == nil {
+				logrus.Infof("could not set pending maintenance metric for resource {%s} as values are missing", aws.StringValue(su.ResourceIdentifier))
+				continue
+			}
 			metricLabels["AutoAppliedAfterDate"] = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
 			metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
 			metricLabels["Description"] = *pma.Description
