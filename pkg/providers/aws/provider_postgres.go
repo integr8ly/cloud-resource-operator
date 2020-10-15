@@ -515,6 +515,10 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.MultiAZ = rdsConfig.MultiAZ
 		updateFound = true
 	}
+	if rdsConfig.AutoMinorVersionUpgrade != nil && *rdsConfig.AutoMinorVersionUpgrade != *foundConfig.AutoMinorVersionUpgrade {
+		mi.AutoMinorVersionUpgrade = rdsConfig.AutoMinorVersionUpgrade
+		updateFound = true
+	}
 	if rdsConfig.PreferredBackupWindow != nil && *rdsConfig.PreferredBackupWindow != *foundConfig.PreferredBackupWindow {
 		mi.PreferredBackupWindow = rdsConfig.PreferredBackupWindow
 		updateFound = true
@@ -581,6 +585,9 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	}
 	if rdsCreateConfig.Port == nil {
 		rdsCreateConfig.Port = aws.Int64(defaultAwsPostgresPort)
+	}
+	if rdsCreateConfig.AutoMinorVersionUpgrade == nil {
+		rdsCreateConfig.AutoMinorVersionUpgrade = aws.Bool(false)
 	}
 	if rdsCreateConfig.DBName == nil {
 		rdsCreateConfig.DBName = aws.String(defaultAwsPostgresDatabase)
