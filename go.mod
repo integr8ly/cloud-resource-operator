@@ -39,6 +39,7 @@ require (
 
 // Pinned to kubernetes-1.15.4
 replace (
+	bitbucket.org/ww/goautoneg => github.com/briangallagher/goautoneg v0.0.0-20120707110453-a547fc61f48d
 	k8s.io/api => k8s.io/api v0.0.0-20190918195907-bd6ac527cfd2
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190918201827-3de75813f604
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d
