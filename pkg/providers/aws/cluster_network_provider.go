@@ -167,6 +167,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		createVpcOutput, err := n.Ec2Api.CreateVpc(&ec2.CreateVpcInput{
 			CidrBlock: aws.String(vpcCidrBlock.String()),
 		})
+
 		ec2Err, isAwsErr := err.(awserr.Error)
 		if err != nil && isAwsErr && ec2Err.Code() == "InvalidVpc.Range" {
 			return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
@@ -175,6 +176,29 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 			return nil, errorUtil.Wrap(err, "unexpected error creating vpc")
 		}
 		logger.Infof("creating vpc: %s", *createVpcOutput.Vpc.VpcId)
+
+		waitVpcErr := n.Ec2Api.WaitUntilVpcExists(&ec2.DescribeVpcsInput{
+			VpcIds: []*string{
+				aws.String(*createVpcOutput.Vpc.VpcId),
+			},
+		})
+		if waitVpcErr != nil {
+			logger.Warnf(
+				"timed out waiting to check if vpc %s with status %s exists, operator will delete the VPC and recreate another one: %w",
+				*createVpcOutput.Vpc.VpcId,
+				*createVpcOutput.Vpc.State,
+				waitVpcErr,
+			)
+			_, err = n.Ec2Api.DeleteVpc(&ec2.DeleteVpcInput{
+				VpcId: aws.String(*createVpcOutput.Vpc.VpcId),
+			})
+			if err != nil {
+				logger.Errorf("unable to delete vpc %s after failing to check if it exists: %w", *createVpcOutput.Vpc.VpcId, err)
+			}
+			return &Network{}, nil
+		}
+
+		logger.Infof("vpc %s is created with state: %s", *createVpcOutput.Vpc.VpcId, *createVpcOutput.Vpc.State)
 
 		// ensure standalone vpc has correct tags
 		clusterIDTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
@@ -1186,9 +1210,9 @@ func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *tag) erro
 			},
 		})
 		if err != nil {
-			return errorUtil.Wrap(err, "unable to tag vpc")
+			return errorUtil.Wrapf(err, "unable to tag vpc %s with state %s", *vpc.VpcId, *vpc.State)
 		}
-		logger.Infof("successfully tagged vpc: %s for clusterID: %s", *vpc.VpcId, clusterIDTag.value)
+		logger.Infof("successfully tagged vpc: %s for clusterID: %s with state %s", *vpc.VpcId, clusterIDTag.value, *vpc.State)
 	}
 	return nil
 }
