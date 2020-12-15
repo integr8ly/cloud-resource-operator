@@ -178,9 +178,9 @@ func (p *PostgresProvider) CreatePostgres(ctx context.Context, pg *v1alpha1.Post
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from postgres cr
-		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, pg.Spec.Tier, logger)
+		vpcCidrBlock, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, pg.Spec.Tier, logger)
 		if err != nil {
-			errMsg := "failed to get _network strategy config"
+			errMsg := "failed to reconcile network provider config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		logger.Debug("standalone network provider enabled, reconciling standalone vpc")

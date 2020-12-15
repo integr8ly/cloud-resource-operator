@@ -1135,21 +1135,46 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 	}
 }
 
-func Test_getNetworkProviderConfig(t *testing.T) {
+func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
 	type args struct {
 		ctx           context.Context
 		configManager ConfigManager
 		logger        *logrus.Entry
 		tier          string
 	}
+	type fields struct {
+		Client         client.Client
+		RdsApi         rdsiface.RDSAPI
+		Ec2Api         ec2iface.EC2API
+		ElasticacheApi elasticacheiface.ElastiCacheAPI
+		Logger         *logrus.Entry
+	}
 	tests := []struct {
 		name    string
+		fields  fields
 		args    args
 		want    *net.IPNet
 		wantErr bool
 	}{
 		{
-			name: "verify successful parse",
+			name: "verify successful reoncile",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+						}}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
 			args: args{
 				ctx: context.TODO(),
 				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
@@ -1166,23 +1191,20 @@ func Test_getNetworkProviderConfig(t *testing.T) {
 			want:    buildValidIpNet("10.0.0.0/16"),
 		},
 		{
-			name: "verify error on nil CIDR Block",
-			args: args{
-				ctx: context.TODO(),
-				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
-					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{
-							CreateStrategy: json.RawMessage("{ }"),
-						}, nil
+			name: "verify invalid CIDR",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+						}}, nil
 					}
 				}),
-				logger: logrus.NewEntry(logrus.StandardLogger()),
-				tier:   "test",
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
 			},
-			wantErr: true,
-		},
-		{
-			name: "verify invalid CIDR",
 			args: args{
 				ctx: context.TODO(),
 				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
@@ -1199,6 +1221,19 @@ func Test_getNetworkProviderConfig(t *testing.T) {
 		},
 		{
 			name: "verify unmarshal error",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+						}}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
 			args: args{
 				ctx: context.TODO(),
 				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
@@ -1213,16 +1248,53 @@ func Test_getNetworkProviderConfig(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "verify default cidr block and no error on empty cidr block",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {}),
+						}}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{  }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: false,
+			want:    buildValidIpNet("10.0.0.0/26"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, tt.args.logger)
+			n := &NetworkProvider{
+				Client:         tt.fields.Client,
+				RdsApi:         tt.fields.RdsApi,
+				Ec2Api:         tt.fields.Ec2Api,
+				ElasticacheApi: tt.fields.ElasticacheApi,
+				Logger:         tt.fields.Logger,
+			}
+			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, tt.args.logger)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ReconcileNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getNetworkProviderConfig() got = %v, want %v", got, tt.want)
+				t.Errorf("ReconcileNetworkProviderConfig() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

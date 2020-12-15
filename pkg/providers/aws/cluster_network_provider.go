@@ -63,6 +63,8 @@ const (
 	// see https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVpcPeeringConnections.html
 	filterVpcPeeringRequesterId = "requester-vpc-info.vpc-id"
 	filterVpcPeeringAccepterId  = "accepter-vpc-info.vpc-id"
+	// default cidr values
+	defaultCIDRMask = "26"
 )
 
 // wrapper for ec2 vpcs, to allow for extensibility
@@ -153,12 +155,21 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		//By default, `integreatly.org/clusterID`.
 		//
 		//NOTE - Once a VPC is created we do not want to update it. To avoid changing cidr block
+		clusterVPC, err := getClusterVpc(ctx, n.Client, n.Ec2Api, n.Logger)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+		}
+
+		_, clusterVPCCidr, err := net.ParseCIDR(*clusterVPC.CidrBlock)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to parse cluster vpc cidr block")
+		}
 
 		// standalone vpc cidr block can not overlap with existing cluster vpc cidr block
 		// issue arises when trying to peer both vpcs with invalid vpc error - `overlapping CIDR range`
 		// we need to ensure both cidr ranges do not intersect before creating the standalone vpc
 		// as the creation of a standalone vpc is designed to be a one shot pass and not to be updated after the fact
-		if err := validateStandaloneCidrBlock(ctx, n.Client, n.Ec2Api, logger, vpcCidrBlock); err != nil {
+		if err := validateStandaloneCidrBlock(vpcCidrBlock, clusterVPCCidr); err != nil {
 			return nil, errorUtil.Wrap(err, "vpc validation failure")
 		}
 		logger.Infof("cidr %s is valid 👍", vpcCidrBlock.String())
@@ -1491,13 +1502,15 @@ func getElasticacheSubnetByGroup(elasticacheApi elasticacheiface.ElastiCacheAPI,
 	return nil, nil
 }
 
-// getNetworkProviderConfig return parsed ipNet cidr block
+// ReconcileNetworkProviderConfig return parsed ipNet cidr block
 // a _network resource type strategy, is expected to have the same tier as either postgres or redis resource type
 // ie. for a postgres tier X there should be a corresponding _network tier X
 //
 // the _network strategy config is unmarshalled into a ec2 create vpc input struct
 // from the struct the cidr block is parsed to ensure validity
-func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string, logger *logrus.Entry) (*net.IPNet, error) {
+// if there is no entry for cidrblock in the _network block a sensible default which doesn't overlap with the cluster vpc
+// if cro is unable to find a valid non-overlapping cidr block it will return an error
+func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string, logger *logrus.Entry) (*net.IPNet, error) {
 	logger.Infof("fetching _network strategy config for tier %s", tier)
 
 	stratCfg, err := configManager.ReadStorageStrategy(ctx, providers.NetworkResourceType, tier)
@@ -1510,18 +1523,88 @@ func getNetworkProviderConfig(ctx context.Context, configManager ConfigManager, 
 		return nil, errorUtil.Wrap(err, "failed to unmarshal aws vpc create config")
 	}
 
-	if vpcCreateConfig.CidrBlock == nil {
-		return nil, errorUtil.New(fmt.Sprintf("CidrBlock in _network strategy tier %s can not be nil", tier))
+	// if the config map is found and the _network block contains an entry, that is returned for use in the network creation
+	if vpcCreateConfig.CidrBlock != nil && *vpcCreateConfig.CidrBlock != "" {
+		_, vpcCidr, err := net.ParseCIDR(*vpcCreateConfig.CidrBlock)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to parse cidr block from _network strategy")
+		}
+		logger.Infof("found vpc cidr block %s in network strategy tier %s", vpcCidr.String(), tier)
+		return vpcCidr, nil
 	}
 
-	_, vpcCidr, err := net.ParseCIDR(*vpcCreateConfig.CidrBlock)
+	//if vpcCreateConfig.CidrBlock is nil or an empty string we can go ahead and set a sensible non overlapping default with a mask size of /26
+	defaultCIDR, err := n.getNonOverlappingDefaultCIDR(ctx)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to parse cidr block from _network strategy")
+		return nil, errorUtil.Wrap(err, "failed to generate default CIDR")
 	}
-	cidrMask, _ := vpcCidr.Mask.Size()
 
-	logger.Infof("found vpc cidr block %s/%d in network strategy tier %s", vpcCidr.IP.String(), cidrMask, tier)
-	return vpcCidr, nil
+	// a default cidr is generated and updated to the config map, that is returned for use in the network creation
+	return defaultCIDR, nil
+}
+
+// getNonOverlappingDefaultCIDR returns a non overlapping cidr block based on the OpenShift vpc cidr block
+// the default mask is /26
+// for other masks the user is required to provide their own via config
+func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*net.IPNet, error) {
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, n.Logger)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to get cluster vpc for cidr block")
+	}
+	//parse the cidr to an ipnet cidr in order to manipulate the ip
+	_, clusterNet, err := net.ParseCIDR(aws.StringValue(clusterVpc.CidrBlock))
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error parsing cluster cidr block")
+	}
+
+	// this map is used to loop through the available options for a vpc cidr range in aws
+	// See aws docs https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html#vpc-sizing-ipv4
+	cidrRanges := map[string]string{
+		"10.255.255.255/8":  fmt.Sprintf("10.0.0.0/%s", defaultCIDRMask),
+		"172.31.255.255/12": fmt.Sprintf("172.16.0.0/%s", defaultCIDRMask),
+	}
+
+	// in this loop we loop through the available cidr ranges for vpcs in aws
+	// in each range the ip of the cidr block is incremented only in the A and B range
+	// the reason for this is that cro allows a maximum mask size of /16
+	// the default cidr mask is set by defaultCIDRMask env and is currently 26
+	//
+	// the current logic checks that the cidr block does not overlap with the cluster machine cidr range
+	// there is a follow on JIRA to check overlap with pod and service cidr blocks -> https://issues.redhat.com/MDGAPI-1000
+	for cidrRange, potentialDefault := range cidrRanges {
+		_, cidrRangeNet, err := net.ParseCIDR(cidrRange)
+		if err != nil {
+			fmt.Println("error parsing cidr range for default cidr block", err)
+		}
+
+		// our potential default
+		potentialDefaultIP, _, err := net.ParseCIDR(potentialDefault)
+		if err != nil {
+			fmt.Println("error parsing potential default cidr range for default cidr block", err)
+		}
+		// loop for as long as potential default is a valid CIDR in range
+		for cidrRangeNet.Contains(potentialDefaultIP) {
+
+			// create CIDR adding the default /26 mask
+			_, defaultNet, err := net.ParseCIDR(fmt.Sprintf("%s/26", potentialDefaultIP.String()))
+			if err != nil {
+				continue
+			}
+			// increment potential IP
+			potentialDefaultIP = incrementIPForDefaultCIDR(potentialDefaultIP)
+
+			// check for overlap
+			// if it overlaps continue with the loop
+			if clusterNet.Contains(defaultNet.IP) || defaultNet.Contains(clusterNet.IP) {
+				continue
+			}
+			// return the first available option that does not overlap
+			return defaultNet, nil
+		}
+	}
+	// if the loop finishes, it means that we have gone through all available cidr blocks in the available ranges in aws
+	// return an error that cro was unable to find an option
+	return nil, errorUtil.New("could not find a default cidr block")
 }
 
 //subnetExists is a helper function for checking if a subnet exists with a specific cidr block
@@ -1542,31 +1625,35 @@ func isValidCIDRRange(CIDR *net.IPNet) bool {
 	return mask > 15 && mask < 27
 }
 
+// Increment an IP address only by B and A class.
+// as cro offers a maximum mask size of /16
+// we reduce the number of increments by skipping the C and D class.
+func incrementIPForDefaultCIDR(ip net.IP) net.IP {
+	ipv4 := ip.To4()
+	if ipv4[1] < 255 {
+		ipv4[1] = ipv4[1] + byte(1)
+	} else {
+		ipv4[1] = byte(0)
+		ipv4[0] = ipv4[0] + byte(1)
+	}
+	return ipv4
+}
+
 // validateStandaloneCidrBlock validates the standalone cidr block before creation, returning an error if the cidr is not valid
 // checks carried out :
 // 		* has a cidr range between \16 and \26
 // 		* does not overlap with cluster vpc cidr block
-func validateStandaloneCidrBlock(ctx context.Context, client client.Client, ec2Api ec2iface.EC2API, logger *logrus.Entry, vpcCidrBlock *net.IPNet) error {
+func validateStandaloneCidrBlock(validateCIDR *net.IPNet, clusterCIDR *net.IPNet) error {
 	// validate has a cidr range between \16 and \26
-	if !isValidCIDRRange(vpcCidrBlock) {
-		return errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
-	}
-
-	clusterVPC, err := getClusterVpc(ctx, client, ec2Api, logger)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to get cluster vpc")
-	}
-
-	_, clusterVPCCidr, err := net.ParseCIDR(*clusterVPC.CidrBlock)
-	if err != nil {
-		return errorUtil.Wrap(err, "failed to parse cluster vpc cidr block")
+	if !isValidCIDRRange(validateCIDR) {
+		return errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", validateCIDR.String()))
 	}
 
 	// standalone vpc cidr block can not overlap with existing cluster vpc cidr block
 	// issue arises when trying to peer both vpcs with invalid vpc error - `overlapping CIDR range`
 	// this utility function returns true if either cidr range intersect
-	if clusterVPCCidr.Contains(vpcCidrBlock.IP) || vpcCidrBlock.Contains(clusterVPCCidr.IP) {
-		return errorUtil.New(fmt.Sprintf("standalone vpc creation failed: standalone cidr block %s overlaps with cluster vpc cidr block %s, update _network strategy to continue vpc creation", vpcCidrBlock.String(), *clusterVPC.CidrBlock))
+	if clusterCIDR.Contains(validateCIDR.IP) || validateCIDR.Contains(clusterCIDR.IP) {
+		return errorUtil.New(fmt.Sprintf("standalone vpc creation failed: standalone cidr block %s overlaps with cluster vpc cidr block %s, update _network strategy to continue vpc creation", validateCIDR.String(), clusterCIDR.IP))
 	}
 	return nil
 }
