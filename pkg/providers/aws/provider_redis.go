@@ -141,7 +141,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from redis cr
-		vpcCidrBlock, err := getNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
+		vpcCidrBlock, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
 		if err != nil {
 			errMsg := "failed to get _network strategy config"
 			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
