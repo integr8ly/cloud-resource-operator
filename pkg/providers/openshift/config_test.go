@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+
 	"testing"
+
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	v1 "k8s.io/api/core/v1"
