@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -1251,7 +1252,88 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		{
 			name: "verify default cidr block and no error on empty cidr block",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {})),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.CidrBlock = aws.String("10.4.0.0/16")
+							}),
+						}}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{  }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: false,
+			want:    buildValidIpNet("10.6.0.0/26"),
+		},
+		{
+			name: "verify empty cidr blocks returns a error",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {
+					network.Spec.ClusterNetwork = []v12.ClusterNetworkEntry{
+						{
+							CIDR: "",
+						},
+					}
+					network.Spec.ServiceNetwork = []string{
+						"",
+					}
+				})),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.CidrBlock = aws.String("")
+							}),
+						}}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				configManager: buildTestConfigManager(func(m *ConfigManagerMock) {
+					m.ReadStorageStrategyFunc = func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{  }"),
+						}, nil
+					}
+				}),
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				tier:   "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "verify no non overlapping available cidr blocks returns a error",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {
+					network.Spec.ClusterNetwork = []v12.ClusterNetworkEntry{
+						{
+							CIDR: "10.0.0.0/8",
+						},
+					}
+					network.Spec.ServiceNetwork = []string{
+						"172.0.0.0/8",
+					}
+				})),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
@@ -1275,8 +1357,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 				logger: logrus.NewEntry(logrus.StandardLogger()),
 				tier:   "test",
 			},
-			wantErr: false,
-			want:    buildValidIpNet("10.0.0.0/26"),
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {

@@ -46,12 +46,6 @@ var _ NetworkManager = &NetworkManagerMock{}
 //             IsEnabledFunc: func(in1 context.Context) (bool, error) {
 // 	               panic("mock out the IsEnabled method")
 //             },
-//             getNonOverlappingDefaultCIDRFunc: func(in1 context.Context) (*net.IPNet, error) {
-// 	               panic("mock out the getNonOverlappingDefaultCIDR method")
-//             },
-//             validateStandaloneCidrBlockFunc: func(in1 context.Context, in2 *net.IPNet) error {
-// 	               panic("mock out the validateStandaloneCidrBlock method")
-//             },
 //         }
 //
 //         // use mockedNetworkManager in code that requires NetworkManager
@@ -85,12 +79,6 @@ type NetworkManagerMock struct {
 
 	// IsEnabledFunc mocks the IsEnabled method.
 	IsEnabledFunc func(in1 context.Context) (bool, error)
-
-	// getNonOverlappingDefaultCIDRFunc mocks the getNonOverlappingDefaultCIDR method.
-	getNonOverlappingDefaultCIDRFunc func(in1 context.Context) (*net.IPNet, error)
-
-	// validateStandaloneCidrBlockFunc mocks the validateStandaloneCidrBlock method.
-	validateStandaloneCidrBlockFunc func(in1 context.Context, in2 *net.IPNet) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -147,30 +135,16 @@ type NetworkManagerMock struct {
 			// In1 is the in1 argument value.
 			In1 context.Context
 		}
-		// getNonOverlappingDefaultCIDR holds details about calls to the getNonOverlappingDefaultCIDR method.
-		getNonOverlappingDefaultCIDR []struct {
-			// In1 is the in1 argument value.
-			In1 context.Context
-		}
-		// validateStandaloneCidrBlock holds details about calls to the validateStandaloneCidrBlock method.
-		validateStandaloneCidrBlock []struct {
-			// In1 is the in1 argument value.
-			In1 context.Context
-			// In2 is the in2 argument value.
-			In2 *net.IPNet
-		}
 	}
-	lockCreateNetwork                sync.RWMutex
-	lockCreateNetworkConnection      sync.RWMutex
-	lockCreateNetworkPeering         sync.RWMutex
-	lockDeleteBundledCloudResources  sync.RWMutex
-	lockDeleteNetwork                sync.RWMutex
-	lockDeleteNetworkConnection      sync.RWMutex
-	lockDeleteNetworkPeering         sync.RWMutex
-	lockGetClusterNetworkPeering     sync.RWMutex
-	lockIsEnabled                    sync.RWMutex
-	lockgetNonOverlappingDefaultCIDR sync.RWMutex
-	lockvalidateStandaloneCidrBlock  sync.RWMutex
+	lockCreateNetwork               sync.RWMutex
+	lockCreateNetworkConnection     sync.RWMutex
+	lockCreateNetworkPeering        sync.RWMutex
+	lockDeleteBundledCloudResources sync.RWMutex
+	lockDeleteNetwork               sync.RWMutex
+	lockDeleteNetworkConnection     sync.RWMutex
+	lockDeleteNetworkPeering        sync.RWMutex
+	lockGetClusterNetworkPeering    sync.RWMutex
+	lockIsEnabled                   sync.RWMutex
 }
 
 // CreateNetwork calls CreateNetworkFunc.
@@ -465,71 +439,5 @@ func (mock *NetworkManagerMock) IsEnabledCalls() []struct {
 	mock.lockIsEnabled.RLock()
 	calls = mock.calls.IsEnabled
 	mock.lockIsEnabled.RUnlock()
-	return calls
-}
-
-// getNonOverlappingDefaultCIDR calls getNonOverlappingDefaultCIDRFunc.
-func (mock *NetworkManagerMock) getNonOverlappingDefaultCIDR(in1 context.Context) (*net.IPNet, error) {
-	if mock.getNonOverlappingDefaultCIDRFunc == nil {
-		panic("NetworkManagerMock.getNonOverlappingDefaultCIDRFunc: method is nil but NetworkManager.getNonOverlappingDefaultCIDR was just called")
-	}
-	callInfo := struct {
-		In1 context.Context
-	}{
-		In1: in1,
-	}
-	mock.lockgetNonOverlappingDefaultCIDR.Lock()
-	mock.calls.getNonOverlappingDefaultCIDR = append(mock.calls.getNonOverlappingDefaultCIDR, callInfo)
-	mock.lockgetNonOverlappingDefaultCIDR.Unlock()
-	return mock.getNonOverlappingDefaultCIDRFunc(in1)
-}
-
-// getNonOverlappingDefaultCIDRCalls gets all the calls that were made to getNonOverlappingDefaultCIDR.
-// Check the length with:
-//     len(mockedNetworkManager.getNonOverlappingDefaultCIDRCalls())
-func (mock *NetworkManagerMock) getNonOverlappingDefaultCIDRCalls() []struct {
-	In1 context.Context
-} {
-	var calls []struct {
-		In1 context.Context
-	}
-	mock.lockgetNonOverlappingDefaultCIDR.RLock()
-	calls = mock.calls.getNonOverlappingDefaultCIDR
-	mock.lockgetNonOverlappingDefaultCIDR.RUnlock()
-	return calls
-}
-
-// validateStandaloneCidrBlock calls validateStandaloneCidrBlockFunc.
-func (mock *NetworkManagerMock) validateStandaloneCidrBlock(in1 context.Context, in2 *net.IPNet) error {
-	if mock.validateStandaloneCidrBlockFunc == nil {
-		panic("NetworkManagerMock.validateStandaloneCidrBlockFunc: method is nil but NetworkManager.validateStandaloneCidrBlock was just called")
-	}
-	callInfo := struct {
-		In1 context.Context
-		In2 *net.IPNet
-	}{
-		In1: in1,
-		In2: in2,
-	}
-	mock.lockvalidateStandaloneCidrBlock.Lock()
-	mock.calls.validateStandaloneCidrBlock = append(mock.calls.validateStandaloneCidrBlock, callInfo)
-	mock.lockvalidateStandaloneCidrBlock.Unlock()
-	return mock.validateStandaloneCidrBlockFunc(in1, in2)
-}
-
-// validateStandaloneCidrBlockCalls gets all the calls that were made to validateStandaloneCidrBlock.
-// Check the length with:
-//     len(mockedNetworkManager.validateStandaloneCidrBlockCalls())
-func (mock *NetworkManagerMock) validateStandaloneCidrBlockCalls() []struct {
-	In1 context.Context
-	In2 *net.IPNet
-} {
-	var calls []struct {
-		In1 context.Context
-		In2 *net.IPNet
-	}
-	mock.lockvalidateStandaloneCidrBlock.RLock()
-	calls = mock.calls.validateStandaloneCidrBlock
-	mock.lockvalidateStandaloneCidrBlock.RUnlock()
 	return calls
 }

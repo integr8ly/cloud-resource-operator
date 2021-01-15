@@ -10,5 +10,5 @@ data:
   postgres: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
   _network: |
-    {"development": { "region": "", "createStrategy": { "CidrBlock": "10.1.0.0/16" }, "deleteStrategy": {} }}
+    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
     

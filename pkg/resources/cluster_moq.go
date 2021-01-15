@@ -8,10 +8,6 @@ import (
 	"sync"
 )
 
-var (
-	lockPodCommanderMockExecIntoPod sync.RWMutex
-)
-
 // Ensure, that PodCommanderMock does implement PodCommander.
 // If this is not the case, regenerate this file with moq.
 var _ PodCommander = &PodCommanderMock{}
@@ -45,6 +41,7 @@ type PodCommanderMock struct {
 			Cmd string
 		}
 	}
+	lockExecIntoPod sync.RWMutex
 }
 
 // ExecIntoPod calls ExecIntoPodFunc.
@@ -59,9 +56,9 @@ func (mock *PodCommanderMock) ExecIntoPod(dpl *v1.Deployment, cmd string) error 
 		Dpl: dpl,
 		Cmd: cmd,
 	}
-	lockPodCommanderMockExecIntoPod.Lock()
+	mock.lockExecIntoPod.Lock()
 	mock.calls.ExecIntoPod = append(mock.calls.ExecIntoPod, callInfo)
-	lockPodCommanderMockExecIntoPod.Unlock()
+	mock.lockExecIntoPod.Unlock()
 	return mock.ExecIntoPodFunc(dpl, cmd)
 }
 
@@ -76,8 +73,8 @@ func (mock *PodCommanderMock) ExecIntoPodCalls() []struct {
 		Dpl *v1.Deployment
 		Cmd string
 	}
-	lockPodCommanderMockExecIntoPod.RLock()
+	mock.lockExecIntoPod.RLock()
 	calls = mock.calls.ExecIntoPod
-	lockPodCommanderMockExecIntoPod.RUnlock()
+	mock.lockExecIntoPod.RUnlock()
 	return calls
 }
