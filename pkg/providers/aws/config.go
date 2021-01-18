@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 

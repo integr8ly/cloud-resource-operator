@@ -195,7 +195,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		})
 		if waitVpcErr != nil {
 			logger.Warnf(
-				"timed out waiting to check if vpc %s with status %s exists, operator will delete the VPC and recreate another one: %w",
+				"timed out waiting to check if vpc %s with status %s exists, operator will delete the VPC and recreate another one: %v",
 				*createVpcOutput.Vpc.VpcId,
 				*createVpcOutput.Vpc.State,
 				waitVpcErr,
@@ -204,7 +204,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 				VpcId: aws.String(*createVpcOutput.Vpc.VpcId),
 			})
 			if err != nil {
-				logger.Errorf("unable to delete vpc %s after failing to check if it exists: %w", *createVpcOutput.Vpc.VpcId, err)
+				logger.Errorf("unable to delete vpc %s after failing to check if it exists: %v", *createVpcOutput.Vpc.VpcId, err)
 			}
 			return &Network{}, nil
 		}

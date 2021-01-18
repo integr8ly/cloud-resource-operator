@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 

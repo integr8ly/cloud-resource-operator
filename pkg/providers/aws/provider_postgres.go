@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
