@@ -8,10 +8,6 @@ import (
 	"sync"
 )
 
-var (
-	lockConfigManagerMockGetStrategyMappingForDeploymentType sync.RWMutex
-)
-
 // Ensure, that ConfigManagerMock does implement ConfigManager.
 // If this is not the case, regenerate this file with moq.
 var _ ConfigManager = &ConfigManagerMock{}
@@ -45,6 +41,7 @@ type ConfigManagerMock struct {
 			T string
 		}
 	}
+	lockGetStrategyMappingForDeploymentType sync.RWMutex
 }
 
 // GetStrategyMappingForDeploymentType calls GetStrategyMappingForDeploymentTypeFunc.
@@ -59,9 +56,9 @@ func (mock *ConfigManagerMock) GetStrategyMappingForDeploymentType(ctx context.C
 		Ctx: ctx,
 		T:   t,
 	}
-	lockConfigManagerMockGetStrategyMappingForDeploymentType.Lock()
+	mock.lockGetStrategyMappingForDeploymentType.Lock()
 	mock.calls.GetStrategyMappingForDeploymentType = append(mock.calls.GetStrategyMappingForDeploymentType, callInfo)
-	lockConfigManagerMockGetStrategyMappingForDeploymentType.Unlock()
+	mock.lockGetStrategyMappingForDeploymentType.Unlock()
 	return mock.GetStrategyMappingForDeploymentTypeFunc(ctx, t)
 }
 
@@ -76,8 +73,8 @@ func (mock *ConfigManagerMock) GetStrategyMappingForDeploymentTypeCalls() []stru
 		Ctx context.Context
 		T   string
 	}
-	lockConfigManagerMockGetStrategyMappingForDeploymentType.RLock()
+	mock.lockGetStrategyMappingForDeploymentType.RLock()
 	calls = mock.calls.GetStrategyMappingForDeploymentType
-	lockConfigManagerMockGetStrategyMappingForDeploymentType.RUnlock()
+	mock.lockGetStrategyMappingForDeploymentType.RUnlock()
 	return calls
 }

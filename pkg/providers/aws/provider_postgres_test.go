@@ -445,6 +445,32 @@ func buildTestInfra() *v12.Infrastructure {
 	}
 }
 
+//
+func buildTestNetwork(modifyFn func(network *v12.Network)) *v12.Network {
+
+	mock := &v12.Network{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name: "cluster",
+		},
+		Spec: v12.NetworkSpec{
+			ClusterNetwork: []v12.ClusterNetworkEntry{
+				{
+					CIDR:       "10.0.0.0/14",
+					HostPrefix: 23,
+				},
+			},
+			ServiceNetwork: []string{
+				"10.5.0.0/16",
+			},
+		},
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+
+}
+
 func builtTestCredSecret() *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: controllerruntime.ObjectMeta{
