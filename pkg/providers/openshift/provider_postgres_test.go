@@ -7,14 +7,12 @@ import (
 	"testing"
 	"time"
 
-	types2 "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,7 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -39,8 +39,8 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 			Name:      testPostgresName,
 			Namespace: testPostgresNamespace,
 		},
-		Spec:   v1alpha1.PostgresSpec{},
-		Status: v1alpha1.PostgresStatus{},
+		Spec:   croType.ResourceTypeSpec{},
+		Status: croType.ResourceTypeStatus{},
 	}
 }
 
@@ -444,7 +444,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			name: "test short reconcile when the cr is not complete",
 			args: args{
 				p: &v1alpha1.Postgres{
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types2.PhaseInProgress,
 					},
 				},
@@ -455,7 +455,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			name: "test default reconcile time when the cr is complete",
 			args: args{
 				p: &v1alpha1.Postgres{
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types2.PhaseComplete,
 					},
 				},

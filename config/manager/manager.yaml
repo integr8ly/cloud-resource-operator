@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-resource-operator
+  namespace: system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cloud-resource-operator
+  template:
+    metadata:
+      labels:
+        name: cloud-resource-operator
+    spec:
+      serviceAccountName: cloud-resource-operator
+      containers:
+      - name: cloud-resource-operator
+        command:
+        - cloud-resource-operator
+        image: controller
+        imagePullPolicy: Always
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "cloud-resource-operator"
+        - name: TAG_KEY_PREFIX
+          value: integreatly.org/

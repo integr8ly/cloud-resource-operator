@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: cloud-resource-operator
+  name: operator-metrics-service
+  namespace: cloud-resource-operator
+spec:
+  ports:
+  - name: http-metrics
+    port: 8383
+    targetPort: 8383
+  selector:
+    name: cloud-resource-operator

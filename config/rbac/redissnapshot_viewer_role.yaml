@@ -1,0 +1,20 @@
+# permissions for end users to view redissnapshots.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: redissnapshot-viewer-role
+rules:
+- apiGroups:
+  - integreatly.org
+  resources:
+  - redissnapshots
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - integreatly.org
+  resources:
+  - redissnapshots/status
+  verbs:
+  - get

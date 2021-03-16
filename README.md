@@ -31,6 +31,7 @@ Please use >= v0.17.x of CRO for Openshift >= v4.4.6.
 Prerequisites:
 - `go`
 - `make`
+- `yq` version 3.x.x 
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
 
@@ -81,10 +82,6 @@ spec:
 The cloud resource operator continuously reconciles using the strat-config as a source of truth for the current state of the provisioned resources. Should these resources alter from the expected the state the operator will update the resources to match the expected state.  
 
 There can be circumstances where a provisioned resource would need to be altered. If this is the case, add `skipCreate: true` to the resources CR `spec`. This will cause the operator to skip creating or updating the resource. 
-
-## Via the Operator Catalog
-
-***In development***
 
 ## Deployment
 The operator expects two configmaps to exist in the namespace it is watching. These configmaps provide the configuration needed to outline the deployment methods and strategies used when provisioning cloud resources.
@@ -165,19 +162,27 @@ $ make test/unit
 
 Update the operator version in the following files:
 
-* Update [version/version.go](version/version.go) (`Version = "<version>"`)
-
-* Update `VERSION` and `PREV_VERSION` (the previous version) in the [Makefile](Makefile) 
+* Update `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) 
 
 * Generate a new cluster service version:
 ```sh
 make gen/csv
 ```
-Ensure: 
-- The latest `CSV` file points to the latest version of the operator image. *Note* the images are referenced twice in the `CSV`. 
-- `deploy/operator.yaml` has the correct image version tag. *Note* all image tags should be prefixed with a `v`
+* Generate a new bundle and push it to your registry
+```sh
+make create/olm/bundle
+```
+NOTE: Make sure that the  `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) are updated correctly.
 
-Commit changes and open pull request. When the PR is accepted, create a new release tag.
+* Generate and push new image, bundle and index
+```sh
+make release/prepare
+```
+NOTE: Make sure that the  `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) are updated correctly.
+
+Example:
+Starting image for the bundles is 0.23.0, if you are releasing version 0.24.0, ensure that the `PREV_VERSION` is set to `0.23.0`, `VERSION` is set to `0.24.0`
+and `PREVIOUS_OPERATOR_VERSIONS` contain coma seperated list of all previous bundles, in this example it would contain only `0.23.0`.
 
 ### Terminology
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`

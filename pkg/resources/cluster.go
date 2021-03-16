@@ -3,7 +3,7 @@ package resources
 import (
 	"bytes"
 	"context"
-	v1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
+	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"io"
 
 	appsv1 "k8s.io/api/apps/v1"

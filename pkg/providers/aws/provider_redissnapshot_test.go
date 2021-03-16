@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/sirupsen/logrus"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +32,7 @@ func buildTestRedisSnapshotCR() *v1alpha1.RedisSnapshot {
 			Name:      "test",
 			Namespace: "test",
 		},
-		Status: v1alpha1.RedisSnapshotStatus{
+		Status: croType.ResourceTypeSnapshotStatus{
 			SnapshotID: "test-identifier",
 		},
 	}
@@ -266,7 +266,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.RedisStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: croType.PhaseInProgress,
 					},
 				},
@@ -366,7 +366,7 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.RedisSnapshotStatus{
+					Status: croType.ResourceTypeSnapshotStatus{
 						SnapshotID: testTimestampedIdentifier,
 					},
 				},
@@ -465,7 +465,7 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.RedisSnapshotStatus{
+					Status: croType.ResourceTypeSnapshotStatus{
 						SnapshotID: testTimestampedIdentifier,
 					},
 				},

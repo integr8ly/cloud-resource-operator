@@ -1,6 +1,8 @@
+
 # Temporary Build Files
 build/_output
 build/_test
+TMP_SA_KUBECONFIG
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Emacs ###
 # -*- mode: gitignore; -*-
@@ -86,4 +88,14 @@ cover.html
 ./cover.html
 ./cover.out
 .python-version
-operator-sdk-v0.10
+operator-sdk-v1.2.0
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*~
