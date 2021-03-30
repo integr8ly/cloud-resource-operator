@@ -1,0 +1,4 @@
+resources:
+- ../cloud-resource-operator
+- ../samples
+- ../scorecard

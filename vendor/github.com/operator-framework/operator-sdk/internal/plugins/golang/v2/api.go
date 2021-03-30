@@ -15,21 +15,12 @@
 package v2
 
 import (
-	"fmt"
-	"path/filepath"
-	"strings"
-
-	"github.com/operator-framework/operator-sdk/internal/scaffold/kustomize"
-
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/kubebuilder/pkg/model/config"
 	"sigs.k8s.io/kubebuilder/pkg/plugin"
-)
 
-// sampleKustomizationFragment is a template for samples/kustomization.yaml.
-const sampleKustomizationFragment = `## This file is auto-generated, do not modify ##
-resources:
-`
+	"github.com/operator-framework/operator-sdk/internal/plugins/manifests"
+)
 
 type createAPIPlugin struct {
 	plugin.CreateAPI
@@ -48,38 +39,35 @@ func (p *createAPIPlugin) InjectConfig(c *config.Config) {
 }
 
 func (p *createAPIPlugin) Run() error {
+	// Run() may add a new resource to the config, so we can compare resources before/after to get the new resource.
+	oldResources := make(map[config.GVK]struct{}, len(p.config.Resources))
+	for _, r := range p.config.Resources {
+		oldResources[r] = struct{}{}
+	}
 	if err := p.CreateAPI.Run(); err != nil {
 		return err
 	}
 
-	// Emulate plugins phase 2 behavior by checking the config for this plugin's
-	// config object.
+	// Emulate plugins phase 2 behavior by checking the config for this plugin's config object.
 	if !hasPluginConfig(p.config) {
 		return nil
 	}
 
-	return p.run()
-}
-
-// SDK plugin-specific scaffolds.
-func (p *createAPIPlugin) run() error {
-
-	// Write CR paths to the samples' kustomization file. This file has a
-	// "do not modify" comment so it is safe to overwrite.
-	samplesKustomization := sampleKustomizationFragment
-	for _, gvk := range p.config.Resources {
-		samplesKustomization += fmt.Sprintf("- %s\n", makeCRFileName(gvk))
-	}
-	kpath := filepath.Join("config", "samples")
-	if err := kustomize.Write(kpath, samplesKustomization); err != nil {
-		return err
+	// Find the new resource. Here we shouldn't worry about checking if one was found,
+	// since downstream plugins will do so.
+	var newResource config.GVK
+	for _, r := range p.config.Resources {
+		if _, hasResource := oldResources[r]; !hasResource {
+			newResource = r
+			break
+		}
 	}
 
-	return nil
+	// Run SDK phase 2 plugins.
+	return p.runPhase2(newResource)
 }
 
-// makeCRFileName returns a Custom Resource example file name in the same format
-// as kubebuilder's CreateAPI plugin for a gvk.
-func makeCRFileName(gvk config.GVK) string {
-	return fmt.Sprintf("%s_%s_%s.yaml", gvk.Group, gvk.Version, strings.ToLower(gvk.Kind))
+// SDK phase 2 plugins.
+func (p *createAPIPlugin) runPhase2(gvk config.GVK) error {
+	return manifests.RunCreateAPI(p.config, gvk)
 }

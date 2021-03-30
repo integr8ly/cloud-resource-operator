@@ -1,0 +1,24 @@
+# permissions for end users to edit blobstorages.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: blobstorage-editor-role
+rules:
+- apiGroups:
+  - integreatly.org
+  resources:
+  - blobstorages
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - integreatly.org
+  resources:
+  - blobstorages/status
+  verbs:
+  - get

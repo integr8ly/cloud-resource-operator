@@ -5,7 +5,7 @@ package aws
 
 import (
 	"context"
-	"github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"sync"
 )
 
@@ -15,28 +15,28 @@ var _ CredentialManager = &CredentialManagerMock{}
 
 // CredentialManagerMock is a mock implementation of CredentialManager.
 //
-//     func TestSomethingThatUsesCredentialManager(t *testing.T) {
+// 	func TestSomethingThatUsesCredentialManager(t *testing.T) {
 //
-//         // make and configure a mocked CredentialManager
-//         mockedCredentialManager := &CredentialManagerMock{
-//             ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error) {
-// 	               panic("mock out the ReconcileCredentials method")
-//             },
-//             ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
-// 	               panic("mock out the ReconcileProviderCredentials method")
-//             },
-//             ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (*Credentials, error) {
-// 	               panic("mock out the ReconcileSESCredentials method")
-//             },
-//             ReoncileBucketOwnerCredentialsFunc: func(ctx context.Context, name string, ns string, bucket string) (*Credentials, *v1.CredentialsRequest, error) {
-// 	               panic("mock out the ReoncileBucketOwnerCredentials method")
-//             },
-//         }
+// 		// make and configure a mocked CredentialManager
+// 		mockedCredentialManager := &CredentialManagerMock{
+// 			ReconcileCredentialsFunc: func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error) {
+// 				panic("mock out the ReconcileCredentials method")
+// 			},
+// 			ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+// 				panic("mock out the ReconcileProviderCredentials method")
+// 			},
+// 			ReconcileSESCredentialsFunc: func(ctx context.Context, name string, ns string) (*Credentials, error) {
+// 				panic("mock out the ReconcileSESCredentials method")
+// 			},
+// 			ReoncileBucketOwnerCredentialsFunc: func(ctx context.Context, name string, ns string, bucket string) (*Credentials, *v1.CredentialsRequest, error) {
+// 				panic("mock out the ReoncileBucketOwnerCredentials method")
+// 			},
+// 		}
 //
-//         // use mockedCredentialManager in code that requires CredentialManager
-//         // and then make assertions.
+// 		// use mockedCredentialManager in code that requires CredentialManager
+// 		// and then make assertions.
 //
-//     }
+// 	}
 type CredentialManagerMock struct {
 	// ReconcileCredentialsFunc mocks the ReconcileCredentials method.
 	ReconcileCredentialsFunc func(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error)

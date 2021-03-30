@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/sirupsen/logrus"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -86,7 +86,7 @@ func buildTestPostgresSnapshotCr() *v1alpha1.PostgresSnapshot {
 			Name:      "test",
 			Namespace: "test",
 		},
-		Status: v1alpha1.PostgresSnapshotStatus{
+		Status: croType.ResourceTypeSnapshotStatus{
 			SnapshotID: "test-identifier",
 		},
 	}
@@ -288,7 +288,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: croType.PhaseInProgress,
 					},
 				},
@@ -319,7 +319,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: croType.PhaseDeleteInProgress,
 					},
 				},
@@ -416,7 +416,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.PostgresSnapshotStatus{
+					Status: croType.ResourceTypeSnapshotStatus{
 						SnapshotID: testTimestampedIdentifier,
 					},
 				},
@@ -515,7 +515,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Status: v1alpha1.PostgresSnapshotStatus{
+					Status: croType.ResourceTypeSnapshotStatus{
 						SnapshotID: testTimestampedIdentifier,
 					},
 				},

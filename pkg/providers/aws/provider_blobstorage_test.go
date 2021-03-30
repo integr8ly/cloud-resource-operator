@@ -3,26 +3,26 @@ package aws
 import (
 	"context"
 	"errors"
-	crov1 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
+	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"testing"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	croapis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
+	croapis "github.com/integr8ly/cloud-resource-operator/apis"
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -303,7 +303,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			name: "test short reconcile when the cr is not complete",
 			args: args{
 				b: &v1alpha1.BlobStorage{
-					Status: v1alpha1.BlobStorageStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseInProgress,
 					},
 				},
@@ -314,7 +314,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			name: "test default reconcile time when the cr is complete",
 			args: args{
 				b: &v1alpha1.BlobStorage{
-					Status: v1alpha1.BlobStorageStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseComplete,
 					},
 				},

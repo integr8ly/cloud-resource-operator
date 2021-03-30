@@ -1,0 +1,8 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- integreatly_v1alpha1_blobstorage.yaml
+- integreatly_v1alpha1_postgres.yaml
+- integreatly_v1alpha1_postgressnapshot.yaml
+- integreatly_v1alpha1_redis.yaml
+- integreatly_v1alpha1_redissnapshot.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

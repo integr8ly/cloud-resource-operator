@@ -9,7 +9,7 @@ import (
 
 	errorUtil "github.com/pkg/errors"
 
-	v12 "github.com/integr8ly/cloud-resource-operator/pkg/apis/config/v1"
+	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -19,9 +19,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	croApis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croApis "github.com/integr8ly/cloud-resource-operator/apis"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -1127,7 +1127,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			name: "test short reconcile when the cr is not complete",
 			args: args{
 				p: &v1alpha1.Postgres{
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: croType.PhaseInProgress,
 					},
 				},
@@ -1138,7 +1138,7 @@ func TestAWSPostgresProvider_GetReconcileTime(t *testing.T) {
 			name: "test default reconcile time when the cr is complete",
 			args: args{
 				p: &v1alpha1.Postgres{
-					Status: v1alpha1.PostgresStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: croType.PhaseComplete,
 					},
 				},

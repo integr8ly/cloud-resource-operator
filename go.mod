@@ -3,7 +3,7 @@ module github.com/integr8ly/cloud-resource-operator
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.25.48
+	github.com/aws/aws-sdk-go v1.27.0
 	github.com/containerd/typeurl v0.0.0-20190228175220-2a93cfde8c20 // indirect
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
@@ -11,26 +11,29 @@ require (
 	github.com/elazarl/goproxy/ext v0.0.0-20190421051319-9d40249d3c2f // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20180820084758-c7ce16629ff4 // indirect
-	github.com/go-openapi/spec v0.19.3
 	github.com/google/uuid v1.1.1
 	github.com/gregjones/httpcache v0.0.0-20190203031600-7a902570cb17 // indirect
 	github.com/hashicorp/go-version v1.2.1
-	github.com/lib/pq v1.3.0
+	github.com/lib/pq v1.7.0
 	github.com/mattn/go-runewidth v0.0.9 // indirect
+	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/gomega v1.10.2
 	github.com/opencontainers/runtime-spec v1.0.0 // indirect
 	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
 	github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
-	github.com/operator-framework/operator-sdk v0.19.0
+	github.com/operator-framework/operator-sdk v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.5.1
 	github.com/sirupsen/logrus v1.6.0
-	github.com/spf13/pflag v1.0.5
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
-	k8s.io/api v0.18.4
-	k8s.io/apimachinery v0.18.4
+	golang.org/x/net v0.0.0-20200625001655-4c5254603344
+	golang.org/x/sys v0.0.0-20210309074719-68d13333faf2 // indirect
+	golang.org/x/tools v0.0.0-20200815165600-90abf76919f3 // indirect
+	k8s.io/api v0.18.8
+	k8s.io/apiextensions-apiserver v0.18.8
+	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kube-openapi v0.0.0-20200410145947-61e04a5be9a6
-	sigs.k8s.io/controller-runtime v0.6.1
+	sigs.k8s.io/controller-runtime v0.6.3
 )
 
 // Pinned to kubernetes-1.16.2

@@ -41,7 +41,6 @@ jobs:
         - make code/check
         - make test/unit/ci
         - $GOPATH/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken=$COVERALLS_TOKEN
-        - make code/audit
     - stage: push
       script:
         - docker login --password "$QUAY_PASSWORD" --username "$QUAY_USERNAME" quay.io

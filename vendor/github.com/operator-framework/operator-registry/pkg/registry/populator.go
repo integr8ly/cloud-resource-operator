@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -19,23 +18,27 @@ import (
 )
 
 type Dependencies struct {
-	RawMessage []map[string]string `json:"dependencies" yaml:"dependencies"`
+	RawMessage []map[string]interface{} `json:"dependencies" yaml:"dependencies"`
 }
 
 // DirectoryPopulator loads an unpacked operator bundle from a directory into the database.
 type DirectoryPopulator struct {
-	loader      Load
-	graphLoader GraphLoader
-	querier     Query
-	imageDirMap map[image.Reference]string
+	loader          Load
+	graphLoader     GraphLoader
+	querier         Query
+	imageDirMap     map[image.Reference]string
+	overwriteDirMap map[string]map[image.Reference]string
+	overwrite       bool
 }
 
-func NewDirectoryPopulator(loader Load, graphLoader GraphLoader, querier Query, imageDirMap map[image.Reference]string) *DirectoryPopulator {
+func NewDirectoryPopulator(loader Load, graphLoader GraphLoader, querier Query, imageDirMap map[image.Reference]string, overwriteDirMap map[string]map[image.Reference]string, overwrite bool) *DirectoryPopulator {
 	return &DirectoryPopulator{
-		loader:      loader,
-		graphLoader: graphLoader,
-		querier:     querier,
-		imageDirMap: imageDirMap,
+		loader:          loader,
+		graphLoader:     graphLoader,
+		querier:         querier,
+		imageDirMap:     imageDirMap,
+		overwriteDirMap: overwriteDirMap,
+		overwrite:       overwrite,
 	}
 }
 
@@ -52,11 +55,24 @@ func (i *DirectoryPopulator) Populate(mode Mode) error {
 		imagesToAdd = append(imagesToAdd, imageInput)
 	}
 
+	imagesToReAdd := make([]*ImageInput, 0)
+	for pkg := range i.overwriteDirMap {
+		for to, from := range i.overwriteDirMap[pkg] {
+			imageInput, err := NewImageInput(to, from)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			imagesToReAdd = append(imagesToReAdd, imageInput)
+		}
+	}
+
 	if len(errs) > 0 {
 		return utilerrors.NewAggregate(errs)
 	}
 
-	err := i.loadManifests(imagesToAdd, mode)
+	err := i.loadManifests(imagesToAdd, imagesToReAdd, mode)
 	if err != nil {
 		return err
 	}
@@ -64,7 +80,81 @@ func (i *DirectoryPopulator) Populate(mode Mode) error {
 	return nil
 }
 
-func (i *DirectoryPopulator) loadManifests(imagesToAdd []*ImageInput, mode Mode) error {
+func (i *DirectoryPopulator) globalSanityCheck(imagesToAdd []*ImageInput) error {
+	var errs []error
+	images := make(map[string]struct{})
+	for _, image := range imagesToAdd {
+		images[image.Bundle.BundleImage] = struct{}{}
+	}
+
+	attemptedOverwritesPerPackage := map[string]struct{}{}
+	for _, image := range imagesToAdd {
+		validOverwrite := false
+		bundlePaths, err := i.querier.GetBundlePathsForPackage(context.TODO(), image.Bundle.Package)
+		if err != nil {
+			// Assume that this means that the bundle is empty
+			// Or that this is the first time the package is loaded.
+			return nil
+		}
+		for _, bundlePath := range bundlePaths {
+			if _, ok := images[bundlePath]; ok {
+				errs = append(errs, BundleImageAlreadyAddedErr{ErrorString: fmt.Sprintf("Bundle %s already exists", image.Bundle.BundleImage)})
+				continue
+			}
+		}
+		channels, err := i.querier.ListChannels(context.TODO(), image.Bundle.Package)
+		if err != nil {
+			return err
+		}
+
+		for _, channel := range channels {
+			bundle, err := i.querier.GetBundle(context.TODO(), image.Bundle.Package, channel, image.Bundle.Name)
+			if err != nil {
+				// Assume that if we can not find a bundle for the package, channel and or CSV Name that this is safe to add
+				continue
+			}
+			if bundle != nil {
+				if !i.overwrite {
+					// raise error that this package + channel + csv combo is already in the db
+					errs = append(errs, PackageVersionAlreadyAddedErr{ErrorString: "Bundle already added that provides package and csv"})
+					break
+				}
+				// ensure overwrite is not in the middle of a channel (i.e. nothing replaces it)
+				_, err = i.querier.GetBundleThatReplaces(context.TODO(), image.Bundle.Name, image.Bundle.Package, channel)
+				if err != nil {
+					if err.Error() == fmt.Errorf("no entry found for %s %s", image.Bundle.Package, channel).Error() {
+						// overwrite is not replaced by any other bundle
+						validOverwrite = true
+						continue
+					}
+					errs = append(errs, err)
+					break
+				}
+				// This bundle is in this channel but is not the head of this channel
+				errs = append(errs, OverwriteErr{ErrorString: "Cannot overwrite a bundle that is not at the head of a channel using --overwrite-latest"})
+				validOverwrite = false
+				break
+			}
+		}
+		if validOverwrite {
+			if _, ok := attemptedOverwritesPerPackage[image.Bundle.Package]; ok {
+				errs = append(errs, OverwriteErr{ErrorString: "Cannot overwrite more than one bundle at a time for a given package using --overwrite-latest"})
+				break
+			}
+			attemptedOverwritesPerPackage[image.Bundle.Package] = struct{}{}
+		}
+	}
+
+	return utilerrors.NewAggregate(errs)
+}
+
+func (i *DirectoryPopulator) loadManifests(imagesToAdd []*ImageInput, imagesToReAdd []*ImageInput, mode Mode) error {
+	// global sanity checks before insertion
+	err := i.globalSanityCheck(imagesToAdd)
+	if err != nil {
+		return err
+	}
+
 	switch mode {
 	case ReplacesMode:
 		// TODO: This is relatively inefficient. Ideally, we should be able to use a replaces
@@ -77,13 +167,27 @@ func (i *DirectoryPopulator) loadManifests(imagesToAdd []*ImageInput, mode Mode)
 		// same package linearly.
 		var err error
 		var validImagesToAdd []*ImageInput
+
+		for pkg := range i.overwriteDirMap {
+			// TODO: If this succeeds but the add fails there will be a disconnect between
+			// the registry and the index. Loading the bundles in a single transactions as
+			// described above would allow us to do the removable in that same transaction
+			// and ensure that rollback is possible.
+			err := i.loader.RemovePackage(pkg)
+			if err != nil {
+				return err
+			}
+		}
+
+		imagesToAdd = append(imagesToAdd, imagesToReAdd...)
+
 		for len(imagesToAdd) > 0 {
 			validImagesToAdd, imagesToAdd, err = i.getNextReplacesImagesToAdd(imagesToAdd)
 			if err != nil {
 				return err
 			}
 			for _, image := range validImagesToAdd {
-				err := i.loadManifestsReplaces(image.bundle, image.annotationsFile)
+				err := i.loadManifestsReplaces(image.Bundle, image.AnnotationsFile)
 				if err != nil {
 					return err
 				}
@@ -91,14 +195,14 @@ func (i *DirectoryPopulator) loadManifests(imagesToAdd []*ImageInput, mode Mode)
 		}
 	case SemVerMode:
 		for _, image := range imagesToAdd {
-			err := i.loadManifestsSemver(image.bundle, image.annotationsFile, false)
+			err := i.loadManifestsSemver(image.Bundle, image.AnnotationsFile, false)
 			if err != nil {
 				return err
 			}
 		}
 	case SkipPatchMode:
 		for _, image := range imagesToAdd {
-			err := i.loadManifestsSemver(image.bundle, image.annotationsFile, true)
+			err := i.loadManifestsSemver(image.Bundle, image.AnnotationsFile, true)
 			if err != nil {
 				return err
 			}
@@ -119,22 +223,12 @@ func (i *DirectoryPopulator) loadManifests(imagesToAdd []*ImageInput, mode Mode)
 }
 
 func (i *DirectoryPopulator) loadManifestsReplaces(bundle *Bundle, annotationsFile *AnnotationsFile) error {
-	channels, err := i.querier.ListChannels(context.TODO(), annotationsFile.GetName())
-	existingPackageChannels := map[string]string{}
-	for _, c := range channels {
-		current, err := i.querier.GetCurrentCSVNameForChannel(context.TODO(), annotationsFile.GetName(), c)
-		if err != nil {
-			return err
-		}
-		existingPackageChannels[c] = current
-	}
-
 	bcsv, err := bundle.ClusterServiceVersion()
 	if err != nil {
 		return fmt.Errorf("error getting csv from bundle %s: %s", bundle.Name, err)
 	}
 
-	packageManifest, err := translateAnnotationsIntoPackage(annotationsFile, bcsv, existingPackageChannels)
+	packageManifest, err := i.translateAnnotationsIntoPackage(annotationsFile, bcsv)
 	if err != nil {
 		return fmt.Errorf("Could not translate annotations file into packageManifest %s", err)
 	}
@@ -156,7 +250,7 @@ func (i *DirectoryPopulator) getNextReplacesImagesToAdd(imagesToAdd []*ImageInpu
 	// separate graph
 	imagesPerPackage := make(map[string][]*ImageInput, 0)
 	for _, image := range imagesToAdd {
-		pkg := image.bundle.Package
+		pkg := image.Bundle.Package
 		if _, ok := imagesPerPackage[pkg]; !ok {
 			newPkgImages := make([]*ImageInput, 0)
 			newPkgImages = append(newPkgImages, image)
@@ -182,7 +276,7 @@ func (i *DirectoryPopulator) getNextReplacesImagesToAdd(imagesToAdd []*ImageInpu
 		// then check each image to see if it can be a replacement
 		replacesLoader := ReplacesGraphLoader{}
 		for _, pkgImage := range pkgImages {
-			canAdd, err := replacesLoader.CanAdd(pkgImage.bundle, graph)
+			canAdd, err := replacesLoader.CanAdd(pkgImage.Bundle, graph)
 			if err != nil {
 				pkgErrs = append(pkgErrs, err)
 			}
@@ -198,15 +292,11 @@ func (i *DirectoryPopulator) getNextReplacesImagesToAdd(imagesToAdd []*ImageInpu
 		// no new images can be added, the current iteration aggregates all the
 		// errors that describe invalid bundles
 		if pkgFoundImages == 0 && pkgRemainingImages > 0 {
-			errs = append(errs, utilerrors.NewAggregate(pkgErrs))
+			errs = append(errs, pkgErrs...)
 		}
 	}
 
-	if len(errs) > 0 {
-		return nil, nil, utilerrors.NewAggregate(errs)
-	}
-
-	return foundImages, remainingImages, nil
+	return foundImages, remainingImages, utilerrors.NewAggregate(errs)
 }
 
 func (i *DirectoryPopulator) loadManifestsSemver(bundle *Bundle, annotations *AnnotationsFile, skippatch bool) error {
@@ -330,15 +420,23 @@ func (i *DirectoryPopulator) loadOperatorBundle(manifest PackageManifest, bundle
 }
 
 // translateAnnotationsIntoPackage attempts to translate the channels.yaml file at the given path into a package.yaml
-func translateAnnotationsIntoPackage(annotations *AnnotationsFile, csv *ClusterServiceVersion, existingPackageChannels map[string]string) (PackageManifest, error) {
+func (i *DirectoryPopulator) translateAnnotationsIntoPackage(annotations *AnnotationsFile, csv *ClusterServiceVersion) (PackageManifest, error) {
 	manifest := PackageManifest{}
+	existingChannels := map[string]string{}
+
+	pkgm, err := i.querier.GetPackage(context.TODO(), annotations.GetName())
+	if err == nil {
+		for _, c := range pkgm.Channels {
+			existingChannels[c.Name] = c.CurrentCSVName
+		}
+	}
 
 	for _, ch := range annotations.GetChannels() {
-		existingPackageChannels[ch] = csv.GetName()
+		existingChannels[ch] = csv.GetName()
 	}
 
 	channels := []PackageChannel{}
-	for c, current := range existingPackageChannels {
+	for c, current := range existingChannels {
 		channels = append(channels,
 			PackageChannel{
 				Name:           c,
@@ -347,9 +445,29 @@ func translateAnnotationsIntoPackage(annotations *AnnotationsFile, csv *ClusterS
 	}
 
 	manifest = PackageManifest{
-		PackageName:        annotations.GetName(),
-		DefaultChannelName: annotations.GetDefaultChannelName(),
-		Channels:           channels,
+		PackageName: annotations.GetName(),
+		Channels:    channels,
+	}
+
+	defaultChan := annotations.GetDefaultChannelName()
+	if defaultChan != "" {
+		if _, found := existingChannels[defaultChan]; found {
+			manifest.DefaultChannelName = annotations.GetDefaultChannelName()
+		} else {
+			return manifest, fmt.Errorf("Channel %s is set as default in annotations but not found in existing package channels", defaultChan)
+		}
+	} else {
+		// No default channel is provided in annotations. Attempt to infer from package manifest
+		if pkgm != nil {
+			manifest.DefaultChannelName = pkgm.GetDefaultChannel()
+		} else {
+			// Infer default channel if only one channel is provided
+			if len(annotations.GetChannels()) == 1 {
+				manifest.DefaultChannelName = annotations.GetChannels()[0]
+			} else {
+				return manifest, fmt.Errorf("Default channel is missing and can't be inferred")
+			}
+		}
 	}
 
 	return manifest, nil
@@ -370,36 +488,4 @@ func DecodeFile(path string, into interface{}) error {
 	decoder := yaml.NewYAMLOrJSONDecoder(fileReader, 30)
 
 	return decoder.Decode(into)
-}
-
-func parseDependenciesFile(path string, depFile *DependenciesFile) error {
-	deps := Dependencies{}
-	err := DecodeFile(path, &deps)
-	if err != nil || len(deps.RawMessage) == 0 {
-		return fmt.Errorf("Unable to decode the dependencies file %s", path)
-	}
-	depList := []Dependency{}
-	for _, v := range deps.RawMessage {
-		// convert map to json
-		jsonStr, _ := json.Marshal(v)
-
-		// Check dependency type
-		dep := Dependency{}
-		err := json.Unmarshal(jsonStr, &dep)
-		if err != nil {
-			return err
-		}
-
-		switch dep.GetType() {
-		case GVKType, PackageType:
-			dep.Value = string(jsonStr)
-		default:
-			return fmt.Errorf("Unsupported dependency type %s", dep.GetType())
-		}
-		depList = append(depList, dep)
-	}
-
-	depFile.Dependencies = depList
-
-	return nil
 }

@@ -1,0 +1,20 @@
+# permissions for end users to view blobstorages.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: blobstorage-viewer-role
+rules:
+- apiGroups:
+  - integreatly.org
+  resources:
+  - blobstorages
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - integreatly.org
+  resources:
+  - blobstorages/status
+  verbs:
+  - get

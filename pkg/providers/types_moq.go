@@ -5,8 +5,8 @@ package providers
 
 import (
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"sync"
 	"time"
 )
@@ -17,19 +17,19 @@ var _ DeploymentDetails = &DeploymentDetailsMock{}
 
 // DeploymentDetailsMock is a mock implementation of DeploymentDetails.
 //
-//     func TestSomethingThatUsesDeploymentDetails(t *testing.T) {
+// 	func TestSomethingThatUsesDeploymentDetails(t *testing.T) {
 //
-//         // make and configure a mocked DeploymentDetails
-//         mockedDeploymentDetails := &DeploymentDetailsMock{
-//             DataFunc: func() map[string][]byte {
-// 	               panic("mock out the Data method")
-//             },
-//         }
+// 		// make and configure a mocked DeploymentDetails
+// 		mockedDeploymentDetails := &DeploymentDetailsMock{
+// 			DataFunc: func() map[string][]byte {
+// 				panic("mock out the Data method")
+// 			},
+// 		}
 //
-//         // use mockedDeploymentDetails in code that requires DeploymentDetails
-//         // and then make assertions.
+// 		// use mockedDeploymentDetails in code that requires DeploymentDetails
+// 		// and then make assertions.
 //
-//     }
+// 	}
 type DeploymentDetailsMock struct {
 	// DataFunc mocks the Data method.
 	DataFunc func() map[string][]byte
@@ -75,37 +75,37 @@ var _ BlobStorageProvider = &BlobStorageProviderMock{}
 
 // BlobStorageProviderMock is a mock implementation of BlobStorageProvider.
 //
-//     func TestSomethingThatUsesBlobStorageProvider(t *testing.T) {
+// 	func TestSomethingThatUsesBlobStorageProvider(t *testing.T) {
 //
-//         // make and configure a mocked BlobStorageProvider
-//         mockedBlobStorageProvider := &BlobStorageProviderMock{
-//             CreateStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, types.StatusMessage, error) {
-// 	               panic("mock out the CreateStorage method")
-//             },
-//             DeleteStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (types.StatusMessage, error) {
-// 	               panic("mock out the DeleteStorage method")
-//             },
-//             GetNameFunc: func() string {
-// 	               panic("mock out the GetName method")
-//             },
-//             GetReconcileTimeFunc: func(bs *v1alpha1.BlobStorage) time.Duration {
-// 	               panic("mock out the GetReconcileTime method")
-//             },
-//             SupportsStrategyFunc: func(s string) bool {
-// 	               panic("mock out the SupportsStrategy method")
-//             },
-//         }
+// 		// make and configure a mocked BlobStorageProvider
+// 		mockedBlobStorageProvider := &BlobStorageProviderMock{
+// 			CreateStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, croType.StatusMessage, error) {
+// 				panic("mock out the CreateStorage method")
+// 			},
+// 			DeleteStorageFunc: func(ctx context.Context, bs *v1alpha1.BlobStorage) (croType.StatusMessage, error) {
+// 				panic("mock out the DeleteStorage method")
+// 			},
+// 			GetNameFunc: func() string {
+// 				panic("mock out the GetName method")
+// 			},
+// 			GetReconcileTimeFunc: func(bs *v1alpha1.BlobStorage) time.Duration {
+// 				panic("mock out the GetReconcileTime method")
+// 			},
+// 			SupportsStrategyFunc: func(s string) bool {
+// 				panic("mock out the SupportsStrategy method")
+// 			},
+// 		}
 //
-//         // use mockedBlobStorageProvider in code that requires BlobStorageProvider
-//         // and then make assertions.
+// 		// use mockedBlobStorageProvider in code that requires BlobStorageProvider
+// 		// and then make assertions.
 //
-//     }
+// 	}
 type BlobStorageProviderMock struct {
 	// CreateStorageFunc mocks the CreateStorage method.
-	CreateStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, types.StatusMessage, error)
+	CreateStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, croType.StatusMessage, error)
 
 	// DeleteStorageFunc mocks the DeleteStorage method.
-	DeleteStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (types.StatusMessage, error)
+	DeleteStorageFunc func(ctx context.Context, bs *v1alpha1.BlobStorage) (croType.StatusMessage, error)
 
 	// GetNameFunc mocks the GetName method.
 	GetNameFunc func() string
@@ -154,7 +154,7 @@ type BlobStorageProviderMock struct {
 }
 
 // CreateStorage calls CreateStorageFunc.
-func (mock *BlobStorageProviderMock) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, types.StatusMessage, error) {
+func (mock *BlobStorageProviderMock) CreateStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (*BlobStorageInstance, croType.StatusMessage, error) {
 	if mock.CreateStorageFunc == nil {
 		panic("BlobStorageProviderMock.CreateStorageFunc: method is nil but BlobStorageProvider.CreateStorage was just called")
 	}
@@ -189,7 +189,7 @@ func (mock *BlobStorageProviderMock) CreateStorageCalls() []struct {
 }
 
 // DeleteStorage calls DeleteStorageFunc.
-func (mock *BlobStorageProviderMock) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (types.StatusMessage, error) {
+func (mock *BlobStorageProviderMock) DeleteStorage(ctx context.Context, bs *v1alpha1.BlobStorage) (croType.StatusMessage, error) {
 	if mock.DeleteStorageFunc == nil {
 		panic("BlobStorageProviderMock.DeleteStorageFunc: method is nil but BlobStorageProvider.DeleteStorage was just called")
 	}

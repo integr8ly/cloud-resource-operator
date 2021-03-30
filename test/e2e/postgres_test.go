@@ -4,7 +4,6 @@ import (
 	goctx "context"
 	"database/sql"
 	"fmt"
-	"testing"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -13,9 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-
-	framework "github.com/operator-framework/operator-sdk/pkg/test"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 
 	_ "github.com/lib/pq"
 	errorUtil "github.com/pkg/errors"
@@ -27,9 +24,9 @@ const (
 )
 
 // verify a connection can be made to postgres instance
-func VerifyPostgresConnectionTest(t *testing.T, f *framework.Framework, namespace string) error {
+func VerifyPostgresConnectionTest(t TestingTB, ctx *TestingContext, namespace string) error {
 	// get postgres secret
-	sec, err := getPostgresSecret(t, f, namespace)
+	sec, err := getPostgresSecret(t, ctx, namespace)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get secret")
 	}
@@ -45,13 +42,13 @@ func VerifyPostgresConnectionTest(t *testing.T, f *framework.Framework, namespac
 
 	// create postgres connection job
 	pj := ConnectionJob(buildPostgresContainer(psqlCommand), postgresConnectionJobName, namespace)
-	if err := f.Client.Create(goctx.TODO(), pj, getCleanupOptions(t)); err != nil {
+	if err := ctx.Client.Create(goctx.TODO(), pj); err != nil {
 		return errorUtil.Wrapf(err, "could not create postgres connection job")
 	}
 
 	// poll postgres connection job for success
 	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
-		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresConnectionJobName}, pj); err != nil {
+		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresConnectionJobName}, pj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}
 		for _, s := range pj.Status.Conditions {
@@ -68,9 +65,9 @@ func VerifyPostgresConnectionTest(t *testing.T, f *framework.Framework, namespac
 	return nil
 }
 
-func VerifyPostgresPermissionTest(t *testing.T, f *framework.Framework, namespace string) error {
+func VerifyPostgresPermissionTest(t TestingTB, ctx *TestingContext, namespace string) error {
 	// get postgres secret
-	sec, err := getPostgresSecret(t, f, namespace)
+	sec, err := getPostgresSecret(t, ctx, namespace)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get secret")
 	}
@@ -83,13 +80,13 @@ func VerifyPostgresPermissionTest(t *testing.T, f *framework.Framework, namespac
 
 	// create postgres connection job
 	pj := ConnectionJob(buildPostgresContainer(psqlCommand), postgresPermissionJobName, namespace)
-	if err := f.Client.Create(goctx.TODO(), pj, getCleanupOptions(t)); err != nil {
+	if err := ctx.Client.Create(goctx.TODO(), pj); err != nil {
 		return errorUtil.Wrapf(err, "could not create postgres connection job")
 	}
 
 	// poll postgres command execution job to succeed
 	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
-		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresPermissionJobName}, pj); err != nil {
+		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresPermissionJobName}, pj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}
 		for _, s := range pj.Status.Conditions {
@@ -107,8 +104,8 @@ func VerifyPostgresPermissionTest(t *testing.T, f *framework.Framework, namespac
 }
 
 // verify postgres connection secret is valid
-func VerifyPostgresSecretTest(t *testing.T, f *framework.Framework, namespace string) error {
-	sec, err := getPostgresSecret(t, f, namespace)
+func VerifyPostgresSecretTest(t TestingTB, ctx *TestingContext, namespace string) error {
+	sec, err := getPostgresSecret(t, ctx, namespace)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get secret")
 	}
@@ -130,17 +127,17 @@ func VerifyPostgresSecretTest(t *testing.T, f *framework.Framework, namespace st
 	return nil
 }
 
-func getPostgresSecret(t *testing.T, f *framework.Framework, namespace string) (v1.Secret, error) {
+func getPostgresSecret(t TestingTB, ctx *TestingContext, namespace string) (v1.Secret, error) {
 	sec := v1.Secret{}
 	pcr := &v1alpha1.Postgres{}
 	// poll cr for complete status phase
-	if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pcr); err != nil {
+	if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pcr); err != nil {
 		return sec, errorUtil.Wrapf(err, "could not get resource")
 	}
 	t.Logf("postgres status phase %s", pcr.Status.Phase)
 
 	// get created secret
-	if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: pcr.Status.SecretRef.Namespace, Name: pcr.Status.SecretRef.Name}, &sec); err != nil {
+	if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: pcr.Status.SecretRef.Namespace, Name: pcr.Status.SecretRef.Name}, &sec); err != nil {
 		return sec, errorUtil.Wrapf(err, "could not get secret")
 	}
 

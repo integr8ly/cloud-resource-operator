@@ -1,0 +1,24 @@
+# permissions for end users to edit redissnapshots.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: redissnapshot-editor-role
+rules:
+- apiGroups:
+  - integreatly.org
+  resources:
+  - redissnapshots
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - integreatly.org
+  resources:
+  - redissnapshots/status
+  verbs:
+  - get

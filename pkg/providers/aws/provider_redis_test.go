@@ -12,8 +12,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
-	croApis "github.com/integr8ly/cloud-resource-operator/pkg/apis"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croApis "github.com/integr8ly/cloud-resource-operator/apis"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -26,7 +27,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sirupsen/logrus"
@@ -793,7 +794,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			name: "test short reconcile when the cr is not complete",
 			args: args{
 				r: &v1alpha1.Redis{
-					Status: v1alpha1.RedisStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseInProgress,
 					},
 				},
@@ -804,7 +805,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			name: "test default reconcile time when the cr is complete",
 			args: args{
 				r: &v1alpha1.Redis{
-					Status: v1alpha1.RedisStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseComplete,
 					},
 				},

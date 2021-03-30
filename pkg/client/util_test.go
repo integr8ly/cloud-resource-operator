@@ -3,19 +3,19 @@ package client
 import (
 	"context"
 	"errors"
-	croType "github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis"
+	"github.com/integr8ly/cloud-resource-operator/apis"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -76,7 +76,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 						"productName": "test",
 					},
 				},
-				Spec: v1alpha1.BlobStorageSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
@@ -115,7 +115,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 						"cro": "test",
 					},
 				},
-				Spec: v1alpha1.BlobStorageSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
@@ -207,7 +207,7 @@ func TestReconcilePostgres(t *testing.T) {
 						"productName": "test",
 					},
 				},
-				Spec: v1alpha1.PostgresSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
@@ -246,7 +246,7 @@ func TestReconcilePostgres(t *testing.T) {
 						"cro": "test",
 					},
 				},
-				Spec: v1alpha1.PostgresSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
@@ -337,7 +337,7 @@ func TestReconcileRedis(t *testing.T) {
 						"productName": "test",
 					},
 				},
-				Spec: v1alpha1.RedisSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
@@ -376,7 +376,7 @@ func TestReconcileRedis(t *testing.T) {
 						"cro": "test",
 					},
 				},
-				Spec: v1alpha1.RedisSpec{
+				Spec: croType.ResourceTypeSpec{
 					Type: "managed",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{

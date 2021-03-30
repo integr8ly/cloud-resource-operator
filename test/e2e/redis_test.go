@@ -3,16 +3,11 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-
-	"testing"
-
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	framework "github.com/operator-framework/operator-sdk/pkg/test"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	bv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	errorUtil "github.com/pkg/errors"
 )
@@ -22,9 +17,9 @@ const (
 )
 
 // verify a connection can be made to redis instance
-func VerifyRedisConnectionTest(t *testing.T, f *framework.Framework, namespace string) error {
+func VerifyRedisConnectionTest(t TestingTB, ctx *TestingContext, namespace string) error {
 	// get posgres secret
-	sec, err := getRedisSecret(t, f, namespace)
+	sec, err := getRedisSecret(t, ctx, namespace)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to get secret")
 	}
@@ -38,13 +33,13 @@ func VerifyRedisConnectionTest(t *testing.T, f *framework.Framework, namespace s
 
 	// create redis connection job
 	rj := ConnectionJob(buildRedisContainer(rcliCommand), redisConnectionJobName, namespace)
-	if err := f.Client.Create(goctx.TODO(), rj, getCleanupOptions(t)); err != nil {
+	if err := ctx.Client.Create(goctx.TODO(), rj); err != nil {
 		return errorUtil.Wrapf(err, "could not create redis connection job")
 	}
 
 	// poll redis connection job for success
 	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
-		if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisConnectionJobName}, rj); err != nil {
+		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisConnectionJobName}, rj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}
 		for _, s := range rj.Status.Conditions {
@@ -62,17 +57,17 @@ func VerifyRedisConnectionTest(t *testing.T, f *framework.Framework, namespace s
 }
 
 // return redis secret
-func getRedisSecret(t *testing.T, f *framework.Framework, namespace string) (v1.Secret, error) {
+func getRedisSecret(t TestingTB, ctx *TestingContext, namespace string) (v1.Secret, error) {
 	sec := v1.Secret{}
 	rcr := &v1alpha1.Redis{}
 	// poll cr for complete status phase
-	if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, rcr); err != nil {
+	if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, rcr); err != nil {
 		return sec, errorUtil.Wrapf(err, "could not get resource")
 	}
 	t.Logf("postgres status phase %s", rcr.Status.Phase)
 
 	// get created secret
-	if err := f.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: rcr.Status.SecretRef.Namespace, Name: rcr.Status.SecretRef.Name}, &sec); err != nil {
+	if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: rcr.Status.SecretRef.Namespace, Name: rcr.Status.SecretRef.Name}, &sec); err != nil {
 		return sec, errorUtil.Wrapf(err, "could not get secret")
 	}
 

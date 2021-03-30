@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/sirupsen/logrus"
@@ -46,13 +47,13 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: v1alpha1.BlobStorageSpec{
+					Spec: croType.ResourceTypeSpec{
 						SecretRef: &types.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
 					},
-					Status: v1alpha1.BlobStorageStatus{},
+					Status: croType.ResourceTypeStatus{},
 				},
 			},
 			want: &providers.BlobStorageInstance{
@@ -92,13 +93,13 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: v1alpha1.BlobStorageSpec{
+					Spec: croType.ResourceTypeSpec{
 						SecretRef: &types.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
 					},
-					Status: v1alpha1.BlobStorageStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseComplete,
 						SecretRef: &types.SecretRef{
 							Name:      "test",
@@ -142,13 +143,13 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: v1alpha1.BlobStorageSpec{
+					Spec: croType.ResourceTypeSpec{
 						SecretRef: &types.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
 					},
-					Status: v1alpha1.BlobStorageStatus{
+					Status: croType.ResourceTypeStatus{
 						Phase: types.PhaseComplete,
 						SecretRef: &types.SecretRef{
 							Name:      "test",
