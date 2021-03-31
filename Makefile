@@ -232,7 +232,7 @@ code/audit:
 	gosec ./...
 
 .PHONY: code/gen
-code/gen: setup/moq apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
+code/gen: apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 	@go generate ./...
 
