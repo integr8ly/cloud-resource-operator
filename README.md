@@ -163,18 +163,18 @@ Cut a release on Github you need to be an [owner](OWNERS)
 
 - On github ui select on tags 
 
-![tags image](img/tags.png)
+![tags image](img/tags.png?raw=true)
 - Select Releases on then next screen
 
-![release button](img/release-button.png)
+![release button](img/release-button.png?raw=true)
 
 - On the Release list screen select `Draft a new release` button 
 
-![draft release](img/draft-release.png)
+![draft release](img/draft-release.png?raw=true)
 
 - On the Draft release screen add a tag, description and add the PR for the release and select `Publish release`
 
-![release](img/release.png)
+![release](img/release.png?raw=true)
 
 Update the operator version in the following files:
 
