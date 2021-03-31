@@ -32,6 +32,13 @@ else
 	OPERATOR_SDK_OS := linux-gnu
 endif
 
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
 .PHONY: build
 build: code/gen
 	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./main.go
@@ -180,12 +187,7 @@ test/e2e/image:
 	@echo Running e2e tests:
 	$(OPERATOR_SDK) test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
+
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -232,13 +234,14 @@ code/audit:
 	gosec ./...
 
 .PHONY: code/gen
-code/gen: apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
+code/gen: setup/moq apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 	@go generate ./...
 
 .PHONY: setup/moq
 setup/moq:
-	go install github.com/matryer/moq
+	go get github.com/matryer/moq
+	go mod vendor
 
 .PHONY: create/olm/bundle
 create/olm/bundle:

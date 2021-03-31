@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.8
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.16
 
 ENV OPERATOR_SDK_VERSION=v1.2.0
 
