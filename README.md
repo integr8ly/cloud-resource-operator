@@ -159,6 +159,22 @@ $ make test/unit
 
 ### Releasing
 
+Cut a release on Github you need to be an [owner](OWNERS)
+
+- On github ui select on tags 
+
+![tags image](./img/tags.png)
+- Select Releases on then next screen
+
+![release button](./img/release-button.png)
+
+- On the Release list screen select `Draft a new release` button 
+
+![draft release](./img/draft-release.png)
+
+- On the Draft release screen add a tag, description and add the PR for the release and select `Publish release`
+
+![release](./img/release.png)
 
 Update the operator version in the following files:
 
