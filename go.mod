@@ -1,6 +1,6 @@
 module github.com/integr8ly/cloud-resource-operator
 
-go 1.13
+go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.27.0
@@ -8,7 +8,6 @@ require (
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/elazarl/goproxy v0.0.0-20190421051319-9d40249d3c2f // indirect
-	github.com/elazarl/goproxy/ext v0.0.0-20190421051319-9d40249d3c2f // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20180820084758-c7ce16629ff4 // indirect
 	github.com/google/uuid v1.1.1
@@ -26,7 +25,7 @@ require (
 	github.com/prometheus/client_golang v1.5.1
 	github.com/sirupsen/logrus v1.6.0
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
-	golang.org/x/sys v0.0.0-20210309074719-68d13333faf2 // indirect
+	golang.org/x/sys v0.0.0-20210330210617-4fbd30eecc44 // indirect
 	golang.org/x/tools v0.0.0-20200815165600-90abf76919f3 // indirect
 	k8s.io/api v0.18.8
 	k8s.io/apiextensions-apiserver v0.18.8
