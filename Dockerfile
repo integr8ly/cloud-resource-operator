@@ -21,7 +21,7 @@ COPY test/ test/
 # Build	
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o cloud-resource-operator main.go
 
-FROM registry.access.redhat.com/ubi7/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 ENV OPERATOR=/usr/local/bin/cloud-resource-operator \
 USER_UID=1001 \
