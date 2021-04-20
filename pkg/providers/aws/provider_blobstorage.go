@@ -409,7 +409,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	defer p.exposeBlobStorageMetrics(ctx, bs)
 
 	if foundBucket != nil {
-		if err = reconcileS3BucketSettings(aws.StringValue(foundBucket.Name), s3svc); err != nil {
+		if err = reconcileS3BucketSettings(aws.StringValue(foundBucket.Name), s3svc, bs); err != nil {
 			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
 			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 		}
@@ -440,7 +440,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	if err = reconcileS3BucketSettings(aws.StringValue(bucketCfg.Bucket), s3svc); err != nil {
+	if err = reconcileS3BucketSettings(aws.StringValue(bucketCfg.Bucket), s3svc, bs); err != nil {
 		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.StringValue(bucketCfg.Bucket))
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
@@ -465,14 +465,27 @@ func getS3buckets(s3svc s3iface.S3API) ([]*s3.Bucket, error) {
 	return existingBuckets, nil
 }
 
-func reconcileS3BucketSettings(bucket string, s3svc s3iface.S3API) error {
+func reconcileS3BucketSettings(bucket string, s3svc s3iface.S3API, bs *v1alpha1.BlobStorage) error {
+
+	var blockPublicAcls = defaultBlockPublicAcls
+	var blockPublicPolicy = defaultBlockPublicPolicy
+	var ignorePublicAcls = defaultIgnorePublicAcls
+	var restrictPublicBuckets = defaultRestrictPublicBuckets
+
+	if (bs.Spec.RemoveBlockOnPublicAccess) {
+		blockPublicAcls = false
+		blockPublicPolicy = false
+		ignorePublicAcls = false
+		restrictPublicBuckets = false
+	}
+
 	_, err := s3svc.PutPublicAccessBlock(&s3.PutPublicAccessBlockInput{
 		Bucket: aws.String(bucket),
 		PublicAccessBlockConfiguration: &s3.PublicAccessBlockConfiguration{
-			BlockPublicAcls:       aws.Bool(defaultBlockPublicAcls),
-			BlockPublicPolicy:     aws.Bool(defaultBlockPublicPolicy),
-			IgnorePublicAcls:      aws.Bool(defaultIgnorePublicAcls),
-			RestrictPublicBuckets: aws.Bool(defaultRestrictPublicBuckets),
+			BlockPublicAcls:       aws.Bool(blockPublicAcls),
+			BlockPublicPolicy:     aws.Bool(blockPublicPolicy),
+			IgnorePublicAcls:      aws.Bool(ignorePublicAcls),
+			RestrictPublicBuckets: aws.Bool(restrictPublicBuckets),
 		},
 	})
 	if err != nil {
@@ -493,7 +506,40 @@ func reconcileS3BucketSettings(bucket string, s3svc s3iface.S3API) error {
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to set encryption settings on bucket %s", bucket)
 	}
+
+	if (bs.Spec.AllowPublicGetObjectAccess) {
+		policy, err := getAllowPublicGetObjectAccess(bucket)
+		if (err != nil) {
+			return errorUtil.Wrapf(err, "failed to get allow public get object access")
+		}
+
+		_, err = s3svc.PutBucketPolicy(&s3.PutBucketPolicyInput{
+			Bucket: aws.String(bucket),
+			Policy: aws.String(string(policy)),
+		})
+		if err != nil {
+			return errorUtil.Wrapf(err, "failed to create bucket policy on %s", bucket)
+		}
+	}
 	return nil
+}
+
+func getAllowPublicGetObjectAccess(bucketName string) ([]byte, error) {
+
+	s3Policy := map[string]interface{}{
+		"Version": "2012-10-17",
+		"Statement": []map[string]interface{}{
+			{
+				"Sid":    "Stmt1618957960008",
+				"Effect": "Allow",
+				"Principal": "*",
+				"Action":   "s3:GetObject",
+				"Resource": "arn:aws:s3:::" + bucketName + "/*",
+			},
+		},
+	}
+
+	return json.Marshal(s3Policy)
 }
 
 func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alpha1.BlobStorage) (*s3.CreateBucketInput, *S3DeleteStrat, *StrategyConfig, error) {

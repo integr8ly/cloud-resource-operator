@@ -29,7 +29,7 @@ import (
 type BlobStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              types.ResourceTypeSpec   `json:"spec,omitempty"`
+	Spec              types.ResourceTypeSpec `json:"spec,omitempty"`
 	Status            types.ResourceTypeStatus `json:"status,omitempty"`
 }
 

@@ -16,7 +16,8 @@ import (
 type modifyResourceFunc func(cr metav1.Object) error
 
 // ReconcileBlobStorage creates or updates a blob storage custom resource
-func ReconcileBlobStorage(ctx context.Context, client client.Client, productName, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc) (*v1alpha1.BlobStorage, error) {
+func ReconcileBlobStorage(ctx context.Context, client client.Client, productName, deploymentType, tier, name, ns, secretName, secretNs string, modifyFunc modifyResourceFunc, allowPublicGetObjectAccess bool, removeBlockOnPublicAccess bool) (*v1alpha1.BlobStorage, error) {
+
 	bs := &v1alpha1.BlobStorage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -44,6 +45,8 @@ func ReconcileBlobStorage(ctx context.Context, client client.Client, productName
 			Name:      secretName,
 			Namespace: secretNs,
 		}
+		bs.Spec.RemoveBlockOnPublicAccess = removeBlockOnPublicAccess
+		bs.Spec.AllowPublicGetObjectAccess = allowPublicGetObjectAccess
 		return nil
 	})
 	if err != nil {

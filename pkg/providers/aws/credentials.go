@@ -42,6 +42,7 @@ var (
 				"s3:PutBucketTagging",
 				"s3:PutBucketPublicAccessBlock",
 				"s3:PutEncryptionConfiguration",
+				"s3:PutBucketPolicy",
 				"ec2:DescribeVpcs",
 				"ec2:DescribeSubnets",
 				"ec2:DescribeSecurityGroups",

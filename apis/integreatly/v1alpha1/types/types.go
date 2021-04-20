@@ -27,6 +27,8 @@ type ResourceTypeSpec struct {
 	Tier       string     `json:"tier"`
 	SkipCreate bool       `json:"skipCreate,omitempty"`
 	SecretRef  *SecretRef `json:"secretRef"`
+	RemoveBlockOnPublicAccess  bool `json:"removeBlockOnPublicAccess,omitempty"`
+	AllowPublicGetObjectAccess  bool `json:"allowPublicGetObjectAccess,omitempty"`
 }
 
 type StatusPhase string

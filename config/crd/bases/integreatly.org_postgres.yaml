@@ -35,6 +35,10 @@ spec:
             type: object
           spec:
             properties:
+              allowPublicGetObjectAccess:
+                type: boolean
+              removeBlockOnPublicAccess:
+                type: boolean
               secretRef:
                 properties:
                   name:
