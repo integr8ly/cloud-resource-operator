@@ -33,3 +33,13 @@ spec:
           value: "cloud-resource-operator"
         - name: TAG_KEY_PREFIX
           value: integreatly.org/
+        volumeMounts:
+        - name: bound-sa-token
+          mountPath: /var/run/secrets/openshift/serviceaccount
+      volumes:
+      - name: bound-sa-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: openshift
