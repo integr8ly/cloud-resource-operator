@@ -1302,6 +1302,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				},
 			},
 			want: &rds.ModifyDBInstanceInput{
+				ApplyImmediately:           aws.Bool(true),
 				DeletionProtection:         aws.Bool(false),
 				BackupRetentionPeriod:      aws.Int64(0),
 				DBInstanceClass:            aws.String("newValue"),

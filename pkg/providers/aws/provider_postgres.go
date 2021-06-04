@@ -61,6 +61,7 @@ const (
 	defaultPostgresUserKey               = "user"
 	defaultPostgresPasswordKey           = "password"
 	defaultStorageEncrypted              = true
+	defalutApplyImmediately              = true
 )
 
 var (
@@ -701,6 +702,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		}
 		if engineUpgradeNeeded {
 			mi.EngineVersion = rdsConfig.EngineVersion
+			mi.ApplyImmediately = aws.Bool(defalutApplyImmediately)
 			updateFound = true
 		}
 	}
