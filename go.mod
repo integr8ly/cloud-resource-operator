@@ -8,13 +8,13 @@ require (
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/elazarl/goproxy v0.0.0-20190421051319-9d40249d3c2f // indirect
+	github.com/elazarl/goproxy/ext v0.0.0-20210110162100-a92cc753f88e // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20180820084758-c7ce16629ff4 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gregjones/httpcache v0.0.0-20190203031600-7a902570cb17 // indirect
 	github.com/hashicorp/go-version v1.2.1
 	github.com/lib/pq v1.7.0
-	github.com/matryer/moq v0.2.1 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.2

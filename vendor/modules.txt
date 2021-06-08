@@ -223,6 +223,8 @@ github.com/docker/spdystream
 github.com/docker/spdystream/spdy
 # github.com/elazarl/goproxy v0.0.0-20190421051319-9d40249d3c2f
 ## explicit
+# github.com/elazarl/goproxy/ext v0.0.0-20210110162100-a92cc753f88e
+## explicit
 # github.com/emicklei/go-restful v2.9.5+incompatible
 github.com/emicklei/go-restful
 github.com/emicklei/go-restful/log
@@ -386,8 +388,6 @@ github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 # github.com/markbates/inflect v1.0.4
 github.com/markbates/inflect
-# github.com/matryer/moq v0.2.1
-## explicit
 # github.com/mattn/go-colorable v0.1.8
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
