@@ -2,6 +2,8 @@ package aws
 
 import (
 	"context"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
@@ -13,7 +15,6 @@ import (
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 const (
@@ -34,7 +35,7 @@ func NewAWSRedisMetricsProvider(client client.Client, logger *logrus.Entry) *Red
 	return &RedisMetricsProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"providers": redisMetricProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -64,7 +65,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}
 
 	// create a session from redis strategy (region) and reconciled aws keys
-	sess, err := CreateSessionFromStrategy(ctx, r.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, redisStrategyConfig)
+	sess, err := CreateSessionFromStrategy(ctx, r.Client, providerCreds, redisStrategyConfig)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create aws session to scrape elasticache cloud watch metrics")
 	}

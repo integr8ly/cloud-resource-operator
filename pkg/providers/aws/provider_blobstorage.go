@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
@@ -84,7 +85,7 @@ func NewAWSBlobStorageProvider(client client.Client, logger *logrus.Entry) *Blob
 	return &BlobStorageProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"provider": blobstorageProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -145,7 +146,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// setup aws s3 sdk session
 	p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to create s3 bucket"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -252,7 +253,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// create new s3 session
 	p.Logger.Infof("creating new aws sdk session in region %s", stratCfg.Region)
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to delete s3 bucket"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)

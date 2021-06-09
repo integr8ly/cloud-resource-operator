@@ -39,7 +39,7 @@ func NewAWSPostgresSnapshotProvider(client client.Client, logger *logrus.Entry) 
 	return &PostgresSnapshotProvider{
 		client:            client,
 		logger:            logger.WithFields(logrus.Fields{"provider": postgresSnapshotProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -234,5 +234,5 @@ func (p *PostgresSnapshotProvider) createSessionForResource(ctx context.Context,
 		return nil, err
 	}
 
-	return CreateSessionFromStrategy(ctx, p.client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	return CreateSessionFromStrategy(ctx, p.client, providerCreds, stratCfg)
 }
