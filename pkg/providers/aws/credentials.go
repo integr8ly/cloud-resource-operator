@@ -13,6 +13,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	errorUtil "github.com/pkg/errors"
 	v12 "k8s.io/api/core/v1"
@@ -138,12 +139,24 @@ type Credentials struct {
 	PolicyName      string
 	AccessKeyID     string
 	SecretAccessKey string
+	RoleArn         string
+	TokenFilePath   string
 }
 
 //go:generate moq -out credentials_moq.go . CredentialManager
 type CredentialManager interface {
 	ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error)
 	ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, error)
+}
+
+func NewCredentialManager(client client.Client) CredentialManager {
+	ns, _ := k8sutil.GetOperatorNamespace()
+	_, err := getSTSCredentialsSecret(context.TODO(), client, ns)
+	if err == nil {
+		return NewSTSCredentialManager(client)
+	}
+
+	return NewCredentialMinterCredentialManager(client)
 }
 
 var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)

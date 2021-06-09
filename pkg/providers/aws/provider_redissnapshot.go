@@ -39,7 +39,7 @@ func NewAWSRedisSnapshotProvider(client client.Client, logger *logrus.Entry) *Re
 	return &RedisSnapshotProvider{
 		client:            client,
 		logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -246,5 +246,5 @@ func (p *RedisSnapshotProvider) createSessionForResource(ctx context.Context, na
 		return nil, err
 	}
 
-	return CreateSessionFromStrategy(ctx, p.client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	return CreateSessionFromStrategy(ctx, p.client, providerCreds, stratCfg)
 }

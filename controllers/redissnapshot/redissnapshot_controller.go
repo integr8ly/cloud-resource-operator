@@ -72,7 +72,7 @@ func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
 		logger:            logger,
 		provider:          provider,
 		ConfigManager:     croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
-		CredentialManager: croAws.NewCredentialMinterCredentialManager(mgr.GetClient()),
+		CredentialManager: croAws.NewCredentialManager(mgr.GetClient()),
 	}, nil
 }
 

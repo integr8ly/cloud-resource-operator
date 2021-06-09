@@ -98,7 +98,7 @@ func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *Postgre
 	return &PostgresProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 		TCPPinger:         NewConnectionTestManager(),
 	}
@@ -154,7 +154,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// setup aws RDS instance sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, strategyConfig)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, strategyConfig)
 	if err != nil {
 		errMsg := "failed to create aws session to create rds db instance"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -467,7 +467,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	}
 
 	// setup aws postgres instance sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to delete rds db instance"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
