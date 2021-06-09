@@ -141,9 +141,7 @@ type Credentials struct {
 //go:generate moq -out credentials_moq.go . CredentialManager
 type CredentialManager interface {
 	ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error)
-	ReconcileSESCredentials(ctx context.Context, name, ns string) (*Credentials, error)
-	ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, *v1.CredentialsRequest, error)
-	ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error)
+	ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, error)
 }
 
 var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)
@@ -163,33 +161,25 @@ func NewCredentialMinterCredentialManager(client client.Client) *CredentialMinte
 
 //ReconcileProviderCredentials Ensure the credentials the AWS provider requires are available
 func (m *CredentialMinterCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error) {
-	_, creds, err := m.ReconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
+	creds, err := m.reconcileCredentials(ctx, m.ProviderCredentialName, ns, operatorEntries)
 	if err != nil {
 		return nil, err
 	}
 	return creds, nil
 }
 
-func (m *CredentialMinterCredentialManager) ReconcileSESCredentials(ctx context.Context, name, ns string) (*Credentials, error) {
-	_, creds, err := m.ReconcileCredentials(ctx, name, ns, sendRawMailEntries)
+func (m *CredentialMinterCredentialManager) ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, error) {
+	creds, err := m.reconcileCredentials(ctx, name, ns, buildPutBucketObjectEntries(bucket))
 	if err != nil {
 		return nil, err
 	}
 	return creds, nil
 }
 
-func (m *CredentialMinterCredentialManager) ReoncileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, *v1.CredentialsRequest, error) {
-	cr, creds, err := m.ReconcileCredentials(ctx, name, ns, buildPutBucketObjectEntries(bucket))
-	if err != nil {
-		return nil, nil, err
-	}
-	return creds, cr, nil
-}
-
-func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*v1.CredentialsRequest, *Credentials, error) {
+func (m *CredentialMinterCredentialManager) reconcileCredentials(ctx context.Context, name string, ns string, entries []v1.StatementEntry) (*Credentials, error) {
 	cr, err := m.reconcileCredentialRequest(ctx, name, ns, entries)
 	if err != nil {
-		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
+		return nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
 	}
 	err = wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
 		if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
@@ -201,22 +191,22 @@ func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Con
 		return cr.Status.Provisioned, nil
 	})
 	if err != nil {
-		return nil, nil, errorUtil.Wrap(err, "timed out waiting for credential request to become provisioned")
+		return nil, errorUtil.Wrap(err, "timed out waiting for credential request to become provisioned")
 	}
 
 	codec, err := v1.NewCodec()
 	if err != nil {
-		return nil, nil, errorUtil.Wrap(err, "failed to create credentials codec")
+		return nil, errorUtil.Wrap(err, "failed to create credentials codec")
 	}
 	awsProvStatus := &v1.AWSProviderStatus{}
 	if err = codec.DecodeProviderSpec(cr.Status.ProviderStatus, awsProvStatus); err != nil {
-		return nil, nil, errorUtil.Wrapf(err, "failed to decode credentials request %s", cr.Name)
+		return nil, errorUtil.Wrapf(err, "failed to decode credentials request %s", cr.Name)
 	}
 	accessKeyID, secAccessKey, err := m.reconcileAWSCredentials(ctx, cr)
 	if err != nil {
-		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile aws credentials from credential request %s", cr.Name)
+		return nil, errorUtil.Wrapf(err, "failed to reconcile aws credentials from credential request %s", cr.Name)
 	}
-	return cr, &Credentials{
+	return &Credentials{
 		Username:        awsProvStatus.User,
 		PolicyName:      awsProvStatus.Policy,
 		AccessKeyID:     accessKeyID,
