@@ -233,13 +233,22 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// expose a connection metric
 	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
-
+	stsEnabled := true
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
 				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		}
+		if stsEnabled {
+			// the tag should be added to the create strategy in cases where sts is enabled
+			// and in the same api request of the first creation of the postgres to allow
+			msg, err := p.buildRedisTagCreateStrategy(ctx, r, elasticacheConfig)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
 		}
 
 		logrus.Info("creating elasticache cluster")
@@ -300,18 +309,20 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		logger.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
 	}
 
-	// add tags to cache nodes
-	cacheInstance := *foundCache.NodeGroups[0]
-	if *cacheInstance.Status != "available" {
-		logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
-		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
-	}
+	if !stsEnabled {
+		// add tags to cache nodes
+		cacheInstance := *foundCache.NodeGroups[0]
+		if *cacheInstance.Status != "available" {
+			logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
+			return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
+		}
 
-	for _, cache := range cacheInstance.NodeGroupMembers {
-		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
-			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		for _, cache := range cacheInstance.NodeGroupMembers {
+			msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
+				return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
 		}
 	}
 
@@ -328,6 +339,59 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// return secret information
 	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
+}
+
+
+// buildRedisTagCreateStrategy Tags RDS resources
+func (p *RedisProvider) buildRedisTagCreateStrategy(ctx context.Context, cr *v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput) (croType.StatusMessage, error) {
+	// get the environment from the CR
+	// set the tag values that will always be added
+	defaultOrganizationTag := resources.GetOrganizationTag()
+
+	//get Cluster Id
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		msg := "Failed to get cluster id to add tags to Redis instance"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+	}
+
+	// Set the Tag values
+	redisTags := []*elasticache.Tag{
+		{
+			Key:   aws.String(defaultOrganizationTag + "clusterID"),
+			Value: aws.String(clusterID),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-type"),
+			Value: aws.String(cr.Spec.Type),
+		},
+		{
+			Key:   aws.String(defaultOrganizationTag + "resource-name"),
+			Value: aws.String(cr.Name),
+		},
+		{
+			Key:   aws.String("red-hat-managed"),
+			Value: aws.String("true"),
+		},
+	}
+	if cr.ObjectMeta.Labels["productName"] != "" {
+		productTag := &elasticache.Tag{
+			Key:   aws.String(defaultOrganizationTag + "product-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["productName"]),
+		}
+		redisTags = append(redisTags, productTag)
+	}
+	if cr.ObjectMeta.Labels["addonName"] != "" {
+		addonTag := &elasticache.Tag{
+			Key: aws.String("add-on-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["addonName"]),
+		}
+		redisTags = append(redisTags, addonTag)
+	}
+
+	// adding tags to rds postgres create strategy instance
+	elasticacheCreateConfig.SetTags(redisTags)
+	return "", nil
 }
 
 // TagElasticacheNode Add Tags to AWS Elasticache
