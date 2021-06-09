@@ -249,3 +249,7 @@ create/olm/bundle:
 
 .PHONY: release/prepare
 release/prepare: gen/csv image/push create/olm/bundle
+
+.PHONY: setup/sts
+setup/sts:
+	sed "s|ROLE_ARN|$(ROLE_ARN)|g" scripts/sts/sts-secret.yaml | oc apply -f - -n $(NAMESPACE)

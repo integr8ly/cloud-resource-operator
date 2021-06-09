@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	awsCredentials "github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sts"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
@@ -156,17 +158,27 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 	return resources.ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterID, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
 }
 
-func CreateSessionFromStrategy(ctx context.Context, c client.Client, keyID, secretKey string, strategy *StrategyConfig) (*session.Session, error) {
+func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials *Credentials, strategy *StrategyConfig) (*session.Session, error) {
 	region, err := GetRegionFromStrategyOrDefault(ctx, c, strategy)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get region from strategy while creating aws session")
 	}
-	sess, err := session.NewSession(&aws.Config{
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(keyID, secretKey, ""),
-	})
+
+	awsConfig := aws.Config{
+		Region: aws.String(region),
+	}
+	// Check if STS credentials are passed
+	if len(credentials.RoleArn) > 0 {
+		svc := sts.New(session.Must(session.NewSession(&awsConfig)))
+		credentialsProvider := stscreds.NewWebIdentityRoleProvider(svc, credentials.RoleArn, "Red-Hat-cloud-resources-operator", credentials.TokenFilePath)
+		awsConfig.Credentials = awsCredentials.NewCredentials(credentialsProvider)
+	} else {
+		awsConfig.Credentials = awsCredentials.NewStaticCredentials(credentials.AccessKeyID, credentials.SecretAccessKey, "")
+	}
+
+	sess, err := session.NewSession(&awsConfig)
 	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s keyID=%s", region, keyID)
+		return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s", region)
 	}
 	return sess, nil
 }
