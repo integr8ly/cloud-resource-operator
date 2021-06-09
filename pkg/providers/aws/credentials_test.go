@@ -68,7 +68,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cm := NewCredentialMinterCredentialManager(tc.client)
-			_, awsCreds, err := cm.ReconcileCredentials(context.TODO(), tc.credName, tc.credNS, tc.entries)
+			awsCreds, err := cm.reconcileCredentials(context.TODO(), tc.credName, tc.credNS, tc.entries)
 			if err != nil {
 				t.Fatal("unexpected error", err)
 			}
