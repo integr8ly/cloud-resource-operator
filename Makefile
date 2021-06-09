@@ -254,3 +254,7 @@ verify/release/exist:
 .PHONY: coverage
 coverage:
 	hack/codecov.sh
+
+.PHONY: setup/sts
+setup/sts:
+	sed "s|ROLE_ARN|$(ROLE_ARN)|g" scripts/sts/sts-secret.yaml | oc apply -f - -n $(NAMESPACE)
