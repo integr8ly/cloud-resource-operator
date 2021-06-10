@@ -2,7 +2,80 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: '[]'
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "BlobStorage",
+          "metadata": {
+            "labels": {
+              "productName": "ProductName"
+            },
+            "name": "example-blobstorage"
+          },
+          "spec": {
+            "secretRef": {
+              "name": "example-blobstorage-sec"
+            },
+            "tier": "development",
+            "type": "REPLACE_ME"
+          }
+        },
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "Postgres",
+          "metadata": {
+            "labels": {
+              "productName": "productName"
+            },
+            "name": "example-postgres"
+          },
+          "spec": {
+            "secretRef": {
+              "name": "example-postgres-sec"
+            },
+            "tier": "development",
+            "type": "REPLACE_ME"
+          }
+        },
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "PostgresSnapshot",
+          "metadata": {
+            "name": "example-postgressnapshot"
+          },
+          "spec": {
+            "resourceName": "REPLACE_ME"
+          }
+        },
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "Redis",
+          "metadata": {
+            "labels": {
+              "productName": "productName"
+            },
+            "name": "example-redis"
+          },
+          "spec": {
+            "secretRef": {
+              "name": "example-redis-sec"
+            },
+            "tier": "development",
+            "type": "REPLACE_ME"
+          }
+        },
+        {
+          "apiVersion": "integreatly.org/v1alpha1",
+          "kind": "RedisSnapshot",
+          "metadata": {
+            "name": "example-redissnapshot"
+          },
+          "spec": {
+            "resourceName": "REPLACE_ME"
+          }
+        }
+      ]
     capabilities: Basic Install
     containerImage: quay.io/integreatly/cloud-resource-operator:v0.26.0
     operators.operatorframework.io/builder: operator-sdk-v1.2.0
@@ -41,8 +114,200 @@ spec:
     mediatype: image/png
   install:
     spec:
-      deployments: null
-    strategy: ""
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - persistentvolumes
+          verbs:
+          - '*'
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - infrastructures
+          - networks
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - prometheusrules
+          verbs:
+          - '*'
+        serviceAccountName: cloud-resource-operator
+      deployments:
+      - name: cloud-resource-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              name: cloud-resource-operator
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                name: cloud-resource-operator
+            spec:
+              containers:
+              - command:
+                - cloud-resource-operator
+                env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: OPERATOR_NAME
+                  value: cloud-resource-operator
+                - name: TAG_KEY_PREFIX
+                  value: integreatly.org/
+                image: quay.io/integreatly/cloud-resource-operator:v0.26.0
+                imagePullPolicy: Always
+                name: cloud-resource-operator
+                resources: {}
+              serviceAccountName: cloud-resource-operator
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - endpoints
+          - events
+          - persistentvolumeclaims
+          - pods
+          - pods/exec
+          - secrets
+          - services
+          - services/finalizers
+          verbs:
+          - '*'
+        - apiGroups:
+          - apps
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - cloud-resource-operator
+          resources:
+          - deployments/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - cloudcredential.openshift.io
+          resources:
+          - credentialsrequests
+          verbs:
+          - '*'
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - '*'
+          - authentications
+          - builds
+          - clusteroperators
+          - featuregates
+          - infrastructures
+          - ingresses
+          - networks
+          - schedulers
+          verbs:
+          - '*'
+        - apiGroups:
+          - integreatly
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - integreatly.org
+          resources:
+          - '*'
+          - postgres
+          - postgressnapshots
+          - redis
+          - redissnapshots
+          - smtpcredentialset
+          verbs:
+          - '*'
+        - apiGroups:
+          - integreatly.org
+          resources:
+          - blobstorages
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - integreatly.org
+          resources:
+          - blobstorages/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - prometheusrules
+          verbs:
+          - '*'
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - get
+        - apiGroups:
+          - operators.coreos.com
+          resources:
+          - catalogsources
+          verbs:
+          - get
+          - patch
+          - update
+        serviceAccountName: cloud-resource-operator
+    strategy: deployment
   installModes:
   - supported: true
     type: OwnNamespace
@@ -63,4 +328,7 @@ spec:
   maturity: alpha
   provider:
     name: Integreatly
+  replaces: cloud-resources.v0.25.0
+  skips:
+    - cloud-resources.v0.25.0
   version: 0.26.0
