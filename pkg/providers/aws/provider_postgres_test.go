@@ -434,6 +434,21 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 	}
 }
 
+func buildTestPostgresApplyImmediatelyCR() *v1alpha1.Postgres {
+	return &v1alpha1.Postgres{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+			Labels: map[string]string{
+				"productName": "test_product",
+			},
+		},
+		Spec: croType.ResourceTypeSpec{
+			ApplyImmediately: true,
+		},
+	}
+}
+
 func buildTestInfra() *v12.Infrastructure {
 	return &v12.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -1228,6 +1243,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 	type args struct {
 		rdsConfig   *rds.CreateDBInstanceInput
 		foundConfig *rds.DBInstance
+		cr          *v1alpha1.Postgres
 	}
 	tests := []struct {
 		name    string
@@ -1239,6 +1255,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 			name: "test modification not required",
 			args: args{
 				rdsConfig: &rds.CreateDBInstanceInput{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
 					BackupRetentionPeriod:      aws.Int64(1),
 					DBInstanceClass:            aws.String("test"),
@@ -1252,6 +1269,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					Port:                       aws.Int64(1),
 				},
 				foundConfig: &rds.DBInstance{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
 					BackupRetentionPeriod:      aws.Int64(1),
 					DBInstanceClass:            aws.String("test"),
@@ -1267,6 +1285,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresCR(),
 			},
 			want: nil,
 		},
@@ -1274,6 +1293,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 			name: "test when modification is required",
 			args: args{
 				rdsConfig: &rds.CreateDBInstanceInput{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(false),
 					BackupRetentionPeriod:      aws.Int64(0),
 					DBInstanceClass:            aws.String("newValue"),
@@ -1286,6 +1306,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					Port:                       aws.Int64(0),
 				},
 				foundConfig: &rds.DBInstance{
+					AutoMinorVersionUpgrade:    aws.Bool(true),
 					DeletionProtection:         aws.Bool(true),
 					BackupRetentionPeriod:      aws.Int64(1),
 					DBInstanceClass:            aws.String("test"),
@@ -1300,8 +1321,11 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresApplyImmediatelyCR(),
 			},
 			want: &rds.ModifyDBInstanceInput{
+				ApplyImmediately:           aws.Bool(true),
+				AutoMinorVersionUpgrade:    aws.Bool(false),
 				DeletionProtection:         aws.Bool(false),
 				BackupRetentionPeriod:      aws.Int64(0),
 				DBInstanceClass:            aws.String("newValue"),
@@ -1347,6 +1371,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresCR(),
 			},
 			want: nil,
 		},
@@ -1381,6 +1406,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresCR(),
 			},
 			want: nil,
 		},
@@ -1416,6 +1442,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresCR(),
 			},
 			want:    nil,
 			wantErr: "invalid postgres version: failed to parse desired version: Malformed version: broken version num",
@@ -1452,6 +1479,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
+				cr: buildTestPostgresCR(),
 			},
 			want:    nil,
 			wantErr: "invalid postgres version: failed to parse current version: Malformed version: broken version num",
@@ -1459,7 +1487,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig)
+			got, err := buildRDSUpdateStrategy(tt.args.rdsConfig, tt.args.foundConfig, tt.args.cr)
 
 			if err != nil {
 				if tt.wantErr == "" {

@@ -35,6 +35,8 @@ spec:
             type: object
           spec:
             properties:
+              applyImmediately:
+                type: boolean
               secretRef:
                 properties:
                   name:
