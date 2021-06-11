@@ -10,7 +10,7 @@ From your CRO branch, navigate to makefile and ensure that:
 must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CRO.
 - Run `make gen/csv` which will generate new manifests.
 - Ensure that the IMAGE_REG and IMAGE_ORG matches the desired repositories.
-- Create new CRO image by running `make image/build/push` or point to the existing one in the CSV you have created.
+- Create new CRO image by running `make image/build` and `make image/push` or point to the existing one in the CSV you have created.
 - Ensure that the replaces field is present and replaces previous version.
 - Run `make create/olm/bundle` - this will create and push bundles and indices to given repository, as well as validating them.
 
