@@ -167,16 +167,17 @@ func TestReconcilePostgres(t *testing.T) {
 	}
 
 	type args struct {
-		ctx            context.Context
-		client         client.Client
-		deploymentType string
-		productName    string
-		tier           string
-		name           string
-		ns             string
-		secretName     string
-		secretNs       string
-		modifyFunc     modifyResourceFunc
+		ctx              context.Context
+		client           client.Client
+		deploymentType   string
+		productName      string
+		tier             string
+		name             string
+		ns               string
+		secretName       string
+		secretNs         string
+		applyImmediately bool
+		modifyFunc       modifyResourceFunc
 	}
 	tests := []struct {
 		name    string
@@ -187,16 +188,17 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "test successful creation",
 			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
-				tier:           "production",
-				productName:    "test",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
-				modifyFunc:     nil,
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme),
+				deploymentType:   "managed",
+				tier:             "production",
+				productName:      "test",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: false,
+				modifyFunc:       nil,
 			},
 			want: &v1alpha1.Postgres{
 				ObjectMeta: v1.ObjectMeta{
@@ -221,15 +223,16 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "test modification function",
 			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
-				productName:    "test",
-				tier:           "production",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme),
+				deploymentType:   "managed",
+				productName:      "test",
+				tier:             "production",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: true,
 				modifyFunc: func(cr v1.Object) error {
 					cr.SetLabels(map[string]string{
 						"cro": "test",
@@ -253,6 +256,7 @@ func TestReconcilePostgres(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
+					ApplyImmediately: true,
 				},
 			},
 			wantErr: false,
@@ -260,15 +264,16 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "test modification function error",
 			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
-				tier:           "development",
-				productName:    "test",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme),
+				deploymentType:   "workshop",
+				tier:             "development",
+				productName:      "test",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: false,
 				modifyFunc: func(cr v1.Object) error {
 					return errors.New("error executing function")
 				},
@@ -279,7 +284,7 @@ func TestReconcilePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
+			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.applyImmediately, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
