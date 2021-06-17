@@ -52,7 +52,7 @@ const (
 	defaultAwsBackupRetentionPeriod      = 31
 	defaultAwsDBInstanceClass            = "db.t3.small"
 	defaultAwsEngine                     = "postgres"
-	defaultAwsEngineVersion              = "10.13"
+	defaultAwsEngineVersion              = "10.15"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
 	defaultAWSCopyTagsToSnapshot         = true
