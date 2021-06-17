@@ -36,6 +36,8 @@ spec:
           spec:
             properties:
               applyImmediately:
+                description: ApplyImmediately is only available to Postgres cr, for
+                  blobstorage and redis cr's currently does nothing
                 type: boolean
               secretRef:
                 properties:
