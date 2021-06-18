@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -166,6 +167,13 @@ func TestReconcilePostgres(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
+	upgradePostgres := &v1alpha1.Postgres{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+
 	type args struct {
 		ctx              context.Context
 		client           client.Client
@@ -186,7 +194,7 @@ func TestReconcilePostgres(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful creation",
+			name: "test successful creation on create",
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
@@ -221,7 +229,7 @@ func TestReconcilePostgres(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function",
+			name: "test modification function on create",
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
@@ -235,7 +243,7 @@ func TestReconcilePostgres(t *testing.T) {
 				applyImmediately: true,
 				modifyFunc: func(cr v1.Object) error {
 					cr.SetLabels(map[string]string{
-						"cro": "test",
+						"productName": "test",
 					})
 					return nil
 				},
@@ -246,7 +254,7 @@ func TestReconcilePostgres(t *testing.T) {
 					Namespace:       "test",
 					ResourceVersion: "1",
 					Labels: map[string]string{
-						"cro": "test",
+						"productName": "test",
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
@@ -262,10 +270,114 @@ func TestReconcilePostgres(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function error",
+			name: "test modification function error on create",
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
+				deploymentType:   "workshop",
+				tier:             "development",
+				productName:      "test",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: false,
+				modifyFunc: func(cr v1.Object) error {
+					return errors.New("error executing function")
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "test successful creation on upgrade",
+			args: args{
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
+				deploymentType:   "managed",
+				tier:             "production",
+				productName:      "test",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: false,
+				modifyFunc:       nil,
+			},
+			want: &v1alpha1.Postgres{
+				TypeMeta: v1.TypeMeta{
+					Kind:       "Postgres",
+					APIVersion: "integreatly.org/v1alpha1",
+				},
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "managed",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function on upgrade",
+			args: args{
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
+				deploymentType:   "managed",
+				productName:      "test",
+				tier:             "production",
+				name:             "test",
+				ns:               "test",
+				secretName:       "test",
+				secretNs:         "test",
+				applyImmediately: true,
+				modifyFunc: func(cr v1.Object) error {
+					cr.SetLabels(map[string]string{
+						"productName": "test",
+					})
+					return nil
+				},
+			},
+			want: &v1alpha1.Postgres{
+				TypeMeta: v1.TypeMeta{
+					Kind:       "Postgres",
+					APIVersion: "integreatly.org/v1alpha1",
+				},
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "managed",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+					ApplyImmediately: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function error on upgrade",
+			args: args{
+				ctx:              context.TODO(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
 				deploymentType:   "workshop",
 				tier:             "development",
 				productName:      "test",
@@ -290,7 +402,7 @@ func TestReconcilePostgres(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ReconcilePostgres() got = %v, want %v", got, tt.want)
+				t.Errorf("ReconcilePostgres() \n got = %v, \n want= %v", got, tt.want)
 			}
 		})
 	}
