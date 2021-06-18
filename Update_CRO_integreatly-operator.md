@@ -11,7 +11,15 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
 - Run `make gen/csv` which will generate new manifests.
 - Ensure that the IMAGE_REG and IMAGE_ORG matches the desired repositories.
 - Create new CRO image by running `make image/build` and `make image/push` or point to the existing one in the CSV you have created.
-- Ensure that the replaces field is present and replaces previous version.
+- Ensure that the replaces field is present and replaces the previous version.
+- If a version skip is required, update the CRO CSV(cloud-resources-operator.clusterserviceversion.yaml) with replaces and skips fields e.g. below yaml replaces 0.24.1 , skips 0.25.0 and 0.26.0 and installs 0.27.0
+```yaml
+  replaces: cloud-resources.v0.24.1
+  skips:
+    - cloud-resources.v0.25.0
+    - cloud-resources.v0.26.0
+  version: 0.27.0
+```
 - Run `make create/olm/bundle` - this will create and push bundles and indices to given repository, as well as validating them.
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
@@ -21,7 +29,7 @@ for the Integreatly Operator and ensure that using the `index` format is selecte
 
 Update the image of the index to point to the newly created index. For example:
 
-```
+```yaml
  cloud-resources:
     channel: "rhmi"
     installFrom: "index"
@@ -43,7 +51,7 @@ file to point at your new version
 
 We keep track of bundle changes in the manifest directory in the integreatly-operator repo. These have no effect on the 
 logic of integreatly-operator but will need to be correct to pass the `ci/prow/manifests` job. To do this we copy the 
-directories the latest version from CRO from`./deploy/olm-catalog/cloud-resources/<latest-version>` to the 
+directories the latest version from CRO from`./packagemanifests/<latest-version>` to the 
 integreatly-operator directory,
 [./manifests/integreatly-cloud-resources](https://github.com/integr8ly/integreatly-operator/tree/master/manifests/integreatly-cloud-resources) 
 
