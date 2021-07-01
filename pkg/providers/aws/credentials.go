@@ -68,6 +68,7 @@ var (
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",
 				"elasticache:DescribeUpdateActions",
+				"elasticache:BatchApplyUpdateAction",
 				"elasticache:AddTagsToResource",
 				"elasticache:DescribeSnapshots",
 				"elasticache:CreateSnapshot",

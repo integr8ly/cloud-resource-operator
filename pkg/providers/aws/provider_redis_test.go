@@ -203,6 +203,10 @@ func (m *mockElasticacheClient) DescribeUpdateActions(*elasticache.DescribeUpdat
 	return &elasticache.DescribeUpdateActionsOutput{}, nil
 }
 
+func (m *mockElasticacheClient) BatchApplyUpdateAction(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error) {
+	return &elasticache.BatchApplyUpdateActionOutput{}, nil
+}
+
 func (m *mockElasticacheClient) DescribeCacheSubnetGroups(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 	return m.describeCacheSubnetGroupsFn(input)
 }

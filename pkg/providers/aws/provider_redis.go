@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +304,11 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 			errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
 			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
+	}
+
+	if r.Spec.ApplyImmediately {
+		// TODO add error handling once applyCriticalSecurityUpdates is refactored to return errors
+		p.applyCriticalSecurityUpdates(cacheSvc, foundCache.ReplicationGroupId)
 	}
 
 	primaryEndpoint := foundCache.NodeGroups[0].PrimaryEndpoint
@@ -1065,4 +1071,70 @@ func (p *RedisProvider) buildCacheName(ctx context.Context, rd *v1alpha1.Redis) 
 
 func replicationGroupStatusIsHealthy(cache *elasticache.ReplicationGroup) bool {
 	return resources.Contains(healthyAWSReplicationGroupStatuses, *cache.Status)
+}
+
+func (p *RedisProvider) applyCriticalSecurityUpdates(cacheSvc elasticacheiface.ElastiCacheAPI, replicationGroupId *string) error {
+	logger := p.Logger.WithField("action", "applyCriticalSecurityUpdates")
+	ServiceUpdateStatusAvailable := elasticache.ServiceUpdateStatusAvailable
+
+	updateActions, err := cacheSvc.DescribeUpdateActions(&elasticache.DescribeUpdateActionsInput{
+		ReplicationGroupIds: []*string{replicationGroupId},
+		ServiceUpdateStatus: []*string{&ServiceUpdateStatusAvailable},
+	})
+	if err != nil {
+		logger.Errorf("failed to get elasticache service updates: %v", err)
+		// NOT returning an error to avoid problems with this code until it is sufficiently tested
+		return nil
+		// TODO: refactor to buble up error state through return call once this code has been proven in a real upgrade scenario (which we are unable to replica at the moment)
+	}
+
+	// Filter list of available updates down to Available Critical Security updates only
+	acceptableUpdates := []*elasticache.UpdateAction{}
+	for _, update := range updateActions.UpdateActions {
+		if *update.ServiceUpdateSeverity == elasticache.ServiceUpdateSeverityCritical &&
+			*update.ServiceUpdateType == elasticache.ServiceUpdateTypeSecurityUpdate &&
+			*update.ServiceUpdateStatus == elasticache.ServiceUpdateStatusAvailable {
+
+			if *update.UpdateActionStatus == elasticache.UpdateActionStatusNotApplied {
+				acceptableUpdates = append(acceptableUpdates, update)
+			} else if *update.UpdateActionStatus != elasticache.UpdateActionStatusComplete {
+				// Log current status of upgrades that are applied but not completed
+				logger.Warnf("Service update in progress. Redis instance %s Service update name: %s Current status: %s", *replicationGroupId, resources.SafeStringDereference(update.ServiceUpdateName), resources.SafeStringDereference(update.UpdateActionStatus))
+				// TODO: once this code has been proven, add StatusMessage to the return value
+				return nil
+			} else {
+				logrus.Infof("Service update %s complete on the redis instance %s", resources.SafeStringDereference(update.ServiceUpdateName), *replicationGroupId)
+			}
+		}
+	}
+	// Sort by UpdateActionAvailableDate in descending order
+	sort.Slice(acceptableUpdates, func(i, j int) bool {
+		return resources.SafeTimeDereference(acceptableUpdates[i].UpdateActionAvailableDate).After(resources.SafeTimeDereference(acceptableUpdates[j].UpdateActionAvailableDate))
+	})
+
+	if len(acceptableUpdates) > 0 {
+		// Select lates update to be applied
+		update := acceptableUpdates[0]
+		// Available critical security updates need to be applied immediately
+		logger.Warnf("Commencing critical security update of Redis instance %s Service update name: %s", *replicationGroupId, resources.SafeStringDereference(update.ServiceUpdateName))
+		updateOutput, err := cacheSvc.BatchApplyUpdateAction(&elasticache.BatchApplyUpdateActionInput{
+			ReplicationGroupIds: []*string{replicationGroupId},
+			ServiceUpdateName:   update.ServiceUpdateName,
+		})
+		if err != nil {
+			logger.Errorf("Encountered an error when applying Service Update: %v", err)
+			// NOT returning an error to avoid problems with this code until it is sufficiently tested
+			return nil
+			// TODO: refactor to buble up error state through return call once this code has been proven in a real upgrade scenario (which we are unable to replica at the moment)
+		}
+		if len(updateOutput.UnprocessedUpdateActions) > 0 {
+			for _, failure := range updateOutput.UnprocessedUpdateActions {
+				logger.Errorf("Encountered a %s error when applying Service Update: %s", resources.SafeStringDereference(failure.ErrorType), resources.SafeStringDereference(failure.ErrorMessage))
+				// NOT returning an error to avoid problems with this code until it is sufficiently tested
+				return nil
+				// TODO: refactor to buble up error state through return call once this code has been proven in a real upgrade scenario (which we are unable to replica at the moment)
+			}
+		}
+	}
+	return nil
 }

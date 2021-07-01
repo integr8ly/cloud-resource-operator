@@ -3,9 +3,10 @@ package client
 import (
 	"context"
 	"errors"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
+
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -414,16 +415,17 @@ func TestReconcileRedis(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type args struct {
-		ctx            context.Context
-		client         client.Client
-		deploymentType string
-		tier           string
-		productName    string
-		name           string
-		ns             string
-		secretName     string
-		secretNs       string
-		modifyFunc     modifyResourceFunc
+		ctx              context.Context
+		client           client.Client
+		deploymentType   string
+		tier             string
+		productName      string
+		name             string
+		ns               string
+		secretName       string
+		secretNs         string
+		applyImmediately bool
+		modifyFunc       modifyResourceFunc
 	}
 	tests := []struct {
 		name    string
@@ -526,7 +528,7 @@ func TestReconcileRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.modifyFunc)
+			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.applyImmediately, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileRedis() error = %v, wantErr %v", err, tt.wantErr)
 				return
