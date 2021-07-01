@@ -83,10 +83,8 @@ func ReconcilePostgres(ctx context.Context, client client.Client, productName, d
 			Name:      secretName,
 			Namespace: secretNs,
 		}
+		pg.Spec.ApplyImmediately = applyImmediately
 
-		if applyImmediately {
-			pg.Spec.ApplyImmediately = applyImmediately
-		}
 		return nil
 	})
 	if err != nil {
@@ -125,10 +123,7 @@ func ReconcileRedis(ctx context.Context, client client.Client, productName, depl
 			Name:      secretName,
 			Namespace: secretNs,
 		}
-
-		if applyImmediately {
-			r.Spec.ApplyImmediately = applyImmediately
-		}
+		r.Spec.ApplyImmediately = applyImmediately
 
 		return nil
 	})
