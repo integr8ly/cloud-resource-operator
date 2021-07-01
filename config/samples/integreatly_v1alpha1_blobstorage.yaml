@@ -13,3 +13,5 @@ spec:
   tier: development
   # the type i want for a blob storage
   type: REPLACE_ME
+  # this value is not currently implemented for blobstorage
+  applyImmediately: false

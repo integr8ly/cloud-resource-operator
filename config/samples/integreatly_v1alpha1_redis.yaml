@@ -14,3 +14,5 @@ spec:
   tier: development
   # the type i want for a redis storage
   type: REPLACE_ME
+  # set to true to force any pending service updates on the redis instance
+  applyImmediately: false

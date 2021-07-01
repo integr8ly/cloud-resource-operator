@@ -6,9 +6,10 @@ data:
   blobstorage: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
   redis: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {}, "serviceUpdates": ["elasticache-20210615-002"]  }}
   postgres: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
   _network: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+
     
