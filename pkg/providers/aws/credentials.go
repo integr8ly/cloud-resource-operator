@@ -67,7 +67,7 @@ var (
 				"elasticache:CreateReplicationGroup",
 				"elasticache:DeleteReplicationGroup",
 				"elasticache:DescribeReplicationGroups",
-				"elasticache:DescribeServiceUpdates",
+				"elasticache:DescribeUpdateActions",
 				"elasticache:AddTagsToResource",
 				"elasticache:DescribeSnapshots",
 				"elasticache:CreateSnapshot",

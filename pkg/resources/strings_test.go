@@ -98,3 +98,35 @@ func TestStringOrDefault(t *testing.T) {
 		})
 	}
 }
+func TestSafeStringDereference(t *testing.T) {
+	type args struct {
+		str *string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "test empty string is returned on nil input",
+			args: args{
+				str: nil,
+			},
+			want: "",
+		},
+		{
+			name: "test value is returned",
+			args: args{
+				str: &[]string{"value"}[0],
+			},
+			want: "value",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SafeStringDereference(tt.args.str); got != tt.want {
+				t.Errorf("SafeStringDereference() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

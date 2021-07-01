@@ -199,8 +199,8 @@ func (m *mockElasticacheClient) DescribeCacheClusters(input *elasticache.Describ
 	return m.describeCacheClustersFn(input)
 }
 
-func (m *mockElasticacheClient) DescribeServiceUpdates(*elasticache.DescribeServiceUpdatesInput) (*elasticache.DescribeServiceUpdatesOutput, error) {
-	return &elasticache.DescribeServiceUpdatesOutput{}, nil
+func (m *mockElasticacheClient) DescribeUpdateActions(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+	return &elasticache.DescribeUpdateActionsOutput{}, nil
 }
 
 func (m *mockElasticacheClient) DescribeCacheSubnetGroups(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {

@@ -981,30 +981,40 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, ca
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
-	output, err := cacheSvc.DescribeServiceUpdates(&elasticache.DescribeServiceUpdatesInput{})
+	output, err := cacheSvc.DescribeUpdateActions(&elasticache.DescribeUpdateActionsInput{
+		ReplicationGroupIds: []*string{instance.ReplicationGroupId},
+	})
 	if err != nil {
-		logrus.Errorf("failed to get maintenance information while exposing maintenance metric for %s : %v", *instance.ReplicationGroupId, err)
+		logrus.Errorf("failed to get update actions information while exposing maintenance metric for %s : %v", *instance.ReplicationGroupId, err)
+		return
+	}
+	if output == nil {
+		logrus.Errorf("failed to get update actions(output = nil) information while exposing maintenance metric for %s", *instance.ReplicationGroupId)
 		return
 	}
 
-	logrus.Infof("there are elasticache service updates: %d available", len(output.ServiceUpdates))
-	for _, su := range output.ServiceUpdates {
+	logrus.Infof("there are elasticache service update actions: %d available", len(output.UpdateActions))
+	for _, updateAction := range output.UpdateActions {
 		metricLabels := map[string]string{}
 		metricLabels["clusterID"] = clusterID
 
-		metricLabels["AutoUpdateAfterRecommendedApplyByDate"] = strconv.FormatBool(*su.AutoUpdateAfterRecommendedApplyByDate)
-		metricLabels["Engine"] = *su.Engine
-		metricLabels["EstimatedUpdateTime"] = *su.EstimatedUpdateTime
-		metricLabels["ServiceUpdateDescription"] = *su.ServiceUpdateDescription
-		metricLabels["ServiceUpdateEndDate"] = strconv.FormatInt((*su.ServiceUpdateEndDate).Unix(), 10)
-		metricLabels["ServiceUpdateName"] = *su.ServiceUpdateName
-		metricLabels["ServiceUpdateRecommendedApplyByDate"] = strconv.FormatInt((*su.ServiceUpdateRecommendedApplyByDate).Unix(), 10)
-		metricLabels["ServiceUpdateReleaseDate"] = strconv.FormatInt((*su.ServiceUpdateReleaseDate).Unix(), 10)
-		metricLabels["ServiceUpdateSeverity"] = *su.ServiceUpdateSeverity
-		metricLabels["ServiceUpdateStatus"] = *su.ServiceUpdateStatus
-		metricLabels["ServiceUpdateType"] = *su.ServiceUpdateType
+		metricLabels["ReplicationGroupId"] = resources.SafeStringDereference(updateAction.ReplicationGroupId)
+		metricLabels["CacheClusterId"] = resources.SafeStringDereference(updateAction.CacheClusterId)
+		metricLabels["Engine"] = resources.SafeStringDereference(updateAction.Engine)
+		metricLabels["EstimatedUpdateTime"] = resources.SafeStringDereference(updateAction.EstimatedUpdateTime)
+		metricLabels["NodesUpdated"] = resources.SafeStringDereference(updateAction.NodesUpdated)
+		metricLabels["ServiceUpdateName"] = resources.SafeStringDereference(updateAction.ServiceUpdateName)
+		metricLabels["ServiceUpdateRecommendedApplyByDate"] = strconv.FormatInt((resources.SafeTimeDereference(updateAction.ServiceUpdateRecommendedApplyByDate)).Unix(), 10)
+		metricLabels["ServiceUpdateReleaseDate"] = strconv.FormatInt((resources.SafeTimeDereference(updateAction.ServiceUpdateReleaseDate)).Unix(), 10)
+		metricLabels["ServiceUpdateSeverity"] = resources.SafeStringDereference(updateAction.ServiceUpdateSeverity)
+		metricLabels["ServiceUpdateStatus"] = resources.SafeStringDereference(updateAction.ServiceUpdateStatus)
+		metricLabels["ServiceUpdateType"] = resources.SafeStringDereference(updateAction.ServiceUpdateType)
+		metricLabels["SlaMet"] = resources.SafeStringDereference(updateAction.SlaMet)
+		metricLabels["UpdateActionAvailableDate"] = strconv.FormatInt((resources.SafeTimeDereference(updateAction.UpdateActionAvailableDate)).Unix(), 10)
+		metricLabels["UpdateActionStatus"] = resources.SafeStringDereference(updateAction.UpdateActionStatus)
+		metricLabels["UpdateActionStatusModifiedDate"] = strconv.FormatInt((resources.SafeTimeDereference(updateAction.UpdateActionStatusModifiedDate)).Unix(), 10)
 
-		metricEpochTimestamp := (*su.ServiceUpdateRecommendedApplyByDate).Unix()
+		metricEpochTimestamp := (resources.SafeTimeDereference(updateAction.ServiceUpdateRecommendedApplyByDate)).Unix()
 
 		resources.SetMetric(resources.DefaultRedisMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
 	}
