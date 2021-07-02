@@ -606,18 +606,16 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 		return nil, nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration")
 	}
 
-	if err := json.Unmarshal(stratCfg.ServiceUpdates, elasticacheCreateConfig); err != nil {
-		return nil, nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration")
-	}
-
 	elasticacheDeleteConfig := &elasticache.DeleteReplicationGroupInput{}
 	if err := json.Unmarshal(stratCfg.DeleteStrategy, elasticacheDeleteConfig); err != nil {
 		return nil, nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration")
 	}
 
 	elasticacheServiceUpdates := &ServiceUpdate{}
-	if err := json.Unmarshal(stratCfg.ServiceUpdates, elasticacheServiceUpdates.updates); err != nil {
-		return nil, nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration")
+	if stratCfg.ServiceUpdates != nil {
+		if err := json.Unmarshal(stratCfg.ServiceUpdates, &elasticacheServiceUpdates.updates); err != nil {
+			return nil, nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws elasticache cluster configuration (serviceUpdates field)")
+		}
 	}
 
 	return elasticacheCreateConfig, elasticacheDeleteConfig, elasticacheServiceUpdates, stratCfg, nil
@@ -1106,17 +1104,21 @@ func (p *RedisProvider) applyCriticalSecurityUpdates(cacheSvc elasticacheiface.E
 	// Filter list of available updates down to Available Critical Security updates only
 	var acceptableUpdates []*elasticache.UpdateAction
 	for _, update := range updateActions.UpdateActions {
-		//first loop through the list of service updates specified in the cr.
-		//if a match is found then add it to the list of acceptable updates.
-		//if one is found it's added to the list and the loop is continued
-		//it it's not found in the list and applyImmediately is set to true then check if it's critical etc.
-		//by continuing if it's already found in the specified list, we wont make any duplications in the list
-		for _, specifiedUpdate := range serviceUpdates.updates {
-			if specifiedUpdate == *update.ServiceUpdateName {
-				logger.Infof("found ServiceUpdate %s which matches %s ServiceUpdate in aws", specifiedUpdate, *update.ServiceUpdateName)
-				acceptableUpdates = append(acceptableUpdates, update)
-				continue
+		// first check if the available update action has not been applied already
+		// if it has been applied log the current status and return if upgrade is in progress
+		// if it wasn't applied and applyImmediately is set to true then check if it's critical security update and add it to the list of acceptable updates
+		// if applyImmediately is false loop through the list of service updates specified in the CRO configuration and add matches to the list of acceptable updates.
+
+		if *update.UpdateActionStatus != elasticache.UpdateActionStatusNotApplied {
+			if *update.UpdateActionStatus == elasticache.UpdateActionStatusComplete {
+				logrus.Infof("Service update %s complete on the redis instance %s", resources.SafeStringDereference(update.ServiceUpdateName), *replicationGroupId)
+			} else {
+				// Log current status of upgrades that are applied but not completed
+				logger.Warnf("Service update in progress. Redis instance %s Service update name: %s Current status: %s", *replicationGroupId, resources.SafeStringDereference(update.ServiceUpdateName), resources.SafeStringDereference(update.UpdateActionStatus))
+				// TODO: once this code has been proven, add StatusMessage to the return value
+				return nil
 			}
+			continue
 		}
 
 		if applyImmediately {
@@ -1124,16 +1126,18 @@ func (p *RedisProvider) applyCriticalSecurityUpdates(cacheSvc elasticacheiface.E
 				*update.ServiceUpdateType == elasticache.ServiceUpdateTypeSecurityUpdate &&
 				*update.ServiceUpdateStatus == elasticache.ServiceUpdateStatusAvailable {
 
-				if *update.UpdateActionStatus == elasticache.UpdateActionStatusNotApplied {
-					acceptableUpdates = append(acceptableUpdates, update)
-				} else if *update.UpdateActionStatus != elasticache.UpdateActionStatusComplete {
-					// Log current status of upgrades that are applied but not completed
-					logger.Warnf("Service update in progress. Redis instance %s Service update name: %s Current status: %s", *replicationGroupId, resources.SafeStringDereference(update.ServiceUpdateName), resources.SafeStringDereference(update.UpdateActionStatus))
-					// TODO: once this code has been proven, add StatusMessage to the return value
-					return nil
-				} else {
-					logrus.Infof("Service update %s complete on the redis instance %s", resources.SafeStringDereference(update.ServiceUpdateName), *replicationGroupId)
-				}
+				acceptableUpdates = append(acceptableUpdates, update)
+				continue
+			}
+		}
+
+		for _, specifiedUpdate := range serviceUpdates.updates {
+			if specifiedUpdate == *update.ServiceUpdateName &&
+				*update.ServiceUpdateStatus == elasticache.ServiceUpdateStatusAvailable {
+
+				logger.Infof("found ServiceUpdate %s which matches %s ServiceUpdate in aws", specifiedUpdate, *update.ServiceUpdateName)
+				acceptableUpdates = append(acceptableUpdates, update)
+				break
 			}
 		}
 	}
