@@ -283,6 +283,7 @@ func Test_createRedisCluster(t *testing.T) {
 		redisConfig             *elasticache.CreateReplicationGroupInput
 		stratCfg                *StrategyConfig
 		standaloneNetworkExists bool
+		ServiceUpdate           *ServiceUpdate
 	}
 	type fields struct {
 		Client            client.Client
@@ -585,7 +586,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg, tt.args.standaloneNetworkExists)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg,tt.args.ServiceUpdate, tt.args.standaloneNetworkExists)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
