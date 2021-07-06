@@ -742,7 +742,7 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 			updateFound = true
 		}
 
-		if applyImmediately{
+		if applyImmediately {
 			modifyInput.ApplyImmediately = aws.Bool(applyImmediately)
 		}
 	}

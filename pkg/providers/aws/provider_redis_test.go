@@ -916,7 +916,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 		foundConfig              *elasticache.ReplicationGroup
 		replicationGroupClusters []elasticache.CacheCluster
 		logger                   *logrus.Entry
-		applyImmediately		 bool
+		applyImmediately         bool
 	}
 	tests := []struct {
 		name    string
@@ -947,7 +947,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						SnapshotWindow:             aws.String("test"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: false,
 			},
 			want: nil,
@@ -975,7 +975,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						SnapshotWindow:             aws.String("test"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: false,
 			},
 			want: nil,
@@ -1003,7 +1003,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						SnapshotWindow:             aws.String("test"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: false,
 			},
 			want:    nil,
@@ -1032,7 +1032,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						SnapshotWindow:             aws.String("test"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: false,
 			},
 			want:    nil,
@@ -1072,7 +1072,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						PreferredAvailabilityZone:  aws.String("test"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: true,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
@@ -1104,7 +1104,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				},
 				replicationGroupClusters: []elasticache.CacheCluster{},
 				logger:                   testLogger,
-				applyImmediately: false,
+				applyImmediately:         false,
 			},
 			want:    nil,
 			wantErr: "failed to get instance type offerings for type cache.test2: test",
@@ -1143,7 +1143,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 						PreferredAvailabilityZone:  aws.String("test2"),
 					},
 				},
-				logger: testLogger,
+				logger:           testLogger,
 				applyImmediately: false,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
