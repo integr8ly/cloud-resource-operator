@@ -916,6 +916,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 		foundConfig              *elasticache.ReplicationGroup
 		replicationGroupClusters []elasticache.CacheCluster
 		logger                   *logrus.Entry
+		applyImmediately		 bool
 	}
 	tests := []struct {
 		name    string
@@ -947,6 +948,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: false,
 			},
 			want: nil,
 		},
@@ -974,6 +976,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: false,
 			},
 			want: nil,
 		},
@@ -1001,6 +1004,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: false,
 			},
 			want:    nil,
 			wantErr: "invalid redis version: failed to parse desired version: Malformed version: some invalid value",
@@ -1029,6 +1033,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: false,
 			},
 			want:    nil,
 			wantErr: "invalid redis version: failed to parse current version: Malformed version: some invalid value",
@@ -1068,6 +1073,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: true,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
 				CacheNodeType:              aws.String("cache.newValue"),
@@ -1076,6 +1082,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
 				EngineVersion:              aws.String(defaultEngineVersion),
+				ApplyImmediately:           aws.Bool(true),
 			},
 		},
 		{
@@ -1097,6 +1104,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				},
 				replicationGroupClusters: []elasticache.CacheCluster{},
 				logger:                   testLogger,
+				applyImmediately: false,
 			},
 			want:    nil,
 			wantErr: "failed to get instance type offerings for type cache.test2: test",
@@ -1136,6 +1144,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				applyImmediately: false,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
 				SnapshotRetentionLimit:     aws.Int64(50),
@@ -1148,7 +1157,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildElasticacheUpdateStrategy(tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger)
+			got, err := buildElasticacheUpdateStrategy(tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger, tt.args.applyImmediately)
 			if tt.wantErr != "" && err.Error() != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
