@@ -742,9 +742,8 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 			updateFound = true
 		}
 
-		if applyImmediately {
-			modifyInput.ApplyImmediately = aws.Bool(applyImmediately)
-		}
+		// ApplyImmediately flag is controlled by the redis cr.Spec.applyImmediately flag
+		modifyInput.ApplyImmediately = aws.Bool(applyImmediately)
 	}
 
 	if updateFound {
