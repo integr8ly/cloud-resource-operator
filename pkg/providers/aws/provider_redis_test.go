@@ -1147,7 +1147,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				applyImmediately: false,
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
-				ApplyImmediately:			aws.Bool(false),
+				ApplyImmediately:           aws.Bool(false),
 				SnapshotRetentionLimit:     aws.Int64(50),
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
