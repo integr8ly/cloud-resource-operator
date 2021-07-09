@@ -183,8 +183,8 @@ const (
 	// ErrCodeDBInstanceRoleQuotaExceededFault for service response error code
 	// "DBInstanceRoleQuotaExceeded".
 	//
-	// You can't associate any more AWS Identity and Access Management (IAM) roles
-	// with the DB instance because the quota has been reached.
+	// You can't associate any more Amazon Web Services Identity and Access Management
+	// (IAM) roles with the DB instance because the quota has been reached.
 	ErrCodeDBInstanceRoleQuotaExceededFault = "DBInstanceRoleQuotaExceeded"
 
 	// ErrCodeDBLogFileNotFoundFault for service response error code
@@ -215,22 +215,42 @@ const (
 	// ErrCodeDBProxyAlreadyExistsFault for service response error code
 	// "DBProxyAlreadyExistsFault".
 	//
-	// The specified proxy name must be unique for all proxies owned by your AWS
-	// account in the specified AWS Region.
+	// The specified proxy name must be unique for all proxies owned by your Amazon
+	// Web Services account in the specified Amazon Web Services Region.
 	ErrCodeDBProxyAlreadyExistsFault = "DBProxyAlreadyExistsFault"
+
+	// ErrCodeDBProxyEndpointAlreadyExistsFault for service response error code
+	// "DBProxyEndpointAlreadyExistsFault".
+	//
+	// The specified DB proxy endpoint name must be unique for all DB proxy endpoints
+	// owned by your Amazon Web Services account in the specified Amazon Web Services
+	// Region.
+	ErrCodeDBProxyEndpointAlreadyExistsFault = "DBProxyEndpointAlreadyExistsFault"
+
+	// ErrCodeDBProxyEndpointNotFoundFault for service response error code
+	// "DBProxyEndpointNotFoundFault".
+	//
+	// The DB proxy endpoint doesn't exist.
+	ErrCodeDBProxyEndpointNotFoundFault = "DBProxyEndpointNotFoundFault"
+
+	// ErrCodeDBProxyEndpointQuotaExceededFault for service response error code
+	// "DBProxyEndpointQuotaExceededFault".
+	//
+	// The DB proxy already has the maximum number of endpoints.
+	ErrCodeDBProxyEndpointQuotaExceededFault = "DBProxyEndpointQuotaExceededFault"
 
 	// ErrCodeDBProxyNotFoundFault for service response error code
 	// "DBProxyNotFoundFault".
 	//
-	// The specified proxy name doesn't correspond to a proxy owned by your AWS
-	// accoutn in the specified AWS Region.
+	// The specified proxy name doesn't correspond to a proxy owned by your Amazon
+	// Web Services account in the specified Amazon Web Services Region.
 	ErrCodeDBProxyNotFoundFault = "DBProxyNotFoundFault"
 
 	// ErrCodeDBProxyQuotaExceededFault for service response error code
 	// "DBProxyQuotaExceededFault".
 	//
-	// Your AWS account already has the maximum number of proxies in the specified
-	// AWS Region.
+	// Your Amazon Web Services account already has the maximum number of proxies
+	// in the specified Amazon Web Services Region.
 	ErrCodeDBProxyQuotaExceededFault = "DBProxyQuotaExceededFault"
 
 	// ErrCodeDBProxyTargetAlreadyRegisteredFault for service response error code
@@ -243,15 +263,16 @@ const (
 	// ErrCodeDBProxyTargetGroupNotFoundFault for service response error code
 	// "DBProxyTargetGroupNotFoundFault".
 	//
-	// The specified target group isn't available for a proxy owned by your AWS
-	// account in the specified AWS Region.
+	// The specified target group isn't available for a proxy owned by your Amazon
+	// Web Services account in the specified Amazon Web Services Region.
 	ErrCodeDBProxyTargetGroupNotFoundFault = "DBProxyTargetGroupNotFoundFault"
 
 	// ErrCodeDBProxyTargetNotFoundFault for service response error code
 	// "DBProxyTargetNotFoundFault".
 	//
 	// The specified RDS DB instance or Aurora DB cluster isn't available for a
-	// proxy owned by your AWS account in the specified AWS Region.
+	// proxy owned by your Amazon Web Services account in the specified Amazon Web
+	// Services Region.
 	ErrCodeDBProxyTargetNotFoundFault = "DBProxyTargetNotFoundFault"
 
 	// ErrCodeDBSecurityGroupAlreadyExistsFault for service response error code
@@ -350,17 +371,50 @@ const (
 	// You have reached the maximum number of event subscriptions.
 	ErrCodeEventSubscriptionQuotaExceededFault = "EventSubscriptionQuotaExceeded"
 
+	// ErrCodeExportTaskAlreadyExistsFault for service response error code
+	// "ExportTaskAlreadyExists".
+	//
+	// You can't start an export task that's already running.
+	ErrCodeExportTaskAlreadyExistsFault = "ExportTaskAlreadyExists"
+
+	// ErrCodeExportTaskNotFoundFault for service response error code
+	// "ExportTaskNotFound".
+	//
+	// The export task doesn't exist.
+	ErrCodeExportTaskNotFoundFault = "ExportTaskNotFound"
+
 	// ErrCodeGlobalClusterAlreadyExistsFault for service response error code
 	// "GlobalClusterAlreadyExistsFault".
+	//
+	// The GlobalClusterIdentifier already exists. Choose a new global database
+	// identifier (unique name) to create a new global database cluster.
 	ErrCodeGlobalClusterAlreadyExistsFault = "GlobalClusterAlreadyExistsFault"
 
 	// ErrCodeGlobalClusterNotFoundFault for service response error code
 	// "GlobalClusterNotFoundFault".
+	//
+	// The GlobalClusterIdentifier doesn't refer to an existing global database
+	// cluster.
 	ErrCodeGlobalClusterNotFoundFault = "GlobalClusterNotFoundFault"
 
 	// ErrCodeGlobalClusterQuotaExceededFault for service response error code
 	// "GlobalClusterQuotaExceededFault".
+	//
+	// The number of global database clusters for this account is already at the
+	// maximum allowed.
 	ErrCodeGlobalClusterQuotaExceededFault = "GlobalClusterQuotaExceededFault"
+
+	// ErrCodeIamRoleMissingPermissionsFault for service response error code
+	// "IamRoleMissingPermissions".
+	//
+	// The IAM role requires additional permissions to export to an Amazon S3 bucket.
+	ErrCodeIamRoleMissingPermissionsFault = "IamRoleMissingPermissions"
+
+	// ErrCodeIamRoleNotFoundFault for service response error code
+	// "IamRoleNotFound".
+	//
+	// The IAM role is missing for exporting to an Amazon S3 bucket.
+	ErrCodeIamRoleNotFoundFault = "IamRoleNotFound"
 
 	// ErrCodeInstallationMediaAlreadyExistsFault for service response error code
 	// "InstallationMediaAlreadyExists".
@@ -379,6 +433,14 @@ const (
 	//
 	// The request would result in the user exceeding the allowed number of DB instances.
 	ErrCodeInstanceQuotaExceededFault = "InstanceQuotaExceeded"
+
+	// ErrCodeInsufficientAvailableIPsInSubnetFault for service response error code
+	// "InsufficientAvailableIPsInSubnetFault".
+	//
+	// The requested operation can't be performed because there aren't enough available
+	// IP addresses in the proxy's subnets. Add more CIDR blocks to the VPC or remove
+	// IP address that aren't required from the subnets.
+	ErrCodeInsufficientAvailableIPsInSubnetFault = "InsufficientAvailableIPsInSubnetFault"
 
 	// ErrCodeInsufficientDBClusterCapacityFault for service response error code
 	// "InsufficientDBClusterCapacityFault".
@@ -448,6 +510,13 @@ const (
 	// is in this state.
 	ErrCodeInvalidDBParameterGroupStateFault = "InvalidDBParameterGroupState"
 
+	// ErrCodeInvalidDBProxyEndpointStateFault for service response error code
+	// "InvalidDBProxyEndpointStateFault".
+	//
+	// You can't perform this operation while the DB proxy endpoint is in a particular
+	// state.
+	ErrCodeInvalidDBProxyEndpointStateFault = "InvalidDBProxyEndpointStateFault"
+
 	// ErrCodeInvalidDBProxyStateFault for service response error code
 	// "InvalidDBProxyStateFault".
 	//
@@ -492,8 +561,30 @@ const (
 	// retry the action.
 	ErrCodeInvalidEventSubscriptionStateFault = "InvalidEventSubscriptionState"
 
+	// ErrCodeInvalidExportOnlyFault for service response error code
+	// "InvalidExportOnly".
+	//
+	// The export is invalid for exporting to an Amazon S3 bucket.
+	ErrCodeInvalidExportOnlyFault = "InvalidExportOnly"
+
+	// ErrCodeInvalidExportSourceStateFault for service response error code
+	// "InvalidExportSourceState".
+	//
+	// The state of the export snapshot is invalid for exporting to an Amazon S3
+	// bucket.
+	ErrCodeInvalidExportSourceStateFault = "InvalidExportSourceState"
+
+	// ErrCodeInvalidExportTaskStateFault for service response error code
+	// "InvalidExportTaskStateFault".
+	//
+	// You can't cancel an export task that has completed.
+	ErrCodeInvalidExportTaskStateFault = "InvalidExportTaskStateFault"
+
 	// ErrCodeInvalidGlobalClusterStateFault for service response error code
 	// "InvalidGlobalClusterStateFault".
+	//
+	// The global cluster is in an invalid state and can't perform the requested
+	// operation.
 	ErrCodeInvalidGlobalClusterStateFault = "InvalidGlobalClusterStateFault"
 
 	// ErrCodeInvalidOptionGroupStateFault for service response error code
@@ -533,7 +624,7 @@ const (
 	// ErrCodeKMSKeyNotAccessibleFault for service response error code
 	// "KMSKeyNotAccessibleFault".
 	//
-	// An error occurred accessing an AWS KMS key.
+	// An error occurred accessing an Amazon Web Services KMS key.
 	ErrCodeKMSKeyNotAccessibleFault = "KMSKeyNotAccessibleFault"
 
 	// ErrCodeOptionGroupAlreadyExistsFault for service response error code
@@ -551,7 +642,7 @@ const (
 	// ErrCodeOptionGroupQuotaExceededFault for service response error code
 	// "OptionGroupQuotaExceededFault".
 	//
-	// The quota of 20 option groups was exceeded for this AWS account.
+	// The quota of 20 option groups was exceeded for this Amazon Web Services account.
 	ErrCodeOptionGroupQuotaExceededFault = "OptionGroupQuotaExceededFault"
 
 	// ErrCodePointInTimeRestoreNotEnabledFault for service response error code
