@@ -1109,26 +1109,21 @@ func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.
 	// Filter list of available updates down to Available Critical Security updates only
 	for _, update := range updateActions.UpdateActions {
 		for _, specifiedUpdate := range specifiedUpdates.updates {
-			logger.Infof("BOBOOOOPP  %s", specifiedUpdate)
-			// to do add additional checks here to stop blasting the api with requests
-			// for now it only checks if the specified update is the one being checked in the loop
 			if specifiedUpdate == *update.ServiceUpdateName {
-				logger.Infof("found specified ServiceUpdate '%s' which matches '%s' ServiceUpdate in aws, adding to the acceptableUpdates list to be batched", specifiedUpdate, *update.ServiceUpdateName)
+				logger.Infof("found specified ServiceUpdate '%s' which matches '%s' ServiceUpdate in aws", specifiedUpdate, *update.ServiceUpdateName)
+				logger.Infof("Checking status of Update Action = %s ", resources.SafeStringDereference(update.ServiceUpdateName))
+				logger.Infof("UpdateActionStatus = %s ", resources.SafeStringDereference(update.UpdateActionStatus))
+				logger.Infof("ServiceUpdateSeverity = %s ", resources.SafeStringDereference(update.ServiceUpdateSeverity))
+				logger.Infof("ServiceUpdateStatus = %s ", resources.SafeStringDereference(update.ServiceUpdateStatus))
+
 				if *update.ServiceUpdateStatus == elasticache.ServiceUpdateStatusAvailable &&
 					validServiceUpdateStates(resources.SafeStringDereference(update.UpdateActionStatus)) {
 					err := p.applyServiceUpdate(cacheSvc, replicationGroup.ReplicationGroupId, update.ServiceUpdateName)
 					if err != nil {
 						encounteredError = true
-						logger.Errorf("error returned when running batchApplyUpdate function for update %s with err %v, there may be errors logged while the update is taking place", *update.ServiceUpdateName, err)
+						logger.Errorf("error returned when running batchApplyUpdate function for update %s with err %v", *update.ServiceUpdateName, err)
 						break
 					}
-					// add logic to push out only where required
-					logger.Infof("Checking status of Update Action = %s ", *update.ServiceUpdateName)
-					logger.Infof("UpdateActionStatus = %s ", *update.UpdateActionStatus)
-					logger.Infof("ServiceUpdateSeverity = %s ", *update.ServiceUpdateSeverity)
-					logger.Infof("ServiceUpdateStatus = %s ", *update.ServiceUpdateStatus)
-
-					logger.Infof("found a critical security service update which is available and in notapplied state for Redis instance %s Service update name: %s Current status: %s", *replicationGroup.ReplicationGroupId, resources.SafeStringDereference(update.ServiceUpdateName), resources.SafeStringDereference(update.UpdateActionStatus))
 
 					if *update.ServiceUpdateSeverity == elasticache.ServiceUpdateSeverityCritical &&
 						*update.ServiceUpdateType == elasticache.ServiceUpdateTypeSecurityUpdate {
@@ -1137,7 +1132,7 @@ func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.
 						if _, err := cacheSvc.ModifyReplicationGroup(&elasticache.ModifyReplicationGroupInput{
 							ApplyImmediately:   aws.Bool(true),
 							ReplicationGroupId: replicationGroup.ReplicationGroupId}); err != nil {
-							logger.Errorf("error returned when running ModifyReplicationGroup function for update %s with err %v, there may be errors logged while the update is taking place", *update.ServiceUpdateName, err)
+							logger.Errorf("error returned when running ModifyReplicationGroup function for update %s with err %v", *update.ServiceUpdateName, err)
 							encounteredError = true
 							break
 						}

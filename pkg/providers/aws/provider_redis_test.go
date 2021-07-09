@@ -62,7 +62,7 @@ type mockElasticacheClient struct {
 	createSnapshotFn            func(*elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error)
 	deleteSnapshotFn            func(*elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error)
 	describeUpdateActionsFn     func(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error)
-	modifyReplicationGroupFn	func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
+	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
 	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
 
 	calls struct {
@@ -94,6 +94,15 @@ func buildMockElasticacheClient(modifyFn func(*mockElasticacheClient)) *mockElas
 	mock := &mockElasticacheClient{
 		describeCacheSubnetGroupsFn: func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 			return &elasticache.DescribeCacheSubnetGroupsOutput{}, nil
+		},
+		describeUpdateActionsFn: func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+			return &elasticache.DescribeUpdateActionsOutput{
+				Marker:        nil,
+				UpdateActions: []*elasticache.UpdateAction{},
+			}, nil
+		},
+		modifyReplicationGroupFn: func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
+			return &elasticache.ModifyReplicationGroupOutput{}, nil
 		},
 	}
 	if modifyFn != nil {
@@ -1220,11 +1229,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 		specifiedUpdates *ServiceUpdate
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    bool
-		wantErr bool
+		name      string
+		fields    fields
+		args      args
+		want      bool
+		wantErr   bool
 		checkfunc func(t *testing.T, cacheSvc *mockElasticacheClient)
 	}{
 		{
@@ -1244,11 +1253,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 							Marker: nil,
 							UpdateActions: []*elasticache.UpdateAction{
 								{
-									ServiceUpdateName:  aws.String("test-service-update"),
-									ServiceUpdateType: aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
 									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityCritical),
-									UpdateActionStatus: aws.String(elasticache.UpdateActionStatusScheduling),
-									ServiceUpdateStatus: aws.String(elasticache.ServiceUpdateStatusAvailable),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
 								},
 							},
 						}, nil
@@ -1291,11 +1300,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 							Marker: nil,
 							UpdateActions: []*elasticache.UpdateAction{
 								{
-									ServiceUpdateName:  aws.String("test-service-update"),
-									ServiceUpdateType: aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
 									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityImportant),
-									UpdateActionStatus: aws.String(elasticache.UpdateActionStatusScheduling),
-									ServiceUpdateStatus: aws.String(elasticache.ServiceUpdateStatusAvailable),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
 								},
 							},
 						}, nil
@@ -1335,11 +1344,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 							Marker: nil,
 							UpdateActions: []*elasticache.UpdateAction{
 								{
-									ServiceUpdateName:  aws.String("test-service-update"),
-									ServiceUpdateType: aws.String("othertype"),
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String("othertype"),
 									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityImportant),
-									UpdateActionStatus: aws.String(elasticache.UpdateActionStatusScheduling),
-									ServiceUpdateStatus: aws.String(elasticache.ServiceUpdateStatusAvailable),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
 								},
 							},
 						}, nil
@@ -1379,11 +1388,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 							Marker: nil,
 							UpdateActions: []*elasticache.UpdateAction{
 								{
-									ServiceUpdateName:  aws.String("test-service-update"),
-									ServiceUpdateType: aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
 									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityCritical),
-									UpdateActionStatus: aws.String(elasticache.UpdateActionStatusScheduling),
-									ServiceUpdateStatus: aws.String(elasticache.ServiceUpdateStatusAvailable),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
 								},
 							},
 						}, nil
@@ -1420,11 +1429,11 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 							Marker: nil,
 							UpdateActions: []*elasticache.UpdateAction{
 								{
-									ServiceUpdateName:  aws.String("test-service-update"),
-									ServiceUpdateType: aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
 									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityCritical),
-									UpdateActionStatus: aws.String(elasticache.UpdateActionStatusComplete),
-									ServiceUpdateStatus: aws.String(elasticache.ServiceUpdateStatusAvailable),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusComplete),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
 								},
 							},
 						}, nil
@@ -1445,7 +1454,7 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 			},
 		},
 		{
-			name: "expect modify to not be called if there is an error with batchapplyupdate for update that is critical security update",
+			name: "expect modify to not be called if there is an unprocessed update action returned by batchapplyupdate for update that is critical security update",
 			fields: fields{
 				Logger:            testLogger,
 				CredentialManager: nil,
@@ -1492,6 +1501,102 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 			},
 			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
 				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
+					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
+				}
+				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
+					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "expect modify to not be called if there is an error returned by batchapplyupdate for update that is critical security update",
+			fields: fields{
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				CacheSvc:          nil,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			args: args{
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeUpdateActionsFn = func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+						return &elasticache.DescribeUpdateActionsOutput{
+							Marker: nil,
+							UpdateActions: []*elasticache.UpdateAction{
+								{
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityCritical),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.modifyReplicationGroupFn = func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
+						return &elasticache.ModifyReplicationGroupOutput{}, nil
+					}
+					elasticacheClient.batchApplyUpdateActionFn = func(input *elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error) {
+						return &elasticache.BatchApplyUpdateActionOutput{}, errors.New("Random error")
+					}
+				}),
+				replicationGroup: &elasticache.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-replication-group"),
+				},
+				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
+			},
+			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
+				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
+					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
+				}
+				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
+					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "expect an error if ModifyReplicationGroup return error",
+			fields: fields{
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				CacheSvc:          nil,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			args: args{
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeUpdateActionsFn = func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+						return &elasticache.DescribeUpdateActionsOutput{
+							Marker: nil,
+							UpdateActions: []*elasticache.UpdateAction{
+								{
+									ServiceUpdateName:     aws.String("test-service-update"),
+									ServiceUpdateType:     aws.String(elasticache.ServiceUpdateTypeSecurityUpdate),
+									ServiceUpdateSeverity: aws.String(elasticache.ServiceUpdateSeverityCritical),
+									UpdateActionStatus:    aws.String(elasticache.UpdateActionStatusScheduling),
+									ServiceUpdateStatus:   aws.String(elasticache.ServiceUpdateStatusAvailable),
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.modifyReplicationGroupFn = func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
+						return &elasticache.ModifyReplicationGroupOutput{}, errors.New("Modify error")
+					}
+					elasticacheClient.batchApplyUpdateActionFn = func(input *elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error) {
+						return &elasticache.BatchApplyUpdateActionOutput{}, nil
+					}
+				}),
+				replicationGroup: &elasticache.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-replication-group"),
+				},
+				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
+			},
+			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
+				if len(cacheSvc.calls.ModifyReplicationGroup) != 1 {
 					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
 				}
 				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
