@@ -1086,9 +1086,10 @@ func replicationGroupStatusIsHealthy(cache *elasticache.ReplicationGroup) bool {
 }
 
 //this function is responsible for checking if there are any critical updates which are specified in the config map
-//it gets the updateactions from the cluster
+//it gets the updateactions for a given Elasticache from AWS
 //it will loop through them and check if they are specified
-//if they are it will apply a batch update and return a true or false to show that it has been applied or not
+//if they are it will apply service update
+//if the applied update is critical security update, it will apply it immediately
 func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.ElastiCacheAPI, replicationGroup *elasticache.ReplicationGroup, specifiedUpdates *ServiceUpdate) error {
 	logger := p.Logger.WithField("action", "checkSpecifiedSecurityUpdates")
 	ServiceUpdateStatusAvailable := elasticache.ServiceUpdateStatusAvailable
@@ -1100,9 +1101,7 @@ func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.
 
 	if err != nil {
 		logger.Errorf("failed to get elasticache service updates: %v", err)
-		// NOT returning an error to avoid problems with this code until it is sufficiently tested
 		return err
-		// TODO: refactor to bubble up error state through return call once this code has been proven in a real upgrade scenario (which we are unable to replica at the moment)
 	}
 
 	encounteredError := false
@@ -1118,6 +1117,7 @@ func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.
 
 				if *update.ServiceUpdateStatus == elasticache.ServiceUpdateStatusAvailable &&
 					validServiceUpdateStates(resources.SafeStringDereference(update.UpdateActionStatus)) {
+					logger.Warnf("Commencing service update %s of Elasticache (Redis) instance %s", resources.SafeStringDereference(update.ServiceUpdateName), *replicationGroup.ReplicationGroupId)
 					err := p.applyServiceUpdate(cacheSvc, replicationGroup.ReplicationGroupId, update.ServiceUpdateName)
 					if err != nil {
 						encounteredError = true
@@ -1127,8 +1127,8 @@ func (p *RedisProvider) checkSpecifiedSecurityUpdates(cacheSvc elasticacheiface.
 
 					if *update.ServiceUpdateSeverity == elasticache.ServiceUpdateSeverityCritical &&
 						*update.ServiceUpdateType == elasticache.ServiceUpdateTypeSecurityUpdate {
-						// this call catches cases where the serviceUpdate has already been pushed to pending modifications by a previous batchapplyupdate
 						// this should push the changes out immediately rather than waiting for the maintenance window.
+						logger.Warnf("Setting 'ApplyImmediately' flag to 'true' on the Elasticache instance %s in order to apply the service update immediately", *replicationGroup.ReplicationGroupId)
 						if _, err := cacheSvc.ModifyReplicationGroup(&elasticache.ModifyReplicationGroupInput{
 							ApplyImmediately:   aws.Bool(true),
 							ReplicationGroupId: replicationGroup.ReplicationGroupId}); err != nil {
