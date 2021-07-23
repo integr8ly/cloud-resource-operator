@@ -19,6 +19,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -66,7 +67,11 @@ func New(mgr manager.Manager) (*RedisReconciler, error) {
 		return nil, err
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis"})
-	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(client, logger), openshift.NewOpenShiftRedisProvider(client, logger)}
+	providerList := []providers.RedisProvider{
+		aws.NewAWSRedisProvider(client, logger),
+		openshift.NewOpenShiftRedisProvider(client, logger),
+		gcp.NewGCPRedisProvider(client, logger),
+	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &RedisReconciler{
 		Client:           mgr.GetClient(),
