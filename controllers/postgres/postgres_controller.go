@@ -19,6 +19,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
@@ -77,7 +78,7 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 	}
 
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), aws.NewAWSPostgresProvider(client, logger)}
+	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), aws.NewAWSPostgresProvider(client, logger), gcp.NewGCPPostgresProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &PostgresReconciler{
 		Client:           client,
