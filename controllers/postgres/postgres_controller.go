@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
@@ -85,7 +86,7 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), awsPostgresProvider}
+	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), awsPostgresProvider, gcp.NewGCPPostgresProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &PostgresReconciler{
 		Client:           client,
