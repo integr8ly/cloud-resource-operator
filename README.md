@@ -88,17 +88,17 @@ The operator expects two configmaps to exist in the namespace it is watching. Th
 
 ### Provider configmap
 The `cloud-resource-config` configmap defines which provider should be used to provision a specific resource type. Different deployment types can contain different `resource type > provider` mappings.
-An example can be seen [here](deploy/examples/cloud_resource_config.yaml).
+An example can be seen [here](config/samples/cloud_resource_config.yaml).
 For example, a `workshop` deployment type might choose to deploy a Postgres resource type in-cluster (`openshift`), while a `managed` deployment type might choose `AWS` to deploy an RDS instance instead. 
 
 ### Strategy configmap
 A config map object is expected to exist for each provider (Currently `AWS` or `Openshift`) that will be used by the operator. 
 This config map contains information about how to deploy a particular resource type, such as blob storage, with that provider. 
-In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of an AWS strategy configmap can be seen [here](deploy/examples/cloud_resources_aws_strategies.yaml).
+In the Cloud Resources Operator, this provider-specific configuration is called a strategy. An example of an AWS strategy configmap can be seen [here](config/samples/cloud_resources_aws_strategies.yaml).
 
 ### Custom Resources
 With `Provider` and `Strategy` configmaps in place, cloud resources can be provisioned by creating a custom resource object for the desired resource type. 
-An example of a Postgres custom resource can be seen [here](./deploy/crds/integreatly_v1alpha1_postgres_cr.yaml). 
+An example of a Postgres custom resource can be seen [here](./config/samples/integreatly_v1alpha1_postgres.yaml). 
 
 Each custom resource contains:
 - A `secretRef`, containing the name of the secret that will be created by the operator with connection details to the resource
@@ -204,7 +204,7 @@ and `PREVIOUS_OPERATOR_VERSIONS` contain coma seperated list of all previous bun
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
 - `Resource type` - Something that can be requested from the operator via a custom resource e.g. `blobstorage`, `redis`
 - `Resource` - The result of a resource type created via a provider e.g. `S3 Bucket`, `Azure Blob`
-- `Deployment type` - Groups mappings of resource types to providers (see [here](deploy/examples/cloud_resource_config.yaml)) e.g. `managed`, `workshop`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
+- `Deployment type` - Groups mappings of resource types to providers (see [here](config/samples/cloud_resource_config.yaml)) e.g. `managed`, `workshop`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
 - `Deployment tier` - Provides a layer of abstraction, which allows the end user to request a resource of a certain level (for example, a `production` worthy Postgres instance), without being concerned with provider-specific deployment details (such as storage capacity, for example). 
 
 ### Design
