@@ -85,9 +85,8 @@ func (r *BlobStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *BlobStorageReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *BlobStorageReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling BlobStorage")
-	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.Client)
 
 	// Fetch the BlobStorage instance

@@ -3,21 +3,42 @@ layout: go.kubebuilder.io/v2
 projectName: cloud-resource-operator
 repo: github.com/integr8ly/cloud-resource-operator
 resources:
-- group: integreatly
+-
+  domain: integreatly.org
+  controller: true
+  group: integreatly
   kind: BlobStorage
+  path: github.com/integr8ly/cloud-resource-operator/api/v1alpha1
   version: v1alpha1
-- group: integreatly
+-
+  domain: integreatly.org
+  controller: true
+  group: integreatly
   kind: Postgres
+  path: github.com/integr8ly/cloud-resource-operator/api/v1alpha1
   version: v1alpha1
-- group: integreatly
+-
+  domain: integreatly.org
+  controller: true
+  group: integreatly
   kind: PostgresSnapshot
+  path: github.com/integr8ly/cloud-resource-operator/api/v1alpha1
   version: v1alpha1
-- group: integreatly
+-
+  domain: integreatly.org
+  controller: true
+  group: integreatly
   kind: Redis
+  path: github.com/integr8ly/cloud-resource-operator/api/v1alpha1
   version: v1alpha1
-- group: integreatly
+-
+  domain: integreatly.org
+  controller: true
+  group: integreatly
   kind: RedisSnapshot
+  path: github.com/integr8ly/cloud-resource-operator/api/v1alpha1
   version: v1alpha1
-version: 3-alpha
+version: "3"
 plugins:
-  go.sdk.operatorframework.io/v2-alpha: {}
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}

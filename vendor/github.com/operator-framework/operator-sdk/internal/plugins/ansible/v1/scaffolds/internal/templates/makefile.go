@@ -20,14 +20,14 @@ package templates
 import (
 	"errors"
 
-	"sigs.k8s.io/kubebuilder/pkg/model/file"
+	"sigs.k8s.io/kubebuilder/v3/pkg/machinery"
 )
 
-var _ file.Template = &Makefile{}
+var _ machinery.Template = &Makefile{}
 
 // Makefile scaffolds the Makefile
 type Makefile struct {
-	file.TemplateMixin
+	machinery.TemplateMixin
 
 	// Image is controller manager image name
 	Image string
@@ -39,7 +39,7 @@ type Makefile struct {
 	AnsibleOperatorVersion string
 }
 
-// SetTemplateDefaults implements input.Template
+// SetTemplateDefaults implements machinery.Template
 func (f *Makefile) SetTemplateDefaults() error {
 	if f.Path == "" {
 		f.Path = "Makefile"
@@ -47,7 +47,7 @@ func (f *Makefile) SetTemplateDefaults() error {
 
 	f.TemplateBody = makefileTemplate
 
-	f.IfExistsAction = file.Error
+	f.IfExistsAction = machinery.Error
 
 	if f.Image == "" {
 		f.Image = "controller:latest"
@@ -70,65 +70,80 @@ IMG ?= {{ .Image }}
 
 all: docker-build
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: ansible-operator
-	$(ANSIBLE_OPERATOR) run
+##@ General
 
-# Install CRDs into a cluster
-install: kustomize
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk commands is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
+
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ Build
+
+run: ansible-operator ## Run against the configured Kubernetes cluster in ~/.kube/config
+	ANSIBLE_ROLES_PATH="$(ANSIBLE_ROLES_PATH):$(shell pwd)/roles" $(ANSIBLE_OPERATOR) run
+
+docker-build: ## Build docker image with the manager.
+	docker build -t ${IMG} .
+
+docker-push: ## Push docker image with the manager.
+	docker push ${IMG}
+
+##@ Deployment
+
+install: kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-# Uninstall CRDs from a cluster
-uninstall: kustomize
+uninstall: kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: kustomize
+deploy: kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
-# Undeploy controller in the configured Kubernetes cluster in ~/.kube/config
-undeploy: kustomize
+undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
-# Build the docker image
-docker-build:
-	docker build . -t ${IMG}
+OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH := $(shell uname -m | sed 's/x86_64/amd64/')
 
-# Push the docker image
-docker-push:
-	docker push ${IMG}
-
-PATH  := $(PATH):$(PWD)/bin
-SHELL := env PATH=$(PATH) /bin/sh
-OS    = $(shell uname -s | tr '[:upper:]' '[:lower:]')
-ARCH  = $(shell uname -m | sed 's/x86_64/amd64/')
-OSOPER   = $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/apple-darwin/' | sed 's/linux/linux-gnu/')
-ARCHOPER = $(shell uname -m )
-
-kustomize:
-ifeq (, $(shell which kustomize 2>/dev/null))
+.PHONY: kustomize
+KUSTOMIZE = $(shell pwd)/bin/kustomize
+kustomize: ## Download kustomize locally if necessary.
+ifeq (,$(wildcard $(KUSTOMIZE)))
+ifeq (,$(shell which kustomize 2>/dev/null))
 	@{ \
 	set -e ;\
-	mkdir -p bin ;\
-	curl -sSLo - https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/{{ .KustomizeVersion }}/kustomize_{{ .KustomizeVersion }}_$(OS)_$(ARCH).tar.gz | tar xzf - -C bin/ ;\
+	mkdir -p $(dir $(KUSTOMIZE)) ;\
+	curl -sSLo - https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/{{ .KustomizeVersion }}/kustomize_{{ .KustomizeVersion }}_$(OS)_$(ARCH).tar.gz | \
+	tar xzf - -C bin/ ;\
 	}
-KUSTOMIZE=$(realpath ./bin/kustomize)
 else
-KUSTOMIZE=$(shell which kustomize)
+KUSTOMIZE = $(shell which kustomize)
+endif
 endif
 
-ansible-operator:
-ifeq (, $(shell which ansible-operator 2>/dev/null))
+.PHONY: ansible-operator
+ANSIBLE_OPERATOR = $(shell pwd)/bin/ansible-operator
+ansible-operator: ## Download ansible-operator locally if necessary, preferring the $(pwd)/bin path over global if both exist.
+ifeq (,$(wildcard $(ANSIBLE_OPERATOR)))
+ifeq (,$(shell which ansible-operator 2>/dev/null))
 	@{ \
 	set -e ;\
-	mkdir -p bin ;\
-	curl -LO https://github.com/operator-framework/operator-sdk/releases/download/{{ .AnsibleOperatorVersion}}/ansible-operator-{{ .AnsibleOperatorVersion}}-$(ARCHOPER)-$(OSOPER) ;\
-	mv ansible-operator-{{ .AnsibleOperatorVersion}}-$(ARCHOPER)-$(OSOPER) ./bin/ansible-operator ;\
-	chmod +x ./bin/ansible-operator ;\
+	mkdir -p $(dir $(ANSIBLE_OPERATOR)) ;\
+	curl -sSLo $(ANSIBLE_OPERATOR) https://github.com/operator-framework/operator-sdk/releases/download/{{ .AnsibleOperatorVersion }}/ansible-operator_$(OS)_$(ARCH) ;\
+	chmod +x $(ANSIBLE_OPERATOR) ;\
 	}
-ANSIBLE_OPERATOR=$(realpath ./bin/ansible-operator)
 else
-ANSIBLE_OPERATOR=$(shell which ansible-operator)
+ANSIBLE_OPERATOR = $(shell which ansible-operator)
+endif
 endif
 `

@@ -17,17 +17,17 @@ package mdefault
 import (
 	"path/filepath"
 
-	"sigs.k8s.io/kubebuilder/pkg/model/file"
+	"sigs.k8s.io/kubebuilder/v3/pkg/machinery"
 )
 
-var _ file.Template = &Destroy{}
+var _ machinery.Template = &Destroy{}
 
 // Destroy scaffolds a Destroy for building a main
 type Destroy struct {
-	file.TemplateMixin
+	machinery.TemplateMixin
 }
 
-// SetTemplateDefaults implements input.Template
+// SetTemplateDefaults implements machinery.Template
 func (f *Destroy) SetTemplateDefaults() error {
 	if f.Path == "" {
 		f.Path = filepath.Join("molecule", "default", "destroy.yml")
@@ -42,7 +42,7 @@ const destroyTemplate = `---
   connection: local
   gather_facts: false
   collections:
-    - community.kubernetes
+    - kubernetes.core
 
   tasks:
     - import_tasks: kustomize.yml

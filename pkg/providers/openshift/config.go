@@ -20,7 +20,7 @@ import (
 
 const (
 	DefaultConfigMapName = "cloud-resources-openshift-strategies"
-	DefaultFinalizer     = "finalizers.cloud-resources-operator.integreatly.org"
+	DefaultFinalizer     = "cloud-resources-operator.integreatly.org/finalizers"
 	defaultReconcileTime = time.Second * 30
 
 	NamespacePrefixOpenShift = "openshift-"

@@ -17,7 +17,7 @@ import (
 )
 
 func TestNewConfigManager(t *testing.T) {
-	fakeClient := fake.NewFakeClientWithScheme(runtime.NewScheme())
+	fakeClient := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
 	cases := []struct {
 		name              string
 		cmName            string
@@ -69,7 +69,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -77,7 +77,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 		Data: map[string]string{
 			ManagedDeploymentType: string(testDtcJSON),
 		},
-	})
+	}).Build()
 	cases := []struct {
 		name           string
 		cmName         string

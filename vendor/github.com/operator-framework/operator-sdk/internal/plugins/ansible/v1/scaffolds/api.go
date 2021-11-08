@@ -18,94 +18,74 @@ limitations under the License.
 package scaffolds
 
 import (
-	"errors"
+	"sigs.k8s.io/kubebuilder/v3/pkg/config"
+	"sigs.k8s.io/kubebuilder/v3/pkg/machinery"
+	"sigs.k8s.io/kubebuilder/v3/pkg/model/resource"
+	"sigs.k8s.io/kubebuilder/v3/pkg/plugins"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/kubebuilder/pkg/model"
-	"sigs.k8s.io/kubebuilder/pkg/model/config"
-	"sigs.k8s.io/kubebuilder/pkg/model/file"
-	"sigs.k8s.io/kubebuilder/pkg/model/resource"
-	"sigs.k8s.io/kubebuilder/pkg/plugin/scaffold"
-
-	"github.com/operator-framework/operator-sdk/internal/kubebuilder/machinery"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/constants"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/config/crd"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/config/rbac"
-	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/config/samples"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/molecule/mdefault"
 	"github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/playbooks"
 	ansibleroles "github.com/operator-framework/operator-sdk/internal/plugins/ansible/v1/scaffolds/internal/templates/roles"
 )
 
-var _ scaffold.Scaffolder = &apiScaffolder{}
-
-type CreateOptions struct {
-	GVK schema.GroupVersionKind
-	// CRDVersion is the version of the `apiextensions.k8s.io` API which will be used to generate the CRD.
-	CRDVersion       string
-	GeneratePlaybook bool
-	GenerateRole     bool
-}
+var _ plugins.Scaffolder = &apiScaffolder{}
 
 type apiScaffolder struct {
-	config *config.Config
-	opts   CreateOptions
+	fs machinery.Filesystem
+
+	config   config.Config
+	resource resource.Resource
+
+	doRole, doPlaybook bool
 }
 
-// NewCreateAPIScaffolder returns a new Scaffolder for project initialization operations
-func NewCreateAPIScaffolder(config *config.Config, opts CreateOptions) scaffold.Scaffolder {
+// NewCreateAPIScaffolder returns a new plugins.Scaffolder for project initialization operations
+func NewCreateAPIScaffolder(cfg config.Config, res resource.Resource, doRole, doPlaybook bool) plugins.Scaffolder {
 	return &apiScaffolder{
-		config: config,
-		opts:   opts,
+		config:     cfg,
+		resource:   res,
+		doRole:     doRole,
+		doPlaybook: doPlaybook,
 	}
 }
 
-func (s *apiScaffolder) newUniverse(r *resource.Resource) *model.Universe {
-	return model.NewUniverse(
-		model.WithConfig(s.config),
-		model.WithResource(r),
-	)
+// InjectFS implements plugins.Scaffolder
+func (s *apiScaffolder) InjectFS(fs machinery.Filesystem) {
+	s.fs = fs
 }
 
-// Scaffold implements Scaffolder
+// Scaffold implements plugins.Scaffolder
 func (s *apiScaffolder) Scaffold() error {
-	return s.scaffold()
-}
-
-func (s *apiScaffolder) scaffold() error {
-
-	resourceOptions := resource.Options{
-		Group:   s.opts.GVK.Group,
-		Version: s.opts.GVK.Version,
-		Kind:    s.opts.GVK.Kind,
+	if err := s.config.UpdateResource(s.resource); err != nil {
+		return err
 	}
 
-	if s.config.HasResource(resourceOptions.GVK()) {
-		return errors.New("the API resource already exists")
-	}
-
-	// Check that the provided group can be added to the project
-	if !s.config.MultiGroup && len(s.config.Resources) != 0 && !s.config.HasGroup(resourceOptions.Group) {
-		return errors.New("multiple groups are not allowed by default, to enable multi-group set 'multigroup: true' in your PROJECT file")
-	}
-
-	resource := resourceOptions.NewResource(s.config, true)
-	s.config.AddResource(resource.GVK())
-
-	var createAPITemplates []file.Builder
-	createAPITemplates = append(createAPITemplates,
-		&rbac.CRDViewerRole{},
-		&rbac.CRDEditorRole{},
-		&rbac.ManagerRoleUpdater{},
-
-		&crd.CRD{CRDVersion: s.opts.CRDVersion},
-		&crd.Kustomization{},
-		&samples.CR{},
-		&templates.WatchesUpdater{GeneratePlaybook: s.opts.GeneratePlaybook, GenerateRole: s.opts.GenerateRole, PlaybooksDir: constants.PlaybooksDir},
-		&mdefault.ResourceTest{},
+	// Initialize the machinery.Scaffold that will write the files to disk
+	scaffold := machinery.NewScaffold(s.fs,
+		// NOTE: kubebuilder's default permissions are only for root users
+		machinery.WithDirectoryPermissions(0755),
+		machinery.WithFilePermissions(0644),
+		machinery.WithConfig(s.config),
+		machinery.WithResource(&s.resource),
 	)
-	if s.opts.GenerateRole {
+
+	createAPITemplates := []machinery.Builder{
+		&rbac.ManagerRoleUpdater{},
+		&crd.CRD{},
+		&crd.Kustomization{},
+		&templates.WatchesUpdater{
+			GeneratePlaybook: s.doPlaybook,
+			GenerateRole:     s.doRole,
+			PlaybooksDir:     constants.PlaybooksDir,
+		},
+		&mdefault.ResourceTest{},
+	}
+
+	if s.doRole {
 		createAPITemplates = append(createAPITemplates,
 			&ansibleroles.TasksMain{},
 			&ansibleroles.DefaultsMain{},
@@ -118,12 +98,11 @@ func (s *apiScaffolder) scaffold() error {
 		)
 	}
 
-	if s.opts.GeneratePlaybook {
+	if s.doPlaybook {
 		createAPITemplates = append(createAPITemplates,
-			&playbooks.Playbook{GenerateRole: s.opts.GenerateRole})
+			&playbooks.Playbook{GenerateRole: s.doRole},
+		)
 	}
-	return machinery.NewScaffold().Execute(
-		s.newUniverse(resource),
-		createAPITemplates...,
-	)
+
+	return scaffold.Execute(createAPITemplates...)
 }

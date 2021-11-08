@@ -29,7 +29,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/version"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/operator-framework/operator-sdk/internal/generate/collector"
 	"github.com/operator-framework/operator-sdk/internal/util/k8sutil"
@@ -37,28 +38,26 @@ import (
 
 // ApplyTo applies relevant manifests in c to csv, sorts the applied updates,
 // and validates the result.
-func ApplyTo(c *collector.Manifests, csv *operatorsv1alpha1.ClusterServiceVersion) error {
+func ApplyTo(c *collector.Manifests, csv *operatorsv1alpha1.ClusterServiceVersion, extraSAs []string) error {
 	// Apply manifests to the CSV object.
-	if err := apply(c, csv); err != nil {
+	if err := apply(c, csv, extraSAs); err != nil {
 		return err
 	}
 
 	// Set fields required by namespaced operators. This is a no-op for cluster-scoped operators.
 	setNamespacedFields(csv)
 
-	// Sort all updated fields.
-	sortUpdates(csv)
-
 	return validate(csv)
 }
 
 // apply applies relevant manifests in c to csv.
-func apply(c *collector.Manifests, csv *operatorsv1alpha1.ClusterServiceVersion) error {
+func apply(c *collector.Manifests, csv *operatorsv1alpha1.ClusterServiceVersion, extraSAs []string) error {
 	strategy := getCSVInstallStrategy(csv)
 	switch strategy.StrategyName {
 	case operatorsv1alpha1.InstallStrategyNameDeployment:
-		applyRoles(c, &strategy.StrategySpec)
-		applyClusterRoles(c, &strategy.StrategySpec)
+		inPerms, inCPerms, _ := c.SplitCSVPermissionsObjects(extraSAs)
+		applyRoles(c, inPerms, &strategy.StrategySpec, extraSAs)
+		applyClusterRoles(c, inCPerms, &strategy.StrategySpec, extraSAs)
 		applyDeployments(c, &strategy.StrategySpec)
 	}
 	csv.Spec.InstallStrategy = strategy
@@ -85,34 +84,46 @@ const defaultServiceAccountName = "default"
 
 // applyRoles applies Roles to strategy's permissions field by combining Roles bound to ServiceAccounts
 // into one set of permissions.
-func applyRoles(c *collector.Manifests, strategy *operatorsv1alpha1.StrategyDetailsDeployment) { //nolint:dupl
-	objs, _ := c.SplitCSVPermissionsObjects()
-	roleSet := make(map[string]*rbacv1.Role)
+func applyRoles(c *collector.Manifests, objs []client.Object, strategy *operatorsv1alpha1.StrategyDetailsDeployment, extraSAs []string) { //nolint:dupl
+	roleSet := make(map[string]rbacv1.Role)
+	cRoleSet := make(map[string]rbacv1.ClusterRole)
 	for i := range objs {
 		switch t := objs[i].(type) {
 		case *rbacv1.Role:
-			roleSet[t.GetName()] = t
+			roleSet[t.GetName()] = *t
+		case *rbacv1.ClusterRole:
+			cRoleSet[t.GetName()] = *t
 		}
 	}
 
-	saToPermissions := make(map[string]operatorsv1alpha1.StrategyDeploymentPermissions)
-	for _, dep := range c.Deployments {
-		saName := dep.Spec.Template.Spec.ServiceAccountName
-		if saName == "" {
-			saName = defaultServiceAccountName
-		}
-		saToPermissions[saName] = operatorsv1alpha1.StrategyDeploymentPermissions{ServiceAccountName: saName}
-	}
-
-	// Collect all role names by their corresponding service accounts via bindings. This lets us
+	// Collect all role and cluster role names by their corresponding service accounts via bindings. This lets us
 	// look up all service accounts a role is bound to and create one set of permissions per service account.
+	saToPermissions := initPermissionSet(c.Deployments, extraSAs)
 	for _, binding := range c.RoleBindings {
-		if role, hasRole := roleSet[binding.RoleRef.Name]; hasRole {
-			for _, subject := range binding.Subjects {
-				if perm, hasSA := saToPermissions[subject.Name]; hasSA && subject.Kind == "ServiceAccount" {
-					perm.Rules = append(perm.Rules, role.Rules...)
-					saToPermissions[subject.Name] = perm
-				}
+		for _, subject := range binding.Subjects {
+			perm, hasSA := saToPermissions[subject.Name]
+			if subject.Kind != "ServiceAccount" || !hasSA {
+				continue
+			}
+			var (
+				rules   []rbacv1.PolicyRule
+				hasRole bool
+			)
+			switch binding.RoleRef.Kind {
+			case "Role":
+				role, has := roleSet[binding.RoleRef.Name]
+				rules = role.Rules
+				hasRole = has
+			case "ClusterRole":
+				role, has := cRoleSet[binding.RoleRef.Name]
+				rules = role.Rules
+				hasRole = has
+			default:
+				continue
+			}
+			if hasRole {
+				perm.Rules = append(perm.Rules, rules...)
+				saToPermissions[subject.Name] = perm
 			}
 		}
 	}
@@ -124,39 +135,35 @@ func applyRoles(c *collector.Manifests, strategy *operatorsv1alpha1.StrategyDeta
 			perms = append(perms, perm)
 		}
 	}
+	sort.Slice(perms, func(i, j int) bool {
+		return perms[i].ServiceAccountName < perms[j].ServiceAccountName
+	})
 	strategy.Permissions = perms
 }
 
 // applyClusterRoles applies ClusterRoles to strategy's clusterPermissions field by combining ClusterRoles
 // bound to ServiceAccounts into one set of clusterPermissions.
-func applyClusterRoles(c *collector.Manifests, strategy *operatorsv1alpha1.StrategyDetailsDeployment) { //nolint:dupl
-	objs, _ := c.SplitCSVClusterPermissionsObjects()
-	roleSet := make(map[string]*rbacv1.ClusterRole)
+func applyClusterRoles(c *collector.Manifests, objs []client.Object, strategy *operatorsv1alpha1.StrategyDetailsDeployment, extraSAs []string) { //nolint:dupl
+	roleSet := make(map[string]rbacv1.ClusterRole)
 	for i := range objs {
 		switch t := objs[i].(type) {
 		case *rbacv1.ClusterRole:
-			roleSet[t.GetName()] = t
+			roleSet[t.GetName()] = *t
 		}
-	}
-
-	saToPermissions := make(map[string]operatorsv1alpha1.StrategyDeploymentPermissions)
-	for _, dep := range c.Deployments {
-		saName := dep.Spec.Template.Spec.ServiceAccountName
-		if saName == "" {
-			saName = defaultServiceAccountName
-		}
-		saToPermissions[saName] = operatorsv1alpha1.StrategyDeploymentPermissions{ServiceAccountName: saName}
 	}
 
 	// Collect all role names by their corresponding service accounts via bindings. This lets us
 	// look up all service accounts a role is bound to and create one set of permissions per service account.
+	saToPermissions := initPermissionSet(c.Deployments, extraSAs)
 	for _, binding := range c.ClusterRoleBindings {
-		if role, hasRole := roleSet[binding.RoleRef.Name]; hasRole {
-			for _, subject := range binding.Subjects {
-				if perm, hasSA := saToPermissions[subject.Name]; hasSA && subject.Kind == "ServiceAccount" {
-					perm.Rules = append(perm.Rules, role.Rules...)
-					saToPermissions[subject.Name] = perm
-				}
+		for _, subject := range binding.Subjects {
+			perm, hasSA := saToPermissions[subject.Name]
+			if !hasSA || subject.Kind != "ServiceAccount" {
+				continue
+			}
+			if role, hasRole := roleSet[binding.RoleRef.Name]; hasRole {
+				perm.Rules = append(perm.Rules, role.Rules...)
+				saToPermissions[subject.Name] = perm
 			}
 		}
 	}
@@ -168,7 +175,26 @@ func applyClusterRoles(c *collector.Manifests, strategy *operatorsv1alpha1.Strat
 			perms = append(perms, perm)
 		}
 	}
+	sort.Slice(perms, func(i, j int) bool {
+		return perms[i].ServiceAccountName < perms[j].ServiceAccountName
+	})
 	strategy.ClusterPermissions = perms
+}
+
+// initPermissionSet initializes a map of ServiceAccount name to permissions, which are empty.
+func initPermissionSet(deps []appsv1.Deployment, extraSAs []string) map[string]operatorsv1alpha1.StrategyDeploymentPermissions {
+	saToPermissions := make(map[string]operatorsv1alpha1.StrategyDeploymentPermissions)
+	for _, dep := range deps {
+		saName := dep.Spec.Template.Spec.ServiceAccountName
+		if saName == "" {
+			saName = defaultServiceAccountName
+		}
+		saToPermissions[saName] = operatorsv1alpha1.StrategyDeploymentPermissions{ServiceAccountName: saName}
+	}
+	for _, extraSA := range extraSAs {
+		saToPermissions[extraSA] = operatorsv1alpha1.StrategyDeploymentPermissions{ServiceAccountName: extraSA}
+	}
+	return saToPermissions
 }
 
 // applyDeployments updates strategy's deployments with the Deployments
@@ -300,7 +326,150 @@ func applyWebhooks(c *collector.Manifests, csv *operatorsv1alpha1.ClusterService
 		}
 		webhookDescriptions = append(webhookDescriptions, mutatingToWebhookDescription(webhook, depName, svc))
 	}
+
+	for _, svc := range c.Services {
+		crdToConfigMap := getConvWebhookCRDNamesAndConfig(c, svc.GetName())
+
+		if len(crdToConfigMap) != 0 {
+			depName := findMatchingDepNameFromService(c, &svc)
+			des := conversionToWebhookDescription(crdToConfigMap, depName, &svc)
+			webhookDescriptions = append(webhookDescriptions, des...)
+		}
+	}
+	// Sorts the WebhookDescriptions based on natural order of webhookDescriptions Type
+	sort.Slice(webhookDescriptions, func(i, j int) bool {
+		return webhookDescriptions[i].GenerateName < webhookDescriptions[j].GenerateName
+	})
 	csv.Spec.WebhookDefinitions = webhookDescriptions
+}
+
+// conversionToWebhookDescription takes in a map of {crdNames, apiextv.WebhookConversion} and groups
+// all the crds with same port and path. It then creates a webhook description for each unique combination of
+// port and path.
+// For example: if we have the following map: {crd1:[portX+pathX], crd2: [portX+pathX], crd3: [portY:partY]},
+// we will create 2 webhook descriptions: one with [portX+pathX]:[crd1, crd2] and the other with [portY:pathY]:[crd3]
+func conversionToWebhookDescription(crdToConfig map[string]apiextv1.WebhookConversion, depName string, ws *corev1.Service) []operatorsv1alpha1.WebhookDescription {
+	des := make([]operatorsv1alpha1.WebhookDescription, 0)
+
+	// this is a map of serviceportAndPath configs, and the respective CRDs.
+	webhookDescriptions := crdGroups(crdToConfig)
+
+	for serviceConfig, crds := range webhookDescriptions {
+		// we need this to get the conversionReviewVersions.
+		// here, we assume all crds having same servicePortAndPath config will have
+		// same conversion review versions.
+		config, ok := crdToConfig[crds[0]]
+		if !ok {
+			log.Infof("Webhook config for CRD %q not found", crds[0])
+			continue
+		}
+
+		description := operatorsv1alpha1.WebhookDescription{
+			Type:                    operatorsv1alpha1.ConversionWebhook,
+			ConversionCRDs:          crds,
+			AdmissionReviewVersions: config.ConversionReviewVersions,
+			WebhookPath:             &serviceConfig.Path,
+			DeploymentName:          depName,
+			GenerateName:            getGenerateName(crds),
+			SideEffects: func() *admissionregv1.SideEffectClass {
+				seNone := admissionregv1.SideEffectClassNone
+				return &seNone
+			}(),
+		}
+
+		if len(description.AdmissionReviewVersions) == 0 {
+			log.Infof("ConversionReviewVersion not found for the deployment %q", depName)
+		}
+
+		var webhookServiceRefPort int32 = 443
+
+		if serviceConfig.Port != nil {
+			webhookServiceRefPort = *serviceConfig.Port
+		}
+
+		if ws != nil {
+			for _, port := range ws.Spec.Ports {
+				if webhookServiceRefPort == port.Port {
+					description.ContainerPort = port.Port
+					description.TargetPort = &port.TargetPort
+					break
+				}
+			}
+		}
+
+		if description.DeploymentName == "" {
+			if config.ClientConfig.Service != nil {
+				description.DeploymentName = strings.TrimSuffix(config.ClientConfig.Service.Name, "-service")
+			}
+		}
+
+		description.WebhookPath = &serviceConfig.Path
+		des = append(des, description)
+	}
+
+	return des
+}
+
+// serviceportPath is refers to the group of webhook service and
+// path names and port.
+type serviceportPath struct {
+	Port *int32
+	Path string
+}
+
+// crdGroups groups the crds with similar service port and name. It returns a map of serviceportPath
+// and the corresponding crd names.
+func crdGroups(crdToConfig map[string]apiextv1.WebhookConversion) map[serviceportPath][]string {
+
+	uniqueConfig := make(map[serviceportPath][]string)
+
+	for crdName, config := range crdToConfig {
+		serviceportPath := serviceportPath{
+			Port: config.ClientConfig.Service.Port,
+			Path: *config.ClientConfig.Service.Path,
+		}
+
+		uniqueConfig[serviceportPath] = append(uniqueConfig[serviceportPath], crdName)
+	}
+
+	return uniqueConfig
+}
+
+func getConvWebhookCRDNamesAndConfig(c *collector.Manifests, serviceName string) map[string]apiextv1.WebhookConversion {
+	if serviceName == "" {
+		return nil
+	}
+
+	crdToConfig := make(map[string]apiextv1.WebhookConversion)
+
+	for _, crd := range c.V1CustomResourceDefinitions {
+		if crd.Spec.Conversion != nil {
+			whConv := crd.Spec.Conversion.Webhook
+			if whConv != nil && whConv.ClientConfig != nil && whConv.ClientConfig.Service != nil {
+				if whConv.ClientConfig.Service.Name == serviceName {
+					crdToConfig[crd.GetName()] = *whConv
+				}
+			}
+		}
+	}
+
+	for _, crd := range c.V1beta1CustomResourceDefinitions {
+		whConv := crd.Spec.Conversion
+		if whConv != nil && whConv.WebhookClientConfig != nil && whConv.WebhookClientConfig.Service != nil {
+			if whConv.WebhookClientConfig.Service.Name == serviceName {
+				v1whConv := apiextv1.WebhookConversion{
+					ClientConfig:             &apiextv1.WebhookClientConfig{Service: &apiextv1.ServiceReference{}},
+					ConversionReviewVersions: crd.Spec.Conversion.ConversionReviewVersions,
+				}
+				if path := whConv.WebhookClientConfig.Service.Path; path != nil {
+					v1whConv.ClientConfig.Service.Path = new(string)
+					*v1whConv.ClientConfig.Service.Path = *path
+				}
+				crdToConfig[crd.GetName()] = v1whConv
+			}
+		}
+	}
+	return crdToConfig
 }
 
 // The default AdmissionReviewVersions set in a CSV if not set in the source webhook.
@@ -396,8 +565,7 @@ func mutatingToWebhookDescription(webhook admissionregv1.MutatingWebhook, depNam
 }
 
 // findMatchingDeploymentAndServiceForWebhook matches a Service to a webhook's client config (if it uses a service)
-// then matches that Service to a Deployment by comparing label selectors (if the Service uses label selectors).
-// The names of both Service and Deployment are returned if found.
+// and uses that service to find the deployment name.
 func findMatchingDeploymentAndServiceForWebhook(c *collector.Manifests, wcc admissionregv1.WebhookClientConfig) (depName string, ws *corev1.Service) {
 	// Return if a service reference is not specified, since a URL will be in that case.
 	if wcc.Service == nil {
@@ -427,7 +595,15 @@ func findMatchingDeploymentAndServiceForWebhook(c *collector.Manifests, wcc admi
 		return
 	}
 
-	// Match service against pod labels, in which the webhook server will be running.
+	depName = findMatchingDepNameFromService(c, ws)
+
+	return depName, ws
+}
+
+// findMatchingDepNameFromService matches the provided service to a deployment by comparing label selectors (if
+// Service uses label selectors).
+func findMatchingDepNameFromService(c *collector.Manifests, ws *corev1.Service) (depName string) {
+	// Match service against pod labels, in which the webhook server will be running
 	for _, dep := range c.Deployments {
 		podTemplateLabels := dep.Spec.Template.GetLabels()
 		if len(podTemplateLabels) == 0 {
@@ -446,8 +622,7 @@ func findMatchingDeploymentAndServiceForWebhook(c *collector.Manifests, wcc admi
 			break
 		}
 	}
-
-	return depName, ws
+	return depName
 }
 
 // applyCustomResources updates csv's "alm-examples" annotation with the
@@ -474,30 +649,6 @@ func applyCustomResources(c *collector.Manifests, csv *operatorsv1alpha1.Cluster
 	return nil
 }
 
-// sortUpdates sorts all fields updated in csv.
-// TODO(estroz): sort other modified fields.
-func sortUpdates(csv *operatorsv1alpha1.ClusterServiceVersion) {
-	sort.Sort(descSorter(csv.Spec.CustomResourceDefinitions.Owned))
-	sort.Sort(descSorter(csv.Spec.CustomResourceDefinitions.Required))
-}
-
-// descSorter sorts a set of crdDescriptions.
-type descSorter []operatorsv1alpha1.CRDDescription
-
-var _ sort.Interface = descSorter{}
-
-func (descs descSorter) Len() int { return len(descs) }
-func (descs descSorter) Less(i, j int) bool {
-	if descs[i].Name == descs[j].Name {
-		if descs[i].Kind == descs[j].Kind {
-			return version.CompareKubeAwareVersionStrings(descs[i].Version, descs[j].Version) > 0
-		}
-		return descs[i].Kind < descs[j].Kind
-	}
-	return descs[i].Name < descs[j].Name
-}
-func (descs descSorter) Swap(i, j int) { descs[i], descs[j] = descs[j], descs[i] }
-
 // validate will validate csv using the api validation library.
 // More info: https://github.com/operator-framework/api
 func validate(csv *operatorsv1alpha1.ClusterServiceVersion) error {
@@ -523,4 +674,17 @@ func validate(csv *operatorsv1alpha1.ClusterServiceVersion) error {
 	}
 
 	return nil
+}
+
+// generateName takes in a list of crds, and returns a conversion webhook generator name.
+func getGenerateName(crds []string) string {
+	sort.Strings(crds)
+	joinedResourceNames := strings.Builder{}
+
+	for _, name := range crds {
+		if name != "" {
+			joinedResourceNames.WriteString(strings.Split(name, ".")[0])
+		}
+	}
+	return fmt.Sprintf("c%s.kb.io", joinedResourceNames.String())
 }

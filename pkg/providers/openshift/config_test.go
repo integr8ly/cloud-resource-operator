@@ -72,7 +72,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to marshal strategy config", err)
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -80,7 +80,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 		Data: map[string]string{
 			"blobstorage": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
 		},
-	})
+	}).Build()
 	cases := []struct {
 		name                string
 		cmName              string

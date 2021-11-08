@@ -67,12 +67,16 @@ code/gen: manifests kustomize generate
 gen/csv:
 	@$(KUSTOMIZE) build config/manifests | operator-sdk generate packagemanifests --kustomize-dir=config/manifests --output-dir packagemanifests/ --version ${VERSION} --default-channel --channel integreatly
 	@sed -i "s/Version = \"${PREV_VERSION}\"/Version = \"${VERSION}\"/g" version/version.go
-	@yq w -i "packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml" metadata.annotations.containerImage ${OPERATOR_IMG}
-	@yq w -i "packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml" metadata.name cloud-resources.v$(VERSION)
-	@yq w -i "packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml" spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMG}
-	@yq w -i config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml metadata.name cloud-resources.v${VERSION}
-	@yq w -i config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml metadata.annotations.containerImage ${OPERATOR_IMG}
-	@yq w -i config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml spec.version ${VERSION}
+	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.metadata.name="cloud-resources.v$(VERSION)"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.install.spec.deployments[0].spec.template.spec.containers[0].image="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.metadata.name="cloud-resources.v${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.version="${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.installModes[0].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[0].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.installModes[1].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[1].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.installModes[2].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[2].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.installModes[3].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[3].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 
 .PHONY: code/fix
 code/fix:
@@ -156,7 +160,7 @@ test/unit/ci: test/unit
 .PHONY: image/build
 image/build: build
 	echo "build image ${OPERATOR_IMG}"
-	docker build . -t ${OPERATOR_IMG}
+	docker build -t ${OPERATOR_IMG} .
 
 .PHONY: image/push
 image/push: image/build

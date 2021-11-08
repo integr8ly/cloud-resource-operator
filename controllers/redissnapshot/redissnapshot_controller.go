@@ -87,9 +87,8 @@ func (r *RedisSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RedisSnapshotReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *RedisSnapshotReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling redis snapshot")
-	ctx := context.TODO()
 
 	// Fetch the RedisSnapshot instance
 	instance := &integreatlyv1alpha1.RedisSnapshot{}
