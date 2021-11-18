@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -187,8 +188,30 @@ func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput)
 	return &rds.DescribeDBSnapshotsOutput{}, nil
 }
 
+func (m *mockRdsClient) ApplyPendingMaintenanceAction(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error){
+	return &rds.ApplyPendingMaintenanceActionOutput{}, nil
+}
 func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-	return &rds.DescribePendingMaintenanceActionsOutput{}, nil
+	specifiedApplyAfterDate64, _ := strconv.ParseInt("1642032000", 10, 64)
+	timeStamp := time.Unix(specifiedApplyAfterDate64, 0)
+	return &rds.DescribePendingMaintenanceActionsOutput{
+		Marker: nil,
+		PendingMaintenanceActions: []*rds.ResourcePendingMaintenanceActions{
+			{
+				PendingMaintenanceActionDetails: []*rds.PendingMaintenanceAction{
+					{
+						Action:               aws.String("system-update"),
+						AutoAppliedAfterDate: aws.Time(timeStamp),
+						CurrentApplyDate:     aws.Time(timeStamp),
+						Description:          aws.String("test maintenance"),
+						ForcedApplyDate:      aws.Time(timeStamp),
+						OptInStatus:          aws.String("immediate"),
+					},
+				},
+				ResourceIdentifier: aws.String("arn-test"),
+			},
+		},
+	}, nil
 }
 
 func (m *mockRdsClient) DescribeDBSubnetGroups(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
@@ -1499,6 +1522,127 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_rdsApplyStatusUpdate(t *testing.T) {
+	testIdentifier := "test-identifier"
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		session        rdsiface.RDSAPI
+		rdsCfg         *rds.CreateDBInstanceInput
+		serviceUpdates *ServiceUpdate
+		foundInstance  *rds.DBInstance
+	}
+	tests := []struct {
+		name    string
+		args    args
+		fields  fields
+		want    croType.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "test empty update status",
+			args: args{
+				session: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					EngineVersion:              aws.String("10.15"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				serviceUpdates: &ServiceUpdate{
+					updates: nil,
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+					AvailabilityZone:     aws.String("test-availabilityZone"),
+					DBInstanceArn:        aws.String("arn:test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    croType.StatusEmpty,
+			wantErr: false,
+		},
+		{
+			name: "test populated update status",
+			args: args{
+				session: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					EngineVersion:              aws.String("10.16"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				serviceUpdates: &ServiceUpdate{
+					updates: []string{
+						"1642032001",
+					},
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+					AvailabilityZone:     aws.String("test-availabilityZone"),
+					DBInstanceArn:        aws.String("arn-test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:    "service update completed successfully",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.rdsCfg, tt.args.serviceUpdates, tt.args.foundInstance)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("rdsApplyStatusUpdate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("rdsApplyStatusUpdate() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
