@@ -1,5 +1,5 @@
 # Build the manager binary	
-FROM golang:1.16.2 as builder	
+FROM registry.ci.openshift.org/openshift/release:golang-1.16 as builder	
 		
 WORKDIR /workspace	
 # Copy the Go Modules manifests	
@@ -11,7 +11,8 @@ RUN go mod download
 		
 # Copy the go source	
 COPY main.go main.go	
-COPY apis/ apis/		
+COPY apis/ apis/
+COPY vendor/ vendor/			
 COPY controllers/ controllers/	
 COPY pkg/ pkg/
 COPY internal/ internal/	
