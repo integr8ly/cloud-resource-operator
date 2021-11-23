@@ -262,3 +262,6 @@ image/push/pipelines: image/build/pipelines
 	echo "pushing image ${OPERATOR_IMG}"
 	podman push ${OPERATOR_IMG}
 
+.PHONY: verify/release/exist
+verify/release/exist:
+	IMAGE_TO_SCAN=${OPERATOR_IMG} ./scripts/imageExists.sh
