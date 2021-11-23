@@ -5,7 +5,7 @@ LATEST_VERSION=$(grep cloud-resource-operator packagemanifests/cloud-resource-op
 CHANNEL="${CHANNEL:-alpha}"
 ORG="${IMAGE_ORG:-integreatly}"
 REG="${IMAGE_REG:-quay.io}"
-BUILD_TOOL="${BUILD_TOOL:-docker}"
+BUILD_TOOL="${BUILD_TOOL:-podman}"
 UPGRADE_CRO="${UPGRADE:-true}"
 VERSIONS="${BUNDLE_VERSIONS:-$LATEST_VERSION}"
 ROOT=$(pwd)
@@ -63,8 +63,8 @@ generate_bundles() {
       --package rhmi-cloud-resources --output-dir bundle \
       --default $CHANNEL
 
-  docker build -f bundle.Dockerfile -t $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION .
-  docker push $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
+  podman build -f bundle.Dockerfile -t $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION .
+  podman push $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
   operator-sdk bundle validate $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
   cd ..
 }
@@ -88,7 +88,7 @@ push_index() {
 
   printf 'Pushing index image:'$INDEX_IMAGE'\n'
 
-  docker push $INDEX_IMAGE
+  podman push $INDEX_IMAGE
 }
 
 # cleans up the working space

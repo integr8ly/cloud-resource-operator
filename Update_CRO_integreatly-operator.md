@@ -10,7 +10,6 @@ From your CRO branch, navigate to makefile and ensure that:
 must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CRO.
 - Run `make gen/csv` which will generate new manifests.
 - Ensure that the IMAGE_REG and IMAGE_ORG matches the desired repositories.
-- Create new CRO image by running `make image/build` and `make image/push` or point to the existing one in the CSV you have created.
 - Ensure that the replaces field is present and replaces the previous version.
 - If a version skip is required, update the CRO CSV(cloud-resources-operator.clusterserviceversion.yaml) with replaces and skips fields e.g. below yaml replaces 0.24.1 , skips 0.25.0 and 0.26.0 and installs 0.27.0
 ```yaml
@@ -20,7 +19,10 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
     - cloud-resources.v0.26.0
   version: 0.27.0
 ```
-- Run `make create/olm/bundle` - this will create and push bundles and indices to given repository, as well as validating them.
+- Once the package manifests are ready and merged to master run CRO release pipeline with default params. The pipeline will do the following:
+a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
+b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
+- Once the image, bundle and index are pushed, tag the CRO repo.
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
 
