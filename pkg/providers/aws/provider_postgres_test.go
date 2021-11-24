@@ -188,7 +188,7 @@ func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput)
 	return &rds.DescribeDBSnapshotsOutput{}, nil
 }
 
-func (m *mockRdsClient) ApplyPendingMaintenanceAction(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error){
+func (m *mockRdsClient) ApplyPendingMaintenanceAction(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
 	return &rds.ApplyPendingMaintenanceActionOutput{}, nil
 }
 func (m *mockRdsClient) DescribePendingMaintenanceActions(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {

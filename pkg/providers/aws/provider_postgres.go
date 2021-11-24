@@ -1217,7 +1217,7 @@ func rdsInstanceStatusIsHealthy(instance *rds.DBInstance) bool {
 	return resources.Contains(healthyAWSDBInstanceStatuses, *instance.DBInstanceStatus)
 }
 
-func (p *PostgresProvider)rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
+func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSvc.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{ResourceIdentifier: foundInstance.DBInstanceArn})
 	if err != nil {
