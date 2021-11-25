@@ -8,7 +8,7 @@ data:
   redis: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {}, "serviceUpdates": ["elasticache-20210615-002"]  }}
   postgres: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {}, "serviceUpdates": ["1642032000"]  }}
   _network: |
     {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
 
