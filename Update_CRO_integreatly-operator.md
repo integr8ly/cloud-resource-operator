@@ -70,10 +70,14 @@ packageName: rhmi-cloud-resources
 ## Update the Vendor, go.mod and go.sum
 
 ```bash
+# From the integreatly-operator repo
 go get github.com/integr8ly/cloud-resource-operator
 ```
 This should update the `go.mod` and `go.sum` file with the correct version from master
-
+```bash
+# From the integreatly-operator repo
+make vendor/fix
+```
 It should also add the latest version of CRO to the `vendor/` directory and update
 `vendor/modules.txt`
 
@@ -82,7 +86,7 @@ It should also add the latest version of CRO to the `vendor/` directory and upda
 In the integratly-operator go to `apis/v1alpha1/rhmi_types.go` and change the following variables 
 
 ```go
-VersionCloudResources      ProductVersion = "0.26.0" // replace the version wiht your new version here
+VersionCloudResources      ProductVersion = "0.26.0" // replace the version with your new version here
 
 OperatorVersionCloudResources      OperatorVersion = "0.26.0" //also replace it here
 ```
