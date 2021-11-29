@@ -195,7 +195,7 @@ func (r *PostgresReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error
 		}
 
 		// create the postgres instance
-		ps, msg, err := p.CreatePostgres(ctx, instance)
+		ps, msg, err := p.ReconcilePostgres(ctx, instance)
 		if err != nil {
 			instance.Status.SecretRef = &croType.SecretRef{}
 			if updateErr := resources.UpdatePhase(ctx, r.Client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
@@ -204,7 +204,7 @@ func (r *PostgresReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error
 			return ctrl.Result{}, err
 		}
 		if ps == nil {
-			r.logger.Info("secret data is still reconciling, postgres instance is nil")
+			r.logger.Info(msg)
 			instance.Status.SecretRef = &croType.SecretRef{}
 			if err = resources.UpdatePhase(ctx, r.Client, instance, croType.PhaseInProgress, msg); err != nil {
 				return ctrl.Result{}, err
