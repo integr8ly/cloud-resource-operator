@@ -87,7 +87,7 @@ func (p *PostgresProvider) GetReconcileTime(pg *v1alpha1.Postgres) time.Duration
 	return resources.GetForcedReconcileTimeOrDefault(defaultReconcileTime)
 }
 
-func (p *PostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, ps, DefaultFinalizer); err != nil {
 		errMsg := "failed to set finalizer"

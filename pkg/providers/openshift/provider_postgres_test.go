@@ -209,13 +209,13 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 				ConfigManager: tt.fields.ConfigManager,
 				PodCommander:  tt.fields.PodCommander,
 			}
-			got, _, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
+			got, _, err := p.ReconcilePostgres(tt.args.ctx, tt.args.postgres)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("CreatePostgres() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CreatePostgres() got = %+v, want %+v", got.DeploymentDetails, tt.want.DeploymentDetails)
+				t.Errorf("ReconcilePostgres() got = %+v, want %+v", got.DeploymentDetails, tt.want.DeploymentDetails)
 			}
 		})
 	}
@@ -415,7 +415,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 				Logger:        tt.fields.Logger,
 				ConfigManager: tt.fields.ConfigManager,
 			}
-			_, _, err := p.CreatePostgres(tt.args.ctx, tt.args.postgres)
+			_, _, err := p.ReconcilePostgres(tt.args.ctx, tt.args.postgres)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("overrideDefaults() error = %v, wantErr %v", err, tt.wantErr)
 				return

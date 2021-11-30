@@ -965,13 +965,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists)
+			got, _, err := p.reconcileRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("createRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("reconcileRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.want != nil && !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("createRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
+				t.Errorf("reconcileRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
 			}
 		})
 	}
@@ -1547,11 +1547,12 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 		foundInstance  *rds.DBInstance
 	}
 	tests := []struct {
-		name    string
-		args    args
-		fields  fields
-		want    croType.StatusMessage
-		wantErr bool
+		name       string
+		args       args
+		fields     fields
+		want       croType.StatusMessage
+		wantErr    bool
+		wantUpdate bool
 	}{
 		{
 			name: "test empty update status",
@@ -1586,8 +1587,9 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    croType.StatusEmpty,
-			wantErr: false,
+			want:       "completed check for service updates",
+			wantErr:    false,
+			wantUpdate: false,
 		},
 		{
 			name: "test populated update status",
@@ -1624,8 +1626,9 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 			},
-			want:    "service update completed successfully",
-			wantErr: false,
+			want:       "completed check for service updates",
+			wantErr:    false,
+			wantUpdate: true,
 		},
 	}
 	for _, tt := range tests {
@@ -1636,13 +1639,16 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.rdsCfg, tt.args.serviceUpdates, tt.args.foundInstance)
+			update, got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.rdsCfg, tt.args.serviceUpdates, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("rdsApplyStatusUpdate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
 				t.Errorf("rdsApplyStatusUpdate() got = %v, want %v", got, tt.want)
+			}
+			if update != tt.wantUpdate {
+				t.Errorf("rdsApplyStatusUpdate() update = %v, wantUpdate %v", update, tt.wantUpdate)
 			}
 		})
 	}
