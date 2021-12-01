@@ -45,7 +45,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 				logger: logrus.NewEntry(logrus.StandardLogger()),
 				vpc: &ec2.Vpc{
 					CidrBlock: aws.String("10.11.128.0/26"),
-					VpcId:     aws.String("test"),
+					VpcId:     aws.String(mockNetworkVpcId),
 				},
 			},
 			want: []string{
@@ -60,7 +60,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 				logger: logrus.NewEntry(logrus.StandardLogger()),
 				vpc: &ec2.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
-					VpcId:     aws.String("test"),
+					VpcId:     aws.String(mockNetworkVpcId),
 				},
 			},
 			want: []string{
