@@ -308,6 +308,10 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	if foundInstance != nil {
 		// check rds instance phase
 		msg := fmt.Sprintf("found instance %s current status %s", *foundInstance.DBInstanceIdentifier, *foundInstance.DBInstanceStatus)
+		// set the rds engine version in the status
+		if foundInstance.EngineVersion != nil && cr.Status.Version != *foundInstance.EngineVersion {
+			cr.Status.Version = *foundInstance.EngineVersion
+		}
 		if *foundInstance.DBInstanceStatus == "failed" {
 			logger.Error(msg)
 			return nil, croType.StatusMessage(msg), errorUtil.New(msg)

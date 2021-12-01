@@ -255,12 +255,6 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 		return nil, "started elasticache provision", nil
 	}
-
-	// check elasticache phase
-	if *foundCache.Status != "available" {
-		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
-		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
-	}
 	logger.Infof("found existing elasticache cluster %s", *foundCache.ReplicationGroupId)
 
 	cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
@@ -273,8 +267,19 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		cluster := *checkedCluster
 		if resources.SafeStringDereference(cluster.ReplicationGroupId) == *foundCache.ReplicationGroupId {
 			replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
+
+			if checkedCluster.EngineVersion != nil && r.Status.Version != *checkedCluster.EngineVersion {
+				r.Status.Version = *checkedCluster.EngineVersion
+			}
 		}
 	}
+
+	// check elasticache phase
+	if *foundCache.Status != "available" {
+		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
+		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
+	}
+	logger.Infof("found existing elasticache cluster %s", *foundCache.ReplicationGroupId)
 
 	// check if any modifications are required to bring the elasticache instance up to date with the strategy map.
 	modifyInput, err := buildElasticacheUpdateStrategy(ec2Svc, elasticacheConfig, foundCache, replicationGroupClusters, logger)

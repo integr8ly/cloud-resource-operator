@@ -482,6 +482,9 @@ func Test_createRedisCluster(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
 					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 						return &elasticache.DescribeReplicationGroupsOutput{
 							ReplicationGroups: []*elasticache.ReplicationGroup{
