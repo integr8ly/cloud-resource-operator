@@ -8,7 +8,11 @@ From your CRO branch, navigate to makefile and ensure that:
 - PREVIOUS_VERSION and VERSION match the desired versions.
 - PREVIOUS_OPERATOR_VERSION contains all the versions that the bundle aims to replace, for example, if you are making a release of version 0.25.0, the PREVIOUS_OPERATOR_VERSIONS
 must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CRO.
-- Run `make gen/csv` which will generate new manifests.
+
+Navigate to the version directory and ensure that:
+- PREVIOUS_VERSION is matching [version.go](https://github.com/integr8ly/cloud-resource-operator/blob/master/version/version.go).
+
+- Run `make gen/csv` which will generate new manifests, and patch the version in [version.go](https://github.com/integr8ly/cloud-resource-operator/blob/master/version/version.go).
 - Ensure that the IMAGE_REG and IMAGE_ORG matches the desired repositories.
 - Ensure that the replaces field is present and replaces the previous version.
 - If a version skip is required, update the CRO CSV(cloud-resources-operator.clusterserviceversion.yaml) with replaces and skips fields e.g. below yaml replaces 0.24.1 , skips 0.25.0 and 0.26.0 and installs 0.27.0
