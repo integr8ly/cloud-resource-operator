@@ -342,6 +342,63 @@ func Test_createRedisCluster(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			name: "test no error on cache clusters of type memcahced with no replicationgroupid",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{
+							CacheClusters: []*elasticache.CacheCluster{
+								{
+									CacheClusterId: aws.String("test-id"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+		{
 			name: "test elasticache buildReplicationGroupPending is called (valid cluster rhmi subnets)",
 			args: args{
 				ctx: context.TODO(),
