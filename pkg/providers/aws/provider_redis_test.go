@@ -407,7 +407,16 @@ func Test_createRedisCluster(t *testing.T) {
 						return &elasticache.DescribeReplicationGroupsOutput{}, nil
 					}
 				}),
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName)},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+				},
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
 				redisConfig:             &elasticache.CreateReplicationGroupInput{},
@@ -460,6 +469,11 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.vpcs = buildVpcs()
 					ec2Client.subnets = buildValidBundleSubnets()
 					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
 				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
@@ -497,6 +511,11 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.vpcs = buildVpcs()
 					ec2Client.subnets = buildValidBundleSubnets()
 					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
 				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
@@ -552,6 +571,11 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.vpcs = buildVpcs()
 					ec2Client.subnets = buildValidBundleSubnets()
 					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
 				}),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -605,6 +629,11 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.vpcs = buildVpcs()
 					ec2Client.subnets = buildValidBundleSubnets()
 					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
 				}),
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
