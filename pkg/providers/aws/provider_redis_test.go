@@ -120,7 +120,7 @@ func buildCacheClusterList(modifyFn func([]*elasticache.CacheCluster)) []*elasti
 		{
 			CacheClusterStatus: aws.String("available"),
 			ReplicationGroupId: aws.String("test-id"),
-			EngineVersion:      aws.String(defaultEngineVersion),
+			EngineVersion:      aws.String(DefaultEngineVersion),
 		},
 	}
 	if modifyFn != nil {
@@ -1154,7 +1154,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					SnapshotRetentionLimit:     aws.Int64(50),
 					PreferredMaintenanceWindow: aws.String("newValue"),
 					SnapshotWindow:             aws.String("newValue"),
-					EngineVersion:              aws.String(defaultEngineVersion),
+					EngineVersion:              aws.String(DefaultEngineVersion),
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					CacheNodeType:          aws.String("cache.test"),
@@ -1177,7 +1177,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
-				EngineVersion:              aws.String(defaultEngineVersion),
+				EngineVersion:              aws.String(DefaultEngineVersion),
 			},
 		},
 		{
@@ -1222,7 +1222,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					SnapshotRetentionLimit:     aws.Int64(50),
 					PreferredMaintenanceWindow: aws.String("newValue"),
 					SnapshotWindow:             aws.String("newValue"),
-					EngineVersion:              aws.String(defaultEngineVersion),
+					EngineVersion:              aws.String(DefaultEngineVersion),
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					ReplicationGroupId:     aws.String("test-id"),
@@ -1244,7 +1244,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
-				EngineVersion:              aws.String(defaultEngineVersion),
+				EngineVersion:              aws.String(DefaultEngineVersion),
 			},
 		},
 	}

@@ -42,7 +42,7 @@ const (
 	// default create params
 	defaultCacheNodeType = "cache.t3.micro"
 	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
-	defaultEngineVersion     = "5.0.6"
+	DefaultEngineVersion     = "5.0.6"
 	defaultDescription       = "A Redis replication group"
 	defaultNumCacheClusters  = 2
 	defaultSnapshotRetention = 31
@@ -768,7 +768,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 		elasticacheConfig.ReplicationGroupDescription = aws.String(defaultDescription)
 	}
 	if elasticacheConfig.EngineVersion == nil {
-		elasticacheConfig.EngineVersion = aws.String(defaultEngineVersion)
+		elasticacheConfig.EngineVersion = aws.String(DefaultEngineVersion)
 	}
 	if elasticacheConfig.NumCacheClusters == nil {
 		elasticacheConfig.NumCacheClusters = aws.Int64(defaultNumCacheClusters)

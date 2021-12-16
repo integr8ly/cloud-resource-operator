@@ -52,7 +52,7 @@ const (
 	defaultAwsBackupRetentionPeriod      = 31
 	defaultAwsDBInstanceClass            = "db.t3.small"
 	defaultAwsEngine                     = "postgres"
-	defaultAwsEngineVersion              = "10.16"
+	DefaultAwsEngineVersion              = "10.16"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
 	defaultAWSCopyTagsToSnapshot         = true
@@ -829,14 +829,14 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.MaxAllocatedStorage = aws.Int64(defaultAwsMaxAllocatedStorage)
 	}
 	if rdsCreateConfig.EngineVersion == nil {
-		rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+		rdsCreateConfig.EngineVersion = aws.String(DefaultAwsEngineVersion)
 	}
 	if rdsCreateConfig.StorageEncrypted == nil {
 		rdsCreateConfig.StorageEncrypted = aws.Bool(defaultStorageEncrypted)
 	}
 	if rdsCreateConfig.EngineVersion != nil {
 		if !resources.Contains(defaultSupportedEngineVersions, *rdsCreateConfig.EngineVersion) {
-			rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
+			rdsCreateConfig.EngineVersion = aws.String(DefaultAwsEngineVersion)
 		}
 	}
 	instanceName, err := p.buildInstanceName(ctx, pg)
