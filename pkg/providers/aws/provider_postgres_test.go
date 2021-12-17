@@ -90,6 +90,7 @@ type mockEc2Client struct {
 	describeRouteTablesFn           func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
 	createRouteFn                   func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
 	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
+	createVpcFn                     func(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error)
 	deleteVpcFn                     func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error)
 	describeInstanceTypeOfferingsFn func(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
 	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
@@ -288,10 +289,13 @@ func (m *mockEc2Client) WaitUntilVpcExists(input *ec2.DescribeVpcsInput) error {
 	return m.WaitUntilVpcExistsFn(input)
 }
 
-func (m *mockEc2Client) CreateVpc(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-	return &ec2.CreateVpcOutput{
-		Vpc: m.vpc,
-	}, nil
+func (m *mockEc2Client) CreateVpc(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+	if m.createVpcFn == nil {
+		return &ec2.CreateVpcOutput{
+			Vpc: m.vpc,
+		}, nil
+	}
+	return m.createVpcFn(input)
 }
 
 func (m *mockEc2Client) DeleteVpc(input *ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {

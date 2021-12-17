@@ -181,8 +181,14 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		})
 
 		ec2Err, isAwsErr := err.(awserr.Error)
-		if err != nil && isAwsErr && ec2Err.Code() == "InvalidVpc.Range" {
-			return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
+		if err != nil && isAwsErr {
+			resources.SetVpcAction("create", "failed", ec2Err.Code(), 1)
+			if ec2Err.Code() == "InvalidVpcRange" {
+				return nil, errorUtil.New(fmt.Sprintf("%s is out of range, block sizes must be between `/16` and `/26`, please update `_network` strategy", vpcCidrBlock.String()))
+			}
+			if ec2Err.Code() == "VpcLimitExceeded" {
+				return nil, errorUtil.New("cannot create vpc - vpc limit exceeded")
+			}
 		}
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "unexpected error creating vpc")
@@ -211,6 +217,9 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		}
 
 		logger.Infof("vpc %s is created with state: %s", *createVpcOutput.Vpc.VpcId, *createVpcOutput.Vpc.State)
+
+		// vpc created, reset metric
+		resources.ResetVpcAction()
 
 		// ensure standalone vpc has correct tags
 		clusterIDTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
