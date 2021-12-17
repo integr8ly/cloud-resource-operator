@@ -2,7 +2,6 @@
 
 approvers:
 - austincunningham
-- mikenairn
 - laurafitzgerald
 - MStokluska
 - pmccarthy
@@ -10,9 +9,19 @@ approvers:
 
 
 reviewers:
+- adam-cattermole
 - austincunningham
-- mikenairn
+- Boomatang
+- briangallagher
+- carlkyrillos
+- KevFan
 - laurafitzgerald
 - pmccarthy
 - MStokluska
-- briangallagher
+- martinhesko
+- makslion
+- philbrookes
+- psturc
+- Stellar-9
+- trepel
+- valerymo
