@@ -418,14 +418,32 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 			}
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
-				msg := "failed to add tags to aws elasticache snapshot"
-				return types.StatusMessage(msg), err
+				cacheErr, isAwsErr := err.(awserr.Error)
+				if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
+					// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
+					logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
+					labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
+					resources.SetMetric(resources.DefaultRedisSnapshotNotAvailable, labels, 1)
+				} else {
+					msg := "failed to add tags to aws elasticache snapshot"
+					return types.StatusMessage(msg), err
+				}
 			}
 		}
 	}
 
 	logrus.Infof("successfully created or updated tags to elasticache node %s", *cache.CacheClusterId)
 	return "successfully created and tagged", nil
+}
+
+func buildCacheSnapshotNotFoundLabels(clusterID string, arn string, snapshotName *string, cacheClusterID *string, cacheArn string) map[string]string {
+	labels := map[string]string{}
+	labels["clusterID"] = clusterID
+	labels["arn"] = arn
+	labels["cacheClusterId"] = resources.SafeStringDereference(cacheClusterID)
+	labels["snapshotName"] = resources.SafeStringDereference(snapshotName)
+	labels["cacheArn"] = cacheArn
+	return labels
 }
 
 //DeleteRedis Delete elasticache replication group
