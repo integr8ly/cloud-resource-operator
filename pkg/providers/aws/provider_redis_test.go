@@ -3,19 +3,20 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
-
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	croApis "github.com/integr8ly/cloud-resource-operator/apis"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -39,9 +40,10 @@ import (
 )
 
 var (
-	testLogger  = logrus.WithFields(logrus.Fields{"testing": "true"})
-	testAddress = aws.String("redis")
-	testPort    = aws.Int64(6397)
+	testLogger   = logrus.WithFields(logrus.Fields{"testing": "true"})
+	testAddress  = aws.String("redis")
+	testPort     = aws.Int64(6397)
+	snapshotName = "test-snapshot"
 )
 
 type mockElasticacheClient struct {
@@ -64,6 +66,7 @@ type mockElasticacheClient struct {
 	describeUpdateActionsFn     func(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error)
 	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
 	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
+	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
 
 	calls struct {
 		DescribeSnapshots []struct {
@@ -185,8 +188,12 @@ func (m *mockElasticacheClient) DeleteReplicationGroup(*elasticache.DeleteReplic
 }
 
 // mock elasticache AddTagsToResource output
-func (m *mockElasticacheClient) AddTagsToResource(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
-	return &elasticache.TagListMessage{}, nil
+func (m *mockElasticacheClient) AddTagsToResource(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+	if resources.DerefString(input.ResourceName) == "arn:aws:elasticache:tes:test:cluster:test" {
+		return &elasticache.TagListMessage{}, nil
+	} else {
+		return m.addTagsToResourceFn(input)
+	}
 }
 
 // mock elasticache DescribeSnapshots
@@ -996,7 +1003,16 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 						}, nil
 					}
 					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{}, nil
+						return &elasticache.DescribeSnapshotsOutput{
+							Snapshots: []*elasticache.Snapshot{
+								&elasticache.Snapshot{
+									SnapshotName: &snapshotName,
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 				}),
 				stsSvc:   &mockStsClient{},
@@ -1014,6 +1030,126 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			},
 			want:    types.StatusMessage("successfully created and tagged"),
 			wantErr: false,
+		},
+		{
+			name: "test tags reconcile completes successfully with a DBClusterSnapshotNotFound error",
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{
+							CacheClusters: buildCacheClusterList(nil),
+						}, nil
+					}
+					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
+						return &elasticache.DescribeSnapshotsOutput{
+							Snapshots: []*elasticache.Snapshot{
+								&elasticache.Snapshot{
+									SnapshotName: &snapshotName,
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return nil, awserr.New(elasticache.ErrCodeSnapshotNotFoundFault, elasticache.ErrCodeSnapshotNotFoundFault, fmt.Errorf("%v", elasticache.ErrCodeSnapshotNotFoundFault))
+					}
+				}),
+				stsSvc:   &mockStsClient{},
+				stratCfg: StrategyConfig{Region: "test"},
+				cache: &elasticache.NodeGroupMember{
+					CacheClusterId:            aws.String("test"),
+					CacheNodeId:               aws.String("test"),
+					PreferredAvailabilityZone: aws.String("test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				ConfigManager:     &ConfigManagerMock{},
+				CredentialManager: &CredentialManagerMock{},
+			},
+			want:    types.StatusMessage("successfully created and tagged"),
+			wantErr: false,
+		},
+		{
+			name: "test tags reconcile fails with any other than expected aws error",
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{
+							CacheClusters: buildCacheClusterList(nil),
+						}, nil
+					}
+					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
+						return &elasticache.DescribeSnapshotsOutput{
+							Snapshots: []*elasticache.Snapshot{
+								&elasticache.Snapshot{
+									SnapshotName: &snapshotName,
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return nil, awserr.New(elasticache.ErrCodeSnapshotAlreadyExistsFault, elasticache.ErrCodeSnapshotAlreadyExistsFault, fmt.Errorf("%v", elasticache.ErrCodeSnapshotAlreadyExistsFault))
+					}
+				}),
+				stsSvc:   &mockStsClient{},
+				stratCfg: StrategyConfig{Region: "test"},
+				cache: &elasticache.NodeGroupMember{
+					CacheClusterId:            aws.String("test"),
+					CacheNodeId:               aws.String("test"),
+					PreferredAvailabilityZone: aws.String("test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				ConfigManager:     &ConfigManagerMock{},
+				CredentialManager: &CredentialManagerMock{},
+			},
+			want:    types.StatusMessage("failed to add tags to aws elasticache snapshot"),
+			wantErr: true,
+		},
+		{
+			name: "test tags reconcile fails with any other generic error",
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{
+							CacheClusters: buildCacheClusterList(nil),
+						}, nil
+					}
+					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
+						return &elasticache.DescribeSnapshotsOutput{
+							Snapshots: []*elasticache.Snapshot{
+								&elasticache.Snapshot{
+									SnapshotName: &snapshotName,
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return nil, fmt.Errorf("%v", elasticache.ErrCodeSnapshotAlreadyExistsFault)
+					}
+				}),
+				stsSvc:   &mockStsClient{},
+				stratCfg: StrategyConfig{Region: "test"},
+				cache: &elasticache.NodeGroupMember{
+					CacheClusterId:            aws.String("test"),
+					CacheNodeId:               aws.String("test"),
+					PreferredAvailabilityZone: aws.String("test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				ConfigManager:     &ConfigManagerMock{},
+				CredentialManager: &CredentialManagerMock{},
+			},
+			want:    types.StatusMessage("failed to add tags to aws elasticache snapshot"),
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
