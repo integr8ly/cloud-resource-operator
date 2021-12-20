@@ -57,7 +57,6 @@ const (
 	defaultNumberOfExpectedSubnets       = 2
 	clusterOwnedTagKeyPrefix             = "kubernetes.io/cluster/"
 	clusterOwnedTagValue                 = "owned"
-	clusterSharedTagValue                = "shared"
 	//network peering
 	tagVpcPeeringNameValue = "RHMI Cloud Resource Peering Connection"
 	// filter names for vpc peering connections
@@ -360,12 +359,18 @@ func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context, network *
 		return nil, errorUtil.Wrap(err, "failure while reconciling standalone security group")
 	}
 
-	// find cluster vpc route tables using associated cluster subnets
-	// multiples route tables can exist for a single vpc (main and secondary)
-	logger.Info("finding cluster route table(s) using associated cluster subnets")
-	clusterVpcRouteTables, err := n.getClusterRouteTables(ctx)
+	// a tag for identifying cluster owned vpc resources
+	clusterVpcRouteTableTag, err := getClusterOwnerTag(ctx, n.Client)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failure while getting vpc route tables")
+		return nil, errorUtil.Wrap(err, "error building cluster owner tag")
+	}
+
+	// find cluter vpc route tables using cluster vpc route table tag
+	// multiples route tables can exist for a single vpc (main and secondary)
+	logger.Info("finding cluster route table(s)")
+	clusterVpcRouteTables, err := n.getVPCRouteTable(clusterVpcRouteTableTag)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failure while getting vpc route table")
 	}
 	logger.Infof("found %d cluster vpc route tables", len(clusterVpcRouteTables))
 
@@ -403,9 +408,15 @@ func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context, network *
 		}
 	}
 
+	// get croOwner tag to use in getting standalone vpc route tables
+	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
+	}
+
 	// get standalone vpc route table using cro owner tag
 	logger.Info("finding standalone route table(s)")
-	standAloneVpcRouteTables, err := n.getCRORouteTables(ctx)
+	standAloneVpcRouteTables, err := n.getVPCRouteTable(genericToEc2Tag(croOwnerTag))
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting standalone vpc route tables")
 	}
@@ -468,10 +479,16 @@ func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context, networkPe
 		}
 	}
 
-	// find cluster vpc route tables using cluster vpcID
+	// a tag for identifying cluster owned vpc resources
+	clusterVpcRouteTableTag, err := getClusterOwnerTag(ctx, n.Client)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building cluster owner tag")
+	}
+
+	// find cluster vpc route tables using cluster vpc route table tag
 	// multiple route tables can exist for a single vpc (main and secondary)
 	logger.Info("finding cluster route table(s)")
-	clusterVpcRouteTables, err := n.getClusterRouteTables(ctx)
+	clusterVpcRouteTables, err := n.getVPCRouteTable(clusterVpcRouteTableTag)
 	if err != nil {
 		return errorUtil.Wrap(err, "failure while getting vpc route table")
 	}
@@ -516,7 +533,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 
 	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, n.Logger)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get cluster vpc, no vpc found")
+		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
 
 	peeringConnection, err := n.getNetworkPeering(ctx, network)
@@ -1159,37 +1176,9 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	return subs, nil
 }
 
-func (n *NetworkProvider) getClusterRouteTables(ctx context.Context) ([]*ec2.RouteTable, error) {
-	routeTables, err := n.Ec2Api.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get route tables")
-	}
-
-	clusterVPC, err := getClusterVpc(ctx, n.Client, n.Ec2Api, n.Logger)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
-	}
-	var foundRouteTables []*ec2.RouteTable
-	for _, routeTable := range routeTables.RouteTables {
-		if routeTable != nil && *routeTable.VpcId == *clusterVPC.VpcId {
-			foundRouteTables = append(foundRouteTables, routeTable)
-		}
-	}
-	if len(foundRouteTables) == 0 {
-		return nil, errorUtil.New(fmt.Sprintf("could not find any route table with the associated vpc id %s", aws.StringValue(clusterVPC.VpcId)))
-	}
-	return foundRouteTables, nil
-}
-
-// getCRORouteTables will return a list of route tables based on a route table tag
+// getVPCRouteTable will return a list of route tables based on a route table tag
 // we expect there to be route tables, if none are found we return an error
-func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTable, error) {
-	// get croOwner tag to use in getting standalone vpc route tables
-	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
-	}
-
+func (n *NetworkProvider) getVPCRouteTable(routeTableTag *ec2.Tag) ([]*ec2.RouteTable, error) {
 	routeTables, err := n.Ec2Api.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get route tables")
@@ -1198,13 +1187,13 @@ func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTa
 	var foundRouteTables []*ec2.RouteTable
 	for _, routeTable := range routeTables.RouteTables {
 		routeTableTags := ec2TagsToGeneric(routeTable.Tags)
-		if tagsContains(routeTableTags, aws.StringValue(genericToEc2Tag(croOwnerTag).Key), aws.StringValue(genericToEc2Tag(croOwnerTag).Value)) {
+		if tagsContains(routeTableTags, aws.StringValue(routeTableTag.Key), aws.StringValue(routeTableTag.Value)) {
 			foundRouteTables = append(foundRouteTables, routeTable)
 		}
 	}
 
 	if len(foundRouteTables) == 0 {
-		return nil, errorUtil.New(fmt.Sprintf("could not find any route table with the tag key: %s and value: %s", aws.StringValue(genericToEc2Tag(croOwnerTag).Key), aws.StringValue(genericToEc2Tag(croOwnerTag).Value)))
+		return nil, errorUtil.New(fmt.Sprintf("could not find any route table with the tag key: %s and value: %s", aws.StringValue(routeTableTag.Key), aws.StringValue(routeTableTag.Value)))
 	}
 	return foundRouteTables, nil
 }
@@ -1758,14 +1747,6 @@ func getCloudResourceOperatorOwnerTag(ctx context.Context, client client.Client)
 // denoted -> ` kubernetes.io/cluster/<cluster-id>=owned
 // this utility function builds and returns the tag
 func getClusterOwnerTag(ctx context.Context, client client.Client) (*ec2.Tag, error) {
-	return getClusterTag(ctx, client, clusterOwnedTagValue)
-}
-
-func getClusterSharedTag(ctx context.Context, client client.Client) (*ec2.Tag, error) {
-	return getClusterTag(ctx, client, clusterSharedTagValue)
-}
-
-func getClusterTag(ctx context.Context, client client.Client, tagValue string) (*ec2.Tag, error) {
 	clusterID, err := resources.GetClusterID(ctx, client)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
@@ -1773,8 +1754,8 @@ func getClusterTag(ctx context.Context, client client.Client, tagValue string) (
 
 	// a tag for identifying cluster owned vpcs
 	return &ec2.Tag{
-		Key:   aws.String(getOSDClusterTagKey(clusterID)),
-		Value: aws.String(tagValue),
+		Key:   aws.String(fmt.Sprintf("%s%s", clusterOwnedTagKeyPrefix, clusterID)),
+		Value: aws.String(clusterOwnedTagValue),
 	}, nil
 }
 

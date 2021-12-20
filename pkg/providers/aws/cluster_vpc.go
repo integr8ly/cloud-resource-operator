@@ -457,27 +457,14 @@ func getSubnets(ec2Svc ec2iface.EC2API) ([]*ec2.Subnet, error) {
 	return subs, nil
 }
 
-func getVPCIDByClusterSubnets(ec2Svc ec2iface.EC2API, clusterID string) (string, error) {
-	listOutput, err := ec2Svc.DescribeSubnets(&ec2.DescribeSubnetsInput{})
-	if err != nil {
-		return "", err
-	}
-
-	for _, sub := range listOutput.Subnets {
-		for _, tag := range sub.Tags {
-			if tag != nil && (*tag.Value == "owned" || *tag.Value == "shared") &&
-				*tag.Key == getOSDClusterTagKey(clusterID) {
-				return *sub.VpcId, nil
-			}
-		}
-	}
-	return "", errorUtil.New(fmt.Sprintf("failed to get cluster vpc id, no vpc found with osd cluster tag: could not find cluster associated subnets with clusterID %s", clusterID))
-}
-
 // function to get vpc of a cluster
 func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, logger *logrus.Entry) (*ec2.Vpc, error) {
 	// first call to aws api from the network provider is to get cluster vpc
 	// polling to allow credential minter time to reconcile credentials
+	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting vpcs")
+	}
 
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
@@ -485,24 +472,22 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API,
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
 	}
 
-	vpcId, err := getVPCIDByClusterSubnets(ec2Svc, clusterID)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting vpc id from associated subnets")
+	// find associated vpc to cluster
+	var foundVPC *ec2.Vpc
+	logger.Infof("searching for cluster %s vpc", clusterID)
+	for _, vpc := range vpcs.Vpcs {
+		for _, tag := range vpc.Tags {
+			if *tag.Value == fmt.Sprintf("%s-vpc", clusterID) {
+				foundVPC = vpc
+			}
+		}
 	}
 
-	vpcs, err := ec2Svc.DescribeVpcs(&ec2.DescribeVpcsInput{VpcIds: []*string{aws.String(vpcId)}})
-	if err != nil {
-		return nil, errorUtil.Wrap(err, fmt.Sprintf("error getting vpc with id %s", vpcId))
-	}
-
-	if len(vpcs.Vpcs) == 0 {
+	if foundVPC == nil {
 		return nil, errorUtil.New("error, no vpc found")
 	}
-	if len(vpcs.Vpcs) > 1 {
-		return nil, errorUtil.New("error, more than one vpc found associated with cluster subnets")
-	}
-	logger.Infof("found cluster %s vpc %s", clusterID, *vpcs.Vpcs[0].VpcId)
-	return vpcs.Vpcs[0], nil
+	logger.Infof("found cluster %s vpc %s", clusterID, *foundVPC.VpcId)
+	return foundVPC, nil
 }
 
 // getSecurityGroup a utility function for returning cro resource security group
@@ -525,8 +510,4 @@ func getSecurityGroup(ec2Svc ec2iface.EC2API, secName string) (*ec2.SecurityGrou
 	}
 
 	return foundSecGroup, nil
-}
-
-func getOSDClusterTagKey(clusterID string) string {
-	return fmt.Sprintf("%s%s", clusterOwnedTagKeyPrefix, clusterID)
 }
