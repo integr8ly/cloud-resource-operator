@@ -4,13 +4,13 @@ IMAGE_NAME ?= cloud-resource-operator
 OPERATOR_IMG = $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):v$(VERSION)
 MANIFEST_NAME ?= cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.32.0
-VERSION=0.32.1
+PREV_VERSION=0.32.1
+VERSION=0.33.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 UPGRADE ?= true
 CHANNEL ?= rhmi
 
-PREVIOUS_OPERATOR_VERSIONS="0.32.0,0.31.0,0.30.0,0.29.0,0.28.0,0.27.1,0.27.0,0.26.0,0.25.0,0.24.1,0.24.0,0.23.0"
+PREVIOUS_OPERATOR_VERSIONS="0.32.1,0.32.0,0.31.0,0.30.0,0.29.0,0.28.0,0.27.1,0.27.0,0.26.0,0.25.0,0.24.1,0.24.0,0.23.0"
 
 SHELL=/bin/bash
 
@@ -66,6 +66,7 @@ code/gen: manifests kustomize generate
 .PHONY: gen/csv
 gen/csv:
 	@$(KUSTOMIZE) build config/manifests | operator-sdk generate packagemanifests --kustomize-dir=config/manifests --output-dir packagemanifests/ --version ${VERSION} --default-channel --channel integreatly
+
 	@sed -i "s/Version = \"${PREV_VERSION}\"/Version = \"${VERSION}\"/g" version/version.go
 	@yq w -i "packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml" metadata.annotations.containerImage ${OPERATOR_IMG}
 	@yq w -i "packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml" metadata.name cloud-resources.v$(VERSION)

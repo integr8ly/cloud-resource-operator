@@ -120,7 +120,7 @@ func buildMockVpc(modifyFn func(*ec2.Vpc)) *ec2.Vpc {
 func buildMockEc2Tag(modifyFn func(*ec2.Tag)) *ec2.Tag {
 	mock := &ec2.Tag{
 		Key:   aws.String(defaultRHMISubnetTag),
-		Value: aws.String(dafaultInfraName),
+		Value: aws.String(defaultInfraName),
 	}
 	if modifyFn != nil {
 		modifyFn(mock)
@@ -282,7 +282,7 @@ func buildValidStandaloneVPCTags() []*ec2.Tag {
 		},
 		{
 			Key:   aws.String("integreatly.org/clusterID"),
-			Value: aws.String(dafaultInfraName),
+			Value: aws.String(defaultInfraName),
 		},
 	}
 }
@@ -378,7 +378,7 @@ func buildValidCIDR(cidr string) *net.IPNet {
 }
 
 func buildSubnetGroupID() string {
-	return resources.ShortenString(fmt.Sprintf("%s-%s", dafaultInfraName, "subnet-group"), DefaultAwsIdentifierLength)
+	return resources.ShortenString(fmt.Sprintf("%s-%s", defaultInfraName, "subnet-group"), DefaultAwsIdentifierLength)
 }
 
 func buildSubnetGroupDescription() string {

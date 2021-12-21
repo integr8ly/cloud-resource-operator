@@ -2,27 +2,27 @@ package aws
 
 import (
 	"context"
+	"fmt"
+	errorUtil "github.com/pkg/errors"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	errorUtil "github.com/pkg/errors"
-
 	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
-
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	croApis "github.com/integr8ly/cloud-resource-operator/apis"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -38,12 +38,15 @@ const (
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
 	defaultVpcId                   = "testID"
-	dafaultInfraName               = "test"
+	defaultInfraName               = "test"
 )
 
 var (
 	lockMockEc2ClientDescribeRouteTables    sync.RWMutex
 	lockMockEc2ClientDescribeSecurityGroups sync.RWMutex
+	lockMockEc2ClientDescribeSubnets        sync.RWMutex
+	snapshotARN                             = "test:arn"
+	snapshotIdentifier                      = "testIdentifier"
 )
 
 type mockRdsClient struct {
@@ -60,6 +63,8 @@ type mockRdsClient struct {
 	listTagsForResourceFn    func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
 	removeTagsFromResourceFn func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
 	deleteDBSubnetGroupFn    func(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error)
+	addTagsToResourceFn      func(*rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error)
+	describeDBSnapshotsFn    func(*rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error)
 }
 
 type mockEc2Client struct {
@@ -181,11 +186,15 @@ func (m *mockRdsClient) DeleteDBInstance(*rds.DeleteDBInstanceInput) (*rds.Delet
 }
 
 func (m *mockRdsClient) AddTagsToResource(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-	return &rds.AddTagsToResourceOutput{}, nil
+	if resources.SafeStringDereference(input.ResourceName) == snapshotARN {
+		return m.addTagsToResourceFn(input)
+	} else {
+		return &rds.AddTagsToResourceOutput{}, nil
+	}
 }
 
 func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-	return &rds.DescribeDBSnapshotsOutput{}, nil
+	return m.describeDBSnapshotsFn(input)
 }
 
 func (m *mockRdsClient) ApplyPendingMaintenanceAction(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
@@ -478,7 +487,7 @@ func buildTestInfra() *v12.Infrastructure {
 			Name: "cluster",
 		},
 		Status: v12.InfrastructureStatus{
-			InfrastructureName: dafaultInfraName,
+			InfrastructureName: defaultInfraName,
 		},
 	}
 }
@@ -701,7 +710,7 @@ func buildVpcs() []*ec2.Vpc {
 func buildSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
-			VpcId:            aws.String("testID"),
+			VpcId:            aws.String(defaultVpcId),
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
@@ -778,8 +787,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds CreateReplicationGroup is called (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:                  &mockRdsClient{dbInstances: []*rds.DBInstance{}},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             &rds.CreateDBInstanceInput{},
@@ -801,9 +815,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
 					rdsClient.dbInstances = buildAvailableDBInstance(testIdentifier)
 				}),
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:    context.TODO(),
-				cr:     buildTestPostgresCR(),
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -829,9 +848,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			name: "test rds exists and is not available (valid cluster bundle subnets)",
 			args: args{
 				rdsSvc: &mockRdsClient{dbInstances: buildPendingDBInstance(testIdentifier)},
-				ec2Svc: &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
-				ctx:    context.TODO(),
-				cr:     buildTestPostgresCR(),
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -850,8 +874,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:                  &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -870,8 +899,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and does not need to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:                  &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				rdsSvc: &mockRdsClient{dbInstances: buildAvailableDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildAvailableCreateInput(testIdentifier),
@@ -890,8 +924,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to be modified but maintenance is pending (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:                  &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				rdsSvc: &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -910,8 +949,13 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to update pending maintenance (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc:                  &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
-				ec2Svc:                  &mockEc2Client{vpcs: buildVpcs(), subnets: buildValidBundleSubnets(), secGroups: buildSecurityGroups(secName), azs: buildAZ()},
+				rdsSvc: &mockRdsClient{dbInstances: buildPendingModifiedDBInstance(testIdentifier)},
+				ec2Svc: &mockEc2Client{
+					vpcs:      buildVpcs(),
+					subnets:   buildValidBundleSubnets(),
+					secGroups: buildSecurityGroups(secName),
+					azs:       buildAZ(),
+				},
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildNewRequiresModificationsCreateInput(testIdentifier),
@@ -1223,9 +1267,24 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 		{
 			name: "test tagging is successful",
 			args: args{
-				ctx:    context.TODO(),
-				cr:     buildTestPostgresCR(),
-				rdsSvc: &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
+				rdsSvc: &mockRdsClient{
+					dbInstances: []*rds.DBInstance{},
+					addTagsToResourceFn: func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+						return &rds.AddTagsToResourceOutput{}, nil
+					},
+					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+						return &rds.DescribeDBSnapshotsOutput{
+							DBSnapshots: []*rds.DBSnapshot{
+								&rds.DBSnapshot{
+									DBSnapshotArn:        &snapshotARN,
+									DBSnapshotIdentifier: &snapshotIdentifier,
+								},
+							},
+						}, nil
+					},
+				},
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
@@ -1240,6 +1299,42 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 			},
 			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
+		},
+		{
+			name: "test tagging is unsuccessful if any non-aws error is returned",
+			args: args{
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
+				rdsSvc: &mockRdsClient{
+					dbInstances: []*rds.DBInstance{},
+					addTagsToResourceFn: func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+						return nil, fmt.Errorf("%v", rds.ErrCodeDBSnapshotAlreadyExistsFault)
+					},
+					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+						return &rds.DescribeDBSnapshotsOutput{
+							DBSnapshots: []*rds.DBSnapshot{
+								&rds.DBSnapshot{
+									DBSnapshotArn:        &snapshotARN,
+									DBSnapshotIdentifier: &snapshotIdentifier,
+								},
+							},
+						}, nil
+					},
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+					AvailabilityZone:     aws.String("test-availabilityZone"),
+					DBInstanceArn:        aws.String("arn:test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			want:    croType.StatusMessage("Failed to add Tags to RDS Snapshot"),
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
