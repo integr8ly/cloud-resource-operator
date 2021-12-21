@@ -79,10 +79,10 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    containerImage: quay.io/integreatly/cloud-resource-operator:v0.32.2
+    containerImage: quay.io/integreatly/cloud-resource-operator:v0.33.0
     operators.operatorframework.io/builder: operator-sdk-v1.2.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
-  name: cloud-resources.v0.32.2
+  name: cloud-resources.v0.33.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -169,7 +169,7 @@ spec:
                         value: cloud-resource-operator
                       - name: TAG_KEY_PREFIX
                         value: integreatly.org/
-                    image: quay.io/integreatly/cloud-resource-operator:v0.32.2
+                    image: quay.io/integreatly/cloud-resource-operator:v0.33.0
                     imagePullPolicy: Always
                     name: cloud-resource-operator
                     resources: {}
@@ -329,5 +329,10 @@ spec:
   maturity: alpha
   provider:
     name: Integreatly
-  replaces: cloud-resources.v0.32.1
-  version: 0.32.2
+  replaces: cloud-resources.v0.30.0
+  skips:
+    - cloud-resources.v0.31.0
+    - cloud-resources.v0.32.0
+    - cloud-resources.v0.32.1
+    - cloud-resources.v0.32.2
+  version: 0.33.0
