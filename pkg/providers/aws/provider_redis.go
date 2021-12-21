@@ -406,6 +406,9 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 		CacheClusterId: aws.String(*cache.CacheClusterId),
 	}
 
+	metricName := resources.DefaultRedisSnapshotNotAvailable+"_"+strings.ToLower(r.Name)
+	// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
+	resources.ResetMetric(metricName)
 	// loop snapshots adding tags per found snapshot
 	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
 	if snapshotList.Snapshots != nil {
@@ -416,19 +419,20 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 				ResourceName: aws.String(snapshotArn),
 				Tags:         cacheTags,
 			}
+			labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
 				cacheErr, isAwsErr := err.(awserr.Error)
 				if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
 					// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
 					logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
-					labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
-					resources.SetMetric(resources.DefaultRedisSnapshotNotAvailable, labels, 1)
+					resources.SetMetric(metricName, labels, 1)
 				} else {
 					msg := "failed to add tags to aws elasticache snapshot"
 					return types.StatusMessage(msg), err
 				}
 			}
+			resources.SetMetric(metricName, labels, 0)
 		}
 	}
 

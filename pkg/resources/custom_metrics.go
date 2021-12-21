@@ -68,6 +68,18 @@ func StartGaugeVector() {
 	}()
 }
 
+func ResetMetric(name string) {
+	logrus.Info(fmt.Sprintf("Resetting metric %s", name))
+	// set vector value
+	gv, ok := MetricVecs[name]
+	if ok {
+		gv.Reset()
+		logrus.Info(fmt.Sprintf("successfully reset metric value for %s", name))
+		return
+	}
+	logrus.Error(fmt.Sprintf("Error reset metric value for %s", name))
+}
+
 //SetMetric Set exports a Prometheus Gauge
 func SetMetric(name string, labels map[string]string, value float64) {
 	// set vector value
