@@ -330,4 +330,6 @@ spec:
   provider:
     name: Integreatly
   replaces: cloud-resources.v0.32.1
+  skips:
+    - cloud-resources.v0.32.2
   version: 0.33.0
