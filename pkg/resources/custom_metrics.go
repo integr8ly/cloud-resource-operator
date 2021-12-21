@@ -35,6 +35,8 @@ const (
 	DefaultRedisStatusMetricName              = "cro_redis_status_phase"
 	DefaultRedisDeletionMetricName            = "cro_redis_deletion_timestamp"
 	DefaultRedisSnapshotStatusMetricName      = "cro_redis_snapshot_status_phase"
+	DefaultRedisSnapshotNotAvailable          = "cro_redis_snapshot_not_found"
+	DefaultPostgresSnapshotNotAvailable       = "cro_postgres_snapshot_not_found"
 	DefaultBlobStorageStatusMetricName        = "cro_blobstorage_status_phase"
 
 	BytesInGibiBytes = 1073741824
