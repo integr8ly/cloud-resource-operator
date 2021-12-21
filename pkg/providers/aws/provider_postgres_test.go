@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -1300,78 +1299,6 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 			},
 			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
-		},
-		{
-			name: "test tagging is successful if an error ErrCodeDBSnapshotNotFoundFault is returned",
-			args: args{
-				ctx: context.TODO(),
-				cr:  buildTestPostgresCR(),
-				rdsSvc: &mockRdsClient{
-					dbInstances: []*rds.DBInstance{},
-					addTagsToResourceFn: func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					},
-					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
-							},
-						}, nil
-					},
-				},
-				foundInstance: &rds.DBInstance{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-					AvailabilityZone:     aws.String("test-availabilityZone"),
-					DBInstanceArn:        aws.String("arn:test"),
-				},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			want:    croType.StatusMessage("successfully created and tagged"),
-			wantErr: false,
-		},
-		{
-			name: "test tagging is unsuccessful if any other aws error than ErrCodeDBSnapshotNotFoundFault is returned",
-			args: args{
-				ctx: context.TODO(),
-				cr:  buildTestPostgresCR(),
-				rdsSvc: &mockRdsClient{
-					dbInstances: []*rds.DBInstance{},
-					addTagsToResourceFn: func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotAlreadyExistsFault, rds.ErrCodeDBSnapshotAlreadyExistsFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotAlreadyExistsFault))
-					},
-					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
-							},
-						}, nil
-					},
-				},
-				foundInstance: &rds.DBInstance{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-					AvailabilityZone:     aws.String("test-availabilityZone"),
-					DBInstanceArn:        aws.String("arn:test"),
-				},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			want:    croType.StatusMessage("Failed to add Tags to RDS Snapshot"),
-			wantErr: true,
 		},
 		{
 			name: "test tagging is unsuccessful if any non-aws error is returned",
