@@ -408,7 +408,10 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 
 	// loop snapshots adding tags per found snapshot
 	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
-	if snapshotList.Snapshots != nil {
+	if snapshotList.Snapshots != nil && len(snapshotList.Snapshots) > 0 {
+		metricName := getMetricName(r.Name)
+		// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
+		resources.ResetMetric(metricName)
 		for _, snapshot := range snapshotList.Snapshots {
 			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
 			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
@@ -416,19 +419,20 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 				ResourceName: aws.String(snapshotArn),
 				Tags:         cacheTags,
 			}
+			labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
 			_, err = cacheSvc.AddTagsToResource(snapshotInput)
 			if err != nil {
 				cacheErr, isAwsErr := err.(awserr.Error)
 				if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
 					// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
 					logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
-					labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
-					resources.SetMetric(resources.DefaultRedisSnapshotNotAvailable, labels, 1)
+					resources.SetMetric(metricName, labels, 1)
 				} else {
 					msg := "failed to add tags to aws elasticache snapshot"
 					return types.StatusMessage(msg), err
 				}
 			}
+			resources.SetMetric(metricName, labels, 0)
 		}
 	}
 
@@ -436,12 +440,18 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 	return "successfully created and tagged", nil
 }
 
+func getMetricName(redisName string) string {
+	// Convention for CRs is - but _ for prom metrics
+	name := strings.ReplaceAll(redisName, "-", "_")
+	return resources.DefaultRedisSnapshotNotAvailable + "_" + strings.ToLower(name)
+}
+
 func buildCacheSnapshotNotFoundLabels(clusterID string, arn string, snapshotName *string, cacheClusterID *string, cacheArn string) map[string]string {
 	labels := map[string]string{}
 	labels["clusterID"] = clusterID
 	labels["arn"] = arn
-	labels["cacheClusterId"] = resources.DerefString(cacheClusterID)
-	labels["snapshotName"] = resources.DerefString(snapshotName)
+	labels["cacheClusterId"] = resources.SafeStringDereference(cacheClusterID)
+	labels["snapshotName"] = resources.SafeStringDereference(snapshotName)
 	labels["cacheArn"] = cacheArn
 	return labels
 }
