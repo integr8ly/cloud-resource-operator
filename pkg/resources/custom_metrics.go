@@ -77,7 +77,6 @@ func ResetMetric(name string) {
 		logrus.Info(fmt.Sprintf("successfully reset metric value for %s", name))
 		return
 	}
-	logrus.Error(fmt.Sprintf("Error reset metric value for %s", name))
 }
 
 //SetMetric Set exports a Prometheus Gauge

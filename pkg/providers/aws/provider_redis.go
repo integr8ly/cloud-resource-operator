@@ -406,12 +406,12 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 		CacheClusterId: aws.String(*cache.CacheClusterId),
 	}
 
-	metricName := resources.DefaultRedisSnapshotNotAvailable+"_"+strings.ToLower(r.Name)
-	// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
-	resources.ResetMetric(metricName)
 	// loop snapshots adding tags per found snapshot
 	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
-	if snapshotList.Snapshots != nil {
+	if snapshotList.Snapshots != nil && len(snapshotList.Snapshots) > 0 {
+		metricName := getMetricName(r.Name)
+		// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
+		resources.ResetMetric(metricName)
 		for _, snapshot := range snapshotList.Snapshots {
 			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
 			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
@@ -438,6 +438,12 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 
 	logrus.Infof("successfully created or updated tags to elasticache node %s", *cache.CacheClusterId)
 	return "successfully created and tagged", nil
+}
+
+func getMetricName(redisName string) string {
+	// Convention for CRs is - but _ for prom metrics
+	name := strings.ReplaceAll(redisName, "-", "_")
+	return resources.DefaultRedisSnapshotNotAvailable+"_"+strings.ToLower(name)
 }
 
 func buildCacheSnapshotNotFoundLabels(clusterID string, arn string, snapshotName *string, cacheClusterID *string, cacheArn string) map[string]string {
