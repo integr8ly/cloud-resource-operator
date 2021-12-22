@@ -189,7 +189,7 @@ func (m *mockElasticacheClient) DeleteReplicationGroup(*elasticache.DeleteReplic
 
 // mock elasticache AddTagsToResource output
 func (m *mockElasticacheClient) AddTagsToResource(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
-	if resources.DerefString(input.ResourceName) == "arn:aws:elasticache:tes:test:cluster:test" {
+	if resources.SafeStringDereference(input.ResourceName) == "arn:aws:elasticache:tes:test:cluster:test" {
 		return &elasticache.TagListMessage{}, nil
 	} else {
 		return m.addTagsToResourceFn(input)

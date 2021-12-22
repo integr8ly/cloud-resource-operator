@@ -408,6 +408,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 	if err != nil {
 		msg := "Failed to add Tags to RDS instance"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+
 	}
 
 	// Get a list of Snapshot objects for the DB instance
@@ -419,6 +420,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 		msg := "Can't get Snapshot info"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
+
 	// Adding tags to each DB Snapshots from list on AWS
 	for _, snapshotList := range rdsSnapshotList.DBSnapshots {
 		inputRdsSnapshot := &rds.AddTagsToResourceInput{
@@ -428,31 +430,13 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 		// Adding Tags to RDS Snapshot
 		_, err = rdsSvc.AddTagsToResource(inputRdsSnapshot)
 		if err != nil {
-			rdsErr, isAwsErr := err.(awserr.Error)
-			if isAwsErr && rdsErr.Code() == rds.ErrCodeDBSnapshotNotFoundFault {
-				// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
-				logrus.Warningf("DBSnapshotNotFound error trying tag aws rds snapshot")
-				// metric
-				labels := buildRdsSnapshotNotFoundLabels(clusterID, foundInstance.DBInstanceArn, snapshotList.DBSnapshotArn, snapshotList.DBSnapshotIdentifier)
-				resources.SetMetric(resources.DefaultPostgresSnapshotNotAvailable, labels, 1)
-			} else {
-				msg := "Failed to add Tags to RDS Snapshot"
-				return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
-			}
+			msg := "Failed to add Tags to RDS Snapshot"
+			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
 	}
 
 	logger.Infof("tags were added successfully to the rds instance %s", *foundInstance.DBInstanceIdentifier)
 	return "successfully created and tagged", nil
-}
-
-func buildRdsSnapshotNotFoundLabels(clusterID string, dbInstanceArn, dbSnapshotArn, dbSnapshotIdentifier *string) map[string]string {
-	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["dbInstanceArn"] = resources.DerefString(dbInstanceArn)
-	labels["dbSnapshotArn"] = resources.DerefString(dbSnapshotArn)
-	labels["dbSnapshotIdentifier"] = resources.DerefString(dbSnapshotIdentifier)
-	return labels
 }
 
 func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {

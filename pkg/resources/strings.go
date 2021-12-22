@@ -64,10 +64,3 @@ func SafeStringDereference(s *string) string {
 	}
 	return ""
 }
-
-func DerefString(s *string) string {
-	if s != nil {
-		return *s
-	}
-	return ""
-}
