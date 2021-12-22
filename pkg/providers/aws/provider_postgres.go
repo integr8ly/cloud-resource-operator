@@ -439,15 +439,6 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 	return "successfully created and tagged", nil
 }
 
-func buildRdsSnapshotNotFoundLabels(clusterID string, dbInstanceArn, dbSnapshotArn, dbSnapshotIdentifier *string) map[string]string {
-	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["dbInstanceArn"] = resources.SafeStringDereference(dbInstanceArn)
-	labels["dbSnapshotArn"] = resources.SafeStringDereference(dbSnapshotArn)
-	labels["dbSnapshotIdentifier"] = resources.SafeStringDereference(dbSnapshotIdentifier)
-	return labels
-}
-
 func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "DeletePostgres")
 	logger.Infof("reconciling postgres %s", r.Name)
