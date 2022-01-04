@@ -431,8 +431,9 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 					msg := "failed to add tags to aws elasticache snapshot"
 					return types.StatusMessage(msg), err
 				}
+			} else {
+				resources.SetMetric(metricName, labels, 0)
 			}
-			resources.SetMetric(metricName, labels, 0)
 		}
 	}
 
