@@ -78,6 +78,8 @@ spec:
                 type: object
               strategy:
                 type: string
+              version:
+                type: string
             type: object
         type: object
     served: true

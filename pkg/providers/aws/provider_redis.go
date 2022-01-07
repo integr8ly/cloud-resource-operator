@@ -42,7 +42,7 @@ const (
 	// default create params
 	defaultCacheNodeType = "cache.t3.micro"
 	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
-	defaultEngineVersion     = "5.0.6"
+	DefaultEngineVersion     = "5.0.6"
 	defaultDescription       = "A Redis replication group"
 	defaultNumCacheClusters  = 2
 	defaultSnapshotRetention = 31
@@ -255,12 +255,6 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		}
 		return nil, "started elasticache provision", nil
 	}
-
-	// check elasticache phase
-	if *foundCache.Status != "available" {
-		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
-		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
-	}
 	logger.Infof("found existing elasticache cluster %s", *foundCache.ReplicationGroupId)
 
 	cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
@@ -273,8 +267,19 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		cluster := *checkedCluster
 		if resources.SafeStringDereference(cluster.ReplicationGroupId) == *foundCache.ReplicationGroupId {
 			replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
+
+			if checkedCluster.EngineVersion != nil && r.Status.Version != *checkedCluster.EngineVersion {
+				r.Status.Version = *checkedCluster.EngineVersion
+			}
 		}
 	}
+
+	// check elasticache phase
+	if *foundCache.Status != "available" {
+		logger.Infof("found instance %s current status %s", *foundCache.ReplicationGroupId, *foundCache.Status)
+		return nil, croType.StatusMessage(fmt.Sprintf("createReplicationGroup() in progress, current aws elasticache status is %s", *foundCache.Status)), nil
+	}
+	logger.Infof("found existing elasticache cluster %s", *foundCache.ReplicationGroupId)
 
 	// check if any modifications are required to bring the elasticache instance up to date with the strategy map.
 	modifyInput, err := buildElasticacheUpdateStrategy(ec2Svc, elasticacheConfig, foundCache, replicationGroupClusters, logger)
@@ -792,7 +797,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 		elasticacheConfig.ReplicationGroupDescription = aws.String(defaultDescription)
 	}
 	if elasticacheConfig.EngineVersion == nil {
-		elasticacheConfig.EngineVersion = aws.String(defaultEngineVersion)
+		elasticacheConfig.EngineVersion = aws.String(DefaultEngineVersion)
 	}
 	if elasticacheConfig.NumCacheClusters == nil {
 		elasticacheConfig.NumCacheClusters = aws.Int64(defaultNumCacheClusters)
