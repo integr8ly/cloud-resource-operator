@@ -3,7 +3,7 @@ module github.com/integr8ly/cloud-resource-operator
 go 1.16
 
 require (
-	github.com/aws/aws-sdk-go v1.39.2
+	github.com/aws/aws-sdk-go v1.42.30
 	github.com/containerd/typeurl v0.0.0-20190228175220-2a93cfde8c20 // indirect
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
@@ -24,7 +24,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.5.1
 	github.com/sirupsen/logrus v1.6.0
-	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
+	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f
 	golang.org/x/tools v0.0.0-20200815165600-90abf76919f3 // indirect
 	k8s.io/api v0.18.8
 	k8s.io/apiextensions-apiserver v0.18.8
