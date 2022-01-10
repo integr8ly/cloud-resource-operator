@@ -38,6 +38,7 @@ const (
 	DefaultRedisSnapshotNotAvailable          = "cro_redis_snapshot_not_found"
 	DefaultPostgresSnapshotNotAvailable       = "cro_postgres_snapshot_not_found"
 	DefaultBlobStorageStatusMetricName        = "cro_blobstorage_status_phase"
+	DefaultVpcActionMetricName                = "cro_vpc_action"
 
 	BytesInGibiBytes = 1073741824
 )
@@ -106,6 +107,23 @@ func SetMetric(name string, labels map[string]string, value float64) {
 //SetMetricCurrentTime Set current time wraps set metric
 func SetMetricCurrentTime(name string, labels map[string]string) {
 	SetMetric(name, labels, float64(time.Now().UnixNano())/1e9)
+}
+
+// SetVpcAction sets cro_vpc_action metric
+func SetVpcAction(action string, status string, err string, code float64) {
+	SetMetric(DefaultVpcActionMetricName,
+		map[string]string{
+			"action": action,
+			"status": status,
+			"error":  err,
+		}, code)
+}
+
+// ResetVpcAction resets cro_vpc_action metric
+func ResetVpcAction() {
+	if val, ok := MetricVecs[DefaultVpcActionMetricName]; ok {
+		val.Reset()
+	}
 }
 
 // CreatePrometheusRule will create a PrometheusRule object
