@@ -671,7 +671,7 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 
 func (p *PostgresProvider) isLastResource(ctx context.Context, namespace string) (bool, error) {
 	listOptions := client.ListOptions{
-		Namespace: namespace,
+		Namespace: "",
 	}
 	var postgresList = &v1alpha1.PostgresList{}
 	if err := p.Client.List(ctx, postgresList, &listOptions); err != nil {

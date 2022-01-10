@@ -653,7 +653,7 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 
 func (p *RedisProvider) isLastResource(ctx context.Context, namespace string) (bool, error) {
 	listOptions := client.ListOptions{
-		Namespace: namespace,
+		Namespace: "",
 	}
 	var postgresList = &v1alpha1.PostgresList{}
 	if err := p.Client.List(ctx, postgresList, &listOptions); err != nil {
