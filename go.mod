@@ -22,7 +22,7 @@ require (
 	github.com/openshift/cloud-credential-operator v0.0.0-20190812222907-ec6f38d73a79
 	github.com/operator-framework/operator-sdk v1.2.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.5.1
+	github.com/prometheus/client_golang v1.11.0
 	github.com/sirupsen/logrus v1.6.0
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	golang.org/x/tools v0.0.0-20200815165600-90abf76919f3 // indirect
