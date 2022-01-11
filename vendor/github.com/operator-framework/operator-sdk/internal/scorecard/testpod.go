@@ -35,6 +35,7 @@ const (
 // getPodDefinition fills out a Pod definition based on
 // information from the test
 func getPodDefinition(configMapName string, test v1alpha3.TestConfiguration, r PodTestRunner) *v1.Pod {
+
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("scorecard-test-%s", rand.String(4)),
@@ -75,7 +76,7 @@ func getPodDefinition(configMapName string, test v1alpha3.TestConfiguration, r P
 			InitContainers: []v1.Container{
 				{
 					Name:            "scorecard-untar",
-					Image:           "busybox",
+					Image:           r.UntarImage,
 					ImagePullPolicy: v1.PullIfNotPresent,
 					Args: []string{
 						"tar",
@@ -122,7 +123,11 @@ func getPodDefinition(configMapName string, test v1alpha3.TestConfiguration, r P
 
 // getPodLog fetches the test results which are found in the pod log
 func getPodLog(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) ([]byte, error) {
-	req := client.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &v1.PodLogOptions{})
+	podLogOptions := v1.PodLogOptions{
+		Container: "scorecard-test",
+	}
+
+	req := client.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &podLogOptions)
 	podLogs, err := req.Stream(ctx)
 	if err != nil {
 		return nil, err

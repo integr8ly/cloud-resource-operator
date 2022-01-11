@@ -25,12 +25,13 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/hashicorp/golang-lru"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apiserver/pkg/util/x509metrics"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/lru"
 )
 
 const (
@@ -64,10 +65,7 @@ type ClientManager struct {
 
 // NewClientManager creates a clientManager.
 func NewClientManager(gvs []schema.GroupVersion, addToSchemaFuncs ...func(s *runtime.Scheme) error) (ClientManager, error) {
-	cache, err := lru.New(defaultCacheSize)
-	if err != nil {
-		return ClientManager{}, err
-	}
+	cache := lru.New(defaultCacheSize)
 	hookScheme := runtime.NewScheme()
 	for _, addToSchemaFunc := range addToSchemaFuncs {
 		if err := addToSchemaFunc(hookScheme); err != nil {
@@ -131,6 +129,10 @@ func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 	}
 
 	complete := func(cfg *rest.Config) (*rest.RESTClient, error) {
+		// Avoid client-side rate limiting talking to the webhook backend.
+		// Rate limiting should happen when deciding how many requests to serve.
+		cfg.QPS = -1
+
 		// Combine CAData from the config with any existing CA bundle provided
 		if len(cfg.TLSClientConfig.CAData) > 0 {
 			cfg.TLSClientConfig.CAData = append(cfg.TLSClientConfig.CAData, '\n')
@@ -144,6 +146,11 @@ func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 
 		cfg.ContentConfig.NegotiatedSerializer = cm.negotiatedSerializer
 		cfg.ContentConfig.ContentType = runtime.ContentTypeJSON
+
+		// Add a transport wrapper that allows detection of TLS connections to
+		// servers without SAN extension in their serving certificates
+		cfg.Wrap(x509metrics.NewMissingSANRoundTripperWrapperConstructor(x509MissingSANCounter))
+
 		client, err := rest.UnversionedRESTClientFor(cfg)
 		if err == nil {
 			cm.cache.Add(string(cacheKey), client)

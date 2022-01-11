@@ -89,7 +89,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -139,7 +139,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics, with 1 not complete metric",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -192,7 +192,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test no metrics have been returned from cloudwatch scrape",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),

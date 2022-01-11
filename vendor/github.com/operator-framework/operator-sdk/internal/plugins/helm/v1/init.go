@@ -18,40 +18,42 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/kubebuilder/pkg/model/config"
-	"sigs.k8s.io/kubebuilder/pkg/plugin"
-	"sigs.k8s.io/kubebuilder/pkg/plugin/scaffold"
+	"sigs.k8s.io/kubebuilder/v3/pkg/config"
+	"sigs.k8s.io/kubebuilder/v3/pkg/machinery"
+	"sigs.k8s.io/kubebuilder/v3/pkg/plugin"
+	"sigs.k8s.io/kubebuilder/v3/pkg/plugin/util"
 
-	"github.com/operator-framework/operator-sdk/internal/kubebuilder/cmdutil"
-	"github.com/operator-framework/operator-sdk/internal/plugins/helm/v1/chartutil"
 	"github.com/operator-framework/operator-sdk/internal/plugins/helm/v1/scaffolds"
-	"github.com/operator-framework/operator-sdk/internal/plugins/manifests"
-	"github.com/operator-framework/operator-sdk/internal/plugins/scorecard"
+	sdkpluginutil "github.com/operator-framework/operator-sdk/internal/plugins/util"
 )
 
-type initPlugin struct {
-	config    *config.Config
-	apiPlugin createAPIPlugin
+const (
+	groupFlag   = "group"
+	versionFlag = "version"
+	kindFlag    = "kind"
+)
 
-	// If true, run the `create api` plugin.
-	doCreateAPI bool
+type initSubcommand struct {
+	apiSubcommand createAPISubcommand
+
+	config config.Config
 
 	// For help text.
 	commandName string
+
+	// Flags
+	group   string
+	version string
+	kind    string
 }
 
-var (
-	_ plugin.Init        = &initPlugin{}
-	_ cmdutil.RunOptions = &initPlugin{}
-)
+var _ plugin.InitSubcommand = &initSubcommand{}
 
 // UpdateContext define plugin context
-func (p *initPlugin) UpdateContext(ctx *plugin.Context) {
-	ctx.Description = `Initialize a new Helm-based operator project.
+func (p *initSubcommand) UpdateMetadata(cliMeta plugin.CLIMetadata, subcmdMeta *plugin.SubcommandMetadata) {
+	subcmdMeta.Description = `Initialize a new Helm-based operator project.
 
 Writes the following files:
 - a helm-charts directory with the chart(s) to build releases from
@@ -62,109 +64,111 @@ Writes the following files:
 - a Patch file for customizing image for manager manifests
 - a Patch file for enabling prometheus metrics
 `
-	ctx.Examples = fmt.Sprintf(`  $ %s init --plugins=%s \
+	subcmdMeta.Examples = fmt.Sprintf(`  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --group=apps \
       --version=v1alpha1 \
       --kind=AppService
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --project-name=myapp
       --domain=example.com \
       --group=apps \
       --version=v1alpha1 \
       --kind=AppService
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --group=apps \
       --version=v1alpha1 \
       --kind=AppService \
       --helm-chart=myrepo/app
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=myrepo/app
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=myrepo/app \
       --helm-chart-version=1.2.3
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=app \
       --helm-chart-repo=https://charts.mycompany.com/
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=app \
       --helm-chart-repo=https://charts.mycompany.com/ \
       --helm-chart-version=1.2.3
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=/path/to/local/chart-directories/app/
 
-  $ %s init --plugins=%s \
+  $ %[1]s init --plugins=%[2]s \
       --domain=example.com \
       --helm-chart=/path/to/local/chart-archives/app-1.2.3.tgz
-`,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-		ctx.CommandName, pluginKey,
-	)
+`, cliMeta.CommandName, pluginKey)
 
-	p.commandName = ctx.CommandName
+	p.commandName = cliMeta.CommandName
 }
 
-// BindFlags will set the flags for the plugin
-func (p *initPlugin) BindFlags(fs *pflag.FlagSet) {
+func (p *initSubcommand) BindFlags(fs *pflag.FlagSet) {
 	fs.SortFlags = false
-	fs.StringVar(&p.config.Domain, "domain", "my.domain", "domain for groups")
-	fs.StringVar(&p.config.ProjectName, "project-name", "", "name of this project, the default being directory name")
-	p.apiPlugin.BindFlags(fs)
+	fs.StringVar(&p.group, groupFlag, "", "resource Group")
+	fs.StringVar(&p.version, versionFlag, "", "resource Version")
+	fs.StringVar(&p.kind, kindFlag, "", "resource Kind")
+	p.apiSubcommand.BindFlags(fs)
 }
 
-// InjectConfig will inject the PROJECT file/config in the plugin
-func (p *initPlugin) InjectConfig(c *config.Config) {
-	// v3 project configs get a 'layout' value.
-	c.Layout = pluginKey
+func (p *initSubcommand) InjectConfig(c config.Config) error {
 	p.config = c
-	p.apiPlugin.config = p.config
-}
-
-// Run will call the plugin actions
-func (p *initPlugin) Run() error {
-	if err := cmdutil.Run(p); err != nil {
-		return err
-	}
-
-	// Run SDK phase 2 plugins.
-	if err := p.runPhase2(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-// SDK phase 2 plugins.
-func (p *initPlugin) runPhase2() error {
-	if err := manifests.RunInit(p.config); err != nil {
-		return err
-	}
-	if err := scorecard.RunInit(p.config); err != nil {
-		return err
+func (p *initSubcommand) Scaffold(fs machinery.Filesystem) error {
+	if err := addInitCustomizations(p.config.GetProjectName()); err != nil {
+		return fmt.Errorf("error updating init manifests: %s", err)
 	}
 
-	if p.doCreateAPI {
-		if err := p.apiPlugin.runPhase2(); err != nil {
+	scaffolder := scaffolds.NewInitScaffolder(p.config)
+	scaffolder.InjectFS(fs)
+	return scaffolder.Scaffold()
+}
+
+// PostScaffold will run the required actions after the default plugin scaffold
+func (p *initSubcommand) PostScaffold() error {
+	doAPI := p.group != "" || p.version != "" || p.kind != "" || p.apiSubcommand.options.chartOptions.Chart != ""
+	if !doAPI {
+		fmt.Printf("Next: define a resource with:\n$ %s create api\n", p.commandName)
+	} else {
+		args := []string{"create", "api"}
+		// The following three checks should match the default values in sig.k8s.io/kubebuilder/v3/pkg/cli/resource.go
+		if p.group != "" {
+			args = append(args, fmt.Sprintf("--%s", groupFlag), p.group)
+		}
+		if p.version != "" {
+			args = append(args, fmt.Sprintf("--%s", versionFlag), p.version)
+		}
+		if p.kind != "" {
+			args = append(args, fmt.Sprintf("--%s", kindFlag), p.kind)
+		}
+		if p.apiSubcommand.options.CRDVersion != defaultCrdVersion {
+			args = append(args, fmt.Sprintf("--%s", crdVersionFlag), p.apiSubcommand.options.CRDVersion)
+		}
+		if p.apiSubcommand.options.chartOptions.Chart != "" {
+			args = append(args, fmt.Sprintf("--%s", helmChartFlag), p.apiSubcommand.options.chartOptions.Chart)
+		}
+		if p.apiSubcommand.options.chartOptions.Repo != "" {
+			args = append(args, fmt.Sprintf("--%s", helmChartRepoFlag), p.apiSubcommand.options.chartOptions.Repo)
+		}
+		if p.apiSubcommand.options.chartOptions.Version != "" {
+			args = append(args, fmt.Sprintf("--%s", helmChartVersionFlag), p.apiSubcommand.options.chartOptions.Version)
+		}
+		if err := util.RunCmd("Creating the API", os.Args[0], args...); err != nil {
 			return err
 		}
 	}
@@ -172,52 +176,53 @@ func (p *initPlugin) runPhase2() error {
 	return nil
 }
 
-// Validate perform the required validations for this plugin
-func (p *initPlugin) Validate() error {
+// addInitCustomizations will perform the required customizations for this plugin on the common base
+func addInitCustomizations(projectName string) error {
+	managerFile := filepath.Join("config", "manager", "manager.yaml")
 
-	// Check if the project name is a valid k8s namespace (DNS 1123 label).
-	if p.config.ProjectName == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("error getting current directory: %v", err)
-		}
-		p.config.ProjectName = strings.ToLower(filepath.Base(dir))
+	// todo: we ought to use afero instead. Replace this methods to insert/update
+	// by https://github.com/kubernetes-sigs/kubebuilder/pull/2119
+
+	// Add leader election arg in config/manager/manager.yaml and in config/default/manager_auth_proxy_patch.yaml
+	err := util.InsertCode(managerFile,
+		"--leader-elect",
+		fmt.Sprintf("\n        - --leader-election-id=%s", projectName))
+	if err != nil {
+		return err
 	}
-	if err := validation.IsDNS1123Label(p.config.ProjectName); err != nil {
-		return fmt.Errorf("project name (%s) is invalid: %v", p.config.ProjectName, err)
-	}
-
-	defaultOpts := chartutil.CreateOptions{CRDVersion: "v1"}
-	if !p.apiPlugin.createOptions.GVK.Empty() || p.apiPlugin.createOptions != defaultOpts {
-		p.doCreateAPI = true
-		return p.apiPlugin.Validate()
-	}
-
-	return nil
-}
-
-// GetScaffolder returns scaffold.Scaffolder which will be executed due the RunOptions interface implementation
-func (p *initPlugin) GetScaffolder() (scaffold.Scaffolder, error) {
-	var (
-		apiScaffolder scaffold.Scaffolder
-		err           error
-	)
-	if p.doCreateAPI {
-		apiScaffolder, err = p.apiPlugin.GetScaffolder()
-		if err != nil {
-			return nil, err
-		}
-	}
-	return scaffolds.NewInitScaffolder(p.config, apiScaffolder), nil
-}
-
-// PostScaffold will run the required actions after the default plugin scaffold
-func (p *initPlugin) PostScaffold() error {
-
-	if p.doCreateAPI {
-		return p.apiPlugin.PostScaffold()
+	err = util.InsertCode(filepath.Join("config", "default", "manager_auth_proxy_patch.yaml"),
+		"- \"--leader-elect\"",
+		fmt.Sprintf("\n        - \"--leader-election-id=%s\"", projectName))
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("Next: define a resource with:\n$ %s create api\n", p.commandName)
+	// Increase the default memory required.
+	err = util.ReplaceInFile(managerFile, "memory: 20Mi", "memory: 60Mi")
+	if err != nil {
+		return err
+	}
+
+	// Remove the webhook option for the componentConfig since webhooks are not supported by helm
+	err = util.ReplaceInFile(filepath.Join("config", "manager", "controller_manager_config.yaml"),
+		"webhook:\n  port: 9443", "")
+	if err != nil {
+		return err
+	}
+
+	// Remove the call to the command as manager. Helm has not been exposing this entrypoint
+	// todo: provide the manager entrypoint for helm and then remove it
+	const command = `command:
+        - /manager
+        `
+	err = util.ReplaceInFile(managerFile, command, "")
+	if err != nil {
+		return err
+	}
+
+	if err := sdkpluginutil.UpdateKustomizationsInit(); err != nil {
+		return fmt.Errorf("error updating kustomization.yaml files: %v", err)
+	}
+
 	return nil
 }

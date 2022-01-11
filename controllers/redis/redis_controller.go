@@ -88,9 +88,8 @@ func (r *RedisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RedisReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *RedisReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling Redis")
-	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.Client)
 
 	// Fetch the Redis instance

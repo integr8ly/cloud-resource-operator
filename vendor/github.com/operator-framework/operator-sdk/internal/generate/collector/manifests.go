@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 
 	scorecardv1alpha3 "github.com/operator-framework/api/pkg/apis/scorecard/v1alpha3"
+	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,6 +40,7 @@ import (
 
 // Manifests holds a collector of all manifests relevant to CSV updates.
 type Manifests struct {
+	ClusterServiceVersions           []operatorsv1alpha1.ClusterServiceVersion
 	Roles                            []rbacv1.Role
 	ClusterRoles                     []rbacv1.ClusterRole
 	RoleBindings                     []rbacv1.RoleBinding
@@ -57,6 +59,7 @@ type Manifests struct {
 }
 
 var (
+	csvGK                  = operatorsv1alpha1.SchemeGroupVersion.WithKind("ClusterServiceVersion").GroupKind()
 	roleGK                 = rbacv1.SchemeGroupVersion.WithKind("Role").GroupKind()
 	clusterRoleGK          = rbacv1.SchemeGroupVersion.WithKind("ClusterRole").GroupKind()
 	roleBindingGK          = rbacv1.SchemeGroupVersion.WithKind("RoleBinding").GroupKind()
@@ -70,9 +73,8 @@ var (
 	v1alpha3ScorecardCfgGK = scorecardv1alpha3.GroupVersion.WithKind("Configuration").GroupKind()
 )
 
-// UpdateFromDirs adds Roles, ClusterRoles, Deployments, and Custom Resource examples
-// found in deployDir, and CustomResourceDefinitions found in crdsDir,
-// to their respective fields in a Manifests, then filters and deduplicates them.
+// UpdateFromDirs adds CustomResourceDefinitions found in crdsDir, and all other CSV-relevant manifests
+// from deployDir, to their respective fields in a Manifests, then filters and deduplicates them.
 // All other objects are added to Manifests.Others.
 func (c *Manifests) UpdateFromDirs(deployDir, crdsDir string) error {
 	// Collect all manifests in paths.
@@ -85,47 +87,7 @@ func (c *Manifests) UpdateFromDirs(deployDir, crdsDir string) error {
 		if err != nil {
 			return err
 		}
-		scanner := k8sutil.NewYAMLScanner(bytes.NewBuffer(b))
-		for scanner.Scan() {
-			manifest := scanner.Bytes()
-			typeMeta, err := k8sutil.GetTypeMetaFromBytes(manifest)
-			if err != nil {
-				log.Debugf("No TypeMeta in %s, skipping file", path)
-				continue
-			}
-
-			gvk := typeMeta.GroupVersionKind()
-			switch gvk.GroupKind() {
-			case roleGK:
-				err = c.addRoles(manifest)
-			case clusterRoleGK:
-				err = c.addClusterRoles(manifest)
-			case roleBindingGK:
-				err = c.addRoleBindings(manifest)
-			case clusterRoleBindingGK:
-				err = c.addClusterRoleBindings(manifest)
-			case serviceAccountGK:
-				err = c.addServiceAccounts(manifest)
-			case serviceGK:
-				err = c.addServices(manifest)
-			case deploymentGK:
-				err = c.addDeployments(manifest)
-			case crdGK:
-				// Skip for now and add explicitly from CRDsDir input.
-			case validatingWebhookCfgGK:
-				err = c.addValidatingWebhookConfigurations(manifest)
-			case mutatingWebhookCfgGK:
-				err = c.addMutatingWebhookConfigurations(manifest)
-			case v1alpha3ScorecardCfgGK:
-				err = c.addScorecardConfig(manifest)
-			default:
-				err = c.addOthers(manifest)
-			}
-			if err != nil {
-				return fmt.Errorf("error adding %s to manifest collector: %v", gvk, err)
-			}
-		}
-		return scanner.Err()
+		return c.updateFromReader(bytes.NewBuffer(b))
 	})
 	if err != nil {
 		return fmt.Errorf("error collecting manifests from directory %s: %v", deployDir, err)
@@ -150,11 +112,33 @@ func (c *Manifests) UpdateFromDirs(deployDir, crdsDir string) error {
 	return nil
 }
 
+// UpdateFromDir adds all CSV-relevant manifests from dir to their respective fields in a Manifests,
+// then filters and deduplicates them. All other objects are added to Manifests.Others.
+func (c *Manifests) UpdateFromDir(dir string) error {
+	return c.UpdateFromDirs(dir, "")
+}
+
 // UpdateFromReader adds Roles, ClusterRoles, Deployments, CustomResourceDefinitions,
 // and Custom Resources found in r to their respective fields in a Manifests, then
 // filters and deduplicates them. All other objects are added to Manifests.Others.
 func (c *Manifests) UpdateFromReader(r io.Reader) error {
 	// Bundle contents.
+	if err := c.updateFromReader(r); err != nil {
+		return err
+	}
+
+	// Filter manifests based on data collected.
+	c.filter()
+
+	// Remove duplicate manifests.
+	if err := c.deduplicate(); err != nil {
+		return fmt.Errorf("error removing duplicate manifests: %v", err)
+	}
+
+	return nil
+}
+
+func (c *Manifests) updateFromReader(r io.Reader) error {
 	scanner := k8sutil.NewYAMLScanner(r)
 	for scanner.Scan() {
 		manifest := scanner.Bytes()
@@ -166,6 +150,8 @@ func (c *Manifests) UpdateFromReader(r io.Reader) error {
 
 		gvk := typeMeta.GroupVersionKind()
 		switch gvk.GroupKind() {
+		case csvGK:
+			err = c.addClusterServiceVersions(manifest)
 		case roleGK:
 			err = c.addRoles(manifest)
 		case clusterRoleGK:
@@ -199,14 +185,19 @@ func (c *Manifests) UpdateFromReader(r io.Reader) error {
 		return fmt.Errorf("error collecting manifests from reader: %v", err)
 	}
 
-	// Filter manifests based on data collected.
-	c.filter()
+	return nil
+}
 
-	// Remove duplicate manifests.
-	if err := c.deduplicate(); err != nil {
-		return fmt.Errorf("error removing duplicate manifests: %v", err)
+// addClusterServiceVersions assumes all manifest data in rawManifests are ClusterServiceVersions
+// and adds them to the collector.
+func (c *Manifests) addClusterServiceVersions(rawManifests ...[]byte) error {
+	for _, rawManifest := range rawManifests {
+		csv := operatorsv1alpha1.ClusterServiceVersion{}
+		if err := yaml.Unmarshal(rawManifest, &csv); err != nil {
+			return err
+		}
+		c.ClusterServiceVersions = append(c.ClusterServiceVersions, csv)
 	}
-
 	return nil
 }
 

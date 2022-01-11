@@ -16,7 +16,6 @@ package packagemanifests
 
 import (
 	"context"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,20 +25,22 @@ import (
 )
 
 func NewCmd(cfg *operator.Configuration) *cobra.Command {
-	var timeout time.Duration
-
 	i := packagemanifests.NewInstall(cfg)
 	cmd := &cobra.Command{
-		Use:   "packagemanifests [packagemanifests-root-dir]",
+		Use: "packagemanifests [packagemanifests-root-dir]",
+		Deprecated: "support for the packagemanifests format will be removed in operator-sdk v2.0.0. Use bundles to " +
+			"package your operator instead. Migrate your packagemanifes to a bundle using " +
+			"'operator-sdk pkgman-to-bundle' command. Run 'operator-sdk pkgman-to-bundle --help' " +
+			"for more details.",
 		Short: "Deploy an Operator in the package manifests format with OLM",
 		Long: `'run packagemanifests' deploys an Operator's package manifests with OLM. The command's argument
 will default to './packagemanifests' if unset; if set, the argument must be a package manifests root directory,
 ex. '<project-root>/packagemanifests'.`,
-		Aliases:           []string{"pm"},
-		Args:              cobra.MaximumNArgs(1),
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error { return cfg.Load() },
+		Aliases: []string{"pm"},
+		Args:    cobra.MaximumNArgs(1),
+		PreRunE: func(*cobra.Command, []string) error { return cfg.Load() },
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.Timeout)
 			defer cancel()
 
 			if len(args) == 0 {
@@ -55,10 +56,13 @@ ex. '<project-root>/packagemanifests'.`,
 			}
 		},
 	}
-	cmd.Flags().SortFlags = false
-	cfg.BindFlags(cmd.PersistentFlags())
-	i.BindFlags(cmd.Flags())
 
-	cmd.Flags().DurationVar(&timeout, "timeout", 2*time.Minute, "install timeout")
+	cfg.BindFlags(cmd.Flags())
+	i.BindFlags(cmd.Flags())
+	// Not implemented.
+	if err := cmd.Flags().MarkHidden("service-account"); err != nil {
+		log.Fatal(err)
+	}
+
 	return cmd
 }

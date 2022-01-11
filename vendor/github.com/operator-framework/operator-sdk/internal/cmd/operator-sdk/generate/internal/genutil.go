@@ -23,12 +23,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
+	"github.com/operator-framework/operator-sdk/internal/util/projutil"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/kubebuilder/pkg/model/config"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	cfgv2 "sigs.k8s.io/kubebuilder/v3/pkg/config/v2"
 	"sigs.k8s.io/yaml"
 )
 
@@ -57,7 +57,7 @@ func IsPipeReader() bool {
 }
 
 // WriteObjects writes each object in objs to w.
-func WriteObjects(w io.Writer, objs ...controllerutil.Object) error {
+func WriteObjects(w io.Writer, objs ...client.Object) error {
 	for _, obj := range objs {
 		if err := writeObject(w, obj); err != nil {
 			return err
@@ -67,25 +67,36 @@ func WriteObjects(w io.Writer, objs ...controllerutil.Object) error {
 }
 
 // WriteObjectsToFiles creates dir then writes each object in objs to a file in dir.
-func WriteObjectsToFiles(dir string, objs ...controllerutil.Object) error {
+func WriteObjectsToFiles(dir string, objs ...client.Object) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
 	seenFiles := make(map[string]struct{})
+	// Use the number of dupliates in file names so users can debug duplicate file behavior.
+	dupCount := 0
 	for _, obj := range objs {
 		var fileName string
 		switch t := obj.(type) {
 		case *apiextv1.CustomResourceDefinition:
-			fileName = makeCRDFileName(t.Spec.Group, t.Spec.Names.Plural)
+			if t.Spec.Group != "" && t.Spec.Names.Plural != "" {
+				fileName = makeCRDFileName(t.Spec.Group, t.Spec.Names.Plural)
+			} else {
+				fileName = makeObjectFileName(t)
+			}
 		case *apiextv1beta1.CustomResourceDefinition:
-			fileName = makeCRDFileName(t.Spec.Group, t.Spec.Names.Plural)
+			if t.Spec.Group != "" && t.Spec.Names.Plural != "" {
+				fileName = makeCRDFileName(t.Spec.Group, t.Spec.Names.Plural)
+			} else {
+				fileName = makeObjectFileName(t)
+			}
 		default:
 			fileName = makeObjectFileName(t)
 		}
 
 		if _, hasFile := seenFiles[fileName]; hasFile {
-			return fmt.Errorf("duplicate file cannot be written: %s", fileName)
+			fileName = fmt.Sprintf("dup%d_%s", dupCount, fileName)
+			dupCount++
 		}
 		if err := writeObjectToFile(dir, obj, fileName); err != nil {
 			return err
@@ -99,7 +110,7 @@ func makeCRDFileName(group, resource string) string {
 	return fmt.Sprintf("%s_%s.yaml", group, resource)
 }
 
-func makeObjectFileName(obj controllerutil.Object) string {
+func makeObjectFileName(obj client.Object) string {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	if gvk.Group == "" {
 		return fmt.Sprintf("%s_%s_%s.yaml", obj.GetName(), gvk.Version, strings.ToLower(gvk.Kind))
@@ -152,23 +163,45 @@ func IsNotExist(path string) bool {
 	return err != nil && errors.Is(err, os.ErrNotExist)
 }
 
-// GetOperatorName returns the name of the operator which is by default the projectName attribute of the PROJECT file
-// However, the Go projects built with the plugin version v2 has not this attribute and then, for this case
-// the operatorName will be the current directory.
-func GetOperatorName(cfg *config.Config) (string, error) {
-	if cfg.ProjectName != "" {
-		return cfg.ProjectName, nil
+// IsExist returns true if path exists on disk.
+func IsExist(path string) bool {
+	if path == "" {
+		return false
 	}
-	if cfg.IsV3() {
-		return "", errors.New("project config file must contain 'projectName'")
+	_, err := os.Stat(path)
+	return err == nil || errors.Is(err, os.ErrExist)
+}
+
+// GetPackageNameAndLayout returns packageName and layout, if any, for a project.
+// These values are determined by project version and whether a PROJECT file exists.
+func GetPackageNameAndLayout(defaultPackageName string) (packageName string, layout string, _ error) {
+	packageName = defaultPackageName
+	if projutil.HasProjectFile() {
+		cfg, err := projutil.ReadConfig()
+		if err != nil {
+			return "", "", err
+		}
+		if packageName == "" {
+			switch {
+			case cfg.GetVersion().Compare(cfgv2.Version) == 0:
+				wd, err := os.Getwd()
+				if err != nil {
+					return "", "", err
+				}
+				packageName = strings.ToLower(filepath.Base(wd))
+			default:
+				packageName = cfg.GetProjectName()
+				if packageName == "" {
+					return "", "", errors.New("--package <name> must be set if \"projectName\" is not set in the PROJECT config file")
+				}
+			}
+		}
+		layout = projutil.GetProjectLayout(cfg)
+	} else {
+		if packageName == "" {
+			return "", "", errors.New("--package <name> must be set if PROJECT config file is not present")
+		}
+		layout = "unknown"
 	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("error getting current directory: %v", err)
-	}
-	projectName := strings.ToLower(filepath.Base(dir))
-	if err := validation.IsDNS1123Label(projectName); err != nil {
-		return "", fmt.Errorf("project name (%s) is invalid: %v", projectName, err)
-	}
-	return projectName, nil
+	return packageName, layout, nil
 }

@@ -15,32 +15,34 @@
 package ansible
 
 import (
-	"sigs.k8s.io/kubebuilder/pkg/model/config"
-	"sigs.k8s.io/kubebuilder/pkg/plugin"
+	"sigs.k8s.io/kubebuilder/v3/pkg/config"
+	cfgv3 "sigs.k8s.io/kubebuilder/v3/pkg/config/v3"
+	"sigs.k8s.io/kubebuilder/v3/pkg/plugin"
 
 	"github.com/operator-framework/operator-sdk/internal/plugins"
 )
 
-const pluginName = "ansible" + plugins.DefaultNameQualifier
+const pluginName = "base.ansible" + plugins.DefaultNameQualifier
 
 var (
-	supportedProjectVersions = []string{config.Version3Alpha}
 	pluginVersion            = plugin.Version{Number: 1}
+	supportedProjectVersions = []config.Version{cfgv3.Version}
 	pluginKey                = plugin.KeyFor(Plugin{})
 )
 
 var (
-	_ plugin.Base             = Plugin{}
-	_ plugin.InitPluginGetter = Plugin{}
+	_ plugin.Plugin    = Plugin{}
+	_ plugin.Init      = Plugin{}
+	_ plugin.CreateAPI = Plugin{}
 )
 
 type Plugin struct {
-	initPlugin
-	createAPIPlugin
+	initSubcommand
+	createAPISubcommand
 }
 
-func (Plugin) Name() string                           { return pluginName }
-func (Plugin) Version() plugin.Version                { return pluginVersion }
-func (Plugin) SupportedProjectVersions() []string     { return supportedProjectVersions }
-func (p Plugin) GetInitPlugin() plugin.Init           { return &p.initPlugin }
-func (p Plugin) GetCreateAPIPlugin() plugin.CreateAPI { return &p.createAPIPlugin }
+func (Plugin) Name() string                                         { return pluginName }
+func (Plugin) Version() plugin.Version                              { return pluginVersion }
+func (Plugin) SupportedProjectVersions() []config.Version           { return supportedProjectVersions }
+func (p Plugin) GetInitSubcommand() plugin.InitSubcommand           { return &p.initSubcommand }
+func (p Plugin) GetCreateAPISubcommand() plugin.CreateAPISubcommand { return &p.createAPISubcommand }

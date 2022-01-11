@@ -16,6 +16,7 @@ package operator
 
 import (
 	"context"
+	"time"
 
 	v1 "github.com/operator-framework/api/pkg/operators/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -30,10 +31,12 @@ import (
 
 type Configuration struct {
 	Namespace      string
+	ServiceAccount string
 	KubeconfigPath string
 	RESTConfig     *rest.Config
 	Client         client.Client
 	Scheme         *runtime.Scheme
+	Timeout        time.Duration
 
 	overrides *clientcmd.ConfigOverrides
 }
@@ -54,6 +57,11 @@ func (c *Configuration) BindFlags(fs *pflag.FlagSet) {
 	})
 	fs.StringVar(&c.KubeconfigPath, "kubeconfig", "",
 		"Path to the kubeconfig file to use for CLI requests.")
+	fs.StringVar(&c.ServiceAccount, "service-account", "",
+		"Service account name to bind registry objects to. If unset, the default service account is used. "+
+			"This value does not override the operator's service account")
+	fs.DurationVar(&c.Timeout, "timeout", 2*time.Minute,
+		"Duration to wait for the command to complete before failing")
 }
 
 func (c *Configuration) Load() error {
@@ -108,7 +116,7 @@ type operatorClient struct {
 	client.Client
 }
 
-func (c *operatorClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
+func (c *operatorClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	opts = append(opts, client.FieldOwner("operator-sdk"))
 	return c.Client.Create(ctx, obj, opts...)
 }

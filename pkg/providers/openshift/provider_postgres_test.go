@@ -31,13 +31,15 @@ var (
 	testPostgresDatabase  = "test-postgres"
 	testPostgresUser      = "test-user"
 	testPostgresPassword  = "test-password"
+	FakeResourceVersion   = "1000"
 )
 
 func buildTestPostgresCR() *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      testPostgresName,
-			Namespace: testPostgresNamespace,
+			Name:            testPostgresName,
+			Namespace:       testPostgresNamespace,
+			ResourceVersion: FakeResourceVersion,
 		},
 		Spec:   croType.ResourceTypeSpec{},
 		Status: croType.ResourceTypeStatus{},
@@ -173,7 +175,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		{
 			name: "test successful creation",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 				PodCommander:  buildTestPodCommander(),
@@ -188,7 +190,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 				PodCommander:  buildTestPodCommander(),
@@ -245,7 +247,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "test successful delete",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresDeploymentReady(), buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: nil,
 			},
@@ -257,7 +259,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "test delete when deployment not ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeployment(), buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresDeployment(), buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: nil,
 			},
@@ -315,7 +317,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override pvc defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresPVC()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresPVC()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(pvcSpec),
 			},
@@ -341,7 +343,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override secret defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(secretSpec),
 			},
@@ -363,7 +365,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override deployment defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(depSpec),
 			},
@@ -388,7 +390,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override service defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR()).Build(),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(serviceSpec),
 			},

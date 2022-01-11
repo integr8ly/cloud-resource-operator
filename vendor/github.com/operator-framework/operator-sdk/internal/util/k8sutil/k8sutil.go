@@ -93,7 +93,11 @@ var dns1123LabelRegexp = regexp.MustCompile("[^a-zA-Z0-9]+")
 // replacing all non-compliant UTF-8 characters with "-".
 func FormatOperatorNameDNS1123(name string) string {
 	if len(validation.IsDNS1123Label(name)) != 0 {
-		return dns1123LabelRegexp.ReplaceAllString(name, "-")
+		// Use - for any of the non-matching characters
+		n := dns1123LabelRegexp.ReplaceAllString(name, "-")
+
+		// Now let's remove any leading or trailing -
+		return strings.ToLower(strings.Trim(n, "-"))
 	}
 	return name
 }
@@ -102,18 +106,20 @@ func FormatOperatorNameDNS1123(name string) string {
 // by removing characters from the beginning of label such that len(label) <= 63.
 func TrimDNS1123Label(label string) string {
 	if len(label) > validation.DNS1123LabelMaxLength {
-		return label[len(label)-validation.DNS1123LabelMaxLength:]
+		return strings.Trim(label[len(label)-validation.DNS1123LabelMaxLength:], "-")
 	}
 	return label
 }
 
 // SupportsOwnerReference checks whether a given dependent supports owner references, based on the owner.
+// The namespace of the dependent resource can either be passed in explicitly, otherwise it will be
+// extracted from the dependent runtime.Object.
 // This function performs following checks:
 //  -- True: Owner is cluster-scoped.
 //  -- True: Both Owner and dependent are Namespaced with in same namespace.
 //  -- False: Owner is Namespaced and dependent is Cluster-scoped.
 //  -- False: Both Owner and dependent are Namespaced with different namespaces.
-func SupportsOwnerReference(restMapper meta.RESTMapper, owner, dependent runtime.Object) (bool, error) {
+func SupportsOwnerReference(restMapper meta.RESTMapper, owner, dependent runtime.Object, depNamespace string) (bool, error) {
 	ownerGVK := owner.GetObjectKind().GroupVersionKind()
 	ownerMapping, err := restMapper.RESTMapping(ownerGVK.GroupKind(), ownerGVK.Version)
 	if err != nil {
@@ -136,7 +142,9 @@ func SupportsOwnerReference(restMapper meta.RESTMapper, owner, dependent runtime
 	ownerClusterScoped := ownerMapping.Scope.Name() == meta.RESTScopeNameRoot
 	ownerNamespace := mOwner.GetNamespace()
 	depClusterScoped := depMapping.Scope.Name() == meta.RESTScopeNameRoot
-	depNamespace := mDep.GetNamespace()
+	if depNamespace == "" {
+		depNamespace = mDep.GetNamespace()
+	}
 
 	if ownerClusterScoped {
 		return true, nil

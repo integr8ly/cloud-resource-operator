@@ -17,12 +17,14 @@ package playbooks
 import (
 	"path/filepath"
 
-	"sigs.k8s.io/kubebuilder/pkg/model/file"
+	"sigs.k8s.io/kubebuilder/v3/pkg/machinery"
 )
 
+var _ machinery.Template = &Playbook{}
+
 type Playbook struct {
-	file.TemplateMixin
-	file.ResourceMixin
+	machinery.TemplateMixin
+	machinery.ResourceMixin
 
 	GenerateRole bool
 }
@@ -30,12 +32,11 @@ type Playbook struct {
 func (f *Playbook) SetTemplateDefaults() error {
 	if f.Path == "" {
 		f.Path = filepath.Join("playbooks", "%[kind].yml")
-		f.Path = f.Resource.Replacer().Replace(f.Path)
 	}
-	if f.Path == "" {
-		f.Path = "playbook.yml"
-	}
+	f.Path = f.Resource.Replacer().Replace(f.Path)
+
 	f.TemplateBody = playbookTmpl
+
 	return nil
 }
 
@@ -43,13 +44,13 @@ const playbookTmpl = `---
 - hosts: localhost
   gather_facts: no
   collections:
-    - community.kubernetes
+    - kubernetes.core
     - operator_sdk.util
 
   {{- if .GenerateRole }}
   tasks:
     - import_role:
-        name: "{{.Resource.Kind | lower }}"
+        name: "{{ lower .Resource.Kind }}"
   {{- else }}
   tasks: []
 	{{- end }}

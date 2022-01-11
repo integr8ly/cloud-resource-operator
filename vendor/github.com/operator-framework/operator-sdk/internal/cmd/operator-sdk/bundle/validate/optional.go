@@ -42,13 +42,29 @@ var optionalValidators = validators{
 			nameKey:  "operatorhub",
 			suiteKey: "operatorframework",
 		},
-		desc: "OperatorHub.io metadata validation",
+		desc: "OperatorHub.io metadata validation. ",
+	},
+	{
+		Validator: apivalidation.CommunityOperatorValidator,
+		name:      "community",
+		labels: map[string]string{
+			nameKey: "community",
+		},
+		desc: "(stage: alpha) Community Operator bundle validation. See https://github.com/operator-framework/community-operators/blob/master/docs/packaging-required-fields.md",
+	},
+	{
+		Validator: apivalidation.AlphaDeprecatedAPIsValidator,
+		name:      "alpha-deprecated-apis",
+		labels: map[string]string{
+			nameKey: "alpha-deprecated-apis",
+		},
+		desc: "(stage: alpha) Deprecated APIs bundle validation. This valiator can help you out verify if your bundle contains manifests which uses deprecated APIs. More info: https://kubernetes.io/docs/reference/using-api/deprecation-guide/",
 	},
 }
 
 // runOptionalValidators runs optional validators selected by sel on bundle.
-func runOptionalValidators(bundle *apimanifests.Bundle, sel labels.Selector) []apierrors.ManifestResult {
-	return optionalValidators.run(bundle, sel)
+func runOptionalValidators(bundle *apimanifests.Bundle, sel labels.Selector, optionalValues map[string]string) []apierrors.ManifestResult {
+	return optionalValidators.run(bundle, sel, optionalValues)
 }
 
 // listOptionalValidators lists all optional validators.
@@ -101,7 +117,7 @@ func (vals validators) checkMatches(sel labels.Selector) error {
 }
 
 // run runs optional validators selected by sel on bundle.
-func (vals validators) run(bundle *apimanifests.Bundle, sel labels.Selector) (results []apierrors.ManifestResult) {
+func (vals validators) run(bundle *apimanifests.Bundle, sel labels.Selector, optionalValues map[string]string) (results []apierrors.ManifestResult) {
 	// No selector set, do not run any optional validators.
 	if sel == nil || sel.String() == "" {
 		return results
@@ -115,6 +131,10 @@ func (vals validators) run(bundle *apimanifests.Bundle, sel labels.Selector) (re
 	for _, obj := range bundle.Objects {
 		objs = append(objs, obj)
 	}
+
+	// Pass the --optional-values. e.g. --optional-values="k8s-version=1.22"
+	// or --optional-values="image-path=bundle.Dockerfile"
+	objs = append(objs, optionalValues)
 
 	for _, v := range vals {
 		if sel.Matches(labels.Set(v.labels)) {

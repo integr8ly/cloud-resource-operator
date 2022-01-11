@@ -234,21 +234,18 @@ func (r *CloudMetricsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// off the first reconcile loop
 	go func() {
 		events <- event.GenericEvent{
-			Meta:   &integreatlyv1alpha1.Redis{},
 			Object: &integreatlyv1alpha1.Redis{},
 		}
 	}()
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.Redis{}).
-		For(&integreatlyv1alpha1.Postgres{}).
+		For(&integreatlyv1alpha1.Redis{}). // manager needs at least one object to reconcile on
 		Watches(&source.Channel{Source: events}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 
-func (r *CloudMetricsReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling CloudMetrics")
-	ctx := context.Background()
 
 	// scrapedMetrics stores the GenericCloudMetric which are returned from the providers
 	var scrapedMetrics []*providers.GenericCloudMetric
