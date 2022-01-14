@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -500,13 +499,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		errMsg := "Failed to get watch namespace"
-		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
-	isLastResource, err := p.isLastResource(ctx, namespace)
+	isLastResource, err := p.isLastResource(ctx)
 	if err != nil {
 		errMsg := "failed to check if this cr is the last cr of type postgres and redis"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -656,9 +649,9 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 	return elasticacheCreateConfig, elasticacheDeleteConfig, elasticacheServiceUpdates, stratCfg, nil
 }
 
-func (p *RedisProvider) isLastResource(ctx context.Context, namespace string) (bool, error) {
+func (p *RedisProvider) isLastResource(ctx context.Context) (bool, error) {
 	listOptions := client.ListOptions{
-		Namespace: namespace,
+		Namespace: "",
 	}
 	var postgresList = &v1alpha1.PostgresList{}
 	if err := p.Client.List(ctx, postgresList, &listOptions); err != nil {
