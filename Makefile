@@ -73,6 +73,7 @@ gen/csv:
 	@yq e -i '.metadata.name="cloud-resources.v${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.version="${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.replaces="cloud-resources.v${PREV_VERSION}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.installModes[0].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[0].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.installModes[1].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[1].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.installModes[2].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[2].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
