@@ -4,10 +4,10 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Basic Install
-    containerImage: quay.io/integreatly/cloud-resource-operator:v0.34.0
+    containerImage: quay.io/integreatly/cloud-resource-operator:v0.35.0
     operators.operatorframework.io/builder: operator-sdk-v1.2.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
-  name: cloud-resources.v0.34.0
+  name: cloud-resources.v0.35.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -62,4 +62,4 @@ spec:
   maturity: alpha
   provider:
     name: Integreatly
-  version: 0.34.0
+  version: 0.35.0
