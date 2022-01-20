@@ -29,9 +29,10 @@ Please use >= v0.17.x of CRO for Openshift >= v4.4.6.
 
 
 Prerequisites:
-- `go`
 - `make`
-- `yq` version 3.x.x 
+- [go](https://golang.org/dl/)
+- [yq](https://github.com/mikefarah/yq) version v4+
+- [operator-sdk](https://github.com/operator-framework/operator-sdk) version v1.14.0.
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
 
@@ -199,6 +200,144 @@ NOTE: Make sure that the  `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSI
 Example:
 Starting image for the bundles is 0.23.0, if you are releasing version 0.24.0, ensure that the `PREV_VERSION` is set to `0.23.0`, `VERSION` is set to `0.24.0`
 and `PREVIOUS_OPERATOR_VERSIONS` contain coma seperated list of all previous bundles, in this example it would contain only `0.23.0`.
+
+### Deploy with OLM
+
+These steps detail how to deploy CRO through the Operator Lifecycle Manager (OLM) for development purposes.
+
+To deploy a new development release through OLM, we need a bundle, index, and operator container image.
+* The bundle contains manifests and metadata for a single operator version
+* The index contains a database of pointers to the operator manifest content and refers to the bundle(s)
+
+The [Makefile](Makefile) automates the creation and tagging of these images, but some of the variables should be adjusted first:
+* `VERSION`: this should be set to the value for your development release - in this example we have set it to `10.0.0`
+* `PREVIOUS_OPERATOR_VERSIONS`: this variable determines which bundles to include in the index. As we do not plan to upgrade to this version it can be set to an empty string
+* `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
+* `UPGRADE`: set to `false` as this version will not replace a previous version
+
+Some of these variables can be passed through at the command line if not set in the [Makefile](Makefile):
+
+```sh
+IMAGE_ORG=myorg UPGRADE=false make release/prepare
+```
+
+This pushes a new container image for this CRO version (`v10.0.0`), and creates new [packagemanifests](packagemanifests/) used to create and push a bundle and index container image.
+
+The result is three separate container images in your quay repository:
+- quay.io/myorg/cloud-resource-operator:v10.0.0
+- quay.io/myorg/cloud-resource-operator:bundle-v10.0.0
+- quay.io/myorg/cloud-resource-operator:index-v10.0.0
+
+> **_NOTE_**: To deploy any of the images they must be publicly accessible - ensure that `quay.io/myorg/cloud-resource-operator` is not private
+
+OLM can use this index image to create new operator deployments. A `CatalogSource` is used that references the newly created index tag:
+
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: cro-operator-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: quay.io/myorg/cloud-resource-operator:index-v10.0.0
+```
+
+After a short delay, CRO will be visible from **Operators** -> **OperatorHub** in the Openshift dashboard and can be installed through the GUI.
+
+Alternatively, a `Subscription` object can be created manually (assuming namespace `cloud-resource-operator` exists):
+
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhmi-cloud-resources
+  namespace: cloud-resource-operator
+spec:
+  channel: rhmi
+  name: rhmi-cloud-resources
+  source: cro-operator-catalog
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic
+```
+
+### Upgrade with OLM
+
+These steps detail how to deploy the latest version of CRO and trigger an update to your own development version through the Operator Lifecycle Manager (OLM).
+
+To perform a side-by-side upgrade of CRO through OLM, we must create bundle, index and container images for both the version we are upgrading from and the version we are upgrading to.
+* The bundle contains manifests and metadata for a single operator version
+* The index contains a database of pointers to the operator manifest content and refers to the bundle(s)
+
+First you must checkout the code for the version you would like to upgrade from. For the purposes of this guide we assume that you are upgrading from a tagged previous release. However, if you would like to test an upgrade from the current state of the master branch, follow the first part of the [Deploy with OLM](#deploy-with-olm) guide to create the initial version images. In this example we assume that the latest release is `v0.34.0`.
+
+The [Makefile](Makefile) provides an automated method of creating and pushing the index and bundle images for the latest version of CRO. It uses the latest version number from [packagemanifests](packagemanifests/) to determine which version is newest. Some of the variables within the [Makefile](Makefile) should also be adjusted:
+* `PREVIOUS_OPERATOR_VERSIONS`: this variable determines which bundles to include in the index. As we do not plan to upgrade to this version it can be set to an empty string
+* `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
+* `UPGRADE`: set to `false` as this version will not replace a previous version
+
+```sh
+IMAGE_ORG=myorg UPGRADE=false make create/olm/bundle
+```
+
+This creates a new index and bundle for the original CRO release container image. These are:
+- quay.io/integreatly/cloud-resource-operator:v0.34.0
+- quay.io/myorg/cloud-resource-operator:bundle-v0.34.0
+- quay.io/myorg/cloud-resource-operator:index-v0.34.0
+
+The development release must now be created that we will upgrade to - checkout the code first. For the purposes of this example we assume the development version is `v10.0.0`.
+
+Adjust the [Makefile](Makefile) variables for the new development release:
+* `VERSION`: set this to the chosen version - `10.0.0`
+* `PREV_VERSION`: this is set to the version we are upgrading from - `0.34.0`
+* `PREVIOUS_OPERATOR_VERSIONS`: this contains a list of previous versions that the index will refer to. For our upgrade we only need the single previous version - `0.34.0`
+* `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
+
+```sh
+IMAGE_ORG=myorg make release/prepare
+```
+
+This creates new [packagemanifests](packagemanifests/) for this release, specifying that this version `replaces` the previous version. These manifests are used to generate new index, bundle, and operator container images for the development CRO release:
+- quay.io/myorg/cloud-resource-operator:v10.0.0
+- quay.io/myorg/cloud-resource-operator:bundle-v10.0.0
+- quay.io/myorg/cloud-resource-operator:index-v10.0.0
+
+> **_NOTE_**: To deploy any of the images they must be publicly accessible - ensure that `quay.io/myorg/cloud-resource-operator` is not private
+
+Now that there are bundles, indexes, and operator images for both releases of CRO, the initial version can be deployed. OLM can use the index image to create new operator deployments. A `CatalogSource` is used that references the initial (`v0.34.0`) index tag:
+
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: cro-operator-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: quay.io/myorg/cloud-resource-operator:index-v0.34.0
+```
+
+After a short delay, CRO will be visible from **Operators** -> **OperatorHub** in the Openshift dashboard and can be installed through the GUI.
+
+When ready to trigger the upgrade process, we can update the `CatalogSource` to point to the new index containing the references to both bundles.
+
+```sh
+oc edit catalogsource cro-operator-catalog -n openshift-marketplace
+```
+
+```diff
+apiVersion: operators.coreos.com/v1alpha1
+  kind: CatalogSource
+  metadata:
+    name: cro-operator
+    namespace: openshift-marketplace
+  spec:
+    sourceType: grpc
+-   image: quay.io/myorg/cloud-resource-operator:index-v0.34.0
++   image: quay.io/myorg/cloud-resource-operator:index-v10.0.0
+```
+
+Navigating to **Installed Operators** -> **Cloud Resource Operator** -> **Subscription** will show a pending upgrade. Click to preview the InstallPlan and approve the update. CRO will be updated from `v0.34.0` to `v10.0.0`.
 
 ### Terminology
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
