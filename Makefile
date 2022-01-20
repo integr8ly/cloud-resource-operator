@@ -16,7 +16,7 @@ SHELL=/bin/bash
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
 # otherwise use it through "go run" (slower but will always work and will use correct version)
-OPERATOR_SDK_VERSION=1.2.0
+OPERATOR_SDK_VERSION=1.14.0
 ifeq ($(shell operator-sdk version 2> /dev/null | sed -e 's/", .*/"/' -e 's/.* //'), "v$(OPERATOR_SDK_VERSION)")
 	OPERATOR_SDK ?= operator-sdk
 else
@@ -65,19 +65,15 @@ code/gen: manifests kustomize generate
 # Make sure that the previous version and version values are set to correct values.
 .PHONY: gen/csv
 gen/csv:
-	@$(KUSTOMIZE) build config/manifests | operator-sdk generate packagemanifests --kustomize-dir=config/manifests --output-dir packagemanifests/ --version ${VERSION} --default-channel --channel integreatly
+	@$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate packagemanifests --kustomize-dir=config/manifests --output-dir packagemanifests/ --version ${VERSION} --default-channel --channel integreatly
 	@sed -i "s/Version = \"${PREV_VERSION}\"/Version = \"${VERSION}\"/g" version/version.go
 	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.metadata.name="cloud-resources.v$(VERSION)"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.install.spec.deployments[0].spec.template.spec.containers[0].image="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.metadata.name="cloud-resources.v${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.version="${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
 	@yq e -i '.spec.replaces="cloud-resources.v${PREV_VERSION}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.installModes[0].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[0].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.installModes[1].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[1].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.installModes[2].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[2].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.installModes[3].supported=$(shell yq e -o=json ./config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml | jq '.spec.installModes[3].supported')' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.metadata.name="cloud-resource-operator.v$(VERSION)"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+	@yq e -i '.spec.version="${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
 
 .PHONY: code/fix
 code/fix:
