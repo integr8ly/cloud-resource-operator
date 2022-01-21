@@ -63,8 +63,8 @@ generate_bundles() {
       --package rhmi-cloud-resources --output-dir bundle \
       --default $CHANNEL
 
-  podman build -f bundle.Dockerfile -t $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION .
-  podman push $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
+  ${BUILD_TOOL} build -f bundle.Dockerfile -t $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION .
+  ${BUILD_TOOL} push $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
   operator-sdk bundle validate $REG/$ORG/cloud-resource-operator:bundle-v$LATEST_VERSION
   cd ..
 }
@@ -88,7 +88,7 @@ push_index() {
 
   printf 'Pushing index image:'$INDEX_IMAGE'\n'
 
-  podman push $INDEX_IMAGE
+  ${BUILD_TOOL} push $INDEX_IMAGE
 }
 
 # cleans up the working space
