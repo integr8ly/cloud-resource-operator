@@ -28,7 +28,7 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
 
   - a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
   - b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
-- Once the image, bundle and index are pushed, tag the CRO repo.
+- Once the image, bundle and index are pushed, [tag the CRO repo](https://github.com/integr8ly/cloud-resource-operator#releasing).
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
 
