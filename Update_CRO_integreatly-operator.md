@@ -24,9 +24,10 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
 ![release pipeline](img/pipeline.png?raw=true)
 >**NOTE**: You have to be on the internal Red Hat network to access the pipeline
 
-The pipeline will do the following:
-a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
-b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
+- The pipeline will do the following:
+
+  - a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
+  - b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
 - Once the image, bundle and index are pushed, tag the CRO repo.
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
