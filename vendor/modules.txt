@@ -440,8 +440,6 @@ github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 # github.com/markbates/inflect v1.0.4
 github.com/markbates/inflect
-# github.com/matryer/moq v0.2.5
-## explicit
 # github.com/mattn/go-colorable v0.1.8
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
