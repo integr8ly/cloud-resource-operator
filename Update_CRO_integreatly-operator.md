@@ -19,14 +19,20 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
     - cloud-resources.v0.26.0
   version: 0.27.0
 ```
-- Once the package manifests are ready and merged to master run CRO release pipeline with default params. The pipeline will do the following:
-a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
-b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
-- Once the image, bundle and index are pushed, tag the CRO repo.
+- Once the package manifests are ready and merged to master run CRO [release pipeline](https://master-jenkins-csb-intly.apps.ocp4.prod.psi.redhat.com/job/Delorean/job/release/job/cro/) with default params. 
+
+![release pipeline](img/pipeline.png?raw=true)
+>**NOTE**: You have to be on the internal Red Hat network to access the pipeline
+
+- The pipeline will do the following:
+
+  - a) Build and push new Cloud Resource Operator image with a tag that matches the VESION field.
+  - b) Build and push new bundle and index based on the PREVIOUS_VERSION and VERSION fields 
+- Once the image, bundle and index are pushed, [tag the CRO repo](https://github.com/integr8ly/cloud-resource-operator#releasing).
 
 ## Update the CSV in CRO manifest for the Integreatly-operator
 
-To update Integreatly Operator to use the releases bundle of CRO, navigate to [installation file](https://github.com/integr8ly/integreatly-operator/blob/master/products/installation.yaml#L64) 
+To update Integreatly Operator to use the releases bundle of CRO, navigate to [products/installation.yaml file](https://github.com/integr8ly/integreatly-operator/blob/master/products/installation.yaml#L64) 
 for the Integreatly Operator and ensure that using the `index` format is selected. 
 
 Update the image of the index to point to the newly created index. For example:
@@ -39,11 +45,24 @@ Update the image of the index to point to the newly created index. For example:
     index: "quay.io/integreatly/cloud-resource-operator:index-v0.25.0"
 ```
 
+You need to change the [products/installation-cpaas.yaml file](https://github.com/integr8ly/integreatly-operator/blob/master/products/installation-cpaas.yaml#L80-L84) 
+for the Integreatly Operator and ensure that using the `index` format is selected. 
+
+Update the image of the index to point to the newly created index. For example:
+
+```yaml
+  cloud-resources:
+    channel: "rhmi"
+    installFrom: "index"
+    package: "rhmi-cloud-resources"
+    index: "quay.io/integreatly/cloud-resource-operator:index-v0.25.0"
+```
+
 You need to change the [products.yaml](https://github.com/integr8ly/integreatly-operator/blob/master/products/products.yaml) 
 file to point at your new version
 ```yaml
   - name: cloud-resource-operator
-    version: v0.26.0 # replace this with your latest version
+    version: v0.25.0 # replace this with your latest version
     url: "https://github.com/integr8ly/cloud-resource-operator"
     installType: "rhoam/rhmi"
     manifestsDir: "integreatly-cloud-resources"
