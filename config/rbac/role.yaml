@@ -23,6 +23,16 @@ rules:
   - list
   - watch
 - apiGroups:
+  - integreatly.org
+  resources:
+  - postgres
+  - postgressnapshots
+  - redis
+  - redissnapshots
+  verbs:
+  - list
+  - watch
+- apiGroups:
   - monitoring.coreos.com
   resources:
   - prometheusrules
