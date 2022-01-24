@@ -15,7 +15,7 @@ require (
 	github.com/lib/pq v1.10.0
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.15.0
+	github.com/onsi/gomega v1.18.0
 	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
 	github.com/openshift/cloud-credential-operator v0.0.0-20211102171825-9d7d082fe277
 	github.com/operator-framework/operator-sdk v1.14.0
