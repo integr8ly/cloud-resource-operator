@@ -338,6 +338,15 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 		}
 		msg = fmt.Sprintf("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
 		logger.Infof(msg)
+
+		croStatus, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to add tags to rds: %s", croStatus)
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+
+		msg = fmt.Sprintf("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
+		logger.Infof(msg)
 		pdd := &providers.PostgresDeploymentDetails{
 			Username: *foundInstance.MasterUsername,
 			Password: postgresPass,
