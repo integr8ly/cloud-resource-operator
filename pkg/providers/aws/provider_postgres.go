@@ -336,8 +336,6 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 			logger.Info(statusMsg)
 			return nil, croType.StatusMessage(statusMsg), nil
 		}
-		msg = fmt.Sprintf("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
-		logger.Infof(msg)
 
 		croStatus, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
 		if err != nil {
