@@ -102,7 +102,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 
 func buildClient(scheme *runtime.Scheme, isSTS bool, ns string, secretValues ...string) client.Client {
 	if isSTS {
-		return fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v12.Secret{
+		return fake.NewFakeClientWithScheme(scheme, &v12.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
 				Name:      defaultSTSCredentialSecretName,
 				Namespace: ns,
@@ -111,9 +111,9 @@ func buildClient(scheme *runtime.Scheme, isSTS bool, ns string, secretValues ...
 				defaultRoleARNKeyName:   []byte(secretValues[0]),
 				defaultTokenPathKeyName: []byte(secretValues[1]),
 			},
-		}).Build()
+		})
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.CredentialsRequest{
+	return fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      defaultProviderCredentialName,
 			Namespace: ns,
@@ -139,5 +139,5 @@ func buildClient(scheme *runtime.Scheme, isSTS bool, ns string, secretValues ...
 			defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
 			defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
 		},
-	}).Build()
+	})
 }

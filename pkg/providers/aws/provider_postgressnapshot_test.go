@@ -103,7 +103,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build()
+	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
 	testIdentifier, err := BuildInfraNameFromObject(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, DefaultAwsIdentifierLength)
 	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, DefaultAwsIdentifierLength)
 
@@ -218,7 +218,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -251,7 +251,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -271,7 +271,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -295,7 +295,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -327,7 +327,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -358,7 +358,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -403,7 +403,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build()
+	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
 
 	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, DefaultAwsIdentifierLength)
 
@@ -604,7 +604,7 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()).Build()
+	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
 	testIdentifier := "test-identifier"
 	if err != nil {
 		logrus.Fatal(err)

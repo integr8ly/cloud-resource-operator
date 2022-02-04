@@ -786,7 +786,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	secName, err := BuildInfraName(context.TODO(), fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build security name", err)
@@ -834,7 +834,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -881,7 +881,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -919,7 +919,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -964,7 +964,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1009,7 +1009,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1054,7 +1054,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1099,7 +1099,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1136,7 +1136,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				standaloneNetworkExists: true,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1217,7 +1217,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1237,7 +1237,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1257,7 +1257,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1277,7 +1277,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1302,7 +1302,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1323,7 +1323,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1448,7 +1448,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,

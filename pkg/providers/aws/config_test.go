@@ -91,7 +91,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to marshal strategy config", err)
 	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.ConfigMap{
+	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -99,7 +99,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 		Data: map[string]string{
 			"blobstorage": fmt.Sprintf("{\"test\": %s}", string(rawStratCfg)),
 		},
-	}).Build()
+	})
 	cases := []struct {
 		name                string
 		cmName              string
@@ -173,7 +173,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewClientBuilder().WithScheme(fakeScheme).Build(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme),
 				strategy: fakeStrategy,
 			},
 			wantErr: true,
@@ -182,7 +182,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "strategy defines region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 			},
 			want: fakeStrategy.Region,
@@ -191,7 +191,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "default used when strategy does not define region",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				c:   fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
 				strategy: &StrategyConfig{
 					Region: "",
 				},
