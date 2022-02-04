@@ -2,6 +2,9 @@ package aws
 
 import (
 	"context"
+	"reflect"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
@@ -11,10 +14,8 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/moq/moq_aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 const (
@@ -89,7 +90,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -139,7 +140,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics, with 1 not complete metric",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -192,7 +193,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test no metrics have been returned from cloudwatch scrape",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),

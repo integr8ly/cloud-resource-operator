@@ -58,19 +58,10 @@ func (g *OCIGetter) get(href string) (*bytes.Buffer, error) {
 }
 
 // NewOCIGetter constructs a valid http/https client as a Getter
-func NewOCIGetter(ops ...Option) (Getter, error) {
-	registryClient, err := registry.NewClient()
-	if err != nil {
-		return nil, err
-	}
+func NewOCIGetter(options ...Option) (Getter, error) {
+	var client OCIGetter
 
-	client := OCIGetter{
-		opts: options{
-			registryClient: registryClient,
-		},
-	}
-
-	for _, opt := range ops {
+	for _, opt := range options {
 		opt(&client.opts)
 	}
 

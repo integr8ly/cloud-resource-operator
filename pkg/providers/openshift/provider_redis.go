@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/runtime"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -539,7 +540,7 @@ func int32Ptr(i int32) *int32 { return &i }
 // controllerutil.CreateOrUpdate without mutating the original runtime.Object provided
 func immutableCreateOrUpdate(ctx context.Context, c client.Client, o runtime.Object, cb func(existing runtime.Object) error) (controllerutil.OperationResult, error) {
 	copiedObj := o.DeepCopyObject()
-	return controllerutil.CreateOrUpdate(ctx, c, copiedObj.(client.Object), func() error {
+	return controllerutil.CreateOrUpdate(ctx, c, copiedObj.(runtime.Object), func() error {
 		return cb(copiedObj)
 	})
 }

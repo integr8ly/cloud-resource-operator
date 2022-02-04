@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	cfg "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -45,7 +44,7 @@ type Result = reconcile.Result
 // A Manager is required to create Controllers.
 type Manager = manager.Manager
 
-// Options are the arguments for creating a new Manager.
+// Options are the arguments for creating a new Manager
 type Options = manager.Options
 
 // SchemeBuilder builds a new Scheme for mapping go types to Kubernetes GroupVersionKinds.
@@ -55,7 +54,7 @@ type SchemeBuilder = scheme.Builder
 type GroupVersion = schema.GroupVersion
 
 // GroupResource specifies a Group and a Resource, but does not force a version.  This is useful for identifying
-// concepts during lookup stages without having partially valid types.
+// concepts during lookup stages without having partially valid types
 type GroupResource = schema.GroupResource
 
 // TypeMeta describes an individual object in an API response or request
@@ -89,18 +88,13 @@ var (
 	//
 	// * In-cluster config if running in cluster
 	//
-	// * $HOME/.kube/config if exists.
+	// * $HOME/.kube/config if exists
 	GetConfig = config.GetConfig
 
-	// ConfigFile returns the cfg.File function for deferred config file loading,
-	// this is passed into Options{}.From() to populate the Options fields for
-	// the manager.
-	ConfigFile = cfg.File
-
-	// NewControllerManagedBy returns a new controller builder that will be started by the provided Manager.
+	// NewControllerManagedBy returns a new controller builder that will be started by the provided Manager
 	NewControllerManagedBy = builder.ControllerManagedBy
 
-	// NewWebhookManagedBy returns a new webhook builder that will be started by the provided Manager.
+	// NewWebhookManagedBy returns a new webhook builder that will be started by the provided Manager
 	NewWebhookManagedBy = builder.WebhookManagedBy
 
 	// NewManager returns a new Manager for creating Controllers.
@@ -131,19 +125,10 @@ var (
 	// get any actual logging.
 	Log = log.Log
 
-	// LoggerFrom returns a logger with predefined values from a context.Context.
-	// The logger, when used with controllers, can be expected to contain basic information about the object
-	// that's being reconciled like:
-	// - `reconciler group` and `reconciler kind` coming from the For(...) object passed in when building a controller.
-	// - `name` and `namespace` injected from the reconciliation request.
+	// LoggerFromContext returns a logger with predefined values from a context.Context.
 	//
 	// This is meant to be used with the context supplied in a struct that satisfies the Reconciler interface.
-	LoggerFrom = log.FromContext
-
-	// LoggerInto takes a context and sets the logger as one of its keys.
-	//
-	// This is meant to be used in reconcilers to enrich the logger within a context with additional values.
-	LoggerInto = log.IntoContext
+	LoggerFromContext = log.FromContext
 
 	// SetLogger sets a concrete logging implementation for all deferred Loggers.
 	SetLogger = log.SetLogger

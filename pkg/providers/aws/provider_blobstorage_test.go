@@ -3,11 +3,12 @@ package aws
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"testing"
-	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
@@ -153,7 +154,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket already exists",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestBlobStorageCR(), buildTestCredentialsRequest()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -172,7 +173,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket is created if doesn't exist",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestBlobStorageCR(), buildTestCredentialsRequest()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -233,7 +234,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		{
 			name: "test successful delete",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestBlobStorageCR(), buildTestCredentialsRequest()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -254,7 +255,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		{
 			name: "test error on failed bucket delete",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestBlobStorageCR(), buildTestCredentialsRequest()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -361,7 +362,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 		{
 			name: "test tagging completes",
 			fields: fields{
-				Client:            fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()).Build(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},

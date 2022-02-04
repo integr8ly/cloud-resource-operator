@@ -3,8 +3,9 @@ package openshift
 import (
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	"reflect"
 	"testing"
@@ -165,7 +166,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation",
 			fields: fields{
-				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestRedisCR()).Build(),
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -179,7 +180,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestDeploymentReady(), buildTestRedisCR()).Build(),
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -235,7 +236,7 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 		{
 			name: "test successful deletion",
 			fields: fields{
-				Client:        fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestDeploymentReady(), buildTestRedisCR()).Build(),
+				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
