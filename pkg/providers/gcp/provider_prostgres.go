@@ -63,7 +63,7 @@ func (p PostgresProvider) GetReconcileTime(ps *v1alpha1.Postgres) time.Duration 
 
 // CreatePostgres creates a postgres instances with the credentials at the
 // path specified in the GOOGLE_APPLICATION_CREDENTIALS env
-func (p PostgresProvider) CreatePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p PostgresProvider) ReconcilePostgres(ctx context.Context, ps *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
 
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, ps, DefaultFinalizer); err != nil {
