@@ -3,6 +3,7 @@ module github.com/integr8ly/cloud-resource-operator
 go 1.18
 
 require (
+	cloud.google.com/go/compute v1.7.0
 	cloud.google.com/go/redis v1.2.0
 	github.com/aws/aws-sdk-go v1.44.45
 	github.com/google/uuid v1.3.0
@@ -30,7 +31,6 @@ require (
 
 require (
 	cloud.google.com/go v0.102.0 // indirect
-	cloud.google.com/go/compute v1.7.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

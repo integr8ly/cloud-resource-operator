@@ -4,6 +4,8 @@ cloud.google.com/go/longrunning
 cloud.google.com/go/longrunning/autogen
 # cloud.google.com/go/compute v1.7.0
 ## explicit; go 1.15
+cloud.google.com/go/compute/apiv1
+cloud.google.com/go/compute/internal
 cloud.google.com/go/compute/metadata
 # cloud.google.com/go/redis v1.2.0
 ## explicit; go 1.16
@@ -392,6 +394,8 @@ google.golang.org/appengine/urlfetch
 # google.golang.org/genproto v0.0.0-20220628213854-d9e0b6570c03
 ## explicit; go 1.15
 google.golang.org/genproto/googleapis/api/annotations
+google.golang.org/genproto/googleapis/cloud/compute/v1
+google.golang.org/genproto/googleapis/cloud/extendedops
 google.golang.org/genproto/googleapis/cloud/redis/v1
 google.golang.org/genproto/googleapis/longrunning
 google.golang.org/genproto/googleapis/rpc/code
