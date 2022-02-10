@@ -15,9 +15,10 @@ func CreateNetwork() (croType.StatusMessage, error) {
 		return "Could not create network client", err
 	}
 
-	op, err := networkClient.Insert(ctx, computepb.InsertNetworkRequest{})
+	_, err = networkClient.Insert(ctx, &computepb.InsertNetworkRequest{})
 
 	if err != nil {
 		return "Could not create network", err
 	}
+	return croType.StatusEmpty, nil
 }
