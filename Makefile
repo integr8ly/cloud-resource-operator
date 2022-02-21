@@ -132,27 +132,11 @@ cluster/clean:
 	@$(KUSTOMIZE) build config/rbac | oc delete --force -f -	
 	oc delete project $(NAMESPACE)
 
-.PHONY: test/unit/setup
-test/unit/setup:
-	@echo Installing gotest
-	go get -u github.com/rakyll/gotest
-
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
 	GO111MODULE=off go get -u github.com/rakyll/gotest
 	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/providers/... ./pkg/resources/... ./apis/integreatly/v1alpha1/types/... ./pkg/client/...
-
-.PHONY: test/unit/coverage
-test/unit/coverage:
-	@echo Running the coverage cli and html
-	go tool cover -html=coverage.out
-	go tool cover -func=coverage.out
-
-.PHONY: test/unit/ci
-test/unit/ci: test/unit
-	@echo Removing mock file coverage
-	sed -i.bak '/_moq.go/d' coverage.out
 
 .PHONY: image/build
 image/build: build
@@ -266,3 +250,7 @@ image/push/pipelines: image/build/pipelines
 .PHONY: verify/release/exist
 verify/release/exist:
 	IMAGE_TO_SCAN=${OPERATOR_IMG} ./scripts/imageExists.sh
+
+.PHONY: coverage
+coverage:
+	hack/codecov.sh
