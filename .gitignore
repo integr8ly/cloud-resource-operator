@@ -95,7 +95,8 @@ operator-sdk-v1.2.0
 !vendor/**/zz_generated.*
 
 # editor and IDE paraphernalia
-.idea
 *.swp
 *.swo
-*~
+
+# Generated roles
+rhoam_role.json

@@ -249,4 +249,4 @@ coverage:
 
 .PHONY: setup/sts
 setup/sts:
-	sed "s|ROLE_ARN|$(ROLE_ARN)|g" scripts/sts/sts-secret.yaml | oc apply -f - -n $(NAMESPACE)
+	NAMESPACE=$(NAMESPACE) ./scripts/sts/create-rhoam-policy.sh

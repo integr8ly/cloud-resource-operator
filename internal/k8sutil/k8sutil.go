@@ -34,8 +34,8 @@ var ErrRunLocal = fmt.Errorf("operator run mode forced to local")
 
 // GetOperatorNamespace returns the namespace the operator should be running in.
 func GetOperatorNamespace() (string, error) {
-	if isRunModeLocal() {
-		return "", ErrRunLocal
+	if IsRunModeLocal() {
+		return GetWatchNamespace() // Return the watched namespace for when running locally
 	}
 	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
@@ -67,7 +67,7 @@ func GetGVKsFromAddToScheme(addToSchemeFunc func(*runtime.Scheme) error) ([]sche
 	return ownGVKs, nil
 }
 
-func isRunModeLocal() bool {
+func IsRunModeLocal() bool {
 	return !isRunModeCluster()
 }
 
