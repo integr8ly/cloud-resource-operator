@@ -5,7 +5,6 @@ metadata:
   name: example-blobstorage
   labels:
     productName: ProductName
-    stsTag: AddOnName
 spec:
   # i want my blob storage information output in a secret named example-blobstorage-sec
   secretRef:

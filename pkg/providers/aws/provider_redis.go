@@ -233,7 +233,9 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// expose a connection metric
 	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
-	stsEnabled := true
+
+	//TODO: replace with real check for whether sts is enabled
+	stsEnabled := false
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
@@ -341,49 +343,17 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
 }
 
-
 // buildRedisTagCreateStrategy Tags RDS resources
 func (p *RedisProvider) buildRedisTagCreateStrategy(ctx context.Context, cr *v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput) (croType.StatusMessage, error) {
-	// get the environment from the CR
-	// set the tag values that will always be added
-	defaultOrganizationTag := resources.GetOrganizationTag()
-
-	//get Cluster Id
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	redisTags, _, err := p.getDefaultElasticacheTags(ctx, cr)
 	if err != nil {
-		msg := "Failed to get cluster id to add tags to Redis instance"
+		msg := "Failed to build default tags"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
-	// Set the Tag values
-	redisTags := []*elasticache.Tag{
-		{
-			Key:   aws.String(defaultOrganizationTag + "clusterID"),
-			Value: aws.String(clusterID),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-type"),
-			Value: aws.String(cr.Spec.Type),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-name"),
-			Value: aws.String(cr.Name),
-		},
-		{
-			Key:   aws.String("red-hat-managed"),
-			Value: aws.String("true"),
-		},
-	}
-	if cr.ObjectMeta.Labels["productName"] != "" {
-		productTag := &elasticache.Tag{
-			Key:   aws.String(defaultOrganizationTag + "product-name"),
-			Value: aws.String(cr.ObjectMeta.Labels["productName"]),
-		}
-		redisTags = append(redisTags, productTag)
-	}
 	if cr.ObjectMeta.Labels["addonName"] != "" {
 		addonTag := &elasticache.Tag{
-			Key: aws.String("add-on-name"),
+			Key:   aws.String("add-on-name"),
 			Value: aws.String(cr.ObjectMeta.Labels["addonName"]),
 		}
 		redisTags = append(redisTags, addonTag)
@@ -428,35 +398,10 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
 	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:cluster:%s", region, *id.Account, *cache.CacheClusterId)
 
-	// set the tag values that will always be added
-	organizationTag := resources.GetOrganizationTag()
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	cacheTags, clusterID, err := p.getDefaultElasticacheTags(ctx, r)
 	if err != nil {
-		errMsg := "failed to get cluster id"
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-	cacheTags := []*elasticache.Tag{
-		{
-			Key:   aws.String(organizationTag + "clusterID"),
-			Value: aws.String(clusterID),
-		},
-		{
-			Key:   aws.String(organizationTag + "resource-type"),
-			Value: aws.String(r.Spec.Type),
-		},
-		{
-			Key:   aws.String(organizationTag + "resource-name"),
-			Value: aws.String(r.Name),
-		},
-	}
-
-	// check is product name exists on cr
-	if r.ObjectMeta.Labels["productName"] != "" {
-		productTag := &elasticache.Tag{
-			Key:   aws.String(organizationTag + "product-name"),
-			Value: aws.String(r.ObjectMeta.Labels["productName"]),
-		}
-		cacheTags = append(cacheTags, productTag)
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// add tags
@@ -720,6 +665,15 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 	}
 
 	return elasticacheCreateConfig, elasticacheDeleteConfig, elasticacheServiceUpdates, stratCfg, nil
+}
+
+func (p *RedisProvider) getDefaultElasticacheTags(ctx context.Context, cr *v1alpha1.Redis) ([]*elasticache.Tag, string, error) {
+	tags, clusterID, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	if err != nil {
+		msg := "Failed to get default redis tags"
+		return nil, "", errorUtil.Wrapf(err, msg)
+	}
+	return genericToElasticacheTags(tags), clusterID, nil
 }
 
 func (p *RedisProvider) isLastResource(ctx context.Context) (bool, error) {

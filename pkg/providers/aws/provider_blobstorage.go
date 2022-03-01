@@ -195,35 +195,10 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string, s3svc s3iface.S3API) (croType.StatusMessage, error) {
 	p.Logger.Infof("bucket %s found, Adding tags to bucket", bucketName)
 
-	// set tag values that will always be added
-	defaultOrganizationTag := resources.GetOrganizationTag()
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	bucketTags, err := p.getDefaultS3Tags(ctx, bs)
 	if err != nil {
-		errMsg := "failed to get cluster id"
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-	bucketTags := []*s3.Tag{
-		{
-			Key:   aws.String(defaultOrganizationTag + "clusterID"),
-			Value: aws.String(clusterID),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-type"),
-			Value: aws.String(bs.Spec.Type),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-name"),
-			Value: aws.String(bs.Name),
-		},
-	}
-
-	// check if product name exists and append label
-	if bs.ObjectMeta.Labels["productName"] != "" {
-		productTag := &s3.Tag{
-			Key:   aws.String(defaultOrganizationTag + "product-name"),
-			Value: aws.String(bs.ObjectMeta.Labels["productName"]),
-		}
-		bucketTags = append(bucketTags, productTag)
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// adding the tags to S3
@@ -352,6 +327,15 @@ func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v
 	p.exposeBlobStorageMetrics(ctx, bs)
 
 	return nil
+}
+
+func (p *BlobStorageProvider) getDefaultS3Tags(ctx context.Context, cr *v1alpha1.BlobStorage) ([]*s3.Tag, error) {
+	tags, _, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	if err != nil {
+		msg := "Failed to get default s3 tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+	return genericToS3Tags(tags), nil
 }
 
 func deleteBucket(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
