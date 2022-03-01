@@ -170,9 +170,20 @@ func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials
 	}
 	// Check if STS credentials are passed
 	if len(credentials.RoleArn) > 0 {
-		svc := sts.New(session.Must(session.NewSession(&awsConfig)))
-		credentialsProvider := stscreds.NewWebIdentityRoleProvider(svc, credentials.RoleArn, "Red-Hat-cloud-resources-operator", credentials.TokenFilePath)
-		awsConfig.Credentials = awsCredentials.NewCredentials(credentialsProvider)
+		// If running locally and STS role to assume is created, assume this role locally
+		// Local IAM user must be a principle in the role created with the sts:AssumeRole action
+		// Otherwise assume running in a pod in STS cluster
+		if k8sutil.IsRunModeLocal() {
+			sess, err := session.NewSession(&awsConfig)
+			if err != nil {
+				return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s", region)
+			}
+			awsConfig.Credentials = stscreds.NewCredentials(sess, credentials.RoleArn)
+		} else {
+			svc := sts.New(session.Must(session.NewSession(&awsConfig)))
+			credentialsProvider := stscreds.NewWebIdentityRoleProvider(svc, credentials.RoleArn, "Red-Hat-cloud-resources-operator", credentials.TokenFilePath)
+			awsConfig.Credentials = awsCredentials.NewCredentials(credentialsProvider)
+		}
 	} else {
 		awsConfig.Credentials = awsCredentials.NewStaticCredentials(credentials.AccessKeyID, credentials.SecretAccessKey, "")
 	}
