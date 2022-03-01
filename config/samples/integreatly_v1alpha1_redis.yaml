@@ -6,7 +6,6 @@ metadata:
   labels:
   # label for the product we are installing , subject to change
     productName: productName
-    stsTag: AddOnName
 spec:
   # i want my redis storage information output in a secret named example-redis-sec
   secretRef:
