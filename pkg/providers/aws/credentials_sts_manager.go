@@ -35,7 +35,7 @@ func NewSTSCredentialManager(client client.Client) *STSCredentialManager {
 }
 
 //ReconcileProviderCredentials Ensure the credentials the AWS provider requires are available
-func (m *STSCredentialManager) ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error) {
+func (m *STSCredentialManager) ReconcileProviderCredentials(ctx context.Context, _ string) (*Credentials, error) {
 	secret, err := getSTSCredentialsSecret(ctx, m.Client, m.OperatorNamespace)
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get aws STS credentials secret %s", defaultSTSCredentialSecretName)
@@ -54,7 +54,7 @@ func (m *STSCredentialManager) ReconcileProviderCredentials(ctx context.Context,
 	return credentials, nil
 }
 
-func (m *STSCredentialManager) ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, error) {
+func (m *STSCredentialManager) ReconcileBucketOwnerCredentials(_ context.Context, _, _, _ string) (*Credentials, error) {
 	return nil, nil
 }
 

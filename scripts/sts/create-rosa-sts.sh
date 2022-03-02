@@ -1,4 +1,7 @@
 #!/bin/bash
+# Usage :
+# ./create-rosa-sts.sh <cluster name>
+
 set -eux
 
 
