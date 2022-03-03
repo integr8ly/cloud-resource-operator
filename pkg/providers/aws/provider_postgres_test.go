@@ -1809,7 +1809,7 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 					PubliclyAccessible:         aws.Bool(true),
 					AllocatedStorage:           aws.Int64(1),
 					MaxAllocatedStorage:        aws.Int64(1),
-					EngineVersion:              aws.String("10.16"),
+					EngineVersion:              aws.String("10.18"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
