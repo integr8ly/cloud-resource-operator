@@ -5,7 +5,8 @@ add the latest version of CRO
 ## Release new version bundle of Cloud Resource Operator
 
 From your CRO branch, navigate to makefile and ensure that:
-- PREVIOUS_VERSION and VERSION match the desired versions.
+- PREVIOUS_VERSION and VERSION match the desired versions. You can confirm the PREVIOUS_VERSION by checking the last release CRO in rhmi_types
+version e.g. rhoam-release-v1.17.0 https://github.com/integr8ly/integreatly-operator/blob/rhoam-release-v1.17/apis/v1alpha1/rhmi_types.go#L96
 - PREVIOUS_OPERATOR_VERSION contains all the versions that the bundle aims to replace, for example, if you are making a release of version 0.25.0, the PREVIOUS_OPERATOR_VERSIONS
 must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CRO.
 - Run `make gen/csv` which will generate new manifests.
@@ -19,7 +20,7 @@ must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CR
     - cloud-resources.v0.26.0
   version: 0.27.0
 ```
-- Once the package manifests are ready and merged to master run CRO [release pipeline](https://master-jenkins-csb-intly.apps.ocp4.prod.psi.redhat.com/job/Delorean/job/release/job/cro/) with default params. 
+- Once the package manifests are ready and merged to master run CRO [release pipeline](https://master-jenkins-csb-intly.apps.ocp-c1.prod.psi.redhat.com/job/Delorean/job/release/job/cro/) with default params. 
 
 ![release pipeline](img/pipeline.png?raw=true)
 >**NOTE**: You have to be on the internal Red Hat network to access the pipeline
