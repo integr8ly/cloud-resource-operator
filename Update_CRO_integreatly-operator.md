@@ -7,6 +7,7 @@ add the latest version of CRO
 From your CRO branch, navigate to makefile and ensure that:
 - PREVIOUS_VERSION and VERSION match the desired versions. You can confirm the PREVIOUS_VERSION by checking the last release CRO in rhmi_types
 version e.g. rhoam-release-v1.17.0 https://github.com/integr8ly/integreatly-operator/blob/rhoam-release-v1.17/apis/v1alpha1/rhmi_types.go#L96
+> **NOTE:** If another version of CRO released in the current sprint you may need to use skip field in the CSV.
 - PREVIOUS_OPERATOR_VERSION contains all the versions that the bundle aims to replace, for example, if you are making a release of version 0.25.0, the PREVIOUS_OPERATOR_VERSIONS
 must contain "0.24.0,0.23.0" - where 0.23.0 is the initial bundle version for CRO.
 - Run `make gen/csv` which will generate new manifests.
