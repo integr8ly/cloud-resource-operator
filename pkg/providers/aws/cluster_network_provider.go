@@ -240,11 +240,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		// do not reconcile tags in STS mode
 		if !stsEnabled {
 			// ensure standalone vpc has correct tags
-			clusterIDTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
-			if err != nil {
-				return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
-			}
-			if err = n.reconcileVPCTags(createVpcOutput.Vpc, clusterIDTag); err != nil {
+			if err = n.reconcileVPCTags(ctx, createVpcOutput.Vpc); err != nil {
 				return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
 			}
 		}
@@ -580,24 +576,18 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 	// once we have the peering connection, tag it so it's identifiable as belonging to this operator
 	// this helps with cleaning up resources
 	if !stsEnabled {
-		croTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: tagVpcPeeringNameValue})
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to build cro owner tag")
+			return nil, errorUtil.Wrap(err, "failed to get default tags for peering connection")
 		}
 
 		logger.Infof("checking tags on peering connection")
 		peeringConnectionTags := ec2TagsToGeneric(peeringConnection.Tags)
-		if !tagsContains(peeringConnectionTags, tagDisplayName, tagVpcPeeringNameValue) ||
-			!tagsContains(peeringConnectionTags, croTag.key, croTag.value) {
+		if !tagsContainsAll(defaultTags, peeringConnectionTags) {
 			logger.Info("creating tags on peering connection")
 			_, err = n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{peeringConnection.VpcPeeringConnectionId},
-				Tags: []*ec2.Tag{
-					{
-						Key:   aws.String(tagDisplayName),
-						Value: aws.String(tagVpcPeeringNameValue),
-					}, genericToEc2Tag(croTag),
-				},
+				Tags:      genericToEc2Tags(defaultTags),
 			})
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to tag peering connection")
@@ -929,26 +919,18 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	if !stsEnabled {
 		// ensure standalone vpc has correct tags
 		// we require the subnet group to be tagged with the cro owner tag
-		croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMISecurityGroupNameTagValue})
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "error generating cloud resource owner tag")
+			return nil, errorUtil.Wrap(err, "failed to get default tags for security group")
 		}
 		securityGroupTags := ec2TagsToGeneric(standaloneSecGroup.Tags)
-		if !tagsContains(securityGroupTags, tagDisplayName, DefaultRHMISecurityGroupNameTagValue) ||
-			!tagsContains(securityGroupTags, croOwnerTag.key, croOwnerTag.value) {
+		if !tagsContainsAll(defaultTags, securityGroupTags) {
 			logger.Infof("tagging security group %s", aws.StringValue(standaloneSecGroup.GroupId))
 			_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{
 					standaloneSecGroup.GroupId,
 				},
-				Tags: []*ec2.Tag{
-					{
-						Key:   aws.String(tagDisplayName),
-						Value: aws.String(DefaultRHMISecurityGroupNameTagValue),
-					},
-					genericToEc2Tag(buildManagedTag()),
-					genericToEc2Tag(croOwnerTag),
-				},
+				Tags: genericToEc2Tags(defaultTags),
 			})
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "unable to tag security group")
@@ -1015,32 +997,23 @@ func (n *NetworkProvider) reconcileStandaloneRouteTableTags(ctx context.Context,
 		return errorUtil.New(fmt.Sprint("did not find any route associated with vpc %", vpc.VpcId))
 	}
 
-	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcRouteTableNameTagValue})
 	if err != nil {
-		return errorUtil.Wrap(err, "error generating cloud resource owner tag")
+		return errorUtil.Wrap(err, "failed to get default tags for route table")
 	}
-
 	for _, routeTable := range routeTables {
 		routeTableTags := ec2TagsToGeneric(routeTable.Tags)
-		if !tagsContains(routeTableTags, tagDisplayName, DefaultRHMIVpcRouteTableNameTagValue) ||
-			!tagsContains(routeTableTags, croOwnerTag.key, croOwnerTag.value) {
+		if !tagsContainsAll(defaultTags, routeTableTags) {
 			_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{
 					aws.String(*routeTable.RouteTableId),
 				},
-				Tags: []*ec2.Tag{
-					{
-						Key:   aws.String(tagDisplayName),
-						Value: aws.String(DefaultRHMIVpcRouteTableNameTagValue),
-					},
-					genericToEc2Tag(buildManagedTag()),
-					genericToEc2Tag(croOwnerTag),
-				},
+				Tags: genericToEc2Tags(defaultTags),
 			})
 			if err != nil {
 				return errorUtil.Wrap(err, "unable to tag route table")
 			}
-			logger.Infof("successfully tagged route table: %s for clusterID: %s", aws.StringValue(routeTable.RouteTableId), croOwnerTag.value)
+			logger.Infof("successfully tagged route table: %s", aws.StringValue(routeTable.RouteTableId))
 		}
 	}
 	return nil
@@ -1169,7 +1142,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	if stsEnabled {
 		subnetTags, err := getDefaultSubnetTags(ctx, n.Client)
 		if err != nil {
-			errMsg := "failed to get default tags"
+			errMsg := "failed to get default tags for subnet"
 			return nil, errorUtil.Wrap(err, errMsg)
 		}
 		tagSpec = &ec2.TagSpecification{
@@ -1216,17 +1189,16 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	}
 
 	if !stsEnabled {
-		croClusterOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+		subnetTags, err := getDefaultSubnetTags(ctx, n.Client)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to build cro owner tag")
+			errMsg := "failed to get default tags for subnet"
+			return nil, errorUtil.Wrap(err, errMsg)
 		}
 
 		// ensure subnets have the correct tags
 		for _, sub := range subs {
 			logger.Infof("validating subnet %s", *sub.SubnetId)
-			if !tagsContains(ec2TagsToGeneric(sub.Tags), defaultAWSPrivateSubnetTagKey, "1") ||
-				!tagsContains(ec2TagsToGeneric(sub.Tags), croClusterOwnerTag.key, croClusterOwnerTag.value) ||
-				!tagsContains(ec2TagsToGeneric(sub.Tags), "Name", DefaultRHMISubnetNameTagValue) {
+			if !tagsContainsAll(ec2TagsToGeneric(subnetTags), ec2TagsToGeneric(sub.Tags)) {
 				if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Api, sub, logger); err != nil {
 					return nil, errorUtil.Wrap(err, "failed to tag subnet")
 				}
@@ -1291,30 +1263,25 @@ func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTa
 //
 //VPCs are tagged with the name `<organizationTag>/clusterID`.
 //By default, `integreatly.org/clusterID`.
-func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *tag) error {
+func (n *NetworkProvider) reconcileVPCTags(ctx context.Context, vpc *ec2.Vpc) error {
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
 
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue})
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to get default tags for vpc")
+	}
 	vpcTags := ec2TagsToGeneric(vpc.Tags)
-	if !tagsContains(vpcTags, tagDisplayName, DefaultRHMIVpcNameTagValue) ||
-		!tagsContains(vpcTags, clusterIDTag.key, clusterIDTag.value) {
-
+	if !tagsContainsAll(defaultTags, vpcTags) {
 		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 			Resources: []*string{
 				aws.String(*vpc.VpcId),
 			},
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(tagDisplayName),
-					Value: aws.String(DefaultRHMIVpcNameTagValue),
-				},
-				genericToEc2Tag(buildManagedTag()),
-				genericToEc2Tag(clusterIDTag),
-			},
+			Tags: genericToEc2Tags(defaultTags),
 		})
 		if err != nil {
 			return errorUtil.Wrapf(err, "unable to tag vpc %s with state %s", *vpc.VpcId, *vpc.State)
 		}
-		logger.Infof("successfully tagged vpc: %s for clusterID: %s with state %s", *vpc.VpcId, clusterIDTag.value, *vpc.State)
+		logger.Infof("successfully tagged vpc: %s with state %s", *vpc.VpcId, *vpc.State)
 	}
 	return nil
 }
@@ -1342,9 +1309,9 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		return errorUtil.New("no private subnets found, can not create subnet group for rds")
 	}
 
-	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, nil)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to build cro owner tag")
+		return errorUtil.Wrap(err, "failed to get default tags for rds subnet group")
 	}
 
 	foundSubnetGroup, err := getRDSSubnetGroup(n.RdsApi, subnetGroupName)
@@ -1387,8 +1354,8 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 
 			// ensure tags exist on rds subnet group
 			subnetTags := rdsTagstoGeneric(tags.TagList)
-			if !tagsContains(subnetTags, croOwnerTag.key, croOwnerTag.value) {
-				err := n.updateRdsSubnetGroupTags(foundSubnetGroup, genericToRdsTag(croOwnerTag))
+			if !tagsContainsAll(defaultTags, subnetTags) {
+				err := n.updateRdsSubnetGroupTags(foundSubnetGroup, genericToRdsTags(defaultTags))
 				if err != nil {
 					return errorUtil.Wrap(err, "error updating subnet group tags")
 				}
@@ -1402,10 +1369,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		DBSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		DBSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                subnetIds,
-		Tags: []*rds.Tag{
-			genericToRdsTag(croOwnerTag),
-			genericToRdsTag(buildManagedTag()),
-		},
+		Tags:                     genericToRdsTags(defaultTags),
 	}
 
 	// create db subnet group
@@ -1417,21 +1381,21 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 }
 
 //this function removes tags and reads them to an rds subnet group
-func (n *NetworkProvider) updateRdsSubnetGroupTags(foundSubnet *rds.DBSubnetGroup, croOwnerTag *rds.Tag) error {
+func (n *NetworkProvider) updateRdsSubnetGroupTags(foundSubnet *rds.DBSubnetGroup, rdsTags []*rds.Tag) error {
+	var tagKeys []*string
+	for _, tag := range rdsTags {
+		tagKeys = append(tagKeys, tag.Key)
+	}
 	_, err := n.RdsApi.RemoveTagsFromResource(&rds.RemoveTagsFromResourceInput{
 		ResourceName: foundSubnet.DBSubnetGroupArn,
-		TagKeys: []*string{
-			croOwnerTag.Key,
-		},
+		TagKeys:      tagKeys,
 	})
 	if err != nil {
 		return errorUtil.Wrap(err, "error updating db subnet group tags")
 	}
 	_, err = n.RdsApi.AddTagsToResource(&rds.AddTagsToResourceInput{
 		ResourceName: foundSubnet.DBSubnetGroupArn,
-		Tags: []*rds.Tag{
-			croOwnerTag,
-		},
+		Tags:         rdsTags,
 	})
 	if err != nil {
 		return errorUtil.Wrap(err, "error updating db subnet group tags")
@@ -1493,19 +1457,16 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 		return errorUtil.New("no private subnets found, can not create subnet group for rds")
 	}
 
-	croOwnerTag, err := getCloudResourceOperatorOwnerTag(ctx, n.Client)
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, nil)
 	if err != nil {
-		return errorUtil.Wrap(err, "failed to build cro owner tag")
+		return errorUtil.Wrap(err, "failed to get default tags for elasticache subnet group")
 	}
 
 	subnetGroupInput := &elasticache.CreateCacheSubnetGroupInput{
 		CacheSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		CacheSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                   subnetIDs,
-		Tags: []*elasticache.Tag{
-			genericToElasticacheTag(croOwnerTag),
-			genericToElasticacheTag(buildManagedTag()),
-		},
+		Tags:                        genericToElasticacheTags(defaultTags),
 	}
 
 	logger.Infof("creating resource subnet group %s", subnetGroupName)
@@ -1869,19 +1830,24 @@ func getDefaultTagSpec(ctx context.Context, client client.Client, t *tag, resour
 }
 
 // Used to retrieve a set of default tag values for network resources
+// the tag passed in is used to generate a specific tag for the resource type
+// if t is provided it is the first tag in the list
 func getDefaultNetworkTags(ctx context.Context, client client.Client, t *tag) ([]*tag, error) {
 	croTag, err := getCloudResourceOperatorOwnerTag(ctx, client)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to build default tags")
 	}
-	tags := []*tag{
+	if t != nil {
+		return []*tag{
+			t,
+			croTag,
+			buildManagedTag(),
+		}, nil
+	}
+	return []*tag{
 		croTag,
 		buildManagedTag(),
-	}
-	if t != nil {
-		tags = append(tags, t)
-	}
-	return tags, nil
+	}, nil
 }
 
 // resources such as cluster vpc route tables are tagged with a cluster owner tag
