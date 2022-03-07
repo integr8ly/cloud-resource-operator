@@ -295,7 +295,7 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 			Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
 			Value: aws.String(clusterID),
 		}, {
-			Key:   aws.String("Name"),
+			Key:   aws.String(tagDisplayName),
 			Value: aws.String(DefaultRHMISubnetNameTagValue),
 		}, genericToEc2Tag(buildManagedTag()),
 	}, nil

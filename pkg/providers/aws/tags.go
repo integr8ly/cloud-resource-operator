@@ -26,6 +26,10 @@ type tag struct {
 	value string
 }
 
+func (a *tag) Equal(b *tag) bool {
+	return a.key == b.key && a.value == b.value
+}
+
 func ec2TagToGeneric(ec2Tag *ec2.Tag) *tag {
 	return &tag{key: aws.StringValue(ec2Tag.Key), value: aws.StringValue(ec2Tag.Value)}
 }
@@ -101,6 +105,22 @@ func tagsContains(tags []*tag, key, value string) bool {
 		}
 	}
 	return false
+}
+
+// Checks whether all tags in first parameter are contained within second parameter
+func tagsContainsAll(as []*tag, bs []*tag) bool {
+	for _, a := range as {
+		found := false
+		for _, b := range bs {
+			if a.Equal(b) {
+				found = true
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func getDefaultResourceTags(ctx context.Context, c client.Client, specType string, name string, prodName string) ([]*tag, string, error) {
