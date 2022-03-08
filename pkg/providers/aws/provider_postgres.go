@@ -302,8 +302,9 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	// create connection metric
 	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
 
-	//TODO: replace with real check for whether sts is enabled
-	stsEnabled := false
+	// check if we are running in STS mode
+	_, isSTS := p.CredentialManager.(*STSCredentialManager)
+
 	// check for updates on rds instance if it already exists
 	if foundInstance != nil {
 		// check rds instance phase
@@ -339,7 +340,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 			return nil, croType.StatusMessage(statusMsg), nil
 		}
 
-		if !stsEnabled {
+		if !isSTS {
 			croStatus, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
 			if err != nil {
 				errMsg := fmt.Sprintf("failed to add tags to rds: %s", croStatus)
@@ -368,7 +369,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	}
 	// the tag should be added to the create strategy in cases where sts is enabled
 	// and in the same api request of the first creation of the postgres to allow
-	if stsEnabled {
+	if isSTS {
 		msg, err := p.buildRDSTagCreateStrategy(ctx, cr, rdsCfg)
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
