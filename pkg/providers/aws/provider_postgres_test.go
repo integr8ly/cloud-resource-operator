@@ -95,6 +95,7 @@ type mockEc2Client struct {
 	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
 	createVpcFn                     func(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error)
 	deleteVpcFn                     func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error)
+	createSubnetFn                  func(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error)
 	describeInstanceTypeOfferingsFn func(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
 	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
 	describeSubnetsFn               func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
@@ -305,7 +306,10 @@ func (m *mockEc2Client) DeleteVpc(input *ec2.DeleteVpcInput) (*ec2.DeleteVpcOutp
 	return m.deleteVpcFn(input)
 }
 
-func (m *mockEc2Client) CreateSubnet(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+func (m *mockEc2Client) CreateSubnet(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+	if m.createSubnetFn != nil {
+		return m.createSubnetFn(input)
+	}
 	if m.returnSecondSub {
 		return &ec2.CreateSubnetOutput{
 			Subnet: m.secondSubnet,
