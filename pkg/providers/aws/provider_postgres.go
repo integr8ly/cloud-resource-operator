@@ -413,7 +413,6 @@ func (p *PostgresProvider) buildRDSTagCreateStrategy(ctx context.Context, cr *v1
 	return "", nil
 }
 
-// note this function should not be used in the case of sts implementation as
 func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
 
 	logger := p.Logger.WithField("action", "TagRDSPostgres")
