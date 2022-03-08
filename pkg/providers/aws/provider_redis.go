@@ -234,8 +234,9 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	// expose a connection metric
 	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
 
-	//TODO: replace with real check for whether sts is enabled
-	stsEnabled := false
+	// check if we are running in STS mode
+	_, isSTS := p.CredentialManager.(*STSCredentialManager)
+
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
@@ -243,7 +244,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
 		}
-		if stsEnabled {
+		if isSTS {
 			// the tag should be added to the create strategy in cases where sts is enabled
 			// and in the same api request of the first creation of the postgres to allow
 			msg, err := p.buildRedisTagCreateStrategy(ctx, r, elasticacheConfig)
@@ -311,7 +312,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		logger.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
 	}
 
-	if !stsEnabled {
+	if !isSTS {
 		// add tags to cache nodes
 		cacheInstance := *foundCache.NodeGroups[0]
 		if *cacheInstance.Status != "available" {

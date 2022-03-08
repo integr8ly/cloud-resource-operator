@@ -42,6 +42,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
@@ -175,12 +176,13 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		}
 		logger.Infof("cidr %s is valid 👍", vpcCidrBlock.String())
 
-		// TODO: replace with correct sts enabled check
-		stsEnabled := false
+		// check if we are running in STS mode
+		isSTS := isSTSCluster(ctx, n.Client)
+
 		vpcConfig := &ec2.CreateVpcInput{
 			CidrBlock: aws.String(vpcCidrBlock.String()),
 		}
-		if stsEnabled {
+		if isSTS {
 			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue}, ec2.ResourceTypeVpc)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
@@ -233,7 +235,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		resources.ResetVpcAction()
 
 		// do not reconcile tags in STS mode
-		if !stsEnabled {
+		if !isSTS {
 			// ensure standalone vpc has correct tags
 			if err = n.reconcileVPCTags(ctx, createVpcOutput.Vpc); err != nil {
 				return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
@@ -543,8 +545,9 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 		return nil, errorUtil.Wrap(err, "failed to get peering connection")
 	}
 
-	// TODO: replace with correct sts enabled check
-	stsEnabled := false
+	// check if we are running in STS mode
+	isSTS := isSTSCluster(ctx, n.Client)
+
 	// create the vpc, we make an assumption they're in the same aws account and use the aws region in the aws client
 	// provided to the NetworkProvider struct
 	if peeringConnection == nil {
@@ -552,7 +555,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 			PeerVpcId: clusterVpc.VpcId,
 			VpcId:     network.Vpc.VpcId,
 		}
-		if stsEnabled {
+		if isSTS {
 			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: tagVpcPeeringNameValue}, ec2.ResourceTypeVpcPeeringConnection)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
@@ -570,7 +573,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 
 	// once we have the peering connection, tag it so it's identifiable as belonging to this operator
 	// this helps with cleaning up resources
-	if !stsEnabled {
+	if !isSTS {
 		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: tagVpcPeeringNameValue})
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to get default tags for peering connection")
@@ -866,8 +869,8 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
 
-	// TODO: replace with correct sts enabled check
-	stsEnabled := false
+	// check if we are running in STS mode
+	isSTS := isSTSCluster(ctx, n.Client)
 
 	// if no security group exists in standalone vpc create it
 	if standaloneSecGroup == nil {
@@ -878,7 +881,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 			VpcId:       standaloneVpc.VpcId,
 		}
 
-		if stsEnabled {
+		if isSTS {
 			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMISecurityGroupNameTagValue}, ec2.ResourceTypeSecurityGroup)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
@@ -911,7 +914,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	}
 	logger.Infof("found security group %s", *standaloneSecGroup.GroupId)
 
-	if !stsEnabled {
+	if !isSTS {
 		// ensure standalone vpc has correct tags
 		// we require the subnet group to be tagged with the cro owner tag
 		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMISecurityGroupNameTagValue})
@@ -1131,10 +1134,11 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
 	}
 
-	// TODO: replace with correct sts enabled check
-	stsEnabled := false
+	// check if we are running in STS mode
+	isSTS := isSTSCluster(ctx, n.Client)
+
 	tagSpec := &ec2.TagSpecification{}
-	if stsEnabled {
+	if isSTS {
 		subnetTags, err := getDefaultSubnetTags(ctx, n.Client)
 		if err != nil {
 			errMsg := "failed to get default tags for subnet"
@@ -1156,7 +1160,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 				CidrBlock:        aws.String(expectedAZSubnet.IP.String()),
 				VpcId:            aws.String(*vpc.VpcId),
 			}
-			if stsEnabled {
+			if isSTS {
 				subnetConfig.SetTagSpecifications([]*ec2.TagSpecification{
 					tagSpec,
 				})
@@ -1172,7 +1176,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "error creating new subnet")
 			}
-			if !stsEnabled {
+			if !isSTS {
 				if newErr := tagPrivateSubnet(ctx, n.Client, n.Ec2Api, createOutput.Subnet, logger); newErr != nil {
 					return nil, newErr
 				}
@@ -1183,7 +1187,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		}
 	}
 
-	if !stsEnabled {
+	if !isSTS {
 		subnetTags, err := getDefaultSubnetTags(ctx, n.Client)
 		if err != nil {
 			errMsg := "failed to get default tags for subnet"
@@ -1336,9 +1340,10 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 			}
 		}
 
-		// TODO: replace with correct sts enabled check
-		stsEnabled := false
-		if !stsEnabled {
+		// check if we are running in STS mode
+		isSTS := isSTSCluster(ctx, n.Client)
+
+		if !isSTS {
 			// get tags for rds subnet group
 			tags, err := n.RdsApi.ListTagsForResource(&rds.ListTagsForResourceInput{
 				ResourceName: foundSubnetGroup.DBSubnetGroupArn,
@@ -1860,6 +1865,17 @@ func getClusterTag(ctx context.Context, client client.Client, tagValue string) (
 		Key:   aws.String(getOSDClusterTagKey(clusterID)),
 		Value: aws.String(tagValue),
 	}, nil
+}
+
+// retrieves STS secret from cluster
+// defaults to false if there is a failur retrieving namespace or secret
+func isSTSCluster(ctx context.Context, client client.Client) bool {
+	ns, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		return false
+	}
+	_, err = getSTSCredentialsSecret(ctx, client, ns)
+	return err == nil
 }
 
 // this utilty function verifys if a route already exists in a list of routes
