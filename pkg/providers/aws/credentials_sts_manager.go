@@ -36,8 +36,10 @@ func NewSTSCredentialManager(client client.Client) *STSCredentialManager {
 
 //ReconcileProviderCredentials Ensure the credentials the AWS provider requires are available
 func (m *STSCredentialManager) ReconcileProviderCredentials(ctx context.Context, _ string) (*Credentials, error) {
-	// ignoring the error here as this is validated when calling NewCredentialManager()
-	secret, _ := getSTSCredentialsSecret(ctx, m.Client, m.OperatorNamespace)
+	secret, err := getSTSCredentialsSecret(ctx, m.Client, m.OperatorNamespace)
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to get aws sts credentials secret %s", defaultSTSCredentialSecretName)
+	}
 	credentials := &Credentials{
 		RoleArn:       string(secret.Data[defaultRoleARNKeyName]),
 		TokenFilePath: string(secret.Data[defaultTokenPathKeyName]),
