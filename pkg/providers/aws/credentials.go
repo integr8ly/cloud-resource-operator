@@ -152,11 +152,10 @@ type CredentialManager interface {
 func NewCredentialManager(client client.Client) CredentialManager {
 	ns, _ := k8sutil.GetOperatorNamespace()
 	_, err := getSTSCredentialsSecret(context.TODO(), client, ns)
-	if err == nil {
-		return NewSTSCredentialManager(client)
+	if errors.IsNotFound(err) {
+		return NewCredentialMinterCredentialManager(client)
 	}
-
-	return NewCredentialMinterCredentialManager(client)
+	return NewSTSCredentialManager(client)
 }
 
 var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)

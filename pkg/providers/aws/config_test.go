@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
+	"strings"
 	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
@@ -212,4 +212,92 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateSessionFromStrategy(t *testing.T) {
+	fakeScheme := runtime.NewScheme()
+	_ = v1.AddToScheme(fakeScheme)
+	_ = configv1.SchemeBuilder.AddToScheme(fakeScheme)
+	fakeStrategy := &StrategyConfig{
+		Region: "strategy-region",
+	}
+	fakeInfra := newFakeInfrastructure()
+	type args struct {
+		ctx      context.Context
+		c        client.Client
+		cred     *Credentials
+		strategy *StrategyConfig
+	}
+
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "fail to get default region",
+			args: args{
+				ctx: context.TODO(),
+				c:   fake.NewClientBuilder().WithScheme(fakeScheme).Build(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "create aws session with sts idp",
+			args: args{
+				ctx:      context.TODO(),
+				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				strategy: fakeStrategy,
+				cred: &Credentials{
+					RoleArn:       "ROLE_ARN",
+					TokenFilePath: "TOKEN_FILE_PATH",
+				},
+			},
+		},
+		{
+			name: "create aws session with static idp",
+			args: args{
+				ctx:      context.TODO(),
+				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				strategy: fakeStrategy,
+				cred: &Credentials{
+					AccessKeyID:     "ACCESS_KEY_ID",
+					SecretAccessKey: "SECRET_ACCESS_KEY",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CreateSessionFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
+			if tt.wantErr {
+				if !errorContains(err, "failed to get region") {
+					t.Fatalf("unexpected error from CreateSessionFromStrategy(): %v", err)
+				}
+				return
+			}
+			cred, _ := got.Config.Credentials.Get()
+			switch tt.args.cred.RoleArn {
+			case "ROLE_ARN":
+				if cred.ProviderName != "" {
+					t.Fatalf("aws session with sts credentials not created properly")
+				}
+			default:
+				if cred.ProviderName != "StaticProvider" {
+					t.Fatalf("aws session with static credentials not created properly")
+				}
+			}
+		})
+	}
+}
+
+func errorContains(out error, want string) bool {
+	if out == nil {
+		return want == ""
+	}
+	if want == "" {
+		return false
+	}
+	return strings.Contains(out.Error(), want)
 }
