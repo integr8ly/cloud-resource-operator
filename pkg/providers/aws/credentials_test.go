@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	"testing"
 
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
@@ -15,11 +16,13 @@ import (
 )
 
 func TestCredentialManager_ReconcileCredentials(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := v1.AddToScheme(scheme)
-	err = v12.AddToScheme(scheme)
+	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
+	}
+	ns, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		t.Fatal("failed to get operator namespace", err)
 	}
 	cases := []struct {
 		name                string
@@ -34,27 +37,27 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	}{
 		{
 			name:                "credentials are reconciled successfully",
-			client:              buildClient(scheme, false),
+			client:              buildClient(scheme, false, ns),
 			expectedAccessKeyID: "ACCESS_KEY_ID",
 			expectedSecretKey:   "SECRET_ACCESS_KEY",
 		},
 		{
 			name:              "sts credentials are reconciled successfully",
-			client:            buildClient(scheme, true, "ROLE_ARN", "TOKEN_PATH"),
+			client:            buildClient(scheme, true, ns, "ROLE_ARN", "TOKEN_PATH"),
 			isSTS:             true,
 			expectedRoleARN:   "ROLE_ARN",
 			expectedTokenPath: "TOKEN_PATH",
 		},
 		{
 			name:           "undefined role arn key in sts credentials secret",
-			client:         buildClient(scheme, true, "", "TOKEN_PATH"),
+			client:         buildClient(scheme, true, ns, "", "TOKEN_PATH"),
 			isSTS:          true,
 			wantErr:        true,
 			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultRoleARNKeyName, defaultSTSCredentialSecretName),
 		},
 		{
 			name:           "undefined token path key in sts credentials secret",
-			client:         buildClient(scheme, true, "ROLE_ARN", ""),
+			client:         buildClient(scheme, true, ns, "ROLE_ARN", ""),
 			isSTS:          true,
 			wantErr:        true,
 			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultTokenPathKeyName, defaultSTSCredentialSecretName),
@@ -63,7 +66,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cm := NewCredentialManager(tc.client)
-			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), "")
+			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), ns)
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
 					t.Fatalf("unexpected error from ReconcileProviderCredentials(): %v", err)
@@ -90,11 +93,12 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	}
 }
 
-func buildClient(scheme *runtime.Scheme, isSTS bool, secretValues ...string) client.Client {
+func buildClient(scheme *runtime.Scheme, isSTS bool, ns string, secretValues ...string) client.Client {
 	if isSTS {
 		return fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v12.Secret{
 			ObjectMeta: controllerruntime.ObjectMeta{
-				Name: defaultSTSCredentialSecretName,
+				Name:      defaultSTSCredentialSecretName,
+				Namespace: ns,
 			},
 			Data: map[string][]byte{
 				defaultRoleARNKeyName:   []byte(secretValues[0]),
@@ -104,11 +108,13 @@ func buildClient(scheme *runtime.Scheme, isSTS bool, secretValues ...string) cli
 	}
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.CredentialsRequest{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name: defaultProviderCredentialName,
+			Name:      defaultProviderCredentialName,
+			Namespace: ns,
 		},
 		Spec: v1.CredentialsRequestSpec{
 			SecretRef: v12.ObjectReference{
-				Name: defaultProviderCredentialName,
+				Name:      defaultProviderCredentialName,
+				Namespace: ns,
 			},
 		},
 		Status: v1.CredentialsRequestStatus{
@@ -119,7 +125,8 @@ func buildClient(scheme *runtime.Scheme, isSTS bool, secretValues ...string) cli
 		},
 	}, &v12.Secret{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name: defaultProviderCredentialName,
+			Name:      defaultProviderCredentialName,
+			Namespace: ns,
 		},
 		Data: map[string][]byte{
 			defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
