@@ -127,15 +127,6 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	// create the credentials to be used by the end-user, whoever created the blobstorage instance
-	endUserCredsName := buildEndUserCredentialsNameFromBucket(*bucketCreateCfg.Bucket)
-	p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
-	endUserCreds, err := p.CredentialManager.ReconcileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
 	p.Logger.Infof("creating provider credentials for creating s3 buckets, in namespace %s", bs.Namespace)
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
@@ -160,14 +151,34 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 		return nil, msg, errorUtil.Wrapf(err, string(msg))
 	}
 
+	// create the credentials to be used by the end-user, whoever created the blobstorage instance
+	endUserCredsName := buildEndUserCredentialsNameFromBucket(*bucketCreateCfg.Bucket)
+	p.Logger.Infof("creating end-user credentials with name %s for managing s3 bucket %s", endUserCredsName, *bucketCreateCfg.Bucket)
+	endUserCreds, err := p.CredentialManager.ReconcileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
 	// blobstorageinstance that will be returned if everything is successful
-	bsi := &providers.BlobStorageInstance{
-		DeploymentDetails: &BlobStorageDeploymentDetails{
-			BucketName:          *bucketCreateCfg.Bucket,
-			BucketRegion:        stratCfg.Region,
-			CredentialKeyID:     endUserCreds.AccessKeyID,
-			CredentialSecretKey: endUserCreds.SecretAccessKey,
-		},
+	var bsi *providers.BlobStorageInstance
+	switch p.CredentialManager.(type) {
+	case *STSCredentialManager:
+		bsi = &providers.BlobStorageInstance{
+			DeploymentDetails: &BlobStorageDeploymentDetails{
+				BucketName:   *bucketCreateCfg.Bucket,
+				BucketRegion: stratCfg.Region,
+			},
+		}
+	default:
+		bsi = &providers.BlobStorageInstance{
+			DeploymentDetails: &BlobStorageDeploymentDetails{
+				BucketName:          *bucketCreateCfg.Bucket,
+				BucketRegion:        stratCfg.Region,
+				CredentialKeyID:     endUserCreds.AccessKeyID,
+				CredentialSecretKey: endUserCreds.SecretAccessKey,
+			},
+		}
 	}
 
 	// Adding tags to s3
