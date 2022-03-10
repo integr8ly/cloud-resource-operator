@@ -2,6 +2,7 @@ package k8sutil
 
 import (
 	"fmt"
+	"github.com/spf13/afero"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+var AppFS = afero.NewOsFs()
 
 // GetWatchNamespace returns the Namespace the operator should be watching for changes
 func GetWatchNamespace() (string, error) {
@@ -73,7 +76,7 @@ func IsRunModeLocal() bool {
 
 // IsRunInCluster checks if the operator is run in cluster
 func isRunModeCluster() bool {
-	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount")
+	_, err := AppFS.Stat("/var/run/secrets/kubernetes.io/serviceaccount")
 	if err == nil {
 		return true
 	}

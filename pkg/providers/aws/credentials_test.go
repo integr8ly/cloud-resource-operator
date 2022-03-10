@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	"os"
 	"testing"
 
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
@@ -20,6 +21,12 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+
+	// Make test work locally
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+
 	ns, err := k8sutil.GetOperatorNamespace()
 	if err != nil {
 		t.Fatal("failed to get operator namespace", err)
