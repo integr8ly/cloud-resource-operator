@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/spf13/afero"
 	"strings"
 	"testing"
-
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
 	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	v1 "k8s.io/api/core/v1"
@@ -227,6 +226,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 		c        client.Client
 		cred     *Credentials
 		strategy *StrategyConfig
+		mockFs   func()
 	}
 
 	tests := []struct {
@@ -237,13 +237,14 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 		{
 			name: "fail to get default region",
 			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
+				ctx:    context.TODO(),
+				c:      fake.NewFakeClientWithScheme(fakeScheme),
+				mockFs: func() {},
 			},
 			wantErr: true,
 		},
 		{
-			name: "create aws session with sts idp",
+			name: "create aws session with sts idp - local",
 			args: args{
 				ctx:      context.TODO(),
 				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
@@ -251,6 +252,34 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
 					TokenFilePath: "TOKEN_FILE_PATH",
+				},
+				mockFs: func() {},
+			},
+		},
+		{
+			name: "create aws session with sts idp - in pod",
+			args: args{
+				ctx:      context.TODO(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				strategy: fakeStrategy,
+				cred: &Credentials{
+					RoleArn:       "ROLE_ARN",
+					TokenFilePath: "TOKEN_FILE_PATH",
+				},
+				mockFs: func() {
+					// Reset
+					defer func() {
+						k8sutil.AppFS = afero.NewOsFs()
+					}()
+
+					// Mock filesystem
+					k8sutil.AppFS = afero.NewMemMapFs()
+					if err := k8sutil.AppFS.MkdirAll("/var/run/secrets/kubernetes.io", 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := afero.WriteFile(k8sutil.AppFS, "/var/run/secrets/kubernetes.io/serviceaccount", []byte("a file"), 0755); err != nil {
+						t.Fatal(err)
+					}
 				},
 			},
 		},
@@ -264,12 +293,14 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 					AccessKeyID:     "ACCESS_KEY_ID",
 					SecretAccessKey: "SECRET_ACCESS_KEY",
 				},
+				mockFs: func() {},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.args.mockFs()
 			got, err := CreateSessionFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
 			if tt.wantErr {
 				if !errorContains(err, "failed to get region") {
@@ -280,8 +311,14 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			cred, _ := got.Config.Credentials.Get()
 			switch tt.args.cred.RoleArn {
 			case "ROLE_ARN":
-				if cred.ProviderName != "" {
-					t.Fatalf("aws session with sts credentials not created properly")
+				if k8sutil.IsRunModeLocal() {
+					if cred.ProviderName != "AssumeRoleProvider" {
+						t.Fatalf("aws session with sts assume role provider credentials not created properly")
+					}
+				} else {
+					if cred.ProviderName != "" {
+						t.Fatalf("aws session with sts credentials not created properly")
+					}
 				}
 			default:
 				if cred.ProviderName != "StaticProvider" {

@@ -174,10 +174,7 @@ func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials
 		// Local IAM user must be a principle in the role created with the sts:AssumeRole action
 		// Otherwise assume running in a pod in STS cluster
 		if k8sutil.IsRunModeLocal() {
-			sess, err := session.NewSession(&awsConfig)
-			if err != nil {
-				return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s", region)
-			}
+			sess := session.Must(session.NewSession(&awsConfig))
 			awsConfig.Credentials = stscreds.NewCredentials(sess, credentials.RoleArn)
 		} else {
 			svc := sts.New(session.Must(session.NewSession(&awsConfig)))
