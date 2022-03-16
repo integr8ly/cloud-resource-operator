@@ -479,7 +479,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 	type fields struct {
 		Logger *logrus.Entry
 		Client client.Client
-		Ec2Svc ec2iface.EC2API
+		Ec2Api ec2iface.EC2API
 	}
 	type args struct {
 		ctx context.Context
@@ -492,15 +492,40 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			// we expect if no rhmi subnets exist in the cluster vpc isEnabled will return true
-			name: "verify isEnabled is true, no bundle subnets found in cluster vpc",
+			//if no rhmi subnets exist in the cluster vpc then isEnabled will return true ONLY if a valid standalone vpc also exists
+			name: "verify isEnabled is true, no bundle subnets found in cluster vpc and valid standalone vpc exists",
 			args: args{
 				ctx: context.TODO(),
 			},
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB),
+							},
+						}, nil
+					}
+
+				}),
+			},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			//if no rhmi subnets exist in the cluster vpc, isEnabled will still return false if no valid standalone vpc exists
+			name: "verify isEnabled is false, no bundle subnets found in cluster vpc and no standalone vpc exists",
+			args: args{
+				ctx: context.TODO(),
+			},
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(validCIDRSixteen)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
@@ -512,11 +537,11 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 
 				}),
 			},
-			want:    true,
+			want:    false,
 			wantErr: false,
 		},
 		{
-			//we expect if a single rhmi subnet is found in cluster vpc isEnabled will return true
+			// we expect isEnable to return false if a single rhmi subnet is found in cluster vpc
 			name: "verify isEnabled is false, a single bundle subnet is found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
@@ -524,7 +549,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(validCIDRSixteen)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
@@ -536,15 +561,15 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// we expect isEnable to return true if more then one rhmi subnet is found in cluster vpc
-			name: "verify isEnabled is true, multiple bundle subnets found in cluster vpc",
+			// we expect isEnable to return false if more than one rhmi subnet is found in cluster vpc
+			name: "verify isEnabled is false, multiple bundle subnets found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
 			},
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(validCIDRSixteen)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
@@ -565,7 +590,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(validCIDRSixteen)
 				}),
 			},
@@ -580,7 +605,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{}
 				}),
 			},
@@ -596,7 +621,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildVpcs()
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
@@ -613,7 +638,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			n := &NetworkProvider{
 				Logger: tt.fields.Logger,
 				Client: tt.fields.Client,
-				Ec2Api: tt.fields.Ec2Svc,
+				Ec2Api: tt.fields.Ec2Api,
 			}
 			got, err := n.IsEnabled(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -721,12 +746,18 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "successfully build standalone vpc network - CIDR /27",
+			name: "fail if trying to build standalone vpc network - CIDR /27",
 			fields: fields{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
+					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySeven)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildStandaloneSubnets(),
+						}, nil
+					}
 				}),
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
@@ -1343,7 +1374,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "verify successful reoncile",
+			name: "verify successful reconcile",
 			fields: fields{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
 				RdsApi: &mockRdsClient{},
@@ -1820,7 +1851,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 		fields  fields
 		args    args
 		want    *NetworkPeering
-		wantErr string
+		wantErr bool
 	}{
 		{
 			name: "fails when cannot get standalone vpc",
@@ -1835,7 +1866,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 			},
-			wantErr: "failed to get standalone vpc: error getting vpcs: ec2 get vpcs error",
+			wantErr: true,
 		},
 		{
 			name: "fails when cannot get vpc peering connection",
@@ -1856,7 +1887,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 			},
-			wantErr: "failed to get network peering: failed to get cluster vpc: error, no vpc found",
+			wantErr: true,
 		},
 		{
 			name: "success when network peering found",
@@ -1887,6 +1918,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			want: &NetworkPeering{
 				PeeringConnection: buildMockVpcPeeringConnection(nil),
 			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -1899,7 +1931,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 				Logger:         tt.fields.Logger,
 			}
 			got, err := n.GetClusterNetworkPeering(tt.args.ctx)
-			if err != nil && err.Error() != tt.wantErr {
+			if (err != nil) != tt.wantErr {
 				t.Errorf("GetClusterNetworkPeering() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}

@@ -272,7 +272,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 
 //DeleteNetwork returns an error
 //
-//VPCs are tagged with with the name `<organizationTag>/clusterID`.
+//VPCs are tagged with the name `<organizationTag>/clusterID`.
 //By default, `integreatly.org/clusterID`.
 //
 //This tag is used to find a standalone VPC
@@ -679,7 +679,7 @@ func (n *NetworkProvider) DeleteNetworkPeering(peering *NetworkPeering) error {
 func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	logger := n.Logger.WithField("action", "isEnabled")
 
-	//check if there is a standalone vpc already created.
+	//check if there is a cluster vpc already created.
 	foundVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Api, logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
@@ -711,7 +711,20 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 		}
 	}
 	logger.Infof("found %d bundled vpc subnets in cluster vpc", len(validBundledVPCSubnets))
-	return len(validBundledVPCSubnets) == 0, nil
+
+	// Confirm that a standalone VPC actually exists before returning true
+	isUsingStandaloneVPC := false
+	if len(validBundledVPCSubnets) == 0 {
+		saVpc, err := getStandaloneVpc(ctx, n.Client, n.Ec2Api, logger)
+		if err != nil {
+			return isUsingStandaloneVPC, err
+		}
+		if saVpc != nil {
+			isUsingStandaloneVPC = true
+		}
+	}
+
+	return isUsingStandaloneVPC, nil
 }
 
 // DeleteBundledCloudResources returns an error on any error deleting of the following resources
@@ -753,7 +766,7 @@ func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error
 	}
 	logger.Infof("Deleting bundled ec2 security group %s, if it's not found it's already deleted and will continue", securityGroupName)
 	// in the case of the security group the Group Id is required in order to delete security groups
-	// not connected with the default vpc. In order to delete it it is required to describe them
+	// not connected with the default vpc. In order to delete it, it is required to describe them
 	// all in the account and then find the one with the correct group name and then request deletion
 	// using the group id of the matched security group
 	securityGroup, err := getSecurityGroup(n.Ec2Api, securityGroupName)
@@ -939,7 +952,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 		}
 	}
 
-	// authorize the seucrity group ingres if it is not as expected
+	// authorize the security group ingres if it is not as expected
 	if _, err := n.Ec2Api.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId: aws.String(*standaloneSecGroup.GroupId),
 		IpPermissions: []*ec2.IpPermission{
@@ -1016,7 +1029,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		return nil, errorUtil.New("standalone vpc cidr block can't be empty")
 	}
 
-	// AWS stores it's CIDR block as a string, convert it
+	// AWS stores its CIDR block as a string, convert it
 	_, awsCIDR, err := net.ParseCIDR(*vpc.CidrBlock)
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to parse vpc cidr block %s", *vpc.CidrBlock)
@@ -1220,7 +1233,7 @@ func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTa
 
 //reconcileVPCTags will tag a VPC or return an error
 //
-//VPCs are tagged with with the name `<organizationTag>/clusterID`.
+//VPCs are tagged with the name `<organizationTag>/clusterID`.
 //By default, `integreatly.org/clusterID`.
 func (n *NetworkProvider) reconcileVPCTags(vpc *ec2.Vpc, clusterIDTag *tag) error {
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
@@ -1432,7 +1445,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 
 //getStandaloneVpc will return a vpc type or error
 //
-//Standalone VPCs are tagged with with the name `<organizationTag>/clusterID`.
+//Standalone VPCs are tagged with the name `<organizationTag>/clusterID`.
 //By default, `integreatly.org/clusterID`.
 //
 //This tag is used to identify a standalone vpc
@@ -1524,7 +1537,7 @@ func getElasticacheSubnetByGroup(elasticacheApi elasticacheiface.ElastiCacheAPI,
 
 // ReconcileNetworkProviderConfig return parsed ipNet cidr block
 // a _network resource type strategy, is expected to have the same tier as either postgres or redis resource type
-// ie. for a postgres tier X there should be a corresponding _network tier X
+// i.e. for a postgres tier X there should be a corresponding _network tier X
 //
 // the _network strategy config is unmarshalled into a ec2 create vpc input struct
 // from the struct the cidr block is parsed to ensure validity
