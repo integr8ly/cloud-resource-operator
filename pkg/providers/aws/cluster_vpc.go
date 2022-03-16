@@ -287,18 +287,31 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 	}
 	organizationTag := resources.GetOrganizationTag()
 
-	return []*ec2.Tag{
+	tags := []*tag{
 		{
-			Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-			Value: aws.String("1"),
+			key:   defaultAWSPrivateSubnetTagKey,
+			value: "1",
 		}, {
-			Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
-			Value: aws.String(clusterID),
+			key:   fmt.Sprintf("%sclusterID", organizationTag),
+			value: clusterID,
 		}, {
-			Key:   aws.String(tagDisplayName),
-			Value: aws.String(DefaultRHMISubnetNameTagValue),
-		}, genericToEc2Tag(buildManagedTag()),
-	}, nil
+			key:   tagDisplayName,
+			value: DefaultRHMISubnetNameTagValue,
+		}, buildManagedTag(),
+	}
+
+	infraTags, err := getUserInfraTags(ctx, c)
+	if err != nil {
+		msg := "Failed to get user infrastructure tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+	if infraTags != nil {
+		// merge tags into single array, where any duplicate
+		// values in infra are discarded in favour of the default tags
+		tags = mergeTags(tags, infraTags)
+	}
+
+	return genericToEc2Tags(tags), nil
 }
 
 // Builds a list of valid subnet CIDR blocks

@@ -350,14 +350,14 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 func buildValidStandaloneVPCTags() []*ec2.Tag {
 	return []*ec2.Tag{
 		{
-			Key:   aws.String(tagDisplayName),
-			Value: aws.String(DefaultRHMIVpcNameTagValue),
-		},
-		{
 			Key:   aws.String(defaultRHMISubnetTag),
 			Value: aws.String(defaultInfraName),
 		},
 		genericToEc2Tag(buildManagedTag()),
+		{
+			Key:   aws.String(tagDisplayName),
+			Value: aws.String(DefaultRHMIVpcNameTagValue),
+		},
 	}
 }
 
