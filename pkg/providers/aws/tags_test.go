@@ -350,6 +350,121 @@ func Test_tagsContains(t *testing.T) {
 	}
 }
 
+func Test_mergeTags(t *testing.T) {
+	type args struct {
+		tags1 []*tag
+		tags2 []*tag
+	}
+	tests := []struct {
+		name string
+		args args
+		want []*tag
+	}{
+		{
+			name: "test success",
+			args: args{
+				tags1: []*tag{
+					{
+						key:   "testKey",
+						value: "testVal",
+					},
+				},
+				tags2: []*tag{
+					{
+						key:   "testKey2",
+						value: "testVal2",
+					},
+				},
+			},
+			want: []*tag{
+				{
+					key:   "testKey",
+					value: "testVal",
+				},
+				{
+					key:   "testKey2",
+					value: "testVal2",
+				},
+			},
+		},
+		{
+			name: "test duplicate tag retrieves first value",
+			args: args{
+				tags1: []*tag{
+					{
+						key:   "testKey",
+						value: "testVal",
+					},
+				},
+				tags2: []*tag{
+					{
+						key:   "testKey",
+						value: "testVal2",
+					},
+					{
+						key:   "testKey3",
+						value: "testVal3",
+					},
+				},
+			},
+			want: []*tag{
+				{
+					key:   "testKey",
+					value: "testVal",
+				},
+				{
+					key:   "testKey3",
+					value: "testVal3",
+				},
+			},
+		},
+		{
+			name: "test empty first array",
+			args: args{
+				tags1: []*tag{},
+				tags2: []*tag{
+					{
+						key:   "testKey",
+						value: "testVal",
+					},
+				},
+			},
+			want: []*tag{
+				{
+					key:   "testKey",
+					value: "testVal",
+				},
+			},
+		},
+		{
+			name: "test empty second array",
+			args: args{
+				tags1: []*tag{
+					{
+						key:   "testKey",
+						value: "testVal",
+					},
+				},
+				tags2: []*tag{},
+			},
+			want: []*tag{
+				{
+					key:   "testKey",
+					value: "testVal",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeTags(tt.args.tags1, tt.args.tags2)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("mergeTags() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_tagsContainsAll(t *testing.T) {
 	type args struct {
 		tags1 []*tag
