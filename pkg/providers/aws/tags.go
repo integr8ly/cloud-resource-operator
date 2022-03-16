@@ -98,6 +98,21 @@ func genericToEc2Tags(tags []*tag) []*ec2.Tag {
 	return ec2Tags
 }
 
+// this function merges generalTags and infraTags, where any duplicate key in
+// infraTags is discarded in favour of the value in infraTags
+func mergeTags(generalTags []*tag, infraTags []*tag) []*tag {
+	var dupMap = make(map[string]bool)
+	for _, tag := range generalTags {
+		dupMap[tag.key] = true
+	}
+	for _, tag := range infraTags {
+		if _, exists := dupMap[tag.key]; !exists {
+			generalTags = append(generalTags, tag)
+		}
+	}
+	return generalTags
+}
+
 func tagsContains(tags []*tag, key, value string) bool {
 	for _, tag := range tags {
 		if tag.key == key && tag.value == value {
@@ -161,7 +176,36 @@ func getDefaultResourceTags(ctx context.Context, c client.Client, specType strin
 		tags = append(tags, productTag)
 	}
 
+	infraTags, err := getUserInfraTags(ctx, c)
+	if err != nil {
+		msg := "Failed to get user infrastructure tags"
+		return nil, "", errorUtil.Wrapf(err, msg)
+	}
+	if infraTags != nil {
+		// merge tags into single array, where any duplicate
+		// values in infra are overwritten by the default tags
+		tags = mergeTags(infraTags, tags)
+	}
+
 	return tags, clusterID, nil
+}
+
+func getUserInfraTags(ctx context.Context, c client.Client) ([]*tag, error) {
+	// get infra CR
+	infra, err := resources.GetClusterInfrastructure(ctx, c)
+	if err != nil {
+		msg := "Failed to get cluster infrastructure"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+
+	var tags []*tag
+	// retrieve all user infrastructure tags
+	if infra.Status.PlatformStatus != nil && infra.Status.PlatformStatus.AWS != nil {
+		for _, t := range infra.Status.PlatformStatus.AWS.ResourceTags {
+			tags = append(tags, &tag{key: t.Key, value: t.Value})
+		}
+	}
+	return tags, nil
 }
 
 func buildManagedTag() *tag {

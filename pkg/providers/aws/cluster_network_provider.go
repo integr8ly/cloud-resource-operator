@@ -1821,8 +1821,8 @@ func getCloudResourceOperatorOwnerTag(ctx context.Context, client client.Client)
 	return genericTag, nil
 }
 
-func getDefaultTagSpec(ctx context.Context, client client.Client, t *tag, resourceType string) ([]*ec2.TagSpecification, error) {
-	tags, err := getDefaultNetworkTags(ctx, client, t)
+func getDefaultTagSpec(ctx context.Context, client client.Client, customTag *tag, resourceType string) ([]*ec2.TagSpecification, error) {
+	tags, err := getDefaultNetworkTags(ctx, client, customTag)
 	if err != nil {
 		return nil, err
 	}
@@ -1835,24 +1835,31 @@ func getDefaultTagSpec(ctx context.Context, client client.Client, t *tag, resour
 }
 
 // Used to retrieve a set of default tag values for network resources
-// the tag passed in is used to generate a specific tag for the resource type
-// if t is provided it is the first tag in the list
-func getDefaultNetworkTags(ctx context.Context, client client.Client, t *tag) ([]*tag, error) {
+// the customTag passed in is used to generate a specific tag for the resource type
+func getDefaultNetworkTags(ctx context.Context, client client.Client, customTag *tag) ([]*tag, error) {
 	croTag, err := getCloudResourceOperatorOwnerTag(ctx, client)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to build default tags")
 	}
-	if t != nil {
-		return []*tag{
-			t,
-			croTag,
-			buildManagedTag(),
-		}, nil
-	}
-	return []*tag{
+	tags := []*tag{
 		croTag,
 		buildManagedTag(),
-	}, nil
+	}
+	if customTag != nil {
+		tags = append(tags, customTag)
+	}
+
+	infraTags, err := getUserInfraTags(ctx, client)
+	if err != nil {
+		msg := "Failed to get user infrastructure tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+	if infraTags != nil {
+		// merge tags into single array, where any duplicate
+		// values in infra are discarded in favour of the default tags
+		tags = mergeTags(tags, infraTags)
+	}
+	return tags, nil
 }
 
 // resources such as cluster vpc route tables are tagged with a cluster owner tag
