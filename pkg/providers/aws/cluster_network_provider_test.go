@@ -1819,7 +1819,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 		fields  fields
 		args    args
 		want    *NetworkPeering
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "fails when cannot get standalone vpc",
@@ -1834,7 +1834,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 			},
-			wantErr: true,
+			wantErr: "failed to get standalone vpc: error getting vpcs: ec2 get vpcs error",
 		},
 		{
 			name: "fails when cannot get vpc peering connection",
@@ -1855,7 +1855,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 			},
-			wantErr: true,
+			wantErr: "failed to get network peering: failed to get cluster vpc: error, no vpc found",
 		},
 		{
 			name: "success when network peering found",
@@ -1886,7 +1886,6 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			want: &NetworkPeering{
 				PeeringConnection: buildMockVpcPeeringConnection(nil),
 			},
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -1899,7 +1898,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 				Logger:         tt.fields.Logger,
 			}
 			got, err := n.GetClusterNetworkPeering(tt.args.ctx)
-			if (err != nil) != tt.wantErr {
+			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("GetClusterNetworkPeering() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
