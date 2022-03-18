@@ -491,7 +491,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	return p.deleteRDSInstance(ctx, r, networkManager, rds.New(sess), ec2.New(sess), rdsCreateConfig, rdsDeleteConfig, isEnabled, isLastResource)
 }
 
-func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.Postgres, networkManager NetworkManager, instanceSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput, isEnabled bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteRDSInstance")
 
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
@@ -552,35 +552,43 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 		return croType.StatusMessage(fmt.Sprintf("deletion protection detected, modifyDBInstance() in progress, current aws rds status is %s", *foundInstance.DBInstanceStatus)), nil
 	}
 
-	// standaloneNetworkExists if no bundled resources are found in the cluster vpc
-	if standaloneNetworkExists && isLastResource {
-		logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
-		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+	// isEnabled is true if no bundled resources are found in the cluster vpc
+	if isEnabled && isLastResource {
+		saVPC, err := getStandaloneVpc(ctx, p.Client, ec2Svc, logger)
 		if err != nil {
-			msg := "failed to get cluster network peering"
+			msg := "failed to get standalone VPC"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
+		// Remove all networking resources if standalone vpc exists
+		if saVPC != nil {
+			logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
+			networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+			if err != nil {
+				msg := "failed to get cluster network peering"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
-			msg := "failed to delete network connection"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
+			if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
+				msg := "failed to delete network connection"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
-			msg := "failed to delete cluster network peering"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
+			if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
+				msg := "failed to delete cluster network peering"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetwork(ctx); err != nil {
-			msg := "failed to delete aws networking"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			if err = networkManager.DeleteNetwork(ctx); err != nil {
+				msg := "failed to delete aws networking"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 		}
 	}
 
 	// in the case of standalone network not existing and the last resource is being deleted the
 	// bundled networking resources should be cleaned up similarly to standalone networking resources
 	// this involves the deletion of bundled elasticace and rds subnet group and ec2 security group
-	if !standaloneNetworkExists && isLastResource {
+	if !isEnabled && isLastResource {
 		err := networkManager.DeleteBundledCloudResources(ctx)
 		if err != nil {
 			msg := "failed to delete bundled networking resources"

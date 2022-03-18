@@ -506,10 +506,10 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// delete the elasticache cluster
-	return p.deleteElasticacheCluster(ctx, networkManager, elasticache.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r, isEnabled, isLastResource)
+	return p.deleteElasticacheCluster(ctx, networkManager, elasticache.New(sess), ec2.New(sess), elasticacheCreateConfig, elasticacheDeleteConfig, r, isEnabled, isLastResource)
 }
 
-func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis, standaloneNetworkExists bool, isLastResource bool) (croType.StatusMessage, error) {
+func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkManager NetworkManager, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput, r *v1alpha1.Redis, isEnabled bool, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteElasticacheCluster")
 
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
@@ -553,34 +553,43 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 
 		return "delete detected, deleteReplicationGroup started", nil
 	}
-	if standaloneNetworkExists && isLastResource {
-		logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
-		networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+	// isEnabled is true if no bundled resources are found in the cluster vpc
+	if isEnabled && isLastResource {
+		saVPC, err := getStandaloneVpc(ctx, p.Client, ec2Svc, logger)
 		if err != nil {
-			msg := "failed to get cluster network peering"
+			msg := "failed to get standalone VPC"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
+		// Remove all networking resources if standalone vpc exists
+		if saVPC != nil {
+			logger.Info("found the last instance of types postgres and redis so deleting the standalone network")
+			networkPeering, err := networkManager.GetClusterNetworkPeering(ctx)
+			if err != nil {
+				msg := "failed to get cluster network peering"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
-			msg := "failed to delete network connection"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
+			if err = networkManager.DeleteNetworkConnection(ctx, networkPeering); err != nil {
+				msg := "failed to delete network connection"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
-			msg := "failed to delete cluster network peering"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
+			if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
+				msg := "failed to delete cluster network peering"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 
-		if err = networkManager.DeleteNetwork(ctx); err != nil {
-			msg := "failed to delete aws networking"
-			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			if err = networkManager.DeleteNetwork(ctx); err != nil {
+				msg := "failed to delete aws networking"
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 		}
 	}
 
 	// in the case of standalone network not existing and the last resource is being deleted the
 	// bundled networking resources should be cleaned up similarly to standalone networking resources
 	// this involves the deletion of bundled elasticace and rds subnet group and ec2 security group
-	if !standaloneNetworkExists && isLastResource {
+	if !isEnabled && isLastResource {
 		err := networkManager.DeleteBundledCloudResources(ctx)
 		if err != nil {
 			msg := "failed to delete bundled networking resources"

@@ -492,33 +492,8 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			//if no rhmi subnets exist in the cluster vpc then isEnabled will return true ONLY if a valid standalone vpc also exists
-			name: "verify isEnabled is true, no bundle subnets found in cluster vpc and valid standalone vpc exists",
-			args: args{
-				ctx: context.TODO(),
-			},
-			fields: fields{
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
-								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB),
-							},
-						}, nil
-					}
-
-				}),
-			},
-			want:    true,
-			wantErr: false,
-		},
-		{
-			//if no rhmi subnets exist in the cluster vpc, isEnabled will still return false if no valid standalone vpc exists
-			name: "verify isEnabled is false, no bundle subnets found in cluster vpc and no standalone vpc exists",
+			//if no rhmi subnets exist in the cluster vpc then isEnabled will return true
+			name: "verify isEnabled is true, no bundle subnets found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
 			},
@@ -534,10 +509,9 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 							},
 						}, nil
 					}
-
 				}),
 			},
-			want:    false,
+			want:    true,
 			wantErr: false,
 		},
 		{
@@ -752,12 +726,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
-					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySeven)
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
-						}, nil
-					}
 				}),
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),

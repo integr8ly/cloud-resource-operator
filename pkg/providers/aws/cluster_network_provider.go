@@ -711,20 +711,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 		}
 	}
 	logger.Infof("found %d bundled vpc subnets in cluster vpc", len(validBundledVPCSubnets))
-
-	// Confirm that a standalone VPC actually exists before returning true
-	isUsingStandaloneVPC := false
-	if len(validBundledVPCSubnets) == 0 {
-		saVpc, err := getStandaloneVpc(ctx, n.Client, n.Ec2Api, logger)
-		if err != nil {
-			return isUsingStandaloneVPC, err
-		}
-		if saVpc != nil {
-			isUsingStandaloneVPC = true
-		}
-	}
-
-	return isUsingStandaloneVPC, nil
+	return len(validBundledVPCSubnets) == 0, nil
 }
 
 // DeleteBundledCloudResources returns an error on any error deleting of the following resources

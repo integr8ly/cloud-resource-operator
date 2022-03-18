@@ -750,9 +750,9 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
 		CacheSvc          elasticacheiface.ElastiCacheAPI
+		Ec2Svc            ec2iface.EC2API
 	}
 	type args struct {
-		cacheSvc                elasticacheiface.ElastiCacheAPI
 		networkManager          NetworkManager
 		redisCreateConfig       *elasticache.CreateReplicationGroupInput
 		redisDeleteConfig       *elasticache.DeleteReplicationGroupInput
@@ -883,6 +883,11 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &elasticache.DescribeReplicationGroupsOutput{}, nil
 					}
 				}),
+				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = []*ec2.Vpc{
+						buildValidStandaloneVPC(validCIDRSixteen),
+					}
+				}),
 			},
 			wantErr: false,
 		}, {
@@ -918,7 +923,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.CacheSvc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis, tt.args.standaloneNetworkExists, tt.args.isLastResource); (err != nil) != tt.wantErr {
+			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.CacheSvc, tt.fields.Ec2Svc, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis, tt.args.standaloneNetworkExists, tt.args.isLastResource); (err != nil) != tt.wantErr {
 				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
