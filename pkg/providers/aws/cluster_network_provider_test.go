@@ -190,10 +190,24 @@ func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 				Value: aws.String("1"),
 			},
 			{
-				Key:   aws.String(getOSDClusterTagKey(defaultInfraName)),
-				Value: aws.String(clusterOwnedTagValue),
+				Key:   aws.String(defaultRHMISubnetTag),
+				Value: aws.String("test"),
 			},
+			{
+				Key:   aws.String(tagDisplayName),
+				Value: aws.String(DefaultRHMISubnetNameTagValue),
+			},
+			genericToEc2Tag(buildManagedTag()),
 		},
+	}
+}
+
+func buildUntaggedSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
+	return &ec2.Subnet{
+		SubnetId:         aws.String(subnetId),
+		VpcId:            aws.String(vpcID),
+		AvailabilityZone: aws.String(azId),
+		CidrBlock:        aws.String(cidrBlock),
 	}
 }
 
@@ -327,6 +341,7 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 					Key:   aws.String(getOSDClusterTagKey(defaultInfraName)),
 					Value: aws.String(clusterOwnedTagValue),
 				},
+				genericToEc2Tag(buildManagedTag()),
 			},
 			State: aws.String(ec2.VpcStateAvailable),
 		},
@@ -334,7 +349,6 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 }
 func buildValidStandaloneVPCTags() []*ec2.Tag {
 	return []*ec2.Tag{
-
 		{
 			Key:   aws.String(tagDisplayName),
 			Value: aws.String(DefaultRHMIVpcNameTagValue),
@@ -343,6 +357,7 @@ func buildValidStandaloneVPCTags() []*ec2.Tag {
 			Key:   aws.String(defaultRHMISubnetTag),
 			Value: aws.String(defaultInfraName),
 		},
+		genericToEc2Tag(buildManagedTag()),
 	}
 }
 
@@ -682,7 +697,9 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRSixteen)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
 						}, nil
 					}
 				}),
@@ -706,7 +723,9 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
 						}, nil
 					}
 				}),
@@ -818,7 +837,9 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
 						}, nil
 					}
 				}),
@@ -851,7 +872,9 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
 						}, nil
 					}
 				}),
@@ -1172,6 +1195,108 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "verify untagged vpc is provided with correct tags",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
+					ec2Client.vpc = buildValidNonTaggedStandaloneVPC(validCIDRSixteen)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+					// runs when sts disabled
+					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+						ec2Client.vpc.SetTags(input.Tags)
+						return &ec2.CreateTagsOutput{}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+							ec2Client.vpc.SetTags(input.TagSpecifications[0].Tags)
+						}
+						return &ec2.CreateVpcOutput{
+							Vpc: ec2Client.vpc,
+						}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRSixteen),
+			},
+			want:    buildValidNetworkResponseCreateVPC(validCIDRSixteen, defaultVpcId),
+			wantErr: false,
+		},
+		{
+			name: "verify untagged subnets are provided with correct tags",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
+					ec2Client.azs = buildSortedStandaloneAZs()
+					ec2Client.firstSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+					// runs when sts disabled
+					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+						resource := aws.StringValue(input.Resources[0])
+						if resource == aws.StringValue(ec2Client.firstSubnet.SubnetId) {
+							ec2Client.firstSubnet.SetTags(input.Tags)
+							return &ec2.CreateTagsOutput{}, nil
+						}
+						if resource == aws.StringValue(ec2Client.secondSubnet.SubnetId) {
+							ec2Client.secondSubnet.SetTags(input.Tags)
+							return &ec2.CreateTagsOutput{}, nil
+						}
+						return &ec2.CreateTagsOutput{}, nil
+					}
+					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+						if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+							if ec2Client.returnSecondSub {
+								ec2Client.secondSubnet.SetTags(input.TagSpecifications[0].Tags)
+							} else {
+								ec2Client.firstSubnet.SetTags(input.TagSpecifications[0].Tags)
+							}
+						}
+						if ec2Client.returnSecondSub {
+							return &ec2.CreateSubnetOutput{
+								Subnet: ec2Client.secondSubnet,
+							}, nil
+						}
+						return ec2Client.returnFirstSubnet()
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(nil),
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRSixteen),
+			},
+			want:    buildValidNetworkResponseVPCExists(validCIDRTwentySix, defaultStandaloneVpcId, defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1445,7 +1570,9 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
 						}, nil
 					}
 				}),

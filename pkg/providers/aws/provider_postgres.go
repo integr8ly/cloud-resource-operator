@@ -302,6 +302,9 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	// create connection metric
 	defer p.createRDSConnectionMetric(ctx, cr, foundInstance)
 
+	// check if we are running in STS mode
+	_, isSTS := p.CredentialManager.(*STSCredentialManager)
+
 	// check for updates on rds instance if it already exists
 	if foundInstance != nil {
 		// check rds instance phase
@@ -337,10 +340,12 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 			return nil, croType.StatusMessage(statusMsg), nil
 		}
 
-		croStatus, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to add tags to rds: %s", croStatus)
-			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		if !isSTS {
+			croStatus, err := p.TagRDSPostgres(ctx, cr, rdsSvc, foundInstance)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to add tags to rds: %s", croStatus)
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
 		}
 
 		msg = fmt.Sprintf("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
@@ -362,6 +367,15 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 			cr.Name, cr.Namespace, ResourceIdentifierAnnotation, cr.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 		return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
 	}
+	// the tag should be added to the create strategy in cases where sts is enabled
+	// and in the same api request of the first creation of the postgres to allow
+	if isSTS {
+		msg, err := p.buildRDSTagCreateStrategy(ctx, cr, rdsCfg)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+	}
 
 	logger.Info("creating rds instance")
 	if _, err := rdsSvc.CreateDBInstance(rdsCfg); err != nil {
@@ -375,42 +389,44 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	return nil, "started rds provision", nil
 }
 
-// TagRDSPostgres Tags RDS resources
+// buildRDSTagCreateStrategy Tags RDS resources
+func (p *PostgresProvider) buildRDSTagCreateStrategy(ctx context.Context, cr *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput) (croType.StatusMessage, error) {
+	rdsTags, err := p.getDefaultRdsTags(ctx, cr)
+	if err != nil {
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+
+	}
+
+	if cr.ObjectMeta.Labels["addonName"] != "" {
+		addonTag := &rds.Tag{
+			Key:   aws.String("add-on-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["addonName"]),
+		}
+		rdsTags = append(rdsTags, addonTag)
+	}
+
+	// adding tags to rds postgres create strategy instance
+	rdsCreateConfig.SetTags(rdsTags)
+	rdsCreateConfig.SetCopyTagsToSnapshot(true)
+
+	return "", nil
+}
+
 func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, foundInstance *rds.DBInstance) (croType.StatusMessage, error) {
+
 	logger := p.Logger.WithField("action", "TagRDSPostgres")
 	logger.Infof("adding tags to rds instance %s", *foundInstance.DBInstanceIdentifier)
-	// get the environment from the CR
-	// set the tag values that will always be added
-	defaultOrganizationTag := resources.GetOrganizationTag()
 
-	//get Cluster Id
-	clusterID, _ := resources.GetClusterID(ctx, p.Client)
-	// Set the Tag values
+	rdsTag, err := p.getDefaultRdsTags(ctx, cr)
+	if err != nil {
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 
-	rdsTag := []*rds.Tag{
-		{
-			Key:   aws.String(defaultOrganizationTag + "clusterID"),
-			Value: aws.String(clusterID),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-type"),
-			Value: aws.String(cr.Spec.Type),
-		},
-		{
-			Key:   aws.String(defaultOrganizationTag + "resource-name"),
-			Value: aws.String(cr.Name),
-		},
-	}
-	if cr.ObjectMeta.Labels["productName"] != "" {
-		productTag := &rds.Tag{
-			Key:   aws.String(defaultOrganizationTag + "product-name"),
-			Value: aws.String(cr.ObjectMeta.Labels["productName"]),
-		}
-		rdsTag = append(rdsTag, productTag)
 	}
 
 	// adding tags to rds postgres instance
-	_, err := rdsSvc.AddTagsToResource(&rds.AddTagsToResourceInput{
+	_, err = rdsSvc.AddTagsToResource(&rds.AddTagsToResourceInput{
 		ResourceName: aws.String(*foundInstance.DBInstanceArn),
 		Tags:         rdsTag,
 	})
@@ -446,6 +462,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 
 	logger.Infof("tags were added successfully to the rds instance %s", *foundInstance.DBInstanceIdentifier)
 	return "successfully created and tagged", nil
+
 }
 
 func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postgres) (croType.StatusMessage, error) {
@@ -687,6 +704,15 @@ func (p *PostgresProvider) isLastResource(ctx context.Context) (bool, error) {
 		return false, errorUtil.Wrap(err, msg)
 	}
 	return len(postgresList.Items) == 1 && len(redisList.Items) == 0, nil
+}
+
+func (p *PostgresProvider) getDefaultRdsTags(ctx context.Context, cr *v1alpha1.Postgres) ([]*rds.Tag, error) {
+	tags, _, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	if err != nil {
+		msg := "Failed to get default RDS tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+	return genericToRdsTags(tags), nil
 }
 
 // verifies if there is a change between a found instance and the configuration from the instance strat and verified the changes are not pending
