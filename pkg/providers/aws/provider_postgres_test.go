@@ -3,13 +3,14 @@ package aws
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	errorUtil "github.com/pkg/errors"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	errorUtil "github.com/pkg/errors"
 
 	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 
@@ -1283,12 +1284,16 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		{
 			name: "test successful delete with no postgres and deletion of standalone network",
 			args: args{
-				postgresDeleteConfig:    &rds.DeleteDBInstanceInput{},
-				postgresCreateConfig:    &rds.CreateDBInstanceInput{},
-				pg:                      buildTestPostgresCR(),
-				networkManager:          buildMockNetworkManager(),
-				instanceSvc:             &mockRdsClient{dbInstances: []*rds.DBInstance{}},
-				ec2Svc:                  &mockEc2Client{},
+				postgresDeleteConfig: &rds.DeleteDBInstanceInput{},
+				postgresCreateConfig: &rds.CreateDBInstanceInput{},
+				pg:                   buildTestPostgresCR(),
+				networkManager:       buildMockNetworkManager(),
+				instanceSvc:          &mockRdsClient{dbInstances: []*rds.DBInstance{}},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = []*ec2.Vpc{
+						buildValidStandaloneVPC(validCIDRSixteen),
+					}
+				}),
 				standaloneNetworkExists: true,
 				isLastResource:          true,
 			},
