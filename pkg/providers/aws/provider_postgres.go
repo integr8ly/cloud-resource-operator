@@ -1153,18 +1153,23 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 
 		for _, pma := range su.PendingMaintenanceActionDetails {
 
+			// set default values for metric labels in case these were not retrieved from aws
 			metricEpochTimestamp := time.Now().Unix()
+			autoAppliedAfterDate := ""
+			currentApplyDate := ""
 
 			if pma.AutoAppliedAfterDate != nil && !pma.AutoAppliedAfterDate.IsZero() {
-				metricLabels["AutoAppliedAfterDate"] = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
+				autoAppliedAfterDate = strconv.FormatInt((*pma.AutoAppliedAfterDate).Unix(), 10)
 				metricEpochTimestamp = (*pma.AutoAppliedAfterDate).Unix()
 			}
 
 			if pma.CurrentApplyDate != nil && !pma.CurrentApplyDate.IsZero() {
-				metricLabels["CurrentApplyDate"] = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
+				currentApplyDate = strconv.FormatInt((*pma.CurrentApplyDate).Unix(), 10)
 				metricEpochTimestamp = (*pma.CurrentApplyDate).Unix()
 			}
 
+			metricLabels["AutoAppliedAfterDate"] = autoAppliedAfterDate
+			metricLabels["CurrentApplyDate"] = currentApplyDate
 			metricLabels["Description"] = *pma.Description
 
 			resources.SetMetric(resources.DefaultPostgresMaintenanceMetricName, metricLabels, float64(metricEpochTimestamp))
