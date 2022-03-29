@@ -100,3 +100,4 @@ operator-sdk-v1.2.0
 
 # Generated roles
 rhoam_role.json
+rhoam_role_minimal_policy.json
