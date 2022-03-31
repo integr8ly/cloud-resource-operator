@@ -64,16 +64,8 @@ code/gen: manifests kustomize generate
 
 # Make sure that the previous version and version values are set to correct values.
 .PHONY: gen/csv
-gen/csv:
-	@$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate packagemanifests --kustomize-dir=config/manifests --output-dir packagemanifests/ --version ${VERSION} --default-channel --channel integreatly
-	@sed -i "s/Version = \"${PREV_VERSION}\"/Version = \"${VERSION}\"/g" version/version.go
-	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.metadata.name="cloud-resources.v$(VERSION)"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.install.spec.deployments[0].spec.template.spec.containers[0].image="${OPERATOR_IMG}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.replaces="cloud-resources.v${PREV_VERSION}"' packagemanifests/${VERSION}/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.metadata.annotations.containerImage="${OPERATOR_IMG}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.metadata.name="cloud-resource-operator.v$(VERSION)"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
-	@yq e -i '.spec.version="${VERSION}"' config/manifests/bases/cloud-resource-operator.clusterserviceversion.yaml
+gen/csv: kustomize
+	@SEMVER=$(VERSION) PREV_VERSION=$(PREV_VERSION) ./scripts/gen-csv.sh
 
 .PHONY: code/fix
 code/fix:
@@ -238,7 +230,7 @@ setup/moq:
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
-	IMAGE_ORG=${IMAGE_ORG} IMAGE_REG=${IMAGE_REG} CHANNEL=${CHANNEL} UPGRADE=${UPGRADE} PREVIOUS_OPERATOR_VERSIONS=${PREVIOUS_OPERATOR_VERSIONS} ./scripts/bundle-rhmi-operators.sh
+	@CHANNEL=$(CHANNEL) PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
 
 .PHONY: release/prepare
 release/prepare: gen/csv image/push create/olm/bundle
