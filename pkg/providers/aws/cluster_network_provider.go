@@ -75,6 +75,11 @@ type Network struct {
 	Subnets []*ec2.Subnet
 }
 
+type cidrList struct {
+	cidr       string
+	defaultVal string
+}
+
 // used to map expected ip addresses to availability zones
 type NetworkAZSubnet struct {
 	IP net.IPNet
@@ -1624,12 +1629,19 @@ func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*ne
 		return nil, errorUtil.Wrap(err, "error parsing cluster cidr block")
 	}
 
-	// this map is used to loop through the available options for a vpc cidr range in aws
+	// this list is used to loop through the available options for a vpc cidr range in aws
 	// See aws docs https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html#vpc-sizing-ipv4
-	cidrRanges := map[string]string{
-		"10.255.255.255/8":  fmt.Sprintf("10.0.0.0/%s", defaultCIDRMask),
-		"172.31.255.255/12": fmt.Sprintf("172.16.0.0/%s", defaultCIDRMask),
+	cidrRanges := []*cidrList{
+		{
+			"10.255.255.255/8",
+			fmt.Sprintf("10.0.0.0/%s", defaultCIDRMask),
+		},
+		{
+			"172.31.255.255/12",
+			fmt.Sprintf("172.16.0.0/%s", defaultCIDRMask),
+		},
 	}
+
 	//getting the network cr called from the cluster
 	networkConf := &v12.Network{}
 	err = n.Client.Get(ctx, client.ObjectKey{Name: "cluster"}, networkConf)
@@ -1654,13 +1666,13 @@ func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*ne
 	//
 	// the current logic checks that the cidr block does not overlap with the cluster machine,
 	//  pod and service cidr range
-	for cidrRange, potentialDefault := range cidrRanges {
-		_, cidrRangeNet, err := net.ParseCIDR(cidrRange)
+	for _, cidrList := range cidrRanges {
+		_, cidrRangeNet, err := net.ParseCIDR(cidrList.cidr)
 		if err != nil {
 			fmt.Println("error parsing cidr range for default cidr block", err)
 		}
 		// our potential default
-		potentialDefaultIP, _, err := net.ParseCIDR(potentialDefault)
+		potentialDefaultIP, _, err := net.ParseCIDR(cidrList.defaultVal)
 		if err != nil {
 			fmt.Println("error parsing potential default cidr range for default cidr block", err)
 		}
