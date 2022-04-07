@@ -6,7 +6,6 @@ coverage:
   precision: 2
   round: down
   range: "20...100"
-  threshold: 0%
   ignore: 
     - "build"
     - "config"
@@ -19,8 +18,10 @@ coverage:
     - "version"
 
   status:
-    project: no
-    patch: no
+    project:
+      default:
+        target: auto
+        threshold: 0%
     changes: no
 
 parsers:
