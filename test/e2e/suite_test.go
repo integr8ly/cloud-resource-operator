@@ -17,18 +17,18 @@ limitations under the License.
 package e2e
 
 import (
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"k8s.io/client-go/kubernetes/scheme"
+	// configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	// integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	// . "github.com/onsi/ginkgo"
+	// . "github.com/onsi/gomega"
+	// "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"testing"
+	// "sigs.k8s.io/controller-runtime/pkg/envtest/printer"
+	// logf "sigs.k8s.io/controller-runtime/pkg/log"
+	// "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	// "testing"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -40,50 +40,50 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var err error
 
-func TestAPIs(t *testing.T) {
-	RegisterFailHandler(Fail)
+// func TestAPIs(t *testing.T) {
+// 	RegisterFailHandler(Fail)
 
-	// start test env
-	By("bootstrapping test environment")
+// 	// start test env
+// 	By("bootstrapping test environment")
 
-	useCluster := true
-	testEnv = &envtest.Environment{
-		UseExistingCluster:       &useCluster,
-		AttachControlPlaneOutput: true,
-	}
+// 	useCluster := true
+// 	testEnv = &envtest.Environment{
+// 		UseExistingCluster:       &useCluster,
+// 		AttachControlPlaneOutput: true,
+// 	}
 
-	cfg, err = testEnv.Start()
-	if err != nil {
-		t.Fatalf("could not get start test environment %s", err)
-	}
+// 	cfg, err = testEnv.Start()
+// 	if err != nil {
+// 		t.Fatalf("could not get start test environment %s", err)
+// 	}
 
-	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: "system:admin",
-		Groups:   []string{"system:authenticated"},
-	}
+// 	cfg.Impersonate = rest.ImpersonationConfig{
+// 		UserName: "system:admin",
+// 		Groups:   []string{"system:authenticated"},
+// 	}
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"E2E Test Suite",
-		[]Reporter{printer.NewlineReporter{}})
-}
+// 	RunSpecsWithDefaultAndCustomReporters(t,
+// 		"E2E Test Suite",
+// 		[]Reporter{printer.NewlineReporter{}})
+// }
 
-var _ = BeforeSuite(func(done Done) {
+// var _ = BeforeSuite(func(done Done) {
 
-	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
+// 	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
 
-	err = integreatlyv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+// 	err = integreatlyv1alpha1.AddToScheme(scheme.Scheme)
+// 	Expect(err).NotTo(HaveOccurred())
 
-	err = configv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+// 	err = configv1.AddToScheme(scheme.Scheme)
+// 	Expect(err).NotTo(HaveOccurred())
 
-	// +kubebuilder:scaffold:scheme
-	close(done)
-}, 60)
+// 	// +kubebuilder:scaffold:scheme
+// 	close(done)
+// }, 60)
 
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
+// var _ = AfterSuite(func() {
+// 	By("tearing down the test environment")
 
-	err := testEnv.Stop()
-	Expect(err).ToNot(HaveOccurred())
-})
+// 	err := testEnv.Stop()
+// 	Expect(err).ToNot(HaveOccurred())
+// })
