@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # USAGE
-# NAMESPACE=cloud-resource-operator ./create-rhoam-policy.sh
+# NAMESPACE=cloud-resource-operator ./create-rhoam-policy.sh <optional CLUSTER_NAME> <optional OCM_ENV>
 #
 # Creates the RHOAM role for CRO to assume on STS cluster
 #
@@ -13,6 +13,7 @@ export AWS_PAGER=""
 ROLE_NAME="rhoam_role"
 MINIMAL_POLICY_NAME="${ROLE_NAME}_minimal_policy"
 CLUSTER_NAME="${CLUSTER_NAME:-defaultsts}"
+OCM_ENV="${OCM_ENV:-staging}"
 
 # Gets the local aws account id
 get_account_id() {
@@ -27,6 +28,14 @@ get_role_arn() {
 get_cluster_id() {
   local CLUSTER_ID=$(ocm get clusters --parameter search="name like '%$CLUSTER_NAME%'" | jq '.items[].id' -r)
   echo "$CLUSTER_ID"
+}
+
+get_oidc_provider_env() {
+  if [[ "$OCM_ENV" == "staging" ]]; then
+      echo "rh-oidc-staging"
+  else
+    echo "rh-oidc"
+  fi
 }
 
 # Delete policy and role
@@ -48,7 +57,7 @@ cat <<EOM >"$ROLE_NAME.json"
               "arn:aws:iam::$(get_account_id):user/osdCcsAdmin"
           ],
           "Federated": [
-              "arn:aws:iam::$(get_account_id):oidc-provider/rh-oidc.s3.us-east-1.amazonaws.com/$(get_cluster_id)"
+              "arn:aws:iam::$(get_account_id):oidc-provider/$(get_oidc_provider_env).s3.us-east-1.amazonaws.com/$(get_cluster_id)"
           ]
       },
       "Action": ["sts:AssumeRole", "sts:AssumeRoleWithWebIdentity"],
