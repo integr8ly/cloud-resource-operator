@@ -173,7 +173,7 @@ Cut a release on Github you need to be an [owner](OWNERS)
 
 ![draft release](img/draft-release.png?raw=true)
 
-- On the Draft release screen add a tag, description and add the PR for the release and select `Publish release`
+- On the Draft release screen add a tag alongside a description that includes the fixes present in the release and select `Publish release`
 
 ![release](img/release.png?raw=true)
 
@@ -221,7 +221,7 @@ Some of these variables can be passed through at the command line if not set in 
 IMAGE_ORG=myorg UPGRADE=false make release/prepare
 ```
 
-This pushes a new container image for this CRO version (`v10.0.0`), and creates new [packagemanifests](packagemanifests/) used to create and push a bundle and index container image.
+This pushes a new container image for this CRO version (`v10.0.0`), and creates a new [bundle](bundle/) used to create and push a bundle and index container image.
 
 The result is three separate container images in your quay repository:
 - quay.io/myorg/cloud-resource-operator:v10.0.0
@@ -271,7 +271,7 @@ To perform a side-by-side upgrade of CRO through OLM, we must create bundle, ind
 
 First you must checkout the code for the version you would like to upgrade from. For the purposes of this guide we assume that you are upgrading from a tagged previous release. However, if you would like to test an upgrade from the current state of the master branch, follow the first part of the [Deploy with OLM](#deploy-with-olm) guide to create the initial version images. In this example we assume that the latest release is `v0.34.0`.
 
-The [Makefile](Makefile) provides an automated method of creating and pushing the index and bundle images for the latest version of CRO. It uses the latest version number from [packagemanifests](packagemanifests/) to determine which version is newest. Some of the variables within the [Makefile](Makefile) should also be adjusted:
+The [Makefile](Makefile) provides an automated method of creating and pushing the index and bundle images for the latest version of CRO. It uses the latest version number from the [bundles](bundles/) to determine which version is newest. Some of the variables within the [Makefile](Makefile) should also be adjusted:
 * `PREVIOUS_OPERATOR_VERSIONS`: this variable determines which bundles to include in the index. As we do not plan to upgrade to this version it can be set to an empty string
 * `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
 * `UPGRADE`: set to `false` as this version will not replace a previous version
@@ -297,7 +297,7 @@ Adjust the [Makefile](Makefile) variables for the new development release:
 IMAGE_ORG=myorg make release/prepare
 ```
 
-This creates new [packagemanifests](packagemanifests/) for this release, specifying that this version `replaces` the previous version. These manifests are used to generate new index, bundle, and operator container images for the development CRO release:
+This creates a new [bundle](bundles/) for this release, specifying that this version `replaces` the previous version. These manifests are used to generate new index, bundle, and operator container images for the development CRO release:
 - quay.io/myorg/cloud-resource-operator:v10.0.0
 - quay.io/myorg/cloud-resource-operator:bundle-v10.0.0
 - quay.io/myorg/cloud-resource-operator:index-v10.0.0
