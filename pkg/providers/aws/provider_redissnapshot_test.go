@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"reflect"
 	"testing"
 
@@ -130,9 +131,29 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				if len(mock.calls.CreateSnapshot) != 1 {
 					return errors.New("CreateSnapshot was not called")
 				}
+				defaultOrgTag := resources.GetOrganizationTag()
+				fakeTags := []*elasticache.Tag{
+					{
+						Key:   aws.String(defaultOrgTag + "clusterID"),
+						Value: aws.String("test"),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "resource-type"),
+						Value: aws.String(""),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "resource-name"),
+						Value: aws.String("testtesttest000101010000000000UTC"),
+					},
+					{
+						Key:   aws.String(tagManagedKey),
+						Value: aws.String("true"),
+					},
+				}
 				wantSnapshotInput := &elasticache.CreateSnapshotInput{
 					CacheClusterId: aws.String(testPrimaryCacheNodeId),
 					SnapshotName:   aws.String(testTimestampedIdentifier),
+					Tags:           fakeTags,
 				}
 				gotSnapshotInput := mock.calls.CreateSnapshot[0].In1
 				if !reflect.DeepEqual(gotSnapshotInput, wantSnapshotInput) {

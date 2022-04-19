@@ -102,7 +102,7 @@ func (p *RedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
 // CreateRedis Create an Elasticache Replication Group from strategy config
 func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "CreateRedis")
-	logger.Infof("reconciling redes %s", r.Name)
+	logger.Infof("reconciling redis %s", r.Name)
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
