@@ -110,6 +110,10 @@ cluster/seed/workshop/redis:
 cluster/seed/managed/redis:
 	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
 
+.PHONY: cluster/seed/managed/redissnapshot
+cluster/seed/managed/redissnapshot:
+	@cat config/samples/integreatly_v1alpha1_redissnapshot.yaml | sed "s/resourceName: REPLACE_ME/resourceName: example-redis/g" | oc apply -f - -n $(NAMESPACE)
+
 .PHONY: cluster/seed/workshop/postgres
 cluster/seed/workshop/postgres:
 	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
@@ -117,6 +121,10 @@ cluster/seed/workshop/postgres:
 .PHONY: cluster/seed/managed/postgres
 cluster/seed/managed/postgres:
 	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+
+.PHONY: cluster/seed/managed/postgressnapshot
+cluster/seed/managed/postgressnapshot:
+	@cat config/samples/integreatly_v1alpha1_postgressnapshot.yaml | sed "s/resourceName: REPLACE_ME/resourceName: example-postgres/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:
