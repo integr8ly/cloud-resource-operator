@@ -2,10 +2,10 @@
 
 approvers:
 - austincunningham
+- briangallagher
 - laurafitzgerald
 - MStokluska
 - pmccarthy
-- briangallagher
 
 
 reviewers:
@@ -14,13 +14,14 @@ reviewers:
 - Boomatang
 - briangallagher
 - carlkyrillos
+- cecobask
 - KevFan
 - laurafitzgerald
-- pmccarthy
-- MStokluska
-- martinhesko
 - makslion
+- martinhesko
+- MStokluska
 - philbrookes
+- pmccarthy
 - psturc
 - Stellar-9
 - trepel
