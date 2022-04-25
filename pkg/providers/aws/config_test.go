@@ -238,7 +238,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:    context.TODO(),
-				c:      fake.NewClientBuilder().WithScheme(fakeScheme).Build(),
+				c:      fake.NewFakeClientWithScheme(fakeScheme),
 				mockFs: func() {},
 			},
 			wantErr: true,
@@ -247,7 +247,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - local",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -260,7 +260,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - in pod",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -287,7 +287,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with static idp",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewClientBuilder().WithScheme(fakeScheme).WithObjects(fakeInfra).Build(),
+				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					AccessKeyID:     "ACCESS_KEY_ID",

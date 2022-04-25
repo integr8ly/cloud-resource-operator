@@ -1197,7 +1197,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged vpc is provided with correct tags",
 			fields: fields{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
@@ -1236,7 +1236,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged subnets are provided with correct tags",
 			fields: fields{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestInfra()).Build(),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
