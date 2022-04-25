@@ -27,9 +27,10 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 
+	"time"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
-	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
@@ -121,8 +122,9 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups="cloudcredential.openshift.io",resources=credentialsrequests,verbs="*",namespace=cloud-resource-operator
 // +kubebuilder:rbac:groups=operators.coreos.com,resources=catalogsources,verbs=get;update;patch,namespace=cloud-resource-operator
 
-func (r *PostgresReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *PostgresReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling Postgres")
+	ctx := context.TODO()
 	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.Client)
 
 	// Fetch the Postgres instance

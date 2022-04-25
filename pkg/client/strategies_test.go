@@ -63,7 +63,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map redis is created successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client: fake.NewFakeClientWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -83,7 +83,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map redis is updated successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildDefaultConfigMap()).Build(),
+				client: fake.NewFakeClientWithScheme(scheme, buildDefaultConfigMap()),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -103,7 +103,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map postgres is created successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client: fake.NewFakeClientWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -123,7 +123,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map postgres is updated successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildDefaultConfigMap()).Build(),
+				client: fake.NewFakeClientWithScheme(scheme, buildDefaultConfigMap()),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -143,7 +143,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map check backup start time parsing fails",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client: fake.NewFakeClientWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "I am the wrong format",
 					MaintenanceStartTime: "Mon 16:05",
@@ -161,7 +161,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map check maintenance start time parsing fails",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client: fake.NewFakeClientWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "I am the wrong format",

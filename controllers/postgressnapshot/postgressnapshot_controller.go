@@ -92,8 +92,9 @@ func (r *PostgresSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *PostgresSnapshotReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling postgres snapshot")
+	ctx := context.TODO()
 
 	// Fetch the PostgresSnapshot instance
 	instance := &integreatlyv1alpha1.PostgresSnapshot{}

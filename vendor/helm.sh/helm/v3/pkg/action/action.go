@@ -65,7 +65,7 @@ var (
 // ValidName is a regular expression for resource names.
 //
 // DEPRECATED: This will be removed in Helm 4, and is no longer used here. See
-// pkg/lint/rules.validateMetadataNameFunc for the replacement.
+// pkg/chartutil.ValidateName for the replacement.
 //
 // According to the Kubernetes help text, the regular expression it uses is:
 //

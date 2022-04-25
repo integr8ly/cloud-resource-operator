@@ -5,6 +5,8 @@ package cloudmetrics
 
 import (
 	"context"
+	"time"
+
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -12,7 +14,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"time"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -244,8 +245,9 @@ func (r *CloudMetricsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *CloudMetricsReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling CloudMetrics")
+	ctx := context.TODO()
 
 	// scrapedMetrics stores the GenericCloudMetric which are returned from the providers
 	var scrapedMetrics []*providers.GenericCloudMetric

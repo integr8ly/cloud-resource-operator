@@ -21,10 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	FakeResourceVersion = "1000"
-)
-
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis.AddToScheme(scheme)
@@ -63,7 +59,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			name: "test successful creation",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
 				productName:    "test",
@@ -97,7 +93,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			name: "test modification function",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
 				name:           "test",
@@ -136,7 +132,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			name: "test modification function error",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "workshop",
 				tier:           "development",
 				name:           "test",
@@ -202,7 +198,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test successful creation on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme),
 				deploymentType:   "managed",
 				tier:             "production",
 				productName:      "test",
@@ -237,7 +233,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme),
 				deploymentType:   "managed",
 				productName:      "test",
 				tier:             "production",
@@ -278,7 +274,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function error on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme),
 				deploymentType:   "workshop",
 				tier:             "development",
 				productName:      "test",
@@ -298,7 +294,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test successful creation on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).WithObjects(upgradePostgres).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
 				deploymentType:   "managed",
 				tier:             "production",
 				productName:      "test",
@@ -317,7 +313,7 @@ func TestReconcilePostgres(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
-					ResourceVersion: FakeResourceVersion,
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
 					},
@@ -337,7 +333,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).WithObjects(upgradePostgres).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
 				deploymentType:   "managed",
 				productName:      "test",
 				tier:             "production",
@@ -361,7 +357,7 @@ func TestReconcilePostgres(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
-					ResourceVersion: FakeResourceVersion,
+					ResourceVersion: "1",
 					Labels: map[string]string{
 						"productName": "test",
 					},
@@ -382,7 +378,7 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function error on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewClientBuilder().WithScheme(scheme).WithObjects(upgradePostgres).Build(),
+				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
 				deploymentType:   "workshop",
 				tier:             "development",
 				productName:      "test",
@@ -441,7 +437,7 @@ func TestReconcileRedis(t *testing.T) {
 			name: "test successful creation",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
 				productName:    "test",
@@ -475,7 +471,7 @@ func TestReconcileRedis(t *testing.T) {
 			name: "test modification function",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "managed",
 				tier:           "production",
 				productName:    "test",
@@ -514,7 +510,7 @@ func TestReconcileRedis(t *testing.T) {
 			name: "test modification function error",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewClientBuilder().WithScheme(scheme).Build(),
+				client:         fake.NewFakeClientWithScheme(scheme),
 				deploymentType: "workshop",
 				tier:           "development",
 				productName:    "test",

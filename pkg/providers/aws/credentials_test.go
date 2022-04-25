@@ -36,7 +36,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 			entries:             []v1.StatementEntry{},
 			expectedAccessKeyID: "testkey",
 			expectedSecretKey:   "testsecret",
-			client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1.CredentialsRequest{
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
@@ -62,7 +62,7 @@ func TestCredentialManager_ReconcileCredentials(t *testing.T) {
 					defaultCredentialsKeyIDName:     []byte("testkey"),
 					defaultCredentialsSecretKeyName: []byte("testsecret"),
 				},
-			}).Build(),
+			}),
 		},
 	}
 	for _, tc := range cases {
