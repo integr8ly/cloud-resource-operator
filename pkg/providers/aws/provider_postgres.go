@@ -161,7 +161,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	}
 
 	// check is a standalone network is required
-	networkManager := NewNetworkManager(sess, p.Client, logger)
+	networkManager := NewNetworkManager(sess, p.Client, logger, isSTSCluster(ctx, p.Client))
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
 		errMsg := "failed to check cluster vpc subnets"
@@ -491,7 +491,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, r *v1alpha1.Postg
 	}
 
 	// network manager required for cleaning up network vpc, subnet and subnet groups.
-	networkManager := NewNetworkManager(sess, p.Client, logger)
+	networkManager := NewNetworkManager(sess, p.Client, logger, isSTSCluster(ctx, p.Client))
 
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
