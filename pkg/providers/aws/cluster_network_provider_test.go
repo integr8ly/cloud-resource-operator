@@ -49,7 +49,6 @@ const (
 	defaultSecurityGroupName      = "testsecuritygroup"
 	defaultSecurityGroupId        = "testSecurityGroupId"
 	defaultStandaloneRouteTableId = "testRouteTableId"
-	defaultClusterName            = "kubernetes.io/cluster/test"
 )
 
 func buildMockNetwork(modifyFn func(n *Network)) *Network {
@@ -625,9 +624,10 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Logger: tt.fields.Logger,
-				Client: tt.fields.Client,
-				Ec2Api: tt.fields.Ec2Api,
+				Logger:       tt.fields.Logger,
+				Client:       tt.fields.Client,
+				Ec2Api:       tt.fields.Ec2Api,
+				IsSTSCluster: false,
 			}
 			got, err := n.IsEnabled(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -1305,6 +1305,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			got, err := n.CreateNetwork(tt.args.ctx, tt.args.CIDR)
 			if (err != nil) != tt.wantErr {
@@ -1433,6 +1434,7 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			if err := n.DeleteNetwork(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetwork() error = %v, wantErr %v", err, tt.wantErr)
@@ -1680,6 +1682,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, tt.args.logger)
 			if (err != nil) != tt.wantErr {
@@ -1910,9 +1913,10 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Ec2Api: tt.fields.ec2Client,
-				Client: tt.fields.kubeClient,
-				Logger: tt.fields.logger,
+				Ec2Api:       tt.fields.ec2Client,
+				Client:       tt.fields.kubeClient,
+				Logger:       tt.fields.logger,
+				IsSTSCluster: false,
 			}
 			got, err := n.CreateNetworkPeering(tt.args.ctx, tt.args.network)
 			if err != nil && err.Error() != tt.wantErr {
@@ -2023,6 +2027,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			got, err := n.GetClusterNetworkPeering(tt.args.ctx)
 			if err != nil && err.Error() != tt.wantErr {
@@ -2148,6 +2153,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			if err := n.DeleteNetworkPeering(tt.args.peering); err != nil && err.Error() != tt.wantErr {
 				t.Errorf("DeleteNetworkPeering() error = %v, wantErr %v", err, tt.wantErr)
@@ -2582,6 +2588,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			got, err := n.CreateNetworkConnection(tt.args.ctx, tt.args.network)
 			if (err != nil) != tt.wantErr {
@@ -2912,6 +2919,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			if err := n.DeleteNetworkConnection(tt.args.ctx, tt.args.networkPeering); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetworkConnection() error = %v, wantErr %v", err, tt.wantErr)
@@ -3188,6 +3196,7 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
+				IsSTSCluster:   false,
 			}
 			if err := n.DeleteBundledCloudResources(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("NetworkProvider.DeleteBundledCloudResources() error = %v, wantErr %v", err, tt.wantErr)
