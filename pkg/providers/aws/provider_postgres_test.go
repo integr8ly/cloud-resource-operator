@@ -44,11 +44,12 @@ const (
 )
 
 var (
-	lockMockEc2ClientDescribeRouteTables    sync.RWMutex
-	lockMockEc2ClientDescribeSecurityGroups sync.RWMutex
-	lockMockEc2ClientDescribeSubnets        sync.RWMutex
-	snapshotARN                             = "test:arn"
-	snapshotIdentifier                      = "testIdentifier"
+	lockMockEc2ClientDescribeRouteTables       sync.RWMutex
+	lockMockEc2ClientDescribeSecurityGroups    sync.RWMutex
+	lockMockEc2ClientDescribeSubnets           sync.RWMutex
+	lockMockEc2ClientDescribeAvailabilityZones sync.RWMutex
+	snapshotARN                                = "test:arn"
+	snapshotIdentifier                         = "testIdentifier"
 )
 
 type mockRdsClient struct {
@@ -77,7 +78,6 @@ type mockEc2Client struct {
 	vpcs            []*ec2.Vpc
 	vpc             *ec2.Vpc
 	secGroups       []*ec2.SecurityGroup
-	azs             []*ec2.AvailabilityZone
 	wantErrList     bool
 	returnSecondSub bool
 	// new approach for manually defined mocks
@@ -99,6 +99,8 @@ type mockEc2Client struct {
 	describeInstanceTypeOfferingsFn func(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
 	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
 	describeSubnetsFn               func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+	describeAvailabilityZonesFn     func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
+	createSecurityGroupFn           func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error)
 
 	calls struct {
 		DescribeRouteTables []struct {
@@ -111,6 +113,9 @@ type mockEc2Client struct {
 		}
 		DescribeSubnets []struct {
 			Subnets *ec2.DescribeSubnetsInput
+		}
+		DescribeAvailabilityZones []struct {
+			AvailabilityZones *ec2.DescribeAvailabilityZonesInput
 		}
 	}
 }
@@ -405,8 +410,11 @@ func (m *mockEc2Client) DescribeSecurityGroupsCalls() []struct {
 	return calls
 }
 
-func (m *mockEc2Client) CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-	return &ec2.CreateSecurityGroupOutput{}, nil
+func (m *mockEc2Client) CreateSecurityGroup(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+	if m.createSecurityGroupFn == nil {
+		panic("mockEc2Client.CreateSecurityGroup: method is nil")
+	}
+	return m.createSecurityGroupFn(input)
 }
 
 func (m *mockEc2Client) DeleteSecurityGroup(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
@@ -417,10 +425,20 @@ func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGrou
 	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
 }
 
-func (m *mockEc2Client) DescribeAvailabilityZones(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-	return &ec2.DescribeAvailabilityZonesOutput{
-		AvailabilityZones: m.azs,
-	}, nil
+func (m *mockEc2Client) DescribeAvailabilityZones(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+	if m.describeAvailabilityZonesFn == nil {
+		panic("mockEc2Client.DescribeAvailabilityZones: method is nil")
+	}
+	callInfo := struct {
+		AvailabilityZones *ec2.DescribeAvailabilityZonesInput
+	}{
+		AvailabilityZones: input,
+	}
+	lockMockEc2ClientDescribeAvailabilityZones.Lock()
+	m.calls.DescribeAvailabilityZones = append(m.calls.DescribeAvailabilityZones, callInfo)
+	lockMockEc2ClientDescribeAvailabilityZones.Unlock()
+
+	return m.describeAvailabilityZonesFn(input)
 }
 
 func (m *mockEc2Client) DescribeVpcPeeringConnections(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
@@ -449,7 +467,7 @@ func (m *mockEc2Client) DescribeInstanceTypeOfferings(input *ec2.DescribeInstanc
 
 // the only place this is called is the exposePostgresMetrics func which is not being tested
 // return empty result
-func (m *mockEc2Client) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
+func (m *mockEc2Client) DescribeInstanceTypes(*ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
 	return &ec2.DescribeInstanceTypesOutput{}, nil
 }
 
@@ -517,6 +535,18 @@ func buildTestInfra() *v12.Infrastructure {
 		},
 		Status: v12.InfrastructureStatus{
 			InfrastructureName: defaultInfraName,
+			PlatformStatus: &v12.PlatformStatus{
+				Type: v12.AWSPlatformType,
+				AWS: &v12.AWSPlatformStatus{
+					Region: "eu-west-1",
+					ResourceTags: []v12.AWSResourceTag{
+						{
+							Key:   "test-key",
+							Value: "test-value",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -688,39 +718,6 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 	}
 }
 
-func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
-	return []*rds.DBInstance{
-		{
-			DBInstanceIdentifier:       aws.String(testID),
-			DBInstanceStatus:           aws.String("available"),
-			AvailabilityZone:           aws.String("test-availabilityZone"),
-			AutoMinorVersionUpgrade:    aws.Bool(false),
-			DBInstanceArn:              aws.String("arn-test"),
-			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
-			MasterUsername:             aws.String(defaultAwsPostgresUser),
-			DBName:                     aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
-			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
-			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-			EngineVersion:              aws.String(DefaultAwsEngineVersion),
-			Engine:                     aws.String(defaultAwsEngine),
-			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
-			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
-			MultiAZ:                    aws.Bool(true),
-			Endpoint: &rds.Endpoint{
-				Address:      aws.String("blob"),
-				HostedZoneId: aws.String("blog"),
-				Port:         aws.Int64(defaultAwsPostgresPort),
-			},
-			PendingModifiedValues: &rds.PendingModifiedValues{
-				Port: aws.Int64(123),
-			},
-		},
-	}
-}
-
 func buildVpcs() []*ec2.Vpc {
 	return []*ec2.Vpc{
 		{
@@ -730,21 +727,6 @@ func buildVpcs() []*ec2.Vpc {
 				{
 					Key:   aws.String("test-vpc"),
 					Value: aws.String("test-vpc"),
-				},
-			},
-		},
-	}
-}
-
-func buildSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
-		{
-			VpcId:            aws.String(defaultVpcId),
-			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
 				},
 			},
 		},
@@ -821,10 +803,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -854,7 +840,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -866,10 +852,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -904,10 +894,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -939,7 +933,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -951,10 +945,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -984,7 +982,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -996,10 +994,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -1029,7 +1031,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -1041,10 +1043,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -1074,7 +1080,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -1086,10 +1092,14 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					vpcs:      buildVpcs(),
 					subnets:   buildValidBundleSubnets(),
 					secGroups: buildSecurityGroups(secName),
-					azs:       buildAZ(),
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildAZ(),
 						}, nil
 					},
 				},
@@ -1119,7 +1129,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},
@@ -1433,7 +1443,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
 						return &rds.DescribeDBSnapshotsOutput{
 							DBSnapshots: []*rds.DBSnapshot{
-								&rds.DBSnapshot{
+								{
 									DBSnapshotArn:        &snapshotARN,
 									DBSnapshotIdentifier: &snapshotIdentifier,
 								},

@@ -104,15 +104,7 @@ var (
 			Resource: "*",
 		},
 	}
-	sendRawMailEntries = []v1.StatementEntry{
-		{
-			Effect: "Allow",
-			Action: []string{
-				"ses:SendRawEmail",
-			},
-			Resource: "*",
-		},
-	}
+	timeOut = time.Minute * 5
 )
 
 func buildPutBucketObjectEntries(bucket string) []v1.StatementEntry {
@@ -195,7 +187,7 @@ func (m *CredentialMinterCredentialManager) reconcileCredentials(ctx context.Con
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
 	}
-	err = wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err = wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
 			if errors.IsNotFound(err) {
 				return false, nil
@@ -205,7 +197,7 @@ func (m *CredentialMinterCredentialManager) reconcileCredentials(ctx context.Con
 		return cr.Status.Provisioned, nil
 	})
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "timed out waiting for credential request to become provisioned")
+		return nil, errorUtil.Wrap(err, "timed out waiting for credential request to provision")
 	}
 
 	codec, err := v1.NewCodec()

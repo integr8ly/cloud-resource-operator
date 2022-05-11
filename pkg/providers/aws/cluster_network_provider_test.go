@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -49,6 +50,10 @@ const (
 	defaultSecurityGroupName      = "testsecuritygroup"
 	defaultSecurityGroupId        = "testSecurityGroupId"
 	defaultStandaloneRouteTableId = "testRouteTableId"
+)
+
+var (
+	genericAWSError = awserr.New("666", "generic aws error", errors.New("generic aws error"))
 )
 
 func buildMockNetwork(modifyFn func(n *Network)) *Network {
@@ -213,12 +218,6 @@ func buildUntaggedSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 func buildStandaloneSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		buildSubnet(defaultStandaloneVpcId, "test-id", "test", "test"),
-	}
-}
-
-func buildBundledSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
-		buildSubnet(defaultVpcId, "test-id", "test", "test"),
 	}
 }
 
@@ -652,6 +651,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		Ec2Api         ec2iface.EC2API
 		ElasticacheApi elasticacheiface.ElastiCacheAPI
 		Logger         *logrus.Entry
+		IsSTSCluster   bool
 	}
 	type args struct {
 		ctx  context.Context
@@ -704,6 +704,33 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				}),
 				ElasticacheApi: &mockElasticacheClient{},
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRSixteen),
+			},
+			want:    buildValidNetworkResponseCreateVPC(validCIDRSixteen, defaultStandaloneVpcId),
+			wantErr: false,
+		},
+		{
+			name: "successfully build standalone vpc network  - CIDR /16 (sts cluster)",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
+					ec2Client.vpc = buildValidStandaloneVPC(validCIDRSixteen)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				IsSTSCluster:   true,
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -799,7 +826,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				RdsApi: buildMockRdsClient(nil),
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
@@ -812,6 +838,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							Subnets: []*ec2.Subnet{
 								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
 								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)},
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
 					}
 				}),
@@ -833,7 +864,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.vpc = buildValidNonTaggedStandaloneVPC(validCIDRTwentySix)
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: []*ec2.Subnet{
@@ -862,7 +892,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.vpc = buildValidNonTaggedStandaloneVPC(validCIDRTwentySix)
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.WaitUntilVpcExistsFn = func(input *ec2.DescribeVpcsInput) error {
 						return errorUtil.New("VPC does not exists")
 					}
@@ -914,7 +943,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -927,6 +955,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
 					}
 				}),
@@ -960,7 +993,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.azs = buildUnsortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -968,6 +1000,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							RouteTables: []*ec2.RouteTable{
 								buildMockEc2RouteTable(nil),
 							},
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
 					}
 				}),
@@ -990,7 +1027,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.azs = buildLargeUnsortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -1018,6 +1054,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
@@ -1038,7 +1079,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentyThree)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentyThree)
 					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskTwoA)
 					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskTwoB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -1046,6 +1086,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							RouteTables: []*ec2.RouteTable{
 								buildMockEc2RouteTable(nil),
 							},
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
 					}
 				}),
@@ -1091,7 +1136,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
 					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
@@ -1116,7 +1161,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
+							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
 					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
@@ -1128,7 +1173,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			},
 			args: args{
 				ctx:  context.TODO(),
-				CIDR: buildValidCIDR(validCIDRFifteen),
+				CIDR: buildValidCIDR(validCIDRSixteen),
 			},
 			wantErr: true,
 		},
@@ -1141,7 +1186,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						return &ec2.DescribeRouteTablesOutput{RouteTables: []*ec2.RouteTable{}}, nil
@@ -1165,7 +1209,6 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
 					ec2Client.vpc = buildValidStandaloneVPC(validCIDRTwentySix)
 					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.azs = buildLargeUnsortedStandaloneAZs()
 					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -1184,6 +1227,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
@@ -1197,7 +1245,14 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged vpc is provided with correct tags",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name: "cluster",
+					},
+					Status: v12.InfrastructureStatus{
+						InfrastructureName: defaultInfraName,
+					},
+				}),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = buildValidClusterVPC(defaultNonOverlappingCidr)
@@ -1236,11 +1291,17 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged subnets are provided with correct tags",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name: "cluster",
+					},
+					Status: v12.InfrastructureStatus{
+						InfrastructureName: defaultInfraName,
+					},
+				}),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.vpcs = []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)}
-					ec2Client.azs = buildSortedStandaloneAZs()
 					ec2Client.firstSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					ec2Client.secondSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
@@ -1285,6 +1346,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						}
 						return ec2Client.returnFirstSubnet()
 					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),
 				Logger:         logrus.NewEntry(logrus.StandardLogger()),
@@ -1305,7 +1371,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 				Ec2Api:         tt.fields.Ec2Api,
 				ElasticacheApi: tt.fields.ElasticacheApi,
 				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				IsSTSCluster:   tt.fields.IsSTSCluster,
 			}
 			got, err := n.CreateNetwork(tt.args.ctx, tt.args.CIDR)
 			if (err != nil) != tt.wantErr {
@@ -2223,6 +2289,9 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 							},
 						}, nil
 					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return &ec2.CreateSecurityGroupOutput{}, nil
+					}
 					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 						calls := ec2Client.DescribeRouteTablesCalls()
 						if len(calls) == 1 {
@@ -2279,6 +2348,64 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			},
 			want:    buildMockNetworkConnection(nil),
 			wantErr: false,
+		},
+		{
+			name: "error creating security group",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						calls := ec2Client.DescribeSecurityGroupsCalls()
+						if len(calls) == 1 {
+							return &ec2.DescribeSecurityGroupsOutput{
+								SecurityGroups: []*ec2.SecurityGroup{
+									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+										group.GroupName = aws.String("not test security group id")
+									}),
+								},
+							}, nil
+						}
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:     context.TODO(),
+				network: buildMockNetwork(nil),
+			},
+			wantErr: true,
 		},
 		{
 			name: "test security group exists with no tags",
@@ -3001,6 +3128,75 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "error building bundle subnet group resource name on deletion",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error getting ec2 security group",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "retrieved ec2 security group that is nil",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return &ec2.DeleteSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: false,
+		},
+		{
 			name: "return error when the cluster vpc is nil",
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
@@ -3174,6 +3370,54 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 					}
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
 						return &ec2.DescribeVpcsOutput{}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
+						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
+					}
+				}),
+			},
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "return error when aws error returned on deletesecuritygroup",
+			fields: fields{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+						return &rds.DeleteDBSubnetGroupOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+						return nil, genericAWSError
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+									mock.GroupName = aws.String("testsecuritygroup")
+									mock.VpcId = aws.String("testID")
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildValidClusterVPC("10.0.0.0/23"),
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
 					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {

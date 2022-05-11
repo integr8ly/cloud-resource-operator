@@ -141,16 +141,10 @@ func tagsContainsAll(as []*tag, bs []*tag) bool {
 func getDefaultResourceTags(ctx context.Context, c client.Client, specType string, name string, prodName string) ([]*tag, string, error) {
 	// set the tag values that will always be added
 	defaultOrganizationTag := resources.GetOrganizationTag()
-
-	//get Cluster Id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
 		msg := "Failed to get cluster id"
 		return nil, "", errorUtil.Wrapf(err, msg)
-	}
-
-	if err != nil {
-		return nil, "", err
 	}
 	tags := []*tag{
 		{
@@ -176,11 +170,9 @@ func getDefaultResourceTags(ctx context.Context, c client.Client, specType strin
 		tags = append(tags, productTag)
 	}
 
-	infraTags, err := getUserInfraTags(ctx, c)
-	if err != nil {
-		msg := "Failed to get user infrastructure tags"
-		return nil, "", errorUtil.Wrapf(err, msg)
-	}
+	// ignoring error here, as the same error is handled by the
+	// previous invocation of resources.GetClusterID()
+	infraTags, _ := getUserInfraTags(ctx, c)
 	if infraTags != nil {
 		// merge tags into single array, where any duplicate
 		// values in infra are overwritten by the default tags
@@ -194,7 +186,7 @@ func getUserInfraTags(ctx context.Context, c client.Client) ([]*tag, error) {
 	// get infra CR
 	infra, err := resources.GetClusterInfrastructure(ctx, c)
 	if err != nil {
-		msg := "Failed to get cluster infrastructure"
+		msg := "failed to get cluster infrastructure"
 		return nil, errorUtil.Wrapf(err, msg)
 	}
 

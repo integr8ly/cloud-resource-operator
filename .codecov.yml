@@ -16,6 +16,11 @@ coverage:
     - "packagemanifests"
     - "vendor"
     - "version"
+    - "apis"
+    - "pkg/resources/*_moq.go"
+    - "pkg/providers/types.go"
+    - "pkg/providers/*_moq.go"
+    - "pkg/providers/*/*_moq.go"
 
   status:
     project:

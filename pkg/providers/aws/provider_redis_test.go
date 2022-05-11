@@ -67,6 +67,7 @@ type mockElasticacheClient struct {
 	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
 	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
 	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
+	createReplicationGroupFn    func(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error)
 
 	calls struct {
 		DescribeSnapshots []struct {
@@ -89,6 +90,9 @@ type mockElasticacheClient struct {
 		}
 		BatchApplyUpdateAction []struct {
 			In1 *elasticache.BatchApplyUpdateActionInput
+		}
+		CreateReplicationGroup []struct {
+			In1 *elasticache.CreateReplicationGroupInput
 		}
 	}
 }
@@ -178,8 +182,17 @@ func (m *mockElasticacheClient) ModifyReplicationGroup(input *elasticache.Modify
 }
 
 // mock elasticache CreateReplicationGroup output
-func (m *mockElasticacheClient) CreateReplicationGroup(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error) {
-	return &elasticache.CreateReplicationGroupOutput{}, nil
+func (m *mockElasticacheClient) CreateReplicationGroup(input *elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error) {
+	if m.createReplicationGroupFn == nil {
+		panic("createReplicationGroupFn: method is nil but elasticacheClient.CreateReplicationGroup was just called")
+	}
+	callInfo := struct {
+		In1 *elasticache.CreateReplicationGroupInput
+	}{
+		In1: input,
+	}
+	m.calls.CreateReplicationGroup = append(m.calls.CreateReplicationGroup, callInfo)
+	return m.createReplicationGroupFn(input)
 }
 
 // mock elasticache DeleteReplicationGroup output
@@ -348,6 +361,7 @@ func Test_createRedisCluster(t *testing.T) {
 		fields  fields
 		want    *providers.RedisCluster
 		wantErr bool
+		mockFn  func()
 	}{
 		{
 			name: "test no error on cache clusters of type memcahced with no replicationgroupid",
@@ -407,12 +421,607 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "error getting replication groups",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme),
+			},
+			wantErr: true,
+			mockFn: func() {
+				timeOut = time.Millisecond * 10
+			},
+		},
+		{
+			name: "error creating elasticache cluster",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return nil, genericAWSError
+					}
+					elasticacheClient.createReplicationGroupFn = func(input *elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				standaloneNetworkExists: true,
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme),
+			},
+			wantErr: true,
+			mockFn: func() {
+				timeOut = time.Millisecond * 10
+			},
+		},
+		{
+			name: "error building subnet group name",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error describing subnet groups",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error getting vpc id from associated subnets",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error getting vpc",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error when more than one vpc found associated with cluster subnets",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.vpcs = []*ec2.Vpc{
+						buildValidStandaloneVPC(validCIDRSixteen),
+						buildValidStandaloneVPC(validCIDRSixteen),
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error getting availability zones",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.vpcs = []*ec2.Vpc{
+						buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error creating new subnet",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.vpcs = []*ec2.Vpc{
+						buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									State:    aws.String("available"),
+									ZoneName: aws.String("new-zone"),
+								},
+							},
+						}, nil
+					}
+					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error setting up security group",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("testsubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error creating security group",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("testsubnetgroup"),
+								},
+							},
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+			},
+			fields: fields{
+				Logger: testLogger,
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "failed to describe clusters",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
+						return &elasticache.DescribeCacheSubnetGroupsOutput{
+							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
+								{
+									CacheSubnetGroupName: aws.String("testsubnetgroup"),
+								},
+							},
+						}, nil
+					}
+					elasticacheClient.describeUpdateActionsFn = func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+						return &elasticache.DescribeUpdateActionsOutput{
+							Marker:        nil,
+							UpdateActions: []*elasticache.UpdateAction{},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.secGroups[0].IpPermissions = []*ec2.IpPermission{
+						{
+							IpProtocol: aws.String("-1"),
+							IpRanges: []*ec2.IpRange{
+								{
+									CidrIp: aws.String("10.0.0.0/16"),
+								},
+							},
+						},
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.vpcs = buildVpcs()
+				}),
+				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				r:           buildTestRedisCR(),
+			},
+			fields: fields{
+				Logger:    testLogger,
+				Client:    fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				TCPPinger: buildMockConnectionTester(),
+			},
+			wantErr: true,
+		},
+		{
 			name: "test elasticache buildReplicationGroupPending is called (valid cluster rhmi subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
 					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
 						return &elasticache.DescribeReplicationGroupsOutput{}, nil
+					}
+					elasticacheClient.createReplicationGroupFn = func(input *elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error) {
+						return &elasticache.CreateReplicationGroupOutput{}, nil
 					}
 				}),
 				ec2Svc: &mockEc2Client{
@@ -422,6 +1031,16 @@ func Test_createRedisCluster(t *testing.T) {
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					},
+					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									ZoneName: aws.String("test"),
+									State:    aws.String("available"),
+								},
+							},
 						}, nil
 					},
 				},
@@ -482,6 +1101,16 @@ func Test_createRedisCluster(t *testing.T) {
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									ZoneName: aws.String("test"),
+									State:    aws.String("available"),
+								},
+							},
+						}, nil
+					}
 				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
@@ -525,6 +1154,16 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									ZoneName: aws.String("test"),
+									State:    aws.String("available"),
+								},
+							},
 						}, nil
 					}
 				}),
@@ -587,6 +1226,16 @@ func Test_createRedisCluster(t *testing.T) {
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									ZoneName: aws.String("test"),
+									State:    aws.String("available"),
+								},
+							},
+						}, nil
+					}
 				}),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -643,6 +1292,16 @@ func Test_createRedisCluster(t *testing.T) {
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: []*ec2.AvailabilityZone{
+								{
+									ZoneName: aws.String("test"),
+									State:    aws.String("available"),
+								},
+							},
 						}, nil
 					}
 				}),
@@ -718,6 +1377,13 @@ func Test_createRedisCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.mockFn != nil {
+				tt.mockFn()
+				// reset
+				defer func() {
+					timeOut = time.Minute * 5
+				}()
+			}
 			p := &RedisProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
