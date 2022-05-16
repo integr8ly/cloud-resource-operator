@@ -281,7 +281,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
 	if postgresPass == "" {
 		msg := "unable to retrieve rds password"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, croType.StatusMessage(msg), errorUtil.Errorf(msg)
 	}
 
 	// verify and build rds create config
@@ -637,7 +637,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 // function to get rds instances, used to check/wait on AWS credentials
 func getRDSInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	var pi []*rds.DBInstance
-	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
 		if err != nil {
 			return false, nil

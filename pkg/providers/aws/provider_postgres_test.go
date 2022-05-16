@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -767,6 +768,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		args    args
 		want    *providers.PostgresInstance
 		wantErr bool
+		mockFn  func()
 	}{
 		{
 			name: "test rds CreateReplicationGroup is called (valid cluster bundle subnets)",
@@ -1272,9 +1274,202 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			}},
 			wantErr: false,
 		},
+		{
+			name: "error getting replication groups",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ctx:                     context.TODO(),
+				cr:                      nil,
+				postgresCfg:             nil,
+				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         nil,
+			},
+			want:    nil,
+			wantErr: true,
+			mockFn: func() {
+				timeOut = time.Millisecond * 10
+			},
+		},
+		{
+			name: "error setting up resource vpc",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{}, nil
+					}
+				}),
+				ctx:                     context.TODO(),
+				cr:                      nil,
+				postgresCfg:             nil,
+				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         nil,
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error setting up security group",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{}, nil
+					}
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{
+							DBSubnetGroups: buildRDSSubnetGroup(),
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ctx:                     context.TODO(),
+				cr:                      nil,
+				postgresCfg:             nil,
+				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         nil,
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "failed to retrieve rds credential secret",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{}, nil
+					}
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{
+							DBSubnetGroups: buildRDSSubnetGroup(),
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return nil, nil
+					}
+				}),
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             nil,
+				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         nil,
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "unable to retrieve rds password",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{}, nil
+					}
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{
+							DBSubnetGroups: buildRDSSubnetGroup(),
+						}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return nil, nil
+					}
+				}),
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             nil,
+				standaloneNetworkExists: false,
+			},
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), &v1.Secret{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name:      "test-aws-rds-credentials",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"user":     []byte("postgres"),
+						"password": []byte(""),
+					},
+				}),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         nil,
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.mockFn != nil {
+				tt.mockFn()
+				defer func() {
+					timeOut = time.Minute * 5
+				}()
+			}
 			p := &PostgresProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
@@ -1288,7 +1483,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				return
 			}
 			if tt.want != nil && !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("reconcileRDSInstance() got = %+v, want %v", got.DeploymentDetails, tt.want)
+				t.Errorf("reconcileRDSInstance() got = %v, want %v", got.DeploymentDetails, tt.want)
 			}
 		})
 	}
@@ -2023,6 +2218,94 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 			wantErr:    false,
 			wantUpdate: true,
 		},
+		{
+			name: "failed to get pending maintenance information",
+			args: args{
+				session: &mockRdsClient{
+					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return nil, genericAWSError
+					},
+				},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:       croType.StatusMessage("failed to get pending maintenance information for RDS with identifier : " + testIdentifier),
+			wantErr:    true,
+			wantUpdate: false,
+		},
+		{
+			name: "error epoc timestamp requires string",
+			args: args{
+				session: &mockRdsClient{
+					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return buildPendingMaintenanceActions()
+					},
+				},
+				serviceUpdates: &ServiceUpdate{
+					updates: []string{
+						"invalid",
+					},
+				},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:       croType.StatusMessage("epoc timestamp requires string"),
+			wantErr:    true,
+			wantUpdate: false,
+		},
+		{
+			name: "failed to apply service update",
+			args: args{
+				session: &mockRdsClient{
+					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return buildPendingMaintenanceActions()
+					},
+					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
+						return nil, genericAWSError
+					},
+				},
+				serviceUpdates: &ServiceUpdate{
+					updates: []string{
+						"1642032001",
+					},
+				},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:       croType.StatusMessage("failed to apply service update"),
+			wantErr:    true,
+			wantUpdate: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2068,4 +2351,152 @@ func buildPendingMaintenanceActions() (*rds.DescribePendingMaintenanceActionsOut
 			},
 		},
 	}, nil
+}
+
+func TestReconcilePostgres(t *testing.T) {
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		t.Error("failed to build scheme", err)
+		return
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		TCPPinger         ConnectionTester
+	}
+	type args struct {
+		ctx context.Context
+		pg  *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name          string
+		fields        fields
+		args          args
+		want          *providers.PostgresInstance
+		statusMessage croType.StatusMessage
+		wantErr       bool
+	}{
+		{
+			name: "failed to set finalizer",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg:  buildTestPostgresCR(),
+			},
+			want:          nil,
+			statusMessage: "failed to set finalizer",
+			wantErr:       true,
+		},
+		{
+			name: "failed to retrieve aws rds cluster config for instance",
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+							DeleteStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+							ServiceUpdates: json.RawMessage(""),
+						}, nil
+					},
+				},
+				TCPPinger: buildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg:  buildTestPostgresCR(),
+			},
+			want:          nil,
+			statusMessage: "failed to retrieve aws rds cluster config for instance",
+			wantErr:       true,
+		},
+		{
+			name: "failed to reconcile rds credentials",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
+				Logger: testLogger,
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return nil, genericAWSError
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+							DeleteStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+						}, nil
+					},
+				},
+				TCPPinger: buildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg:  buildTestPostgresCR(),
+			},
+			want:          nil,
+			statusMessage: "failed to reconcile rds credentials",
+			wantErr:       true,
+		},
+		{
+			name: "failed to check cluster vpc subnets",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
+				Logger: testLogger,
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+							DeleteStrategy: json.RawMessage("{ \"test\": \"test\" }"),
+						}, nil
+					},
+				},
+				TCPPinger: buildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg:  buildTestPostgresCR(),
+			},
+			want:          nil,
+			statusMessage: "failed to check cluster vpc subnets",
+			wantErr:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         tt.fields.TCPPinger,
+			}
+			got, statusMessage, err := p.ReconcilePostgres(tt.args.ctx, tt.args.pg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ReconcilePostgres() got = %v, want %v", got, tt.want)
+			}
+			if statusMessage != tt.statusMessage {
+				t.Errorf("ReconcilePostgres() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
+			}
+		})
+	}
 }
