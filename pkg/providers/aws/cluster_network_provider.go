@@ -186,9 +186,10 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 			CidrBlock: aws.String(vpcCidrBlock.String()),
 		}
 		if n.IsSTSCluster {
-			// ignoring error here, as the same error is handled by the
-			// previous invocation of resources.GetClusterID() in getClusterVpc()
-			tagSpec, _ := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue}, ec2.ResourceTypeVpc)
+			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue}, ec2.ResourceTypeVpc)
+			if err != nil {
+				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
+			}
 			vpcConfig.SetTagSpecifications(tagSpec)
 		}
 
@@ -695,9 +696,10 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
 	}
-	// ignoring error here, as the same error is handled by the
-	// previous invocation of resources.GetClusterID() in getClusterVpc()
-	clusterID, _ := resources.GetClusterID(ctx, n.Client)
+	clusterID, err := resources.GetClusterID(ctx, n.Client)
+	if err != nil {
+		return false, errorUtil.Wrap(err, "unable to get cluster id")
+	}
 
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
@@ -755,9 +757,10 @@ func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error
 	if err != nil && isAwsErr && dbSubnetErr.Code() != rds.ErrCodeDBSubnetGroupNotFoundFault {
 		return errorUtil.Wrap(err, "error deleting rds subnet group")
 	}
-	// ignoring error here, as the same error is handled by the
-	// previous invocation of resources.GetClusterID() in BuildInfraName()
-	securityGroupName, _ := BuildInfraName(ctx, n.Client, "securitygroup", DefaultAwsIdentifierLength)
+	securityGroupName, err := BuildInfraName(ctx, n.Client, "securitygroup", DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building bundle security group resource name on deletion")
+	}
 	logger.Infof("Deleting bundled ec2 security group %s, if it's not found it's already deleted and will continue", securityGroupName)
 	// in the case of the security group the Group Id is required in order to delete security groups
 	// not connected with the default vpc. In order to delete it, it is required to describe them

@@ -1276,7 +1276,8 @@ func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *
 				//convert the timestamp string to int64
 				specifiedApplyAfterDate64, err := strconv.ParseInt(specifiedApplyAfterDate, 10, 64)
 				if err != nil {
-					logrus.Error("epoc timestamp requires string")
+					errMsg := "epoc timestamp requires string"
+					return false, croType.StatusMessage(errMsg), err
 				}
 				if pmac.AutoAppliedAfterDate.Before(time.Unix(specifiedApplyAfterDate64, 0)) {
 					update = true

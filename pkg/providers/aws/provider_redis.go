@@ -832,21 +832,25 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.TransitEncryptionEnabled == nil {
 		elasticacheConfig.TransitEncryptionEnabled = aws.Bool(defaultInTransitEncryption)
 	}
-	// ignoring error here, as the same error is handled by
-	// multiple invocations of resources.GetClusterID() in createElasticacheCluster()
-	cacheName, _ := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
+	}
 	if elasticacheConfig.ReplicationGroupId == nil {
 		elasticacheConfig.ReplicationGroupId = aws.String(cacheName)
 	}
-	// ignoring error here, as the same error is handled by
-	// multiple invocations of resources.GetClusterID() in createElasticacheCluster()
-	subGroup, _ := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "failed to build subnet group name")
+	}
 	if elasticacheConfig.CacheSubnetGroupName == nil {
 		elasticacheConfig.CacheSubnetGroupName = aws.String(subGroup)
 	}
-	// ignoring error here, as the same error is handled by
-	// multiple invocations of resources.GetClusterID() in createElasticacheCluster()
-	secName, _ := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	// build security group name
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	if err != nil {
+		return errorUtil.Wrap(err, "error building subnet group name")
+	}
 	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
 	if err != nil {
 		return errorUtil.Wrap(err, "")

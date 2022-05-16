@@ -299,9 +299,11 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 			value: DefaultRHMISubnetNameTagValue,
 		}, buildManagedTag(),
 	}
-	// ignoring error here, as the same error is handled by the
-	// previous invocation of resources.GetClusterID()
-	infraTags, _ := getUserInfraTags(ctx, c)
+	infraTags, err := getUserInfraTags(ctx, c)
+	if err != nil {
+		msg := "Failed to get user infrastructure tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
 	if infraTags != nil {
 		// merge tags into single array, where any duplicate
 		// values in infra are discarded in favour of the default tags

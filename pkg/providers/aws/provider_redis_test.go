@@ -48,13 +48,6 @@ var (
 
 type mockElasticacheClient struct {
 	elasticacheiface.ElastiCacheAPI
-	wantErrList       bool
-	wantErrCreate     bool
-	wantErrDelete     bool
-	replicationGroups []*elasticache.ReplicationGroup
-
-	// new approach for manually defined mocks
-	// to allow for simple overrides in test table declarations
 	modifyCacheSubnetGroupFn    func(*elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error)
 	deleteCacheSubnetGroupFn    func(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error)
 	describeCacheSubnetGroupsFn func(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error)
@@ -68,8 +61,7 @@ type mockElasticacheClient struct {
 	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
 	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
 	createReplicationGroupFn    func(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error)
-
-	calls struct {
+	calls                       struct {
 		DescribeSnapshots []struct {
 			In1 *elasticache.DescribeSnapshotsInput
 		}
@@ -402,7 +394,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
@@ -576,7 +572,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return nil, genericAWSError
 					}
@@ -627,7 +627,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -683,15 +687,23 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
-					ec2Client.vpcs = []*ec2.Vpc{
-						buildValidStandaloneVPC(validCIDRSixteen),
-						buildValidStandaloneVPC(validCIDRSixteen),
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRSixteen),
+								buildValidStandaloneVPC(validCIDRSixteen),
+							},
+						}, nil
 					}
 				}),
 			},
@@ -740,14 +752,22 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
-					ec2Client.vpcs = []*ec2.Vpc{
-						buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+							},
+						}, nil
 					}
 					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 						return nil, genericAWSError
@@ -799,14 +819,22 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
-					ec2Client.vpcs = []*ec2.Vpc{
-						buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
+							},
+						}, nil
 					}
 					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 						return &ec2.DescribeAvailabilityZonesOutput{
@@ -868,7 +896,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 				}),
 			},
 			fields: fields{
@@ -916,7 +948,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 						return &ec2.DescribeSecurityGroupsOutput{}, nil
 					}
@@ -984,23 +1020,32 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
-					ec2Client.secGroups[0].IpPermissions = []*ec2.IpPermission{
-						{
-							IpProtocol: aws.String("-1"),
-							IpRanges: []*ec2.IpRange{
-								{
-									CidrIp: aws.String("10.0.0.0/16"),
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						sgs := buildSecurityGroups(secName)
+						sgs[0].IpPermissions = []*ec2.IpPermission{
+							{
+								IpProtocol: aws.String("-1"),
+								IpRanges: []*ec2.IpRange{
+									{
+										CidrIp: aws.String("10.0.0.0/16"),
+									},
 								},
 							},
-						},
+						}
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: sgs,
+						}, nil
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 				}),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				r:           buildTestRedisCR(),
@@ -1025,9 +1070,17 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: &mockEc2Client{
-					vpcs:      buildVpcs(),
-					subnets:   buildValidBundleSubnets(),
-					secGroups: buildSecurityGroups(secName),
+					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					},
+					subnets: buildValidBundleSubnets(),
+					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					},
 					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -1093,9 +1146,17 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 					ec2Client.subnets = buildValidBundleSubnets()
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -1148,9 +1209,17 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 					ec2Client.subnets = buildValidBundleSubnets()
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -1218,9 +1287,17 @@ func Test_createRedisCluster(t *testing.T) {
 				r:      buildTestRedisCR(),
 				stsSvc: &mockStsClient{},
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 					ec2Client.subnets = buildValidBundleSubnets()
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -1286,9 +1363,17 @@ func Test_createRedisCluster(t *testing.T) {
 				r:      buildTestRedisCR(),
 				stsSvc: &mockStsClient{},
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = buildVpcs()
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: buildVpcs(),
+						}, nil
+					}
 					ec2Client.subnets = buildValidBundleSubnets()
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
 							Subnets: buildValidBundleSubnets(),
@@ -1356,7 +1441,11 @@ func Test_createRedisCluster(t *testing.T) {
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.secGroups = buildSecurityGroups(secName)
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
 				}),
 				r:                       buildTestRedisCR(),
 				stsSvc:                  &mockStsClient{},
@@ -1550,8 +1639,12 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 				}),
 				Ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.vpcs = []*ec2.Vpc{
-						buildValidStandaloneVPC(validCIDRSixteen),
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRSixteen),
+							},
+						}, nil
 					}
 				}),
 			},
@@ -1680,7 +1773,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
 						return &elasticache.DescribeSnapshotsOutput{
 							Snapshots: []*elasticache.Snapshot{
-								&elasticache.Snapshot{
+								{
 									SnapshotName: &snapshotName,
 								},
 							},
@@ -1720,7 +1813,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
 						return &elasticache.DescribeSnapshotsOutput{
 							Snapshots: []*elasticache.Snapshot{
-								&elasticache.Snapshot{
+								{
 									SnapshotName: &snapshotName,
 								},
 							},
@@ -1760,7 +1853,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
 						return &elasticache.DescribeSnapshotsOutput{
 							Snapshots: []*elasticache.Snapshot{
-								&elasticache.Snapshot{
+								{
 									SnapshotName: &snapshotName,
 								},
 							},
@@ -1800,7 +1893,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
 						return &elasticache.DescribeSnapshotsOutput{
 							Snapshots: []*elasticache.Snapshot{
-								&elasticache.Snapshot{
+								{
 									SnapshotName: &snapshotName,
 								},
 							},
@@ -2436,7 +2529,7 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 						return &elasticache.ModifyReplicationGroupOutput{}, nil
 					}
 					elasticacheClient.batchApplyUpdateActionFn = func(input *elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error) {
-						return &elasticache.BatchApplyUpdateActionOutput{}, errors.New("Random error")
+						return &elasticache.BatchApplyUpdateActionOutput{}, errors.New("random error")
 					}
 				}),
 				replicationGroup: &elasticache.ReplicationGroup{
@@ -2481,7 +2574,7 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 						}, nil
 					}
 					elasticacheClient.modifyReplicationGroupFn = func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
-						return &elasticache.ModifyReplicationGroupOutput{}, errors.New("Modify error")
+						return &elasticache.ModifyReplicationGroupOutput{}, errors.New("modify error")
 					}
 					elasticacheClient.batchApplyUpdateActionFn = func(input *elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error) {
 						return &elasticache.BatchApplyUpdateActionOutput{}, nil
