@@ -7,7 +7,7 @@ require (
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/google/uuid v1.2.0
 	github.com/hashicorp/go-version v1.2.1
-	github.com/lib/pq v1.10.0
+	github.com/lib/pq v1.10.6
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
