@@ -696,7 +696,6 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
 	}
-
 	clusterID, err := resources.GetClusterID(ctx, n.Client)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get cluster id")
@@ -758,7 +757,6 @@ func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error
 	if err != nil && isAwsErr && dbSubnetErr.Code() != rds.ErrCodeDBSubnetGroupNotFoundFault {
 		return errorUtil.Wrap(err, "error deleting rds subnet group")
 	}
-
 	securityGroupName, err := BuildInfraName(ctx, n.Client, "securitygroup", DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building bundle security group resource name on deletion")

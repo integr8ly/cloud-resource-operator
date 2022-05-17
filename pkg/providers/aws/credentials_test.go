@@ -2,142 +2,349 @@ package aws
 
 import (
 	"context"
-	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	"os"
-	"testing"
-
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	v12 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"testing"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestCredentialManager_ReconcileCredentials(t *testing.T) {
+func TestCredentialMinterManager_ReconcileProviderCredentials(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-
-	// Make test work locally
-	if k8sutil.IsRunModeLocal() {
-		_ = os.Setenv("WATCH_NAMESPACE", "test")
-	}
-
-	ns, err := k8sutil.GetOperatorNamespace()
-	if err != nil {
-		t.Fatal("failed to get operator namespace", err)
-	}
 	cases := []struct {
 		name                string
 		client              client.Client
-		isSTS               bool
 		wantErr             bool
 		expectedAccessKeyID string
 		expectedSecretKey   string
-		expectedRoleARN     string
-		expectedTokenPath   string
 		expectedErrMsg      string
 	}{
 		{
-			name:                "credentials are reconciled successfully",
-			client:              buildClient(scheme, false, ns),
+			name: "credentials are reconciled successfully",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}, &v12.Secret{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Data: map[string][]byte{
+					defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
+					defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
+				},
+			}),
+			wantErr:             false,
 			expectedAccessKeyID: "ACCESS_KEY_ID",
 			expectedSecretKey:   "SECRET_ACCESS_KEY",
 		},
 		{
-			name:              "sts credentials are reconciled successfully",
-			client:            buildClient(scheme, true, ns, "ROLE_ARN", "TOKEN_PATH"),
-			isSTS:             true,
-			expectedRoleARN:   "ROLE_ARN",
-			expectedTokenPath: "TOKEN_PATH",
-		},
-		{
-			name:           "undefined role arn key in sts credentials secret",
-			client:         buildClient(scheme, true, ns, "", "TOKEN_PATH"),
-			isSTS:          true,
+			name: "error reconciling credentials",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}),
 			wantErr:        true,
-			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultRoleARNKeyName, defaultSTSCredentialSecretName),
-		},
-		{
-			name:           "undefined token path key in sts credentials secret",
-			client:         buildClient(scheme, true, ns, "ROLE_ARN", ""),
-			isSTS:          true,
-			wantErr:        true,
-			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultTokenPathKeyName, defaultSTSCredentialSecretName),
+			expectedErrMsg: "failed to reconcile aws credentials from credential request cloud-resources-aws-credentials",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client)
-			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), ns)
+			cm := NewCredentialManager(tc.client).(*CredentialMinterCredentialManager)
+			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), "testNamespace")
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
 					t.Fatalf("unexpected error from ReconcileProviderCredentials(): %v", err)
 				}
 				return
 			}
-			switch tc.isSTS {
-			case true:
-				if awsCreds.RoleArn != tc.expectedRoleARN {
-					t.Fatalf("unexpected role arn, expected %s but got %s", tc.expectedRoleARN, awsCreds.RoleArn)
-				}
-				if awsCreds.TokenFilePath != tc.expectedTokenPath {
-					t.Fatalf("unexpected toke file path, expected %s but got %s", tc.expectedTokenPath, awsCreds.TokenFilePath)
-				}
-			default:
-				if awsCreds.AccessKeyID != tc.expectedAccessKeyID {
-					t.Fatalf("unexpected access key id, expected %s but got %s", tc.expectedAccessKeyID, awsCreds.AccessKeyID)
-				}
-				if awsCreds.SecretAccessKey != tc.expectedSecretKey {
-					t.Fatalf("unexpected secret access key, expected %s but got %s", tc.expectedSecretKey, awsCreds.SecretAccessKey)
-				}
+			if awsCreds.AccessKeyID != tc.expectedAccessKeyID {
+				t.Fatalf("unexpected access key id, expected %s but got %s", tc.expectedAccessKeyID, awsCreds.AccessKeyID)
+			}
+			if awsCreds.SecretAccessKey != tc.expectedSecretKey {
+				t.Fatalf("unexpected secret access key, expected %s but got %s", tc.expectedSecretKey, awsCreds.SecretAccessKey)
 			}
 		})
 	}
 }
 
-func buildClient(scheme *runtime.Scheme, isSTS bool, ns string, secretValues ...string) client.Client {
-	if isSTS {
-		return fake.NewFakeClientWithScheme(scheme, &v12.Secret{
-			ObjectMeta: controllerruntime.ObjectMeta{
-				Name:      defaultSTSCredentialSecretName,
-				Namespace: ns,
+func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type args struct {
+		ctx     context.Context
+		name    string
+		ns      string
+		entries []v1.StatementEntry
+	}
+	cases := []struct {
+		name                string
+		client              client.Client
+		args                args
+		wantErr             bool
+		expectedErrMsg      string
+		expectedAccessKeyID string
+		expectedSecretKey   string
+		mockFn              func()
+	}{
+		{
+			name: "successfully reconciled credentials",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}, &v12.Secret{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Data: map[string][]byte{
+					defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
+					defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
+				},
+			}),
+			args: args{
+				ctx:     context.TODO(),
+				name:    defaultProviderCredentialName,
+				ns:      "testNamespace",
+				entries: nil,
 			},
-			Data: map[string][]byte{
-				defaultRoleARNKeyName:   []byte(secretValues[0]),
-				defaultTokenPathKeyName: []byte(secretValues[1]),
+			wantErr:             false,
+			expectedAccessKeyID: "ACCESS_KEY_ID",
+			expectedSecretKey:   "SECRET_ACCESS_KEY",
+		},
+		{
+			name: "undefined aws access key id in credentials secret",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}, &v12.Secret{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Data: map[string][]byte{
+					defaultCredentialsKeyIDName:     []byte(""),
+					defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
+				},
+			}),
+			args: args{
+				ctx:     context.TODO(),
+				name:    defaultProviderCredentialName,
+				ns:      "testNamespace",
+				entries: nil,
 			},
+			wantErr:        true,
+			expectedErrMsg: "aws access key id is undefined in secret",
+		},
+		{
+			name: "undefined aws access key id in credentials secret",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}, &v12.Secret{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      defaultProviderCredentialName,
+					Namespace: "testNamespace",
+				},
+				Data: map[string][]byte{
+					defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
+					defaultCredentialsSecretKeyName: []byte(""),
+				},
+			}),
+			args: args{
+				ctx:     context.TODO(),
+				name:    defaultProviderCredentialName,
+				ns:      "testNamespace",
+				entries: nil,
+			},
+			wantErr:        true,
+			expectedErrMsg: "aws secret access key is undefined in secret",
+		},
+		{
+			name:   "failed to reconcile aws credential request",
+			client: fake.NewFakeClientWithScheme(scheme),
+			args: args{
+				ctx: context.TODO(),
+			},
+			wantErr:        true,
+			expectedErrMsg: "failed to reconcile aws credential request",
+		},
+		{
+			name:   "failed to provision credential request (timeout)",
+			client: fake.NewFakeClientWithScheme(scheme),
+			args: args{
+				ctx:  context.TODO(),
+				name: defaultProviderCredentialName,
+				ns:   "testNamespace",
+			},
+			wantErr:        true,
+			expectedErrMsg: "timed out waiting for credential request to provision",
+			mockFn: func() {
+				timeOut = time.Millisecond * 10
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.mockFn != nil {
+				tc.mockFn()
+				// Reset
+				defer func() {
+					timeOut = time.Minute * 5
+				}()
+			}
+			cm := NewCredentialManager(tc.client).(*CredentialMinterCredentialManager)
+			_, err := cm.reconcileCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.entries)
+			if tc.wantErr {
+				if !errorContains(err, tc.expectedErrMsg) {
+					t.Fatalf("unexpected error from reconcileCredentials(): %v", err)
+				}
+				return
+			}
 		})
 	}
-	return fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      defaultProviderCredentialName,
-			Namespace: ns,
-		},
-		Spec: v1.CredentialsRequestSpec{
-			SecretRef: v12.ObjectReference{
-				Name:      defaultProviderCredentialName,
-				Namespace: ns,
+}
+
+func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type args struct {
+		ctx    context.Context
+		name   string
+		ns     string
+		bucket string
+	}
+	cases := []struct {
+		name                string
+		client              client.Client
+		args                args
+		wantErr             bool
+		expectedAccessKeyID string
+		expectedSecretKey   string
+	}{
+		{
+			name: "successfully reconciled bucket owner credentials",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}, &v12.Secret{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Data: map[string][]byte{
+					defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
+					defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
+				},
+			}),
+			args: args{
+				ctx:    context.TODO(),
+				name:   "testName",
+				ns:     "testNamespace",
+				bucket: "testBucket",
 			},
+			wantErr:             false,
+			expectedAccessKeyID: "ACCESS_KEY_ID",
+			expectedSecretKey:   "SECRET_ACCESS_KEY",
 		},
-		Status: v1.CredentialsRequestStatus{
-			Provisioned: true,
-			ProviderStatus: &runtime.RawExtension{
-				Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+		{
+			name: "failed to get aws credentials secret",
+			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      "testName",
+					Namespace: "testNamespace",
+				},
+				Status: v1.CredentialsRequestStatus{
+					Provisioned: true,
+					ProviderStatus: &runtime.RawExtension{
+						Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+					},
+				},
+			}),
+			args: args{
+				ctx:    context.TODO(),
+				name:   "testName",
+				ns:     "testNamespace",
+				bucket: "testBucket",
 			},
+			wantErr: true,
 		},
-	}, &v12.Secret{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      defaultProviderCredentialName,
-			Namespace: ns,
-		},
-		Data: map[string][]byte{
-			defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
-			defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
-		},
-	})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cm := NewCredentialManager(tc.client)
+			awsCreds, err := cm.ReconcileBucketOwnerCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.bucket)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error from ReconcileBucketOwnerCredentials(), but got nil")
+				}
+				return
+			}
+			if awsCreds.AccessKeyID != tc.expectedAccessKeyID {
+				t.Fatalf("unexpected access key id, expected %s but got %s", tc.expectedAccessKeyID, awsCreds.AccessKeyID)
+			}
+			if awsCreds.SecretAccessKey != tc.expectedSecretKey {
+				t.Fatalf("unexpected secret access key, expected %s but got %s", tc.expectedSecretKey, awsCreds.SecretAccessKey)
+			}
+		})
+	}
 }

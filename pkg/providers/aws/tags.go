@@ -141,16 +141,10 @@ func tagsContainsAll(as []*tag, bs []*tag) bool {
 func getDefaultResourceTags(ctx context.Context, c client.Client, specType string, name string, prodName string) ([]*tag, string, error) {
 	// set the tag values that will always be added
 	defaultOrganizationTag := resources.GetOrganizationTag()
-
-	//get Cluster Id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
 		msg := "Failed to get cluster id"
 		return nil, "", errorUtil.Wrapf(err, msg)
-	}
-
-	if err != nil {
-		return nil, "", err
 	}
 	tags := []*tag{
 		{
@@ -194,7 +188,7 @@ func getUserInfraTags(ctx context.Context, c client.Client) ([]*tag, error) {
 	// get infra CR
 	infra, err := resources.GetClusterInfrastructure(ctx, c)
 	if err != nil {
-		msg := "Failed to get cluster infrastructure"
+		msg := "failed to get cluster infrastructure"
 		return nil, errorUtil.Wrapf(err, msg)
 	}
 

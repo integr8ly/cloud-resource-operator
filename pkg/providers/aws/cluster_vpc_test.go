@@ -1,10 +1,17 @@
 package aws
 
 import (
+	"context"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/runtime"
+	ptr "k8s.io/utils/pointer"
 	"reflect"
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 )
 
@@ -97,6 +104,94 @@ func Test_buildSubnetAddress(t *testing.T) {
 			}
 			if !reflect.DeepEqual(gotStr, tt.want) {
 				t.Errorf("buildSubnetAddress() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getDefaultSubnetTags(t *testing.T) {
+	scheme := runtime.NewScheme()
+	err := configv1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type args struct {
+		ctx    context.Context
+		client client.Client
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []*ec2.Tag
+		wantErr bool
+	}{
+		{
+			name: "failed to get cluster infrastructure",
+			args: args{
+				ctx:    context.TODO(),
+				client: fake.NewFakeClientWithScheme(scheme),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "successfully retrieved user infra tags",
+			args: args{
+				ctx: context.TODO(),
+				client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name: "cluster",
+					},
+					Status: configv1.InfrastructureStatus{
+						InfrastructureName: defaultInfraName,
+						PlatformStatus: &configv1.PlatformStatus{
+							Type: configv1.AWSPlatformType,
+							AWS: &configv1.AWSPlatformStatus{
+								Region: "eu-west-1",
+								ResourceTags: []configv1.AWSResourceTag{
+									{
+										Key:   "test-key",
+										Value: "test-value",
+									},
+								},
+							},
+						},
+					},
+				}),
+			},
+			want: []*ec2.Tag{
+				{
+					Key:   ptr.String(defaultAWSPrivateSubnetTagKey),
+					Value: ptr.String("1"),
+				},
+				{
+					Key:   ptr.String("integreatly.org/clusterID"),
+					Value: ptr.String("test"),
+				},
+				{
+					Key:   ptr.String(tagDisplayName),
+					Value: ptr.String(DefaultRHMISubnetNameTagValue),
+				},
+				{
+					Key:   ptr.String(tagManagedKey),
+					Value: ptr.String(tagManagedVal),
+				},
+				{
+					Key:   ptr.String("test-key"),
+					Value: ptr.String("test-value"),
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getDefaultSubnetTags(tt.args.ctx, tt.args.client)
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error in getDefaultSubnetTags(): %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("expected %v to equal %v", got, tt.want)
 			}
 		})
 	}

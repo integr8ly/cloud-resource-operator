@@ -618,7 +618,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 // poll for replication groups
 func getReplicationGroups(cacheSvc elasticacheiface.ElastiCacheAPI) ([]*elasticache.ReplicationGroup, error) {
 	var rgs []*elasticache.ReplicationGroup
-	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeReplicationGroups(&elasticache.DescribeReplicationGroupsInput{})
 		if err != nil {
 			return false, nil
@@ -839,7 +839,6 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.ReplicationGroupId == nil {
 		elasticacheConfig.ReplicationGroupId = aws.String(cacheName)
 	}
-
 	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build subnet group name")
@@ -847,13 +846,11 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.CacheSubnetGroupName == nil {
 		elasticacheConfig.CacheSubnetGroupName = aws.String(subGroup)
 	}
-
 	// build security group name
 	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
-	// get security group
 	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
 	if err != nil {
 		return errorUtil.Wrap(err, "")

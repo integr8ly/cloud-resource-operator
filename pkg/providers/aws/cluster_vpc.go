@@ -299,7 +299,6 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 			value: DefaultRHMISubnetNameTagValue,
 		}, buildManagedTag(),
 	}
-
 	infraTags, err := getUserInfraTags(ctx, c)
 	if err != nil {
 		msg := "Failed to get user infrastructure tags"

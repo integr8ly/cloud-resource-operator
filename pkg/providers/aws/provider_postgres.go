@@ -281,7 +281,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
 	if postgresPass == "" {
 		msg := "unable to retrieve rds password"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		return nil, croType.StatusMessage(msg), errorUtil.Errorf(msg)
 	}
 
 	// verify and build rds create config
@@ -637,7 +637,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 // function to get rds instances, used to check/wait on AWS credentials
 func getRDSInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	var pi []*rds.DBInstance
-	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
 		if err != nil {
 			return false, nil
@@ -1276,7 +1276,8 @@ func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *
 				//convert the timestamp string to int64
 				specifiedApplyAfterDate64, err := strconv.ParseInt(specifiedApplyAfterDate, 10, 64)
 				if err != nil {
-					logrus.Error("epoc timestamp requires string")
+					errMsg := "epoc timestamp requires string"
+					return false, croType.StatusMessage(errMsg), err
 				}
 				if pmac.AutoAppliedAfterDate.Before(time.Unix(specifiedApplyAfterDate64, 0)) {
 					update = true

@@ -163,6 +163,10 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				defaultOrgTag := resources.GetOrganizationTag()
 				fakeTags := []*rds.Tag{
 					{
+						Key:   aws.String("test-key"),
+						Value: aws.String("test-value"),
+					},
+					{
 						Key:   aws.String(defaultOrgTag + "clusterID"),
 						Value: aws.String("test"),
 					},

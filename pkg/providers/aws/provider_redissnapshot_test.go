@@ -134,6 +134,10 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				defaultOrgTag := resources.GetOrganizationTag()
 				fakeTags := []*elasticache.Tag{
 					{
+						Key:   aws.String("test-key"),
+						Value: aws.String("test-value"),
+					},
+					{
 						Key:   aws.String(defaultOrgTag + "clusterID"),
 						Value: aws.String("test"),
 					},

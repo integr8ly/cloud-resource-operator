@@ -124,7 +124,7 @@ func BuildDefaultConfigMap(name, namespace string) *v1.ConfigMap {
 	}
 }
 
-// BuildSubnetGroupName builds and returns an id used for infra resources
+// BuildInfraName builds and returns an id used for infra resources
 func BuildInfraName(ctx context.Context, c client.Client, postfix string, n int) (string, error) {
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
@@ -184,11 +184,7 @@ func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials
 	} else {
 		awsConfig.Credentials = awsCredentials.NewStaticCredentials(credentials.AccessKeyID, credentials.SecretAccessKey, "")
 	}
-
-	sess, err := session.NewSession(&awsConfig)
-	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to create aws session from strategy, region=%s", region)
-	}
+	sess := session.Must(session.NewSession(&awsConfig))
 	return sess, nil
 }
 
