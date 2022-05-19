@@ -36,10 +36,10 @@ import (
 )
 
 const (
+	defaultInfraName               = "test"
+	defaultVpcId                   = "testID"
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
-	defaultVpcId                   = "testID"
-	defaultInfraName               = "test"
 )
 
 var (
@@ -71,6 +71,11 @@ type mockEc2Client struct {
 	firstSubnet     *ec2.Subnet
 	secondSubnet    *ec2.Subnet
 	subnets         []*ec2.Subnet
+	vpcs            []*ec2.Vpc
+	vpc             *ec2.Vpc
+	secGroups       []*ec2.SecurityGroup
+	azs             []*ec2.AvailabilityZone
+	wantErrList     bool
 	returnSecondSub bool
 	// new approach for manually defined mocks
 	// to allow for simple overrides in test table declarations
@@ -617,7 +622,7 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
 			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
 			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-			EngineVersion:              aws.String(DefaultAwsEngineVersion),
+			EngineVersion:              aws.String(defaultAwsEngineVersion),
 			Engine:                     aws.String(defaultAwsEngine),
 			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
@@ -651,7 +656,7 @@ func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
 		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-		EngineVersion:              aws.String(DefaultAwsEngineVersion),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 		MultiAZ:                    aws.Bool(true),
@@ -668,7 +673,7 @@ func buildRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceI
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
 		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-		EngineVersion:              aws.String(DefaultAwsEngineVersion),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 		MultiAZ:                    aws.Bool(true),
@@ -685,10 +690,43 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
 		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
 		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-		EngineVersion:              aws.String(DefaultAwsEngineVersion),
+		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 		MultiAZ:                    aws.Bool(true),
+	}
+}
+
+func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier:       aws.String(testID),
+			DBInstanceStatus:           aws.String("available"),
+			AvailabilityZone:           aws.String("test-availabilityZone"),
+			AutoMinorVersionUpgrade:    aws.Bool(false),
+			DBInstanceArn:              aws.String("arn-test"),
+			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:             aws.String(defaultAwsPostgresUser),
+			DBName:                     aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+			EngineVersion:              aws.String(defaultAwsEngineVersion),
+			Engine:                     aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+			MultiAZ:                    aws.Bool(true),
+			Endpoint: &rds.Endpoint{
+				Address:      aws.String("blob"),
+				HostedZoneId: aws.String("blog"),
+				Port:         aws.Int64(defaultAwsPostgresPort),
+			},
+			PendingModifiedValues: &rds.PendingModifiedValues{
+				Port: aws.Int64(123),
+			},
+		},
 	}
 }
 
@@ -742,7 +780,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build security name", err)

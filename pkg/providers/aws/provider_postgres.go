@@ -38,27 +38,27 @@ import (
 )
 
 const (
-	postgresProviderName                 = "aws-rds"
-	DefaultAwsIdentifierLength           = 40
+	defaultAwsAllocatedStorage           = 20
+	defaultAwsBackupRetentionPeriod      = 31
+	defaultAwsCopyTagsToSnapshot         = true
+	defaultAwsDBInstanceClass            = "db.t3.small"
+	defaultAwsDeleteAutomatedBackups     = true
+	defaultAwsEngine                     = "postgres"
+	defaultAwsEngineVersion              = "10.18"
+	defaultAwsIdentifierLength           = 40
+	defaultAwsMaxAllocatedStorage        = 100
 	defaultAwsMultiAZ                    = true
+	defaultAwsPostgresDatabase           = "postgres"
 	defaultAwsPostgresDeletionProtection = true
 	defaultAwsPostgresPort               = 5432
 	defaultAwsPostgresUser               = "postgres"
-	defaultAwsAllocatedStorage           = 20
-	defaultAwsMaxAllocatedStorage        = 100
-	defaultAwsPostgresDatabase           = "postgres"
-	defaultAwsBackupRetentionPeriod      = 31
-	defaultAwsDBInstanceClass            = "db.t3.small"
-	defaultAwsEngine                     = "postgres"
-	DefaultAwsEngineVersion              = "10.18"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
-	defaultAWSCopyTagsToSnapshot         = true
-	defaultAwsDeleteAutomatedBackups     = true
 	defaultCredSecSuffix                 = "-aws-rds-credentials"
-	defaultPostgresUserKey               = "user"
 	defaultPostgresPasswordKey           = "password"
+	defaultPostgresUserKey               = "user"
 	defaultStorageEncrypted              = true
+	postgresProviderName                 = "aws-rds"
 )
 
 var (
@@ -168,11 +168,11 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	//networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
-	//when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+	//networkManager isEnabled checks for the presence of bundled subnets in the cluster vpc
+	//when bundled subnets are present in a cluster vpc it indicates that the vpc configuration
 	//was created in a cluster with a cluster version <= 4.4.5
 	//
-	//when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+	//when bundled subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from postgres cr
@@ -863,14 +863,14 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.MaxAllocatedStorage = aws.Int64(defaultAwsMaxAllocatedStorage)
 	}
 	if rdsCreateConfig.EngineVersion == nil {
-		rdsCreateConfig.EngineVersion = aws.String(DefaultAwsEngineVersion)
+		rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 	}
 	if rdsCreateConfig.StorageEncrypted == nil {
 		rdsCreateConfig.StorageEncrypted = aws.Bool(defaultStorageEncrypted)
 	}
 	if rdsCreateConfig.EngineVersion != nil {
 		if !resources.Contains(defaultSupportedEngineVersions, *rdsCreateConfig.EngineVersion) {
-			rdsCreateConfig.EngineVersion = aws.String(DefaultAwsEngineVersion)
+			rdsCreateConfig.EngineVersion = aws.String(defaultAwsEngineVersion)
 		}
 	}
 	instanceName, err := p.buildInstanceName(ctx, pg)
@@ -887,7 +887,7 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		rdsCreateConfig.AvailabilityZone = nil
 	}
 	rdsCreateConfig.Engine = aws.String(defaultAwsEngine)
-	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to build subnet group name")
 	}
@@ -896,7 +896,7 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 	}
 
 	// build security group name
-	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -912,14 +912,14 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		}
 	}
 	if rdsCreateConfig.CopyTagsToSnapshot == nil {
-		rdsCreateConfig.CopyTagsToSnapshot = aws.Bool(defaultAWSCopyTagsToSnapshot)
+		rdsCreateConfig.CopyTagsToSnapshot = aws.Bool(defaultAwsCopyTagsToSnapshot)
 	}
 	return nil
 }
 
 // verify postgres delete config
 func (p *PostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1alpha1.Postgres, rdsCreateConfig *rds.CreateDBInstanceInput, rdsDeleteConfig *rds.DeleteDBInstanceInput) error {
-	instanceIdentifier, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
+	instanceIdentifier, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
@@ -935,7 +935,7 @@ func (p *PostgresProvider) buildRDSDeleteConfig(ctx context.Context, pg *v1alpha
 	if rdsDeleteConfig.SkipFinalSnapshot == nil {
 		rdsDeleteConfig.SkipFinalSnapshot = aws.Bool(defaultAwsSkipFinalSnapshot)
 	}
-	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to retrieve timestamped rds config")
 	}
@@ -968,7 +968,7 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsSvc rdsiface.
 	logger := p.Logger.WithField("action", "configureRDSVpc")
 	logger.Info("ensuring vpc is as expected for resource")
 	// get subnet group id
-	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	sgID, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -1250,7 +1250,7 @@ func (p *PostgresProvider) createRDSConnectionMetric(ctx context.Context, cr *v1
 
 // returns the name of the instance from build infra
 func (p *PostgresProvider) buildInstanceName(ctx context.Context, pg *v1alpha1.Postgres) (string, error) {
-	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, DefaultAwsIdentifierLength)
+	instanceName, err := BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return "", errorUtil.Errorf("error occurred building instance name: %v", err)
 	}

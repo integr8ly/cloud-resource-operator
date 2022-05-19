@@ -96,7 +96,7 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 // scrapeRDSCloudWatchMetricData fetches cloud watch metrics for rds
 // and parses it to a GenericCloudMetric in order to return to the controller
 func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
-	resourceID, err := BuildInfraNameFromObject(ctx, p.Client, postgres.ObjectMeta, DefaultAwsIdentifierLength)
+	resourceID, err := BuildInfraNameFromObject(ctx, p.Client, postgres.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)
 	}

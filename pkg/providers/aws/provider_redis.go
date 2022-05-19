@@ -37,17 +37,15 @@ import (
 )
 
 const (
-	redisProviderName = "aws-elasticache"
-	// default create params
-	defaultCacheNodeType = "cache.t3.micro"
-	// required for at rest encryption, see https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/at-rest-encryption.html
-	DefaultEngineVersion     = "5.0.6"
-	defaultDescription       = "A Redis replication group"
-	defaultNumCacheClusters  = 2
-	defaultSnapshotRetention = 31
-	defaultAtRestEncryption  = true
+	defaultAtRestEncryption = true
+	defaultCacheNodeType    = "cache.t3.micro"
+	defaultDescription      = "A Redis replication group"
+	defaultEngineVersion    = "5.0.6"
 	// 3scale does not support in transit encryption (redis with tls)
 	defaultInTransitEncryption = false
+	defaultNumCacheClusters    = 2
+	defaultSnapshotRetention   = 31
+	redisProviderName          = "aws-elasticache"
 )
 
 type ServiceUpdate struct {
@@ -137,11 +135,11 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	//networkManager isEnabled checks for the presence of valid RHMI subnets in the cluster vpc
-	//when rhmi subnets are present in a cluster vpc it indicates that the vpc configuration
+	//networkManager isEnabled checks for the presence of valid CRO subnets in the cluster vpc
+	//when CRO subnets are present in a cluster vpc it indicates that the vpc configuration
 	//was created in a cluster with a cluster version <= 4.4.5
 	//
-	//when rhmi subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
+	//when CRO subnets are absent in a cluster vpc it indicates that the vpc configuration has not been created
 	//and a new vpc is created for all resources to be deployed in and peered with the cluster vpc
 	if isEnabled {
 		// get cidr block from _network strat map, based on tier from redis cr
@@ -598,7 +596,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 
 	// in the case of standalone network not existing and the last resource is being deleted the
 	// bundled networking resources should be cleaned up similarly to standalone networking resources
-	// this involves the deletion of bundled elasticace and rds subnet group and ec2 security group
+	// this involves the deletion of bundled elasticache and rds subnet group and ec2 security group
 	if !isEnabled && isLastResource {
 		err := networkManager.DeleteBundledCloudResources(ctx)
 		if err != nil {
@@ -818,7 +816,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 		elasticacheConfig.ReplicationGroupDescription = aws.String(defaultDescription)
 	}
 	if elasticacheConfig.EngineVersion == nil {
-		elasticacheConfig.EngineVersion = aws.String(DefaultEngineVersion)
+		elasticacheConfig.EngineVersion = aws.String(defaultEngineVersion)
 	}
 	if elasticacheConfig.NumCacheClusters == nil {
 		elasticacheConfig.NumCacheClusters = aws.Int64(defaultNumCacheClusters)
@@ -832,14 +830,15 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.TransitEncryptionEnabled == nil {
 		elasticacheConfig.TransitEncryptionEnabled = aws.Bool(defaultInTransitEncryption)
 	}
-	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
 	if elasticacheConfig.ReplicationGroupId == nil {
 		elasticacheConfig.ReplicationGroupId = aws.String(cacheName)
 	}
-	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+
+	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build subnet group name")
 	}
@@ -847,7 +846,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 		elasticacheConfig.CacheSubnetGroupName = aws.String(subGroup)
 	}
 	// build security group name
-	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -867,7 +866,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 
 // buildElasticacheDeleteConfig checks redis config, if none exists sets values to defaults
 func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput, elasticacheDeleteConfig *elasticache.DeleteReplicationGroupInput) error {
-	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve elasticache config")
 	}
@@ -880,7 +879,7 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 	if elasticacheDeleteConfig.RetainPrimaryCluster == nil {
 		elasticacheDeleteConfig.RetainPrimaryCluster = aws.Bool(false)
 	}
-	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, DefaultAwsIdentifierLength)
+	snapshotIdentifier, err := buildTimestampedInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to retrieve rds config")
 	}
@@ -894,7 +893,7 @@ func (p *RedisProvider) buildElasticacheDeleteConfig(ctx context.Context, r v1al
 func (p *RedisProvider) configureElasticacheVpc(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API) error {
 	logrus.Info("configuring cluster vpc for redis resource")
 	// get subnet group id
-	sgName, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	sgName, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -1127,7 +1126,7 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 }
 
 func (p *RedisProvider) buildCacheName(ctx context.Context, rd *v1alpha1.Redis) (string, error) {
-	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, rd.ObjectMeta, DefaultAwsIdentifierLength)
+	cacheName, err := BuildInfraNameFromObject(ctx, p.Client, rd.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return "", errorUtil.Errorf("error occurred building cache name: %v", err)
 	}

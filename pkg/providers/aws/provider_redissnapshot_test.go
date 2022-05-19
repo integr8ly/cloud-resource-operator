@@ -72,8 +72,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	// testIdentifier, err := BuildInfraNameFromObject(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, DefaultAwsIdentifierLength)
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, DefaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
@@ -357,7 +356,7 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, DefaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)

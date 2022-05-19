@@ -51,21 +51,19 @@ import (
 )
 
 const (
-	DefaultRHMIVpcNameTagValue           = "RHMI Cloud Resource VPC"
-	DefaultRHMISubnetNameTagValue        = "RHMI Cloud Resource Subnet"
-	DefaultRHMISecurityGroupNameTagValue = "RHMI Cloud Resource Security Group"
-	DefaultRHMIVpcRouteTableNameTagValue = "RHMI Cloud Resource Route Table"
-	defaultNumberOfExpectedSubnets       = 2
-	clusterOwnedTagKeyPrefix             = "kubernetes.io/cluster/"
-	clusterOwnedTagValue                 = "owned"
-	//network peering
-	tagVpcPeeringNameValue = "RHMI Cloud Resource Peering Connection"
+	clusterOwnedTagKeyPrefix                = "kubernetes.io/cluster/"
+	clusterOwnedTagValue                    = "owned"
+	defaultCIDRMask                         = "26"
+	defaultNumberOfExpectedSubnets          = 2
+	defaultRouteTableNameTagValue           = "Cloud Resource Route Table"
+	defaultSecurityGroupNameTagValue        = "Cloud Resource Security Group"
+	defaultSubnetNameTagValue               = "Cloud Resource Subnet"
+	defaultVpcNameTagValue                  = "Cloud Resource VPC"
+	defaultVpcPeeringConnectionNameTagValue = "Cloud Resource VPC Peering Connection"
 	// filter names for vpc peering connections
 	// see https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVpcPeeringConnections.html
-	filterVpcPeeringRequesterId = "requester-vpc-info.vpc-id"
 	filterVpcPeeringAccepterId  = "accepter-vpc-info.vpc-id"
-	// default cidr values
-	defaultCIDRMask = "26"
+	filterVpcPeeringRequesterId = "requester-vpc-info.vpc-id"
 )
 
 // Network wrapper for ec2 vpcs, to allow for extensibility
@@ -186,7 +184,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 			CidrBlock: aws.String(vpcCidrBlock.String()),
 		}
 		if n.IsSTSCluster {
-			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue}, ec2.ResourceTypeVpc)
+			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: defaultVpcNameTagValue}, ec2.ResourceTypeVpc)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
 			}
@@ -323,7 +321,7 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 		}
 	}
 
-	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -473,7 +471,7 @@ func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context, network *
 func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context, networkPeering *NetworkPeering) error {
 	logger := n.Logger.WithField("action", "DeleteNetworkConnection")
 	// build security group name
-	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	logger.Info(fmt.Sprintf("setting resource security group %s", standaloneSecurityGroupName))
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
@@ -556,7 +554,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 			VpcId:     network.Vpc.VpcId,
 		}
 		if n.IsSTSCluster {
-			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: tagVpcPeeringNameValue}, ec2.ResourceTypeVpcPeeringConnection)
+			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: defaultVpcPeeringConnectionNameTagValue}, ec2.ResourceTypeVpcPeeringConnection)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
 			}
@@ -574,7 +572,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 	// once we have the peering connection, tag it, so it's identifiable as belonging to this operator
 	// this helps with cleaning up resources
 	if !n.IsSTSCluster {
-		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: tagVpcPeeringNameValue})
+		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: defaultVpcPeeringConnectionNameTagValue})
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to get default tags for peering connection")
 		}
@@ -737,7 +735,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error {
 	logger := n.Logger.WithField("action", "deleteBundledCloudResources")
 
-	subnetGroupName, err := BuildInfraName(ctx, n.Client, "subnetgroup", DefaultAwsIdentifierLength)
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, "subnetgroup", defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building bundle subnet group resource name on deletion")
 	}
@@ -757,7 +755,7 @@ func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error
 	if err != nil && isAwsErr && dbSubnetErr.Code() != rds.ErrCodeDBSubnetGroupNotFoundFault {
 		return errorUtil.Wrap(err, "error deleting rds subnet group")
 	}
-	securityGroupName, err := BuildInfraName(ctx, n.Client, "securitygroup", DefaultAwsIdentifierLength)
+	securityGroupName, err := BuildInfraName(ctx, n.Client, "securitygroup", defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building bundle security group resource name on deletion")
 	}
@@ -840,7 +838,7 @@ func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Networ
 // see -> https://docs.aws.amazon.com/vpc/latest/peering/vpc-peering-security-groups.html
 func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, logger *logrus.Entry) (*ec2.SecurityGroup, error) {
 	// build security group name
-	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	standaloneSecurityGroupName, err := BuildInfraName(ctx, n.Client, defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	logger.Info(fmt.Sprintf("setting resource security group %s", standaloneSecurityGroupName))
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error building subnet group name")
@@ -869,7 +867,6 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 
 	// if no security group exists in standalone vpc create it
 	if standaloneSecGroup == nil {
-
 		securityGroup := &ec2.CreateSecurityGroupInput{
 			Description: aws.String("rhmi cro security group for cro standalone vpc"),
 			GroupName:   aws.String(standaloneSecurityGroupName),
@@ -877,7 +874,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 		}
 
 		if n.IsSTSCluster {
-			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMISecurityGroupNameTagValue}, ec2.ResourceTypeSecurityGroup)
+			tagSpec, err := getDefaultTagSpec(ctx, n.Client, &tag{key: tagDisplayName, value: defaultSecurityGroupNameTagValue}, ec2.ResourceTypeSecurityGroup)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to get default tag spec")
 			}
@@ -912,7 +909,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	if !n.IsSTSCluster {
 		// ensure standalone vpc has correct tags
 		// we require the subnet group to be tagged with the cro owner tag
-		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMISecurityGroupNameTagValue})
+		defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: defaultSecurityGroupNameTagValue})
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to get default tags for security group")
 		}
@@ -990,7 +987,7 @@ func (n *NetworkProvider) reconcileStandaloneRouteTableTags(ctx context.Context,
 		return errorUtil.New(fmt.Sprint("did not find any route associated with vpc %", vpc.VpcId))
 	}
 
-	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcRouteTableNameTagValue})
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: defaultRouteTableNameTagValue})
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get default tags for route table")
 	}
@@ -1257,7 +1254,7 @@ func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTa
 func (n *NetworkProvider) reconcileVPCTags(ctx context.Context, vpc *ec2.Vpc) error {
 	logger := n.Logger.WithField("action", "reconcileVPCTags")
 
-	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: DefaultRHMIVpcNameTagValue})
+	defaultTags, err := getDefaultNetworkTags(ctx, n.Client, &tag{key: tagDisplayName, value: defaultVpcNameTagValue})
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get default tags for vpc")
 	}
@@ -1284,7 +1281,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 	logger := n.Logger.WithField("action", "reconcileRDSVpcConfiguration")
 	logger.Info("ensuring rds subnet groups in vpc are as expected")
 	// get subnet group id
-	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
@@ -1399,7 +1396,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 	logger := n.Logger.WithField("action", "reconcileElasticacheVPCConfiguration")
 	logger.Info("ensuring elasticache subnet groups in vpc are as expected")
 	// get subnet group id
-	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
+	subnetGroupName, err := BuildInfraName(ctx, n.Client, defaultSubnetPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
