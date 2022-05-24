@@ -47,11 +47,10 @@ const (
 // RedisSnapshotReconciler reconciles a RedisSnapshot object
 type RedisSnapshotReconciler struct {
 	k8sclient.Client
-	scheme            *runtime.Scheme
-	logger            *logrus.Entry
-	provider          providers.RedisSnapshotProvider
-	ConfigManager     croAws.ConfigManager
-	CredentialManager croAws.CredentialManager
+	scheme        *runtime.Scheme
+	logger        *logrus.Entry
+	provider      providers.RedisSnapshotProvider
+	ConfigManager croAws.ConfigManager
 }
 
 func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
@@ -67,12 +66,11 @@ func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis_snapshot"})
 	provider := croAws.NewAWSRedisSnapshotProvider(client, logger)
 	return &RedisSnapshotReconciler{
-		Client:            client,
-		scheme:            mgr.GetScheme(),
-		logger:            logger,
-		provider:          provider,
-		ConfigManager:     croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
-		CredentialManager: croAws.NewCredentialMinterCredentialManager(mgr.GetClient()),
+		Client:        client,
+		scheme:        mgr.GetScheme(),
+		logger:        logger,
+		provider:      provider,
+		ConfigManager: croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 	}, nil
 }
 

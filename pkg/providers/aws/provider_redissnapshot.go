@@ -39,7 +39,7 @@ func NewAWSRedisSnapshotProvider(client client.Client, logger *logrus.Entry) *Re
 	return &RedisSnapshotProvider{
 		client:            client,
 		logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -137,9 +137,15 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 	// create snapshot of the redis instance
 	if foundSnapshot == nil {
 		logger.Info("creating redis snapshot")
+		tags, _, err := getDefaultResourceTags(ctx, p.client, redis.Spec.Type, snapshotName, redis.ObjectMeta.Labels["productName"])
+		if err != nil {
+			msg := "failed to get default redis tags"
+			return nil, "", errorUtil.Wrapf(err, msg)
+		}
 		_, err = cacheSvc.CreateSnapshot(&elasticache.CreateSnapshotInput{
 			CacheClusterId: aws.String(cacheName),
 			SnapshotName:   aws.String(snapshotName),
+			Tags:           genericToElasticacheTags(tags),
 		})
 		if err != nil {
 			errMsg := "error creating elasticache snapshot"
@@ -246,5 +252,5 @@ func (p *RedisSnapshotProvider) createSessionForResource(ctx context.Context, na
 		return nil, err
 	}
 
-	return CreateSessionFromStrategy(ctx, p.client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	return CreateSessionFromStrategy(ctx, p.client, providerCreds, stratCfg)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"reflect"
 	"testing"
 
@@ -159,9 +160,37 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				if len(mock.calls.CreateDBSnapshot) != 1 {
 					return errors.New("CreateDBSnapshot was not called")
 				}
+				defaultOrgTag := resources.GetOrganizationTag()
+				fakeTags := []*rds.Tag{
+					{
+						Key:   aws.String("test-key"),
+						Value: aws.String("test-value"),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "clusterID"),
+						Value: aws.String("test"),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "resource-type"),
+						Value: aws.String(""),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "resource-name"),
+						Value: aws.String("testtesttest000101010000000000UTC"),
+					},
+					{
+						Key:   aws.String(tagManagedKey),
+						Value: aws.String("true"),
+					},
+					{
+						Key:   aws.String(defaultOrgTag + "product-name"),
+						Value: aws.String("test_product"),
+					},
+				}
 				wantSnapshotInput := &rds.CreateDBSnapshotInput{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					DBSnapshotIdentifier: aws.String(testTimestampedIdentifier),
+					Tags:                 fakeTags,
 				}
 				gotSnapshotInput := mock.calls.CreateDBSnapshot[0].In1
 				if !reflect.DeepEqual(gotSnapshotInput, wantSnapshotInput) {

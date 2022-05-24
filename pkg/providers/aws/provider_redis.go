@@ -78,7 +78,7 @@ func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvi
 	return &RedisProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 		TCPPinger:         NewConnectionTestManager(),
 	}
@@ -102,7 +102,7 @@ func (p *RedisProvider) GetReconcileTime(r *v1alpha1.Redis) time.Duration {
 // CreateRedis Create an Elasticache Replication Group from strategy config
 func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "CreateRedis")
-	logger.Infof("reconciling redes %s", r.Name)
+	logger.Infof("reconciling redis %s", r.Name)
 	// handle provider-specific finalizer
 	if err := resources.CreateFinalizer(ctx, p.Client, r, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
@@ -123,14 +123,14 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// setup aws elasticache cluster sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to create elasticache replication group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check if a standalone network is required
-	networkManager := NewNetworkManager(sess, p.Client, logger)
+	networkManager := NewNetworkManager(sess, p.Client, logger, isSTSCluster(ctx, p.Client))
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
 		errMsg := "failed to check cluster vpc subnets"
@@ -234,12 +234,24 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	// expose a connection metric
 	defer p.createElasticacheConnectionMetric(ctx, r, foundCache)
 
+	// check if we are running in STS mode
+	_, isSTS := p.CredentialManager.(*STSCredentialManager)
+
 	// create elasticache cluster if it doesn't exist
 	if foundCache == nil {
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
 				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
 			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		}
+		if isSTS {
+			// the tag should be added to the create strategy in cases where sts is enabled
+			// and in the same api request of the first creation of the postgres to allow
+			msg, err := p.buildRedisTagCreateStrategy(ctx, r, elasticacheConfig)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to add tags to rds: %s", msg)
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
 		}
 
 		logrus.Info("creating elasticache cluster")
@@ -300,18 +312,20 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		logger.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
 	}
 
-	// add tags to cache nodes
-	cacheInstance := *foundCache.NodeGroups[0]
-	if *cacheInstance.Status != "available" {
-		logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
-		return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
-	}
+	if !isSTS {
+		// add tags to cache nodes
+		cacheInstance := *foundCache.NodeGroups[0]
+		if *cacheInstance.Status != "available" {
+			logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
+			return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
+		}
 
-	for _, cache := range cacheInstance.NodeGroupMembers {
-		msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
-			return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		for _, cache := range cacheInstance.NodeGroupMembers {
+			msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
+				return nil, types.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
 		}
 	}
 
@@ -328,6 +342,27 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// return secret information
 	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
+}
+
+// buildRedisTagCreateStrategy Tags RDS resources
+func (p *RedisProvider) buildRedisTagCreateStrategy(ctx context.Context, cr *v1alpha1.Redis, elasticacheCreateConfig *elasticache.CreateReplicationGroupInput) (croType.StatusMessage, error) {
+	redisTags, _, err := p.getDefaultElasticacheTags(ctx, cr)
+	if err != nil {
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+	}
+
+	if cr.ObjectMeta.Labels["addonName"] != "" {
+		addonTag := &elasticache.Tag{
+			Key:   aws.String("add-on-name"),
+			Value: aws.String(cr.ObjectMeta.Labels["addonName"]),
+		}
+		redisTags = append(redisTags, addonTag)
+	}
+
+	// adding tags to rds postgres create strategy instance
+	elasticacheCreateConfig.SetTags(redisTags)
+	return "", nil
 }
 
 // TagElasticacheNode Add Tags to AWS Elasticache
@@ -364,35 +399,10 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
 	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:cluster:%s", region, *id.Account, *cache.CacheClusterId)
 
-	// set the tag values that will always be added
-	organizationTag := resources.GetOrganizationTag()
-	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	cacheTags, clusterID, err := p.getDefaultElasticacheTags(ctx, r)
 	if err != nil {
-		errMsg := "failed to get cluster id"
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-	cacheTags := []*elasticache.Tag{
-		{
-			Key:   aws.String(organizationTag + "clusterID"),
-			Value: aws.String(clusterID),
-		},
-		{
-			Key:   aws.String(organizationTag + "resource-type"),
-			Value: aws.String(r.Spec.Type),
-		},
-		{
-			Key:   aws.String(organizationTag + "resource-name"),
-			Value: aws.String(r.Name),
-		},
-	}
-
-	// check is product name exists on cr
-	if r.ObjectMeta.Labels["productName"] != "" {
-		productTag := &elasticache.Tag{
-			Key:   aws.String(organizationTag + "product-name"),
-			Value: aws.String(r.ObjectMeta.Labels["productName"]),
-		}
-		cacheTags = append(cacheTags, productTag)
+		msg := "Failed to build default tags"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// add tags
@@ -484,14 +494,14 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// setup aws elasticache cluster sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to delete elasticache replication group"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// network manager required for cleaning up network.
-	networkManager := NewNetworkManager(sess, p.Client, logger)
+	networkManager := NewNetworkManager(sess, p.Client, logger, isSTSCluster(ctx, p.Client))
 
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
@@ -608,7 +618,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 // poll for replication groups
 func getReplicationGroups(cacheSvc elasticacheiface.ElastiCacheAPI) ([]*elasticache.ReplicationGroup, error) {
 	var rgs []*elasticache.ReplicationGroup
-	err := wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeReplicationGroups(&elasticache.DescribeReplicationGroupsInput{})
 		if err != nil {
 			return false, nil
@@ -656,6 +666,15 @@ func (p *RedisProvider) getElasticacheConfig(ctx context.Context, r *v1alpha1.Re
 	}
 
 	return elasticacheCreateConfig, elasticacheDeleteConfig, elasticacheServiceUpdates, stratCfg, nil
+}
+
+func (p *RedisProvider) getDefaultElasticacheTags(ctx context.Context, cr *v1alpha1.Redis) ([]*elasticache.Tag, string, error) {
+	tags, clusterID, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	if err != nil {
+		msg := "Failed to get default redis tags"
+		return nil, "", errorUtil.Wrapf(err, msg)
+	}
+	return genericToElasticacheTags(tags), clusterID, nil
 }
 
 func (p *RedisProvider) isLastResource(ctx context.Context) (bool, error) {
@@ -820,7 +839,6 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.ReplicationGroupId == nil {
 		elasticacheConfig.ReplicationGroupId = aws.String(cacheName)
 	}
-
 	subGroup, err := BuildInfraName(ctx, p.Client, defaultSubnetPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build subnet group name")
@@ -828,13 +846,11 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 	if elasticacheConfig.CacheSubnetGroupName == nil {
 		elasticacheConfig.CacheSubnetGroupName = aws.String(subGroup)
 	}
-
 	// build security group name
 	secName, err := BuildInfraName(ctx, p.Client, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
 	}
-	// get security group
 	foundSecGroup, err := getSecurityGroup(ec2Svc, secName)
 	if err != nil {
 		return errorUtil.Wrap(err, "")

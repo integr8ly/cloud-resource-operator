@@ -51,11 +51,10 @@ type PostgresSnapshotReconciler struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	k8sclient.Client
-	scheme            *runtime.Scheme
-	logger            *logrus.Entry
-	provider          providers.PostgresSnapshotProvider
-	ConfigManager     croAws.ConfigManager
-	CredentialManager croAws.CredentialManager
+	scheme        *runtime.Scheme
+	logger        *logrus.Entry
+	provider      providers.PostgresSnapshotProvider
+	ConfigManager croAws.ConfigManager
 }
 
 // New returns a new reconcile.Reconciler
@@ -72,12 +71,11 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres_snapshot"})
 	provider := croAws.NewAWSPostgresSnapshotProvider(client, logger)
 	return &PostgresSnapshotReconciler{
-		Client:            client,
-		scheme:            mgr.GetScheme(),
-		logger:            logger,
-		provider:          provider,
-		ConfigManager:     croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
-		CredentialManager: croAws.NewCredentialMinterCredentialManager(mgr.GetClient()),
+		Client:        client,
+		scheme:        mgr.GetScheme(),
+		logger:        logger,
+		provider:      provider,
+		ConfigManager: croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 	}, nil
 }
 

@@ -262,34 +262,55 @@ func createPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.E
 // tags a private subnet with the default aws private subnet tag
 func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Svc ec2iface.EC2API, sub *ec2.Subnet, logger *logrus.Entry) error {
 	logger.Infof("tagging cloud resource subnet %s", *sub.SubnetId)
-	// get cluster id
-	clusterID, err := resources.GetClusterID(ctx, c)
+	tags, err := getDefaultSubnetTags(ctx, c)
 	if err != nil {
-		return errorUtil.Wrap(err, "error getting clusterID")
+		return err
 	}
-	organizationTag := resources.GetOrganizationTag()
-
 	_, err = ec2Svc.CreateTags(&ec2.CreateTagsInput{
 		Resources: []*string{
 			aws.String(*sub.SubnetId),
 		},
-		Tags: []*ec2.Tag{
-			{
-				Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-				Value: aws.String("1"),
-			}, {
-				Key:   aws.String(fmt.Sprintf("%sclusterID", organizationTag)),
-				Value: aws.String(clusterID),
-			}, {
-				Key:   aws.String("Name"),
-				Value: aws.String(DefaultRHMISubnetNameTagValue),
-			},
-		},
+		Tags: tags,
 	})
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to tag subnet")
 	}
 	return nil
+}
+
+// retrieves default subnet tags
+func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, error) {
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+	organizationTag := resources.GetOrganizationTag()
+
+	tags := []*tag{
+		{
+			key:   defaultAWSPrivateSubnetTagKey,
+			value: "1",
+		}, {
+			key:   fmt.Sprintf("%sclusterID", organizationTag),
+			value: clusterID,
+		}, {
+			key:   tagDisplayName,
+			value: DefaultRHMISubnetNameTagValue,
+		}, buildManagedTag(),
+	}
+	infraTags, err := getUserInfraTags(ctx, c)
+	if err != nil {
+		msg := "Failed to get user infrastructure tags"
+		return nil, errorUtil.Wrapf(err, msg)
+	}
+	if infraTags != nil {
+		// merge tags into single array, where any duplicate
+		// values in infra are discarded in favour of the default tags
+		tags = mergeTags(tags, infraTags)
+	}
+
+	return genericToEc2Tags(tags), nil
 }
 
 // Builds a list of valid subnet CIDR blocks

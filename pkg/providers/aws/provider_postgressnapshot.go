@@ -39,7 +39,7 @@ func NewAWSPostgresSnapshotProvider(client client.Client, logger *logrus.Entry) 
 	return &PostgresSnapshotProvider{
 		client:            client,
 		logger:            logger.WithFields(logrus.Fields{"provider": postgresSnapshotProviderName}),
-		CredentialManager: NewCredentialMinterCredentialManager(client),
+		CredentialManager: NewCredentialManager(client),
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 	}
 }
@@ -139,9 +139,15 @@ func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, s
 			return nil, croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
 		logger.Info("creating rds snapshot")
+		tags, _, err := getDefaultResourceTags(ctx, p.client, postgres.Spec.Type, snapshotName, postgres.ObjectMeta.Labels["productName"])
+		if err != nil {
+			msg := "failed to get default postgres tags"
+			return nil, "", errorUtil.Wrapf(err, msg)
+		}
 		_, err = rdsSvc.CreateDBSnapshot(&rds.CreateDBSnapshotInput{
 			DBInstanceIdentifier: aws.String(instanceName),
 			DBSnapshotIdentifier: aws.String(snapshotName),
+			Tags:                 genericToRdsTags(tags),
 		})
 		if err != nil {
 			errMsg := "error creating rds snapshot"
@@ -234,5 +240,5 @@ func (p *PostgresSnapshotProvider) createSessionForResource(ctx context.Context,
 		return nil, err
 	}
 
-	return CreateSessionFromStrategy(ctx, p.client, providerCreds.AccessKeyID, providerCreds.SecretAccessKey, stratCfg)
+	return CreateSessionFromStrategy(ctx, p.client, providerCreds, stratCfg)
 }

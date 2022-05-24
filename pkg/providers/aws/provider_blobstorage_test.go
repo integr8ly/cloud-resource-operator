@@ -73,7 +73,7 @@ func buildTestCredentialsRequest() *cloudcredentialv1.CredentialsRequest {
 	}
 }
 
-func (s *mockS3Svc) ListBuckets(lbi *s3.ListBucketsInput) (*s3.ListBucketsOutput, error) {
+func (s *mockS3Svc) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, error) {
 	if s.wantErrList {
 		return nil, errors.New("mock aws s3 client error")
 	}
@@ -89,14 +89,14 @@ func (s *mockS3Svc) ListBuckets(lbi *s3.ListBucketsInput) (*s3.ListBucketsOutput
 	return cbo, nil
 }
 
-func (s *mockS3Svc) CreateBucket(cbi *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
+func (s *mockS3Svc) CreateBucket(*s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
 	if s.wantErrCreate {
 		return nil, errors.New("mock aws s3 client error")
 	}
 	return &s3.CreateBucketOutput{}, nil
 }
 
-func (s *mockS3Svc) DeleteBucket(dbi *s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
+func (s *mockS3Svc) DeleteBucket(*s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
 	if s.wantErrDelete {
 		return nil, errors.New("mock aws s3 client error")
 	}
@@ -115,7 +115,7 @@ func (s *mockS3Svc) PutPublicAccessBlock(*s3.PutPublicAccessBlockInput) (*s3.Put
 	return &s3.PutPublicAccessBlockOutput{}, nil
 }
 
-func (s *mockS3Svc) PutBucketEncryption(input *s3.PutBucketEncryptionInput) (*s3.PutBucketEncryptionOutput, error) {
+func (s *mockS3Svc) PutBucketEncryption(*s3.PutBucketEncryptionInput) (*s3.PutBucketEncryptionOutput, error) {
 	return &s3.PutBucketEncryptionOutput{}, nil
 }
 
