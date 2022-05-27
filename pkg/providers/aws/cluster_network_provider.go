@@ -277,6 +277,11 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		return nil, errorUtil.Wrap(err, "unexpected error reconciling standalone elasticache vpc networking")
 	}
 
+	// ensure standalone vpc has correct tags
+	if err = n.reconcileVPCTags(ctx, foundVpc); err != nil {
+		return nil, errorUtil.Wrapf(err, "unexpected error while reconciling vpc tags")
+	}
+
 	return &Network{
 		Vpc:     foundVpc,
 		Subnets: privateSubnets,

@@ -1378,6 +1378,100 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "fail while reconciling vpc tags",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name: "cluster",
+					},
+					Status: v12.InfrastructureStatus{
+						InfrastructureName: defaultInfraName,
+						PlatformStatus: &v12.PlatformStatus{
+							Type: v12.AWSPlatformType,
+							AWS: &v12.AWSPlatformStatus{
+								Region: "eu-west-1",
+							},
+						},
+					},
+				}),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								{
+									VpcId:     aws.String(defaultStandaloneVpcId),
+									CidrBlock: aws.String(validCIDRTwentySix),
+									Tags: []*ec2.Tag{
+										{
+											Key:   aws.String("integreatly.org/clusterID"),
+											Value: aws.String("test"),
+										},
+									},
+									State: aws.String(ec2.VpcStateAvailable),
+								},
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = []*ec2.Subnet{}
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{Subnets: []*ec2.Subnet{
+							ec2Client.firstSubnet,
+							ec2Client.secondSubnet,
+						}}, nil
+					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									tags, _ := getDefaultTagSpec(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), &tag{key: tagDisplayName, value: defaultRouteTableNameTagValue}, ec2.ResourceTypeRouteTable)
+									table.Tags = tags[0].Tags
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String(defaultAzIdOne),
+								},
+								{
+									Location: aws.String(defaultAzIdTwo),
+								},
+							},
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(nil),
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySix),
+			},
+			wantErr: true,
+		},
+		{
 			name: "verify untagged vpc is provided with correct tags",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
