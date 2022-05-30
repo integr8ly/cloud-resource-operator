@@ -39,17 +39,15 @@ import (
 )
 
 const (
-	defaultSubnetPostfix          = "subnet-group"
-	defaultSecurityGroupPostfix   = "security-group"
 	defaultAWSPrivateSubnetTagKey = "kubernetes.io/role/internal-elb"
+	defaultSecurityGroupPostfix   = "security-group"
 	defaultSubnetGroupDesc        = "Subnet group created and managed by the Cloud Resource Operator"
 	// In AWS this must be between 16 and 28
+	// We want to use the least host addresses possible, so that we can support clusters provisioned in VPCs with small CIDR masks
+	// 28 has too few hosts available to be future-proof for RHOAM products, so use 27 to avoid a migration being required in the future
 	// Note: The larger the mask, the less hosts available in the network
-	// We want to use the least host addresses possible, so that we can support clusters provisioned in VPCs with small
-	// CIDR masks
-	// 28 has too few hosts available to be future-proof for RHMI products, so use 27 to avoid a migration being
-	// required in the future
-	defaultSubnetMask = 27
+	defaultSubnetMask    = 27
+	defaultSubnetPostfix = "subnet-group"
 )
 
 // ensures a subnet group is in place for the creation of a resource
@@ -62,7 +60,7 @@ func configureSecurityGroup(ctx context.Context, c client.Client, ec2Svc ec2ifac
 	logger.Infof("ensuring security group is correct for cluster %s", clusterID)
 
 	// build security group name
-	secName, err := BuildInfraName(ctx, c, defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(ctx, c, defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	logger.Info(fmt.Sprintf("setting resource security group %s", secName))
 	if err != nil {
 		return errorUtil.Wrap(err, "error building subnet group name")
@@ -296,7 +294,7 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 			value: clusterID,
 		}, {
 			key:   tagDisplayName,
-			value: DefaultRHMISubnetNameTagValue,
+			value: defaultSubnetNameTagValue,
 		}, buildManagedTag(),
 	}
 	infraTags, err := getUserInfraTags(ctx, c)
@@ -316,7 +314,7 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 // Builds a list of valid subnet CIDR blocks
 // Valid meaning it:
 // - Exists within the cluster VPC CIDR block
-// - Supports the amount of hosts that CRO requires by default for all RHMI products
+// - Supports the amount of hosts that CRO requires by default for all RHOAM products
 func buildSubnetAddress(vpc *ec2.Vpc, logger *logrus.Entry) ([]net.IPNet, error) {
 	logger.Infof("calculating subnet mask and address for vpc cidr %s", *vpc.CidrBlock)
 	if *vpc.CidrBlock == "" {

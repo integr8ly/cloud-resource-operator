@@ -170,7 +170,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 				},
 				{
 					Key:   ptr.String(tagDisplayName),
-					Value: ptr.String(DefaultRHMISubnetNameTagValue),
+					Value: ptr.String(defaultSubnetNameTagValue),
 				},
 				{
 					Key:   ptr.String(tagManagedKey),

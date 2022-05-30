@@ -14,7 +14,7 @@ Follow this guide to install [the latest version of oc](https://docs.openshift.c
 * export the namespace you'll run the load generator pod from
 
 ```
-export ns=redhat-rhmi-operator
+export ns=cloud-resource-operator
 ```
 
 * Create a managed redis instance with `tier` set to `production` that you will run the load test against.

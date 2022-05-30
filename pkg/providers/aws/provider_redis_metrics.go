@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	redisMetricProviderName        = "aws elasticache metrics provider"
 	cloudWatchElastiCacheDimension = "CacheClusterId"
+	redisMetricProviderName        = "aws elasticache metrics provider"
 )
 
 var _ providers.RedisMetricsProvider = (*RedisMetricsProvider)(nil)
@@ -82,7 +82,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 }
 
 func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Context, cloudWatchApi cloudwatchiface.CloudWatchAPI, redis *v1alpha1.Redis, elastiCacheApi elasticacheiface.ElastiCacheAPI, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
-	resourceID, err := BuildInfraNameFromObject(ctx, r.Client, redis.ObjectMeta, DefaultAwsIdentifierLength)
+	resourceID, err := BuildInfraNameFromObject(ctx, r.Client, redis.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)
 	}

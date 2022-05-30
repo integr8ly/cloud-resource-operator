@@ -119,7 +119,7 @@ func buildCacheClusterList(modifyFn func([]*elasticache.CacheCluster)) []*elasti
 		{
 			CacheClusterStatus: aws.String("available"),
 			ReplicationGroupId: aws.String("test-id"),
-			EngineVersion:      aws.String(DefaultEngineVersion),
+			EngineVersion:      aws.String(defaultEngineVersion),
 		},
 	}
 	if modifyFn != nil {
@@ -324,7 +324,7 @@ func Test_createRedisCluster(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, DefaultAwsIdentifierLength)
+	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build security name", err)
@@ -649,7 +649,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error when more than one vpc found associated with cluster subnets",
+			name: "error when more than one vpc found associated with bundled subnets",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1058,7 +1058,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "test elasticache buildReplicationGroupPending is called (valid cluster rhmi subnets)",
+			name: "test elasticache buildReplicationGroupPending is called (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1114,7 +1114,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache already exists and status is available (valid cluster rhmi subnets)",
+			name: "test elasticache already exists and status is available (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1190,7 +1190,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache already exists and status is not available (valid cluster rhmi subnets)",
+			name: "test elasticache already exists and status is not available (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1253,7 +1253,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache exists and status is available and needs to be modified (valid cluster rhmi subnets)",
+			name: "test elasticache exists and status is available and needs to be modified (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1329,7 +1329,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache exists and status is available and does not need to be modified (valid cluster rhmi subnets)",
+			name: "test elasticache exists and status is available and does not need to be modified (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -1409,7 +1409,7 @@ func Test_createRedisCluster(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test elasticache already exists and status is available (valid standalone rhmi subnets)",
+			name: "test elasticache already exists and status is available (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2084,7 +2084,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					SnapshotRetentionLimit:     aws.Int64(50),
 					PreferredMaintenanceWindow: aws.String("newValue"),
 					SnapshotWindow:             aws.String("newValue"),
-					EngineVersion:              aws.String(DefaultEngineVersion),
+					EngineVersion:              aws.String(defaultEngineVersion),
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					CacheNodeType:          aws.String("cache.test"),
@@ -2107,7 +2107,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
-				EngineVersion:              aws.String(DefaultEngineVersion),
+				EngineVersion:              aws.String(defaultEngineVersion),
 			},
 		},
 		{
@@ -2152,7 +2152,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					SnapshotRetentionLimit:     aws.Int64(50),
 					PreferredMaintenanceWindow: aws.String("newValue"),
 					SnapshotWindow:             aws.String("newValue"),
-					EngineVersion:              aws.String(DefaultEngineVersion),
+					EngineVersion:              aws.String(defaultEngineVersion),
 				},
 				foundConfig: &elasticache.ReplicationGroup{
 					ReplicationGroupId:     aws.String("test-id"),
@@ -2174,7 +2174,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				PreferredMaintenanceWindow: aws.String("newValue"),
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
-				EngineVersion:              aws.String(DefaultEngineVersion),
+				EngineVersion:              aws.String(defaultEngineVersion),
 			},
 		},
 	}

@@ -122,9 +122,9 @@ Postgres, Redis and Blobstorage resources are tagged with the following key valu
 
 ```bash
 integreatly.org/clusterID: #clusterid
-integreatly.org/product-name: #rhmi component product name
+integreatly.org/product-name: #product name
 integreatly.org/resource-type: #managed/workshop 
-integreatly.org/resource-name: #postgres/redis/blobsorage
+integreatly.org/resource-name: #postgres/redis/blobstorage
 ```
 
 AWS resources can be queried via the aws cli with the cluster id as in the following example

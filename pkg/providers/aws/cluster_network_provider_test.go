@@ -29,27 +29,27 @@ import (
 )
 
 const (
-	defaultRHMISubnetTag          = "integreatly.org/clusterID"
-	defaultStandaloneVpcId        = "standaloneID"
-	validCIDRFifteen              = "10.0.0.0/15"
-	validCIDRSixteen              = "10.0.0.0/16"
-	validCIDREighteen             = "10.0.0.0/18"
-	validCIDRTwentySix            = "10.0.0.0/26"
-	validCIDRTwentySeven          = "10.0.0.0/27"
-	validCIDRTwentyThree          = "10.0.50.0/23"
-	defaultValidSubnetMaskTwoA    = "10.0.50.0/24"
-	defaultValidSubnetMaskTwoB    = "10.0.51.0/24"
-	defaultNonOverlappingCidr     = "192.0.0.0/20"
-	defaultSubnetIdOne            = "test-id-1"
-	defaultSubnetIdTwo            = "test-id-2"
 	defaultAzIdOne                = "test-zone-1"
 	defaultAzIdTwo                = "test-zone-2"
+	defaultNonOverlappingCidr     = "192.0.0.0/20"
+	defaultSecurityGroupId        = "testSecurityGroupId"
+	defaultSecurityGroupName      = "testsecuritygroup"
+	defaultStandaloneRouteTableId = "testRouteTableId"
+	defaultStandaloneVpcId        = "standaloneID"
+	defaultSubnetIdOne            = "test-id-1"
+	defaultSubnetIdTwo            = "test-id-2"
+	defaultSubnetTag              = "integreatly.org/clusterID"
 	defaultValidSubnetMaskOneA    = "10.0.0.0/27"
 	defaultValidSubnetMaskOneB    = "10.0.0.32/27"
+	defaultValidSubnetMaskTwoA    = "10.0.50.0/24"
+	defaultValidSubnetMaskTwoB    = "10.0.51.0/24"
 	mockNetworkVpcId              = "test"
-	defaultSecurityGroupName      = "testsecuritygroup"
-	defaultSecurityGroupId        = "testSecurityGroupId"
-	defaultStandaloneRouteTableId = "testRouteTableId"
+	validCIDREighteen             = "10.0.0.0/18"
+	validCIDRFifteen              = "10.0.0.0/15"
+	validCIDRSixteen              = "10.0.0.0/16"
+	validCIDRTwentySeven          = "10.0.0.0/27"
+	validCIDRTwentySix            = "10.0.0.0/26"
+	validCIDRTwentyThree          = "10.0.50.0/23"
 )
 
 var (
@@ -124,7 +124,7 @@ func buildMockVpc(modifyFn func(*ec2.Vpc)) *ec2.Vpc {
 
 func buildMockEc2Tag(modifyFn func(*ec2.Tag)) *ec2.Tag {
 	mock := &ec2.Tag{
-		Key:   aws.String(defaultRHMISubnetTag),
+		Key:   aws.String(defaultSubnetTag),
 		Value: aws.String(defaultInfraName),
 	}
 	if modifyFn != nil {
@@ -194,12 +194,12 @@ func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 				Value: aws.String("1"),
 			},
 			{
-				Key:   aws.String(defaultRHMISubnetTag),
+				Key:   aws.String(defaultSubnetTag),
 				Value: aws.String("test"),
 			},
 			{
 				Key:   aws.String(tagDisplayName),
-				Value: aws.String(DefaultRHMISubnetNameTagValue),
+				Value: aws.String(defaultSubnetNameTagValue),
 			},
 			genericToEc2Tag(buildManagedTag()),
 		},
@@ -221,7 +221,7 @@ func buildStandaloneSubnets() []*ec2.Subnet {
 	}
 }
 
-func buildValidRHMIBundleSubnets() []*ec2.Subnet {
+func buildValidBundleSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
 			SubnetId:         aws.String("test-id"),
@@ -229,7 +229,7 @@ func buildValidRHMIBundleSubnets() []*ec2.Subnet {
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
-					Key:   aws.String(defaultRHMISubnetTag),
+					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
 				},
 				{
@@ -245,7 +245,7 @@ func buildValidRHMIBundleSubnets() []*ec2.Subnet {
 	}
 }
 
-func buildValidBundleSubnets() []*ec2.Subnet {
+func buildMultipleValidBundleSubnets() []*ec2.Subnet {
 	return []*ec2.Subnet{
 		{
 			SubnetId:         aws.String("test-id"),
@@ -253,27 +253,7 @@ func buildValidBundleSubnets() []*ec2.Subnet {
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
-					Key:   aws.String(getOSDClusterTagKey(defaultInfraName)),
-					Value: aws.String(clusterOwnedTagValue),
-				},
-				{
-					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
-					Value: aws.String("1"),
-				},
-			},
-		},
-	}
-}
-
-func buildMultipleValidRHMIBundleSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
-		{
-			SubnetId:         aws.String("test-id"),
-			VpcId:            aws.String(defaultVpcId),
-			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String(defaultRHMISubnetTag),
+					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
 				},
 				{
@@ -288,7 +268,7 @@ func buildMultipleValidRHMIBundleSubnets() []*ec2.Subnet {
 			AvailabilityZone: aws.String("test"),
 			Tags: []*ec2.Tag{
 				{
-					Key:   aws.String(defaultRHMISubnetTag),
+					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
 				},
 				{
@@ -348,13 +328,13 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 func buildValidStandaloneVPCTags() []*ec2.Tag {
 	return []*ec2.Tag{
 		{
-			Key:   aws.String(defaultRHMISubnetTag),
+			Key:   aws.String(defaultSubnetTag),
 			Value: aws.String(defaultInfraName),
 		},
 		genericToEc2Tag(buildManagedTag()),
 		{
 			Key:   aws.String(tagDisplayName),
-			Value: aws.String(DefaultRHMIVpcNameTagValue),
+			Value: aws.String(defaultVpcNameTagValue),
 		},
 	}
 }
@@ -422,7 +402,7 @@ func buildValidCIDR(cidr string) *net.IPNet {
 }
 
 func buildSubnetGroupID() string {
-	return resources.ShortenString(fmt.Sprintf("%s-%s", defaultInfraName, "subnet-group"), DefaultAwsIdentifierLength)
+	return resources.ShortenString(fmt.Sprintf("%s-%s", defaultInfraName, "subnet-group"), defaultAwsIdentifierLength)
 }
 
 func buildSubnetGroupDescription() string {
@@ -477,7 +457,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			//if no rhmi subnets exist in the cluster vpc then isEnabled will return true
+			//if no subnets exist in the cluster vpc then isEnabled will return true
 			name: "verify isEnabled is true, no bundle subnets found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
@@ -504,7 +484,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// we expect isEnable to return false if a single rhmi subnet is found in cluster vpc
+			// we expect isEnable to return false if a single subnet is found in cluster vpc
 			name: "verify isEnabled is false, a single bundle subnet is found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
@@ -520,7 +500,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidRHMIBundleSubnets(),
+							Subnets: buildValidBundleSubnets(),
 						}, nil
 					}
 				})},
@@ -528,7 +508,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// we expect isEnable to return false if more than one rhmi subnet is found in cluster vpc
+			// we expect isEnable to return false if more than one subnet is found in cluster vpc
 			name: "verify isEnabled is false, multiple bundle subnets found in cluster vpc",
 			args: args{
 				ctx: context.TODO(),
@@ -544,7 +524,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildMultipleValidRHMIBundleSubnets(),
+							Subnets: buildMultipleValidBundleSubnets(),
 						}, nil
 					}
 				}),
@@ -1386,6 +1366,100 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						return &ec2.DescribeAvailabilityZonesOutput{
 							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
+					}
+				}),
+				ElasticacheApi: buildMockElasticacheClient(nil),
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				CIDR: buildValidCIDR(validCIDRTwentySix),
+			},
+			wantErr: true,
+		},
+		{
+			name: "fail while reconciling vpc tags",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+					ObjectMeta: controllerruntime.ObjectMeta{
+						Name: "cluster",
+					},
+					Status: v12.InfrastructureStatus{
+						InfrastructureName: defaultInfraName,
+						PlatformStatus: &v12.PlatformStatus{
+							Type: v12.AWSPlatformType,
+							AWS: &v12.AWSPlatformStatus{
+								Region: "eu-west-1",
+							},
+						},
+					},
+				}),
+				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{}, nil
+					}
+				}),
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								{
+									VpcId:     aws.String(defaultStandaloneVpcId),
+									CidrBlock: aws.String(validCIDRTwentySix),
+									Tags: []*ec2.Tag{
+										{
+											Key:   aws.String("integreatly.org/clusterID"),
+											Value: aws.String("test"),
+										},
+									},
+									State: aws.String(ec2.VpcStateAvailable),
+								},
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = []*ec2.Subnet{}
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{Subnets: []*ec2.Subnet{
+							ec2Client.firstSubnet,
+							ec2Client.secondSubnet,
+						}}, nil
+					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									tags, _ := getDefaultTagSpec(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), &tag{key: tagDisplayName, value: defaultRouteTableNameTagValue}, ec2.ResourceTypeRouteTable)
+									table.Tags = tags[0].Tags
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return &ec2.DescribeInstanceTypeOfferingsOutput{
+							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+								{
+									Location: aws.String(defaultAzIdOne),
+								},
+								{
+									Location: aws.String(defaultAzIdTwo),
+								},
+							},
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+						return nil, genericAWSError
 					}
 				}),
 				ElasticacheApi: buildMockElasticacheClient(nil),
@@ -2487,7 +2561,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -2535,7 +2609,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
 									table.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultRHMISubnetTag)
+											e.Key = aws.String(defaultSubnetTag)
 											e.Value = aws.String("test")
 										}),
 									}
@@ -2585,7 +2659,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -2643,7 +2717,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -2678,7 +2752,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
 									table.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultRHMISubnetTag)
+											e.Key = aws.String(defaultSubnetTag)
 											e.Value = aws.String("test")
 										}),
 									}
@@ -2730,7 +2804,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -2745,7 +2819,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
 											e.Key = aws.String(tagDisplayName)
-											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
 								}),
@@ -2773,7 +2847,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
 									table.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultRHMISubnetTag)
+											e.Key = aws.String(defaultSubnetTag)
 											e.Value = aws.String("test")
 										}),
 									}
@@ -2812,7 +2886,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 						buildMockEc2Tag(func(e *ec2.Tag) {}),
 						buildMockEc2Tag(func(e *ec2.Tag) {
 							e.Key = aws.String(tagDisplayName)
-							e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
 					}
 				}),
@@ -2833,7 +2907,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -2848,7 +2922,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
 											e.Key = aws.String(tagDisplayName)
-											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
 									group.IpPermissions = []*ec2.IpPermission{
@@ -2879,7 +2953,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
 									table.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultRHMISubnetTag)
+											e.Key = aws.String(defaultSubnetTag)
 											e.Value = aws.String("test")
 										}),
 									}
@@ -2918,7 +2992,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 						buildMockEc2Tag(func(e *ec2.Tag) {}),
 						buildMockEc2Tag(func(e *ec2.Tag) {
 							e.Key = aws.String(tagDisplayName)
-							e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
 					}
 					group.IpPermissions = []*ec2.IpPermission{
@@ -3009,7 +3083,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -3054,7 +3128,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
 											e.Key = aws.String(tagDisplayName)
-											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
 									group.IpPermissions = []*ec2.IpPermission{
@@ -3086,7 +3160,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -3151,7 +3225,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
@@ -3195,7 +3269,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 									group.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
 											e.Key = aws.String(tagDisplayName)
-											e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
 									group.IpPermissions = []*ec2.IpPermission{
@@ -3230,7 +3304,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
 										e.Key = aws.String(tagDisplayName)
-										e.Value = aws.String(DefaultRHMIVpcNameTagValue)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
 								}
