@@ -2,7 +2,6 @@
 
 LATEST_VERSION=$(grep cloud-resource-operator bundles/cloud-resource-operator.package.yaml | awk -F v '{print $2}')
 
-CHANNEL="${CHANNEL:-alpha}"
 ORG="${IMAGE_ORG:-integreatly}"
 REG="${IMAGE_REG:-quay.io}"
 BUILD_TOOL="${BUILD_TOOL:-podman}"
