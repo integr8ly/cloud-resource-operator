@@ -2264,9 +2264,6 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 						return nil, genericAWSError
 					},
 				},
-				rdsCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-				},
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -2293,9 +2290,6 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 					updates: []string{
 						"invalid",
 					},
-				},
-				rdsCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
@@ -2327,9 +2321,6 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 						"1642032001",
 					},
 				},
-				rdsCfg: &rds.CreateDBInstanceInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-				},
 				foundInstance: &rds.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
@@ -2344,6 +2335,67 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 			wantErr:    true,
 			wantUpdate: false,
 		},
+		{
+			name: "test no autoapply date on pending maintenanance action",
+			args: args{
+				session: &mockRdsClient{
+					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return &rds.DescribePendingMaintenanceActionsOutput{PendingMaintenanceActions: []*rds.ResourcePendingMaintenanceActions{
+							{
+								ResourceIdentifier: aws.String("arn-test"),
+								PendingMaintenanceActionDetails: []*rds.PendingMaintenanceAction{
+									{
+										Action:      aws.String("system-update"),
+										Description: aws.String("New Operating System update is available"),
+									},
+								},
+							},
+						}}, nil
+					},
+					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: buildAvailableDBInstance(testIdentifier),
+						}, nil
+					},
+					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
+						return &rds.ApplyPendingMaintenanceActionOutput{}, nil
+					},
+				},
+				rdsCfg: &rds.CreateDBInstanceInput{
+					AutoMinorVersionUpgrade:    aws.Bool(false),
+					DeletionProtection:         aws.Bool(true),
+					BackupRetentionPeriod:      aws.Int64(1),
+					DBInstanceClass:            aws.String("test"),
+					PubliclyAccessible:         aws.Bool(true),
+					AllocatedStorage:           aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int64(1),
+					EngineVersion:              aws.String("10.18"),
+					MultiAZ:                    aws.Bool(true),
+					PreferredBackupWindow:      aws.String("test"),
+					PreferredMaintenanceWindow: aws.String("test"),
+					Port:                       aws.Int64(1),
+				},
+				serviceUpdates: &ServiceUpdate{
+					updates: []string{
+						"1642032001",
+					},
+				},
+				foundInstance: &rds.DBInstance{
+					DBInstanceIdentifier: aws.String(testIdentifier),
+					AvailabilityZone:     aws.String("test-availabilityZone"),
+					DBInstanceArn:        aws.String("arn-test"),
+				},
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Logger:            testLogger,
+				CredentialManager: &CredentialManagerMock{},
+				ConfigManager:     &ConfigManagerMock{},
+			},
+			want:       "completed check for service updates",
+			wantErr:    false,
+			wantUpdate: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2353,7 +2405,7 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			update, got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.rdsCfg, tt.args.serviceUpdates, tt.args.foundInstance)
+			update, got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.serviceUpdates, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("rdsApplyStatusUpdate() error = %v, wantErr %v", err, tt.wantErr)
 				return

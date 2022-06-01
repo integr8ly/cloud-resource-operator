@@ -229,7 +229,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	// check if the cluster has already been created
 	foundInstance, err := getFoundInstance(pi, rdsCfg)
 
-	updating, message, err := p.rdsApplyStatusUpdate(session, rdsCfg, serviceUpdates, foundInstance)
+	updating, message, err := p.rdsApplyStatusUpdate(session, serviceUpdates, foundInstance)
 	if err != nil {
 		errMsg := "failed to service update rds instance"
 		return nil, croType.StatusMessage(errMsg), err
@@ -1261,11 +1261,11 @@ func rdsInstanceStatusIsHealthy(instance *rds.DBInstance) bool {
 	return resources.Contains(healthyAWSDBInstanceStatuses, *instance.DBInstanceStatus)
 }
 
-func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *rds.CreateDBInstanceInput, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (bool, croType.StatusMessage, error) {
+func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (bool, croType.StatusMessage, error) {
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSvc.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{ResourceIdentifier: foundInstance.DBInstanceArn})
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to get pending maintenance information for RDS with identifier : %s", *rdsCfg.DBInstanceIdentifier)
+		errMsg := fmt.Sprintf("failed to get pending maintenance information for RDS with identifier : %s", *foundInstance.DBInstanceIdentifier)
 		return false, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	upgrading := false
@@ -1279,7 +1279,7 @@ func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, rdsCfg *
 					errMsg := "epoc timestamp requires string"
 					return false, croType.StatusMessage(errMsg), err
 				}
-				if pmac.AutoAppliedAfterDate.Before(time.Unix(specifiedApplyAfterDate64, 0)) {
+				if pmac.AutoAppliedAfterDate != nil && pmac.AutoAppliedAfterDate.Before(time.Unix(specifiedApplyAfterDate64, 0)) {
 					update = true
 				}
 			}
