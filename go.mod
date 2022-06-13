@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.32
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
 	github.com/google/uuid v1.3.0
-	github.com/hashicorp/go-version v1.2.1
+	github.com/hashicorp/go-version v1.5.0
 	github.com/lib/pq v1.10.6
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
