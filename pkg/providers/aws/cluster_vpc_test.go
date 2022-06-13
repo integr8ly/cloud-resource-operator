@@ -7,7 +7,6 @@ import (
 	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
-	ptr "k8s.io/utils/pointer"
 	"reflect"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -161,24 +160,24 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 			},
 			want: []*ec2.Tag{
 				{
-					Key:   ptr.String(defaultAWSPrivateSubnetTagKey),
-					Value: ptr.String("1"),
+					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
+					Value: aws.String("1"),
 				},
 				{
-					Key:   ptr.String("integreatly.org/clusterID"),
-					Value: ptr.String("test"),
+					Key:   aws.String("integreatly.org/clusterID"),
+					Value: aws.String("test"),
 				},
 				{
-					Key:   ptr.String(tagDisplayName),
-					Value: ptr.String(defaultSubnetNameTagValue),
+					Key:   aws.String(tagDisplayName),
+					Value: aws.String(defaultSubnetNameTagValue),
 				},
 				{
-					Key:   ptr.String(tagManagedKey),
-					Value: ptr.String(tagManagedVal),
+					Key:   aws.String(tagManagedKey),
+					Value: aws.String(tagManagedVal),
 				},
 				{
-					Key:   ptr.String("test-key"),
-					Value: ptr.String("test-value"),
+					Key:   aws.String("test-key"),
+					Value: aws.String("test-value"),
 				},
 			},
 			wantErr: false,
