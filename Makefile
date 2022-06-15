@@ -230,7 +230,7 @@ setup/moq:
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
-	@CHANNEL=$(CHANNEL) PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
+	@PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
 
 .PHONY: release/prepare
 release/prepare: gen/csv image/push create/olm/bundle
