@@ -203,7 +203,9 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			Expect(err).NotTo(HaveOccurred())
+		}
 	}()
 
 	// wait for the webhook server to get ready

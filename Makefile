@@ -135,7 +135,7 @@ cluster/clean:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	GO111MODULE=off go get -u github.com/rakyll/gotest
+	go install github.com/rakyll/gotest@v0.0.6
 	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/providers/... ./pkg/resources/... ./apis/integreatly/v1alpha1/types/... ./pkg/client/...
 
 .PHONY: image/build
@@ -191,7 +191,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
@@ -206,7 +206,7 @@ ifeq (, $(shell which kustomize))
 	KUSTOMIZE_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$KUSTOMIZE_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/kustomize/kustomize/v4@v4.4.1 ;\
+	go install sigs.k8s.io/kustomize/kustomize/v4@v4.5.5 ;\
 	rm -rf $$KUSTOMIZE_GEN_TMP_DIR ;\
 	}
 KUSTOMIZE=$(GOBIN)/kustomize
@@ -225,7 +225,7 @@ code/gen: setup/moq vendor/fix apis/integreatly/v1alpha1/zz_generated.deepcopy.g
 
 .PHONY: setup/moq
 setup/moq:
-	go get github.com/matryer/moq
+	go install github.com/matryer/moq@v0.2.7
 
 .PHONY: create/olm/bundle
 create/olm/bundle:

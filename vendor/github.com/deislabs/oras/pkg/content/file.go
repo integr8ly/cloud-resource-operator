@@ -31,28 +31,19 @@ type FileStore struct {
 	// Reproducible enables stripping times from added files
 	Reproducible bool
 
-	root         string
-	descriptor   *sync.Map // map[digest.Digest]ocispec.Descriptor
-	pathMap      *sync.Map
-	tmpFiles     *sync.Map
-	ignoreNoName bool
+	root       string
+	descriptor *sync.Map // map[digest.Digest]ocispec.Descriptor
+	pathMap    *sync.Map
+	tmpFiles   *sync.Map
 }
 
 // NewFileStore creats a new file store
-func NewFileStore(rootPath string, opts ...WriterOpt) *FileStore {
-	// we have to process the opts to find if they told us to change defaults
-	wOpts := DefaultWriterOpts()
-	for _, opt := range opts {
-		if err := opt(&wOpts); err != nil {
-			continue
-		}
-	}
+func NewFileStore(rootPath string) *FileStore {
 	return &FileStore{
-		root:         rootPath,
-		descriptor:   &sync.Map{},
-		pathMap:      &sync.Map{},
-		tmpFiles:     &sync.Map{},
-		ignoreNoName: wOpts.IgnoreNoName,
+		root:       rootPath,
+		descriptor: &sync.Map{},
+		pathMap:    &sync.Map{},
+		tmpFiles:   &sync.Map{},
 	}
 }
 
@@ -207,14 +198,7 @@ func (s *FileStore) Writer(ctx context.Context, opts ...content.WriterOpt) (cont
 
 	name, ok := ResolveName(desc)
 	if !ok {
-		// if we were not told to ignore NoName, then return an error
-		if !s.ignoreNoName {
-			return nil, ErrNoName
-		}
-
-		// just return a nil writer - we do not want to calculate the hash, so just use
-		// whatever was passed in the descriptor
-		return NewIoContentWriter(ioutil.Discard, WithOutputHash(desc.Digest)), nil
+		return nil, ErrNoName
 	}
 	path, err := s.resolveWritePath(name)
 	if err != nil {

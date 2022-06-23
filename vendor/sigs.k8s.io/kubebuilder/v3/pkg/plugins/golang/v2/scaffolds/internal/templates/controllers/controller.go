@@ -100,7 +100,7 @@ func (r *{{ .Resource.Kind }}Reconciler) Reconcile(req ctrl.Request) (ctrl.Resul
 	_ = context.Background()
 	_ = r.Log.WithValues("{{ .Resource.Kind | lower }}", req.NamespacedName)
 
-	// TODO(user): your logic here
+	// your logic here
 
 	return ctrl.Result{}, nil
 }

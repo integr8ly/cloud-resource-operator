@@ -45,6 +45,10 @@ func parseInfoFile(r io.Reader) ([]Info, error) {
 	out := []Info{}
 	var err error
 	for s.Scan() {
+		if err = s.Err(); err != nil {
+			return nil, err
+		}
+
 		/*
 		   See http://man7.org/linux/man-pages/man5/proc.5.html
 
@@ -81,11 +85,11 @@ func parseInfoFile(r io.Reader) ([]Info, error) {
 		p.Major, _ = strconv.Atoi(mm[0])
 		p.Minor, _ = strconv.Atoi(mm[1])
 
-		p.Root, err = strconv.Unquote(`"` + strings.Replace(fields[3], `"`, `\"`, -1) + `"`)
+		p.Root, err = strconv.Unquote(`"` + fields[3] + `"`)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing '%s' failed: unable to unquote root field", fields[3])
 		}
-		p.Mountpoint, err = strconv.Unquote(`"` + strings.Replace(fields[4], `"`, `\"`, -1) + `"`)
+		p.Mountpoint, err = strconv.Unquote(`"` + fields[4] + `"`)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing '%s' failed: unable to unquote mount point field", fields[4])
 		}
@@ -124,10 +128,6 @@ func parseInfoFile(r io.Reader) ([]Info, error) {
 
 		out = append(out, p)
 	}
-	if err = s.Err(); err != nil {
-		return nil, err
-	}
-
 	return out, nil
 }
 

@@ -86,7 +86,7 @@ func (p dockerPusher) Push(ctx context.Context, desc ocispec.Descriptor) (conten
 
 	resp, err := req.doWithRetries(ctx, nil)
 	if err != nil {
-		if !errors.Is(err, ErrInvalidAuthorization) {
+		if errors.Cause(err) != ErrInvalidAuthorization {
 			return nil, err
 		}
 		log.G(ctx).WithError(err).Debugf("Unable to check existence, continuing with push")
@@ -136,7 +136,7 @@ func (p dockerPusher) Push(ctx context.Context, desc ocispec.Descriptor) (conten
 			//
 			// for the private repo, we should remove mount-from
 			// query and send the request again.
-			resp, err = preq.doWithRetries(pctx, nil)
+			resp, err = preq.do(pctx)
 			if err != nil {
 				return nil, err
 			}
@@ -235,7 +235,7 @@ func (p dockerPusher) Push(ctx context.Context, desc ocispec.Descriptor) (conten
 
 	go func() {
 		defer close(respC)
-		resp, err := req.doWithRetries(ctx, nil)
+		resp, err = req.do(ctx)
 		if err != nil {
 			pr.CloseWithError(err)
 			return
@@ -340,9 +340,9 @@ func (pw *pushWriter) Commit(ctx context.Context, size int64, expected digest.Di
 	}
 
 	// 201 is specified return status, some registries return
-	// 200, 202 or 204.
+	// 200 or 204.
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusCreated, http.StatusNoContent, http.StatusAccepted:
+	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
 	default:
 		return errors.Errorf("unexpected status: %s", resp.Status)
 	}
