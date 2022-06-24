@@ -219,18 +219,17 @@ code/audit:
 	gosec ./...
 
 .PHONY: code/gen
-code/gen: setup/moq apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
+code/gen: setup/moq vendor/fix apis/integreatly/v1alpha1/zz_generated.deepcopy.go apis/config/v1/zz_generated.deepcopy.go
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 	@go generate ./...
 
 .PHONY: setup/moq
 setup/moq:
 	go get github.com/matryer/moq
-	go mod vendor
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
-	@CHANNEL=$(CHANNEL) PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
+	@PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
 
 .PHONY: release/prepare
 release/prepare: gen/csv image/push create/olm/bundle

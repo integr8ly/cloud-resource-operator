@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+set -e
+set -o pipefail
+
 LATEST_VERSION=$(grep cloud-resource-operator bundles/cloud-resource-operator.package.yaml | awk -F v '{print $2}')
 
 ORG="${IMAGE_ORG:-integreatly}"
@@ -65,7 +68,9 @@ generate_bundles() {
       --build-arg metadata_path=./bundles/temp/$VERSION/metadata \
       --build-arg version=$VERSION .
     $BUILD_TOOL push $image
-    operator-sdk bundle validate $image
+    operator-sdk bundle validate \
+      --image-builder $BUILD_TOOL \
+      $image
   done
   cd $ROOT
 }
@@ -74,13 +79,8 @@ generate_bundles() {
 generate_index() {
 
   if [ "$UPGRADE_CRO" = true ] ; then
-    # Once the first file-based index has been built, we can render the PREV_VERSION to generate the new
-    # version instead of iterating over all of the bundles (https://issues.redhat.com/browse/MGDAPI-3780)
-    # opm render $REG/$ORG/cloud-resource-operator:index-v$PREV_VERSION -o yaml > index/index.yaml
-    for VERSION in $(echo $PREVIOUS_OPERATOR_VERSIONS | sed "s/,/ /g")
-    do
-      render_bundle $VERSION
-    done
+    # render from existing index
+    opm render $REG/$ORG/cloud-resource-operator:index-v$PREV_VERSION -o yaml > index/index.yaml
   fi
   render_bundle $LATEST_VERSION
 
@@ -99,20 +99,20 @@ render_bundle() {
   INDEX_FILE=index/index.yaml
 
   # Check whether there is a bundle in the index for this version
-  yq e -e "select(.schema == \"olm.bundle\") | select(.name == \"cloud-resources.v$1\").image" \
-    $INDEX_FILE > /dev/null 2>&1
+  bundle_entry=$(yq e "select(.schema == \"olm.bundle\") | select(.name == \"cloud-resources.v$1\").image" \
+    $INDEX_FILE)
 
   # If the bundle doesn't exist in the index add it
-  if [ $? -eq 1 ]; then
+  if [ -z "$bundle_entry" ]; then
     printf "Rendering bundle for v$1\n"
     file=`ls bundles/$1/manifests | grep .clusterserviceversion.yaml`
     BUNDLE_CSV="bundles/$1/manifests/$file"
 
     # Update channel entries
     # check if this channel entry exists
-    yq e -e "select(.schema == \"olm.channel\").entries[] | select(.name == \"cloud-resources.v$1\")" \
-      $INDEX_FILE > /dev/null 2>&1
-    if [ $? -eq 1 ]; then
+    channel_entry=$(yq e "select(.schema == \"olm.channel\").entries[] | select(.name == \"cloud-resources.v$1\")" \
+      $INDEX_FILE)
+    if [ -z "$channel_entry" ]; then
       # channel entry for this version doesn't exist, create it
       yq e -i "select(.schema == \"olm.channel\").entries \
         |= . + {\"name\":\"cloud-resources.v$1\"}" \
@@ -120,8 +120,8 @@ render_bundle() {
     fi
 
     # check if bundle has replaces
-    yq e -e '.spec.replaces' $BUNDLE_CSV > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
+    replaces=$(yq e '.spec.replaces' $BUNDLE_CSV)
+    if [ "$replaces" != "null" ]; then
       # set channel replaces from bundle
       yq ea -i "(select(fi==1) | .spec.replaces) as \$replaces \
         | select(fi==0) | select(.schema == \"olm.channel\").entries[] \
@@ -130,8 +130,8 @@ render_bundle() {
     fi
 
     # check if bundle has skips
-    yq e -e '.spec.skips' $BUNDLE_CSV > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
+    skips=$(yq e '.spec.skips' $BUNDLE_CSV)
+    if [ "$skips" != "null" ]; then
       # set channel skips from bundle
       yq ea -i "(select(fi==1) | .spec.skips) as \$skips \
         | select(fi==0) | select(.schema == \"olm.channel\").entries[] \
