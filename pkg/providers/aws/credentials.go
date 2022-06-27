@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -144,9 +145,11 @@ type CredentialManager interface {
 func NewCredentialManager(client client.Client) CredentialManager {
 	ns, _ := k8sutil.GetOperatorNamespace()
 	_, err := getSTSCredentialsSecret(context.TODO(), client, ns)
-	if errors.IsNotFound(err) {
+	if err != nil {
+		resources.SetSTSCredentialsSecretMetric(ns, err)
 		return NewCredentialMinterCredentialManager(client)
 	}
+	resources.ResetSTSCredentialsSecretMetric()
 	return NewSTSCredentialManager(client)
 }
 
