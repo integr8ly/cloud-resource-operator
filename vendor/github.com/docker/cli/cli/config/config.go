@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/config/credentials"
@@ -24,37 +23,17 @@ const (
 )
 
 var (
-	initConfigDir sync.Once
-	configDir     string
-	homeDir       string
+	configDir = os.Getenv("DOCKER_CONFIG")
 )
 
-// resetHomeDir is used in testing to resets the "homeDir" package variable to
-// force re-lookup of the home directory between tests.
-func resetHomeDir() {
-	homeDir = ""
-}
-
-func getHomeDir() string {
-	if homeDir == "" {
-		homeDir = homedir.Get()
-	}
-	return homeDir
-}
-
-func setConfigDir() {
-	if configDir != "" {
-		return
-	}
-	configDir = os.Getenv("DOCKER_CONFIG")
+func init() {
 	if configDir == "" {
-		configDir = filepath.Join(getHomeDir(), configFileDir)
+		configDir = filepath.Join(homedir.Get(), configFileDir)
 	}
 }
 
 // Dir returns the directory the configuration file is stored in
 func Dir() string {
-	initConfigDir.Do(setConfigDir)
 	return configDir
 }
 
@@ -109,7 +88,11 @@ func Load(configDir string) (*configfile.ConfigFile, error) {
 	configFile := configfile.New(filename)
 
 	// Try happy path first - latest config file
-	if file, err := os.Open(filename); err == nil {
+	if _, err := os.Stat(filename); err == nil {
+		file, err := os.Open(filename)
+		if err != nil {
+			return configFile, errors.Wrap(err, filename)
+		}
 		defer file.Close()
 		err = configFile.LoadFromReader(file)
 		if err != nil {
@@ -123,12 +106,22 @@ func Load(configDir string) (*configfile.ConfigFile, error) {
 	}
 
 	// Can't find latest config file so check for the old one
-	filename = filepath.Join(getHomeDir(), oldConfigfile)
-	if file, err := os.Open(filename); err == nil {
-		defer file.Close()
-		if err := configFile.LegacyLoadFromReader(file); err != nil {
-			return configFile, errors.Wrap(err, filename)
-		}
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		return configFile, errors.Wrap(err, oldConfigfile)
+	}
+	confFile := filepath.Join(homedir, oldConfigfile)
+	if _, err := os.Stat(confFile); err != nil {
+		return configFile, nil // missing file is not an error
+	}
+	file, err := os.Open(confFile)
+	if err != nil {
+		return configFile, errors.Wrap(err, filename)
+	}
+	defer file.Close()
+	err = configFile.LegacyLoadFromReader(file)
+	if err != nil {
+		return configFile, errors.Wrap(err, filename)
 	}
 	return configFile, nil
 }

@@ -24,14 +24,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/opencontainers/runc/libcontainer/system"
 )
 
-const (
-	// OOMScoreMaxKillable is the maximum score keeping the process killable by the oom killer
-	OOMScoreMaxKillable = -999
-	// OOMScoreAdjMax is from OOM_SCORE_ADJ_MAX https://github.com/torvalds/linux/blob/master/include/uapi/linux/oom.h
-	OOMScoreAdjMax = 1000
-)
+// OOMScoreMaxKillable is the maximum score keeping the process killable by the oom killer
+const OOMScoreMaxKillable = -999
 
 // SetOOMScore sets the oom score for the provided pid
 func SetOOMScore(pid, score int) error {
@@ -42,7 +40,7 @@ func SetOOMScore(pid, score int) error {
 	}
 	defer f.Close()
 	if _, err = f.WriteString(strconv.Itoa(score)); err != nil {
-		if os.IsPermission(err) && (RunningInUserNS() || RunningUnprivileged()) {
+		if os.IsPermission(err) && (system.RunningInUserNS() || RunningUnprivileged()) {
 			return nil
 		}
 		return err

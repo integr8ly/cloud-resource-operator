@@ -99,7 +99,7 @@ type {{ .Resource.Kind }}Reconciler struct {
 func (r *{{ .Resource.Kind }}Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// your logic here
 
 	return ctrl.Result{}, nil
 }
