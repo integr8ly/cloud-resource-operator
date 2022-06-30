@@ -40,7 +40,7 @@ const (
 	defaultAtRestEncryption = true
 	defaultCacheNodeType    = "cache.t3.micro"
 	defaultDescription      = "A Redis replication group"
-	defaultEngineVersion    = "5.0.6"
+	defaultEngineVersion    = "6.2"
 	// 3scale does not support in transit encryption (redis with tls)
 	defaultInTransitEncryption = false
 	defaultNumCacheClusters    = 2

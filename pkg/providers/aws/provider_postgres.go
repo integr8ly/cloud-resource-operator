@@ -44,7 +44,7 @@ const (
 	defaultAwsDBInstanceClass            = "db.t3.small"
 	defaultAwsDeleteAutomatedBackups     = true
 	defaultAwsEngine                     = "postgres"
-	defaultAwsEngineVersion              = "10.18"
+	defaultAwsEngineVersion              = "13.3"
 	defaultAwsIdentifierLength           = 40
 	defaultAwsMaxAllocatedStorage        = 100
 	defaultAwsMultiAZ                    = true
@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	defaultSupportedEngineVersions = []string{"10.18", "10.16", "10.15", "10.13", "10.6", "9.6", "9.5"}
+	defaultSupportedEngineVersions = []string{"13.3", "10.18", "10.16", "10.15", "10.13", "10.6", "9.6", "9.5"}
 	healthyAWSDBInstanceStatuses   = []string{
 		"backtracking",
 		"available",
