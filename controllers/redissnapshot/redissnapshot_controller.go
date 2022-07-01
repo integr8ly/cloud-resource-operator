@@ -64,12 +64,15 @@ func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
 		return nil, err
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis_snapshot"})
-	provider := croAws.NewAWSRedisSnapshotProvider(client, logger)
+	redisSnapshotProvider, err := croAws.NewAWSRedisSnapshotProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
 	return &RedisSnapshotReconciler{
 		Client:        client,
 		scheme:        mgr.GetScheme(),
 		logger:        logger,
-		provider:      provider,
+		provider:      redisSnapshotProvider,
 		ConfigManager: croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 	}, nil
 }

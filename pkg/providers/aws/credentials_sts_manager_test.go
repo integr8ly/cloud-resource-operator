@@ -82,8 +82,8 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client).(*STSCredentialManager)
-			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), ns)
+			cm, err := NewCredentialManager(tc.client)
+			awsCreds, err := cm.(*STSCredentialManager).ReconcileProviderCredentials(context.TODO(), ns)
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
 					t.Fatalf("unexpected error from STS ReconcileProviderCredentials(): %v", err)
@@ -142,8 +142,11 @@ func TestSTSCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client).(*STSCredentialManager)
-			_, err := cm.ReconcileBucketOwnerCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.bucket)
+			cm, err := NewCredentialManager(tc.client)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			_, err = cm.(*STSCredentialManager).ReconcileBucketOwnerCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.bucket)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error from ReconcileBucketOwnerCredentials(), but got nil")

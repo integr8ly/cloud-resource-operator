@@ -94,14 +94,18 @@ type PostgresProvider struct {
 	TCPPinger         ConnectionTester
 }
 
-func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
+func NewAWSPostgresProvider(client client.Client, logger *logrus.Entry) (*PostgresProvider, error) {
+	cm, err := NewCredentialManager(client)
+	if err != nil {
+		return nil, err
+	}
 	return &PostgresProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
-		CredentialManager: NewCredentialManager(client),
+		CredentialManager: cm,
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 		TCPPinger:         NewConnectionTestManager(),
-	}
+	}, nil
 }
 
 func (p *PostgresProvider) GetName() string {

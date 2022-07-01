@@ -6,21 +6,13 @@ coverage:
   precision: 2
   round: down
   range: "20...100"
-  ignore: 
-    - "build"
-    - "config"
-    - "doc"
+  ignore:
     - "hack"
-    - "img"
-    - "openshift-ci"
-    - "packagemanifests"
-    - "vendor"
-    - "version"
     - "apis"
-    - "pkg/resources/*_moq.go"
+    - "**/*_types.go"
+    - "**/*_moq.go"
     - "pkg/providers/types.go"
-    - "pkg/providers/*_moq.go"
-    - "pkg/providers/*/*_moq.go"
+    - "pkg/client/fake"
 
   status:
     project:

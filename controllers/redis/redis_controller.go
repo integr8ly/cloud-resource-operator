@@ -66,7 +66,11 @@ func New(mgr manager.Manager) (*RedisReconciler, error) {
 		return nil, err
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_redis"})
-	providerList := []providers.RedisProvider{aws.NewAWSRedisProvider(client, logger), openshift.NewOpenShiftRedisProvider(client, logger)}
+	redisProvider, err := aws.NewAWSRedisProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
+	providerList := []providers.RedisProvider{redisProvider, openshift.NewOpenShiftRedisProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &RedisReconciler{
 		Client:           mgr.GetClient(),

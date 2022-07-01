@@ -142,15 +142,24 @@ type CredentialManager interface {
 	ReconcileBucketOwnerCredentials(ctx context.Context, name, ns, bucket string) (*Credentials, error)
 }
 
-func NewCredentialManager(client client.Client) CredentialManager {
-	ns, _ := k8sutil.GetOperatorNamespace()
-	_, err := getSTSCredentialsSecret(context.TODO(), client, ns)
+func NewCredentialManager(client client.Client) (CredentialManager, error) {
+	ns, err := k8sutil.GetOperatorNamespace()
 	if err != nil {
-		resources.SetSTSCredentialsSecretMetric(ns, err)
-		return NewCredentialMinterCredentialManager(client)
+		return nil, err
+	}
+	secret, err := getSTSCredentialsSecret(context.TODO(), client, ns)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			resources.SetSTSCredentialsSecretMetric(ns, err)
+			return NewCredentialMinterCredentialManager(client), nil
+		}
+		return nil, err
 	}
 	resources.ResetSTSCredentialsSecretMetric()
-	return NewSTSCredentialManager(client)
+	if secret != nil && secret.Data != nil {
+		return NewSTSCredentialManager(client, ns), nil
+	}
+	return nil, errorUtil.New("could not instantiate credential manager")
 }
 
 var _ CredentialManager = (*CredentialMinterCredentialManager)(nil)
