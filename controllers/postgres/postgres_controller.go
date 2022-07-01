@@ -78,11 +78,11 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 	}
 
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres"})
-	postgresProvider, err := aws.NewAWSPostgresProvider(client, logger)
+	awsPostgresProvider, err := aws.NewAWSPostgresProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), postgresProvider}
+	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), awsPostgresProvider}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &PostgresReconciler{
 		Client:           client,

@@ -69,7 +69,7 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 		return nil, err
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_postgres_snapshot"})
-	postgresSnapshotProvider, err := croAws.NewAWSPostgresSnapshotProvider(client, logger)
+	awsPostgresSnapshotProvider, err := croAws.NewAWSPostgresSnapshotProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 		Client:        client,
 		scheme:        mgr.GetScheme(),
 		logger:        logger,
-		provider:      postgresSnapshotProvider,
+		provider:      awsPostgresSnapshotProvider,
 		ConfigManager: croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 	}, nil
 }

@@ -210,8 +210,14 @@ func New(mgr manager.Manager) (*CloudMetricsReconciler, error) {
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_cloudmetrics"})
 	postgresMetricsProvider, err := aws.NewAWSPostgresMetricsProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
 	postgresProviderList := []providers.PostgresMetricsProvider{postgresMetricsProvider}
 	redisMetricsProvider, err := aws.NewAWSRedisMetricsProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
 	redisProviderList := []providers.RedisMetricsProvider{redisMetricsProvider}
 
 	// we only wish to register metrics once when the new reconciler is created

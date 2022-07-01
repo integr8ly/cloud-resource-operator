@@ -150,9 +150,9 @@ func NewCredentialManager(client client.Client) (CredentialManager, error) {
 	secret, err := getSTSCredentialsSecret(context.TODO(), client, ns)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			resources.SetSTSCredentialsSecretMetric(ns, err)
 			return NewCredentialMinterCredentialManager(client), nil
 		}
+		resources.SetSTSCredentialsSecretMetric(ns, err)
 		return nil, err
 	}
 	resources.ResetSTSCredentialsSecretMetric()

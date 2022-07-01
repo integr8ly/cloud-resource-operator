@@ -68,11 +68,11 @@ func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
 	}
 
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_blobstorage"})
-	blobStorageProvider, err := aws.NewAWSBlobStorageProvider(client, logger)
+	awsBlobStorageProvider, err := aws.NewAWSBlobStorageProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.BlobStorageProvider{blobStorageProvider, openshift.NewBlobStorageProvider(client, logger)}
+	providerList := []providers.BlobStorageProvider{awsBlobStorageProvider, openshift.NewBlobStorageProvider(client, logger)}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &BlobStorageReconciler{
 		Client:           client,
