@@ -3,7 +3,12 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"k8s.io/apimachinery/pkg/types"
+	"os"
 	"reflect"
 	"strconv"
 	"sync"
@@ -2586,6 +2591,66 @@ func TestReconcilePostgres(t *testing.T) {
 			}
 			if statusMessage != tt.statusMessage {
 				t.Errorf("ReconcilePostgres() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
+			}
+		})
+	}
+}
+
+func TestNewAWSPostgresProvider(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+	type args struct {
+		client func() client.Client
+		logger *logrus.Entry
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *PostgresProvider
+		wantErr bool
+	}{
+		{
+			name: "successfully create new postgres provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: false,
+		},
+		{
+			name: "fail to create new postgres provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj apimachinery.Object) error {
+						return errors.New("generic error")
+					}
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewAWSPostgresProvider(tt.args.client(), tt.args.logger)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NewAWSPostgresProvider(), got = %v, want non-nil error", err)
+				}
+				return
+			}
+			if got == nil {
+				t.Errorf("NewAWSPostgresProvider() got = %v, want non-nil result", got)
 			}
 		})
 	}

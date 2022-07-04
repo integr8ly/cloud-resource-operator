@@ -2,11 +2,15 @@ package aws
 
 import (
 	"context"
+	"errors"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	v12 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"os"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 	"time"
 
@@ -18,6 +22,9 @@ func TestCredentialMinterManager_ReconcileProviderCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
 	cases := []struct {
 		name                string
 		client              client.Client
@@ -28,7 +35,7 @@ func TestCredentialMinterManager_ReconcileProviderCredentials(t *testing.T) {
 	}{
 		{
 			name: "credentials are reconciled successfully",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultProviderCredentialName,
 					Namespace: "testNamespace",
@@ -55,7 +62,7 @@ func TestCredentialMinterManager_ReconcileProviderCredentials(t *testing.T) {
 		},
 		{
 			name: "error reconciling credentials",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultProviderCredentialName,
 					Namespace: "testNamespace",
@@ -73,8 +80,11 @@ func TestCredentialMinterManager_ReconcileProviderCredentials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client).(*CredentialMinterCredentialManager)
-			awsCreds, err := cm.ReconcileProviderCredentials(context.TODO(), "testNamespace")
+			cm, err := NewCredentialManager(tc.client)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			awsCreds, err := cm.(*CredentialMinterCredentialManager).ReconcileProviderCredentials(context.TODO(), "testNamespace")
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
 					t.Fatalf("unexpected error from ReconcileProviderCredentials(): %v", err)
@@ -102,6 +112,9 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 		ns      string
 		entries []v1.StatementEntry
 	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
 	cases := []struct {
 		name                string
 		client              client.Client
@@ -114,7 +127,7 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 	}{
 		{
 			name: "successfully reconciled credentials",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultProviderCredentialName,
 					Namespace: "testNamespace",
@@ -147,7 +160,7 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 		},
 		{
 			name: "undefined aws access key id in credentials secret",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultProviderCredentialName,
 					Namespace: "testNamespace",
@@ -179,7 +192,7 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 		},
 		{
 			name: "undefined aws access key id in credentials secret",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultProviderCredentialName,
 					Namespace: "testNamespace",
@@ -211,7 +224,7 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 		},
 		{
 			name:   "failed to reconcile aws credential request",
-			client: fake.NewFakeClientWithScheme(scheme),
+			client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			args: args{
 				ctx: context.TODO(),
 			},
@@ -220,7 +233,7 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 		},
 		{
 			name:   "failed to provision credential request (timeout)",
-			client: fake.NewFakeClientWithScheme(scheme),
+			client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			args: args{
 				ctx:  context.TODO(),
 				name: defaultProviderCredentialName,
@@ -242,8 +255,11 @@ func TestCredentialMinterManager_ReconcileCredentials(t *testing.T) {
 					timeOut = time.Minute * 5
 				}()
 			}
-			cm := NewCredentialManager(tc.client).(*CredentialMinterCredentialManager)
-			_, err := cm.reconcileCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.entries)
+			cm, err := NewCredentialManager(tc.client)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			_, err = cm.(*CredentialMinterCredentialManager).reconcileCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.entries)
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
 					t.Fatalf("unexpected error from reconcileCredentials(): %v", err)
@@ -275,7 +291,7 @@ func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 	}{
 		{
 			name: "successfully reconciled bucket owner credentials",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "testName",
 					Namespace: "testNamespace",
@@ -308,7 +324,7 @@ func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 		},
 		{
 			name: "failed to get aws credentials secret",
-			client: fake.NewFakeClientWithScheme(scheme, &v1.CredentialsRequest{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "testName",
 					Namespace: "testNamespace",
@@ -331,7 +347,10 @@ func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cm := NewCredentialManager(tc.client)
+			cm, err := NewCredentialManager(tc.client)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 			awsCreds, err := cm.ReconcileBucketOwnerCredentials(tc.args.ctx, tc.args.name, tc.args.ns, tc.args.bucket)
 			if tc.wantErr {
 				if err == nil {
@@ -344,6 +363,95 @@ func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 			}
 			if awsCreds.SecretAccessKey != tc.expectedSecretKey {
 				t.Fatalf("unexpected secret access key, expected %s but got %s", tc.expectedSecretKey, awsCreds.SecretAccessKey)
+			}
+		})
+	}
+}
+
+func TestNewCredentialManager(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+	type args struct {
+		client func() client.Client
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    CredentialManager
+		wantErr bool
+	}{
+		{
+			name: "credentials are reconciled successfully",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, &v1.CredentialsRequest{
+						ObjectMeta: controllerruntime.ObjectMeta{
+							Name:      defaultProviderCredentialName,
+							Namespace: "testNamespace",
+						},
+						Status: v1.CredentialsRequestStatus{
+							Provisioned: true,
+							ProviderStatus: &runtime.RawExtension{
+								Raw: []byte("{ \"user\":\"test\", \"policy\":\"test\" }"),
+							},
+						},
+					}, &v12.Secret{
+						ObjectMeta: controllerruntime.ObjectMeta{
+							Name:      defaultProviderCredentialName,
+							Namespace: "testNamespace",
+						},
+						Data: map[string][]byte{
+							defaultCredentialsKeyIDName:     []byte("ACCESS_KEY_ID"),
+							defaultCredentialsSecretKeyName: []byte("SECRET_ACCESS_KEY"),
+						},
+					})
+					return mockClient
+				},
+			},
+		},
+		{
+			name: "error retrieving sts credentials secret",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+						return errors.New("generic error")
+					}
+					return mockClient
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "retrieved nil sts credentials secret and nil error",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+						return nil
+					}
+					return mockClient
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, err := NewCredentialManager(tt.args.client())
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NewCredentialManager(), got = %v, want non-nil error", err)
+				}
+				return
+			}
+			if cm == nil {
+				t.Errorf("NewCredentialManager() got = %v, want non-nil interface", cm)
 			}
 		})
 	}

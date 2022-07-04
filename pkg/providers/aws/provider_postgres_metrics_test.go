@@ -2,6 +2,12 @@ package aws
 
 import (
 	"context"
+	"errors"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	apimachinery "k8s.io/apimachinery/pkg/runtime"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"os"
 	"reflect"
 	"testing"
 
@@ -183,6 +189,66 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("scrapeRDSCloudWatchMetricData() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewAWSPostgresMetricsProvider(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+	type args struct {
+		client func() client.Client
+		logger *logrus.Entry
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *PostgresMetricsProvider
+		wantErr bool
+	}{
+		{
+			name: "successfully create new postgres metrics provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: false,
+		},
+		{
+			name: "fail to create new postgres metrics provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj apimachinery.Object) error {
+						return errors.New("generic error")
+					}
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewAWSPostgresMetricsProvider(tt.args.client(), tt.args.logger)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NewAWSPostgresMetricsProvider(), got = %v, want non-nil error", err)
+				}
+				return
+			}
+			if got == nil {
+				t.Errorf("NewAWSPostgresMetricsProvider() got = %v, want non-nil result", got)
 			}
 		})
 	}

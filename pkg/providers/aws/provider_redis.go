@@ -72,14 +72,18 @@ type RedisProvider struct {
 	TCPPinger         ConnectionTester
 }
 
-func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvider {
+func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) (*RedisProvider, error) {
+	cm, err := NewCredentialManager(client)
+	if err != nil {
+		return nil, err
+	}
 	return &RedisProvider{
 		Client:            client,
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
-		CredentialManager: NewCredentialManager(client),
+		CredentialManager: cm,
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
 		TCPPinger:         NewConnectionTestManager(),
-	}
+	}, nil
 }
 
 func (p *RedisProvider) GetName() string {

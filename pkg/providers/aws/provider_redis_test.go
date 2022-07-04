@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"os"
 	"reflect"
 	"time"
 
@@ -2612,6 +2616,66 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 				return
 			}
 			tt.checkfunc(t, tt.args.cacheSvc)
+		})
+	}
+}
+
+func TestNewAWSRedisProvider(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+	type args struct {
+		client func() client.Client
+		logger *logrus.Entry
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *RedisProvider
+		wantErr bool
+	}{
+		{
+			name: "successfully create new redis provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: false,
+		},
+		{
+			name: "fail to create new redis provider",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj apimachinery.Object) error {
+						return errors.New("generic error")
+					}
+					return mockClient
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewAWSRedisProvider(tt.args.client(), tt.args.logger)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NewAWSRedisProvider(), got = %v, want non-nil error", err)
+				}
+				return
+			}
+			if got == nil {
+				t.Errorf("NewAWSRedisProvider() got = %v, want non-nil result", got)
+			}
 		})
 	}
 }
