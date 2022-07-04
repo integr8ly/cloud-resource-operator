@@ -44,7 +44,7 @@ const (
 	defaultAwsDBInstanceClass            = "db.t3.small"
 	defaultAwsDeleteAutomatedBackups     = true
 	defaultAwsEngine                     = "postgres"
-	defaultAwsEngineVersion              = "13.3"
+	defaultAwsEngineVersion              = "13.4"
 	defaultAwsIdentifierLength           = 40
 	defaultAwsMaxAllocatedStorage        = 100
 	defaultAwsMultiAZ                    = true
@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	defaultSupportedEngineVersions = []string{"13.3", "10.18", "10.16", "10.15", "10.13", "10.6", "9.6", "9.5"}
+	defaultSupportedEngineVersions = []string{"13.4", "10.18", "10.16", "10.15", "10.13", "10.6", "9.6", "9.5"}
 	healthyAWSDBInstanceStatuses   = []string{
 		"backtracking",
 		"available",
@@ -783,6 +783,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		if engineUpgradeNeeded {
 			logrus.Info(fmt.Sprintf("Engine upgrade found, the current EngineVersion is %s and is upgrading to %s", *foundConfig.EngineVersion, *rdsConfig.EngineVersion))
 			mi.EngineVersion = rdsConfig.EngineVersion
+			mi.AllowMajorVersionUpgrade = aws.Bool(true)
 			if cr.Spec.ApplyImmediately {
 				mi.ApplyImmediately = aws.Bool(cr.Spec.ApplyImmediately)
 			}

@@ -778,11 +778,13 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 	for _, foundCacheCluster := range replicationGroupClusters {
 		// check if the redis compatibility version requires an update.
 		if elasticacheConfig.EngineVersion != nil {
+
 			engineUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundCacheCluster.EngineVersion, *elasticacheConfig.EngineVersion)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "invalid redis version")
 			}
 			if engineUpgradeNeeded {
+				modifyInput.SetApplyImmediately(true)
 				modifyInput.EngineVersion = elasticacheConfig.EngineVersion
 				updateFound = true
 			}
