@@ -2112,6 +2112,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
 				EngineVersion:              aws.String(defaultEngineVersion),
+				ApplyImmediately:           aws.Bool(true),
 			},
 		},
 		{
@@ -2179,6 +2180,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				SnapshotWindow:             aws.String("newValue"),
 				ReplicationGroupId:         aws.String("test-id"),
 				EngineVersion:              aws.String(defaultEngineVersion),
+				ApplyImmediately:           aws.Bool(true),
 			},
 		},
 	}
