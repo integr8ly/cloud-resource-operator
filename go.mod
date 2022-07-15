@@ -16,7 +16,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/afero v1.8.2
+	github.com/spf13/afero v1.9.0
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	k8s.io/api v0.22.2
 	k8s.io/apiextensions-apiserver v0.22.2
