@@ -28,6 +28,7 @@ type ResourceTypeSpec struct {
 	SkipCreate bool   `json:"skipCreate,omitempty"`
 	// ApplyImmediately is only available to Postgres cr, for blobstorage and redis cr's currently does nothing
 	ApplyImmediately bool       `json:"applyImmediately,omitempty"`
+	AllowUpdates     bool       `json:"allowUpdates"`
 	SecretRef        *SecretRef `json:"secretRef"`
 }
 
