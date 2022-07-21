@@ -147,6 +147,66 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
+	// setup aws RDS instance sdk session
+	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, strategyConfig)
+	if err != nil {
+		errMsg := "failed to create aws session to create rds db instance"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	updatesAllowed, err := resources.VerifyPostgresUpdatesAllowed(ctx, p.Client, pg.Namespace, pg.Name)
+	if err != nil {
+		msg := "failed to verify if postgres updates are allowed"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	if updatesAllowed {
+		session := rds.New(sess)
+		pi, err := getRDSInstances(session)
+		if err != nil {
+			msg := "failed to get rds replication groups"
+			return nil, croType.StatusMessage(msg), err
+		}
+		foundInstance := getFoundInstance(pi, rdsCfg)
+
+		if foundInstance != nil && rdsCfg.EngineVersion != nil {
+			engineVersionUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundInstance.EngineVersion, *rdsCfg.EngineVersion)
+			if err != nil {
+				msg := "failed to verify if engine version upgrade is needed"
+				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
+
+			if engineVersionUpgradeNeeded {
+				mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance, pg)
+				if err != nil {
+					errMsg := fmt.Sprintf("error building update config for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+					return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+				}
+				if mi != nil {
+					_, err := session.ModifyDBInstance(mi)
+					if err != nil {
+						errMsg := fmt.Sprintf("error experienced trying to modify db instance: %s", *foundInstance.DBInstanceIdentifier)
+						return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+					}
+					statusMsg := fmt.Sprintf("set pending modifications for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+					logger.Info(statusMsg)
+					return nil, croType.StatusMessage(statusMsg), nil
+				}
+			}
+
+			if len(serviceUpdates.updates) > 0 {
+				updating, message, err := p.rdsApplyServiceUpdates(session, serviceUpdates, foundInstance)
+				if err != nil {
+					errMsg := "failed to service update rds instance"
+					return nil, croType.StatusMessage(errMsg), err
+				}
+				if updating {
+					return nil, message, nil
+				}
+			}
+		}
+	}
+
 	// create credentials secret
 	sec := buildDefaultRDSSecret(pg)
 	or, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func() error {
@@ -155,13 +215,6 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create or update secret %s, action was %s", sec.Name, or)
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-
-	// setup aws RDS instance sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, strategyConfig)
-	if err != nil {
-		errMsg := "failed to create aws session to create rds db instance"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// check is a standalone network is required
@@ -224,24 +277,6 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, reconcileStatus, nil
 	}
 
-	pi, err := getRDSInstances(session)
-	if err != nil {
-		// return nil error so this function can be requeued
-		msg := "error getting replication groups"
-		return nil, croType.StatusMessage(msg), err
-	}
-	// check if the cluster has already been created
-	foundInstance, err := getFoundInstance(pi, rdsCfg)
-
-	updating, message, err := p.rdsApplyStatusUpdate(session, serviceUpdates, foundInstance)
-	if err != nil {
-		errMsg := "failed to service update rds instance"
-		return nil, croType.StatusMessage(errMsg), err
-	}
-	if updating {
-		return nil, message, nil
-	}
-
 	return postgres, reconcileStatus, nil
 
 }
@@ -295,7 +330,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	}
 
 	// check if the cluster has already been created
-	foundInstance, err := getFoundInstance(pi, rdsCfg)
+	foundInstance := getFoundInstance(pi, rdsCfg)
 
 	// expose pending maintenance metric
 	defer p.setPostgresServiceMaintenanceMetric(ctx, rdsSvc, foundInstance)
@@ -655,15 +690,15 @@ func getRDSInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	return pi, nil
 }
 
-func getFoundInstance(pi []*rds.DBInstance, config *rds.CreateDBInstanceInput) (*rds.DBInstance, error) {
+func getFoundInstance(pi []*rds.DBInstance, config *rds.CreateDBInstanceInput) *rds.DBInstance {
 	var foundInstance *rds.DBInstance
 	for _, i := range pi {
 		if *i.DBInstanceIdentifier == *config.DBInstanceIdentifier {
 			foundInstance = i
-			return foundInstance, nil
+			return foundInstance
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgres) (*rds.CreateDBInstanceInput, *rds.DeleteDBInstanceInput, *ServiceUpdate, *StrategyConfig, error) {
@@ -1266,7 +1301,7 @@ func rdsInstanceStatusIsHealthy(instance *rds.DBInstance) bool {
 	return resources.Contains(healthyAWSDBInstanceStatuses, *instance.DBInstanceStatus)
 }
 
-func (p *PostgresProvider) rdsApplyStatusUpdate(rdsSvc rdsiface.RDSAPI, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (bool, croType.StatusMessage, error) {
+func (p *PostgresProvider) rdsApplyServiceUpdates(rdsSvc rdsiface.RDSAPI, serviceUpdates *ServiceUpdate, foundInstance *rds.DBInstance) (bool, croType.StatusMessage, error) {
 	// Retrieve service maintenance updates, create and export Prometheus metrics
 	output, err := rdsSvc.DescribePendingMaintenanceActions(&rds.DescribePendingMaintenanceActionsInput{ResourceIdentifier: foundInstance.DBInstanceArn})
 	if err != nil {

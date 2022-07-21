@@ -2205,7 +2205,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 // apply critical security update return if it wants to apply it immediately - if true call the apply immediately logic next in the provider
 // having a return value.
 
-func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
+func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 	scheme, err := buildTestSchemeRedis()
 	if err != nil {
 		logrus.Fatal(err)
@@ -2612,9 +2612,9 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 				CacheSvc:          tt.fields.CacheSvc,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			err := p.checkSpecifiedSecurityUpdates(tt.args.cacheSvc, tt.args.replicationGroup, tt.args.specifiedUpdates)
+			err := p.applySpecifiedSecurityUpdates(tt.args.cacheSvc, tt.args.replicationGroup, tt.args.specifiedUpdates)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("checkSpecifiedSecurityUpdates() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("applylSpecifiedSecurityUpdates() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			tt.checkfunc(t, tt.args.cacheSvc)

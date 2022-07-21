@@ -535,7 +535,6 @@ func buildTestInfra() *v12.Infrastructure {
 	}
 }
 
-//
 func buildTestNetwork(modifyFn func(network *v12.Network)) *v12.Network {
 
 	mock := &v12.Network{
@@ -2138,7 +2137,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 	}
 }
 
-func Test_rdsApplyStatusUpdate(t *testing.T) {
+func Test_rdsApplyStatusUpdates(t *testing.T) {
 	testIdentifier := "test-identifier"
 	scheme, err := buildTestSchemePostgresql()
 	if err != nil {
@@ -2411,7 +2410,7 @@ func Test_rdsApplyStatusUpdate(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			update, got, err := p.rdsApplyStatusUpdate(tt.args.session, tt.args.serviceUpdates, tt.args.foundInstance)
+			update, got, err := p.rdsApplyServiceUpdates(tt.args.session, tt.args.serviceUpdates, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("rdsApplyStatusUpdate() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2463,8 +2462,9 @@ func TestReconcilePostgres(t *testing.T) {
 		TCPPinger         ConnectionTester
 	}
 	type args struct {
-		ctx context.Context
-		pg  *v1alpha1.Postgres
+		ctx     context.Context
+		pg      *v1alpha1.Postgres
+		session rdsiface.RDSAPI
 	}
 	tests := []struct {
 		name          string

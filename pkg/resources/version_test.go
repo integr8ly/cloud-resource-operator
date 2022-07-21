@@ -1,9 +1,44 @@
 package resources
 
 import (
+	"context"
+	croapis "github.com/integr8ly/cloud-resource-operator/apis"
+	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	v1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/openshift/cloud-credential-operator/pkg/apis"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"reflect"
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
 )
+
+func buildTestScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	err := croapis.AddToScheme(scheme)
+	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
+	err = apis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
+	return scheme, nil
+}
+
+func buildTestPostgresCR(allowUpdates bool) *v1alpha1.Postgres {
+	return &v1alpha1.Postgres{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: croType.ResourceTypeSpec{
+			AllowUpdates: allowUpdates,
+		},
+	}
+}
 
 func Test_VerifyVersionUpgradeNeeded(t *testing.T) {
 
@@ -62,7 +97,47 @@ func Test_VerifyVersionUpgradeNeeded(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
+			t.Errorf("VerifyVersionUpgradedNeeded() = %v, want %v", got, tt.want)
 		}
+	}
+}
+
+func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type test struct {
+		name   string
+		client client.Client
+		want   bool
+	}
+
+	tests := []test{
+		{
+			name:   "updates not allowed when value is false",
+			want:   false,
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(false)),
+		},
+		{
+			name:   "updates allowed when value is true",
+			want:   true,
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(true)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := VerifyPostgresUpdatesAllowed(context.TODO(), tt.client, "test", "test")
+
+			if err != nil {
+				t.Errorf("VerifyPostgresUpdatesAllowed() error: %v", err)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VerifyPostgresUpdatesAllowed() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
