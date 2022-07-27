@@ -511,6 +511,10 @@ type RDSAPI interface {
 	ListTagsForResourceWithContext(aws.Context, *rds.ListTagsForResourceInput, ...request.Option) (*rds.ListTagsForResourceOutput, error)
 	ListTagsForResourceRequest(*rds.ListTagsForResourceInput) (*request.Request, *rds.ListTagsForResourceOutput)
 
+	ModifyActivityStream(*rds.ModifyActivityStreamInput) (*rds.ModifyActivityStreamOutput, error)
+	ModifyActivityStreamWithContext(aws.Context, *rds.ModifyActivityStreamInput, ...request.Option) (*rds.ModifyActivityStreamOutput, error)
+	ModifyActivityStreamRequest(*rds.ModifyActivityStreamInput) (*request.Request, *rds.ModifyActivityStreamOutput)
+
 	ModifyCertificates(*rds.ModifyCertificatesInput) (*rds.ModifyCertificatesOutput, error)
 	ModifyCertificatesWithContext(aws.Context, *rds.ModifyCertificatesInput, ...request.Option) (*rds.ModifyCertificatesOutput, error)
 	ModifyCertificatesRequest(*rds.ModifyCertificatesInput) (*request.Request, *rds.ModifyCertificatesOutput)
@@ -698,6 +702,12 @@ type RDSAPI interface {
 	StopDBInstanceAutomatedBackupsReplication(*rds.StopDBInstanceAutomatedBackupsReplicationInput) (*rds.StopDBInstanceAutomatedBackupsReplicationOutput, error)
 	StopDBInstanceAutomatedBackupsReplicationWithContext(aws.Context, *rds.StopDBInstanceAutomatedBackupsReplicationInput, ...request.Option) (*rds.StopDBInstanceAutomatedBackupsReplicationOutput, error)
 	StopDBInstanceAutomatedBackupsReplicationRequest(*rds.StopDBInstanceAutomatedBackupsReplicationInput) (*request.Request, *rds.StopDBInstanceAutomatedBackupsReplicationOutput)
+
+	WaitUntilDBClusterAvailable(*rds.DescribeDBClustersInput) error
+	WaitUntilDBClusterAvailableWithContext(aws.Context, *rds.DescribeDBClustersInput, ...request.WaiterOption) error
+
+	WaitUntilDBClusterDeleted(*rds.DescribeDBClustersInput) error
+	WaitUntilDBClusterDeletedWithContext(aws.Context, *rds.DescribeDBClustersInput, ...request.WaiterOption) error
 
 	WaitUntilDBClusterSnapshotAvailable(*rds.DescribeDBClusterSnapshotsInput) error
 	WaitUntilDBClusterSnapshotAvailableWithContext(aws.Context, *rds.DescribeDBClusterSnapshotsInput, ...request.WaiterOption) error
