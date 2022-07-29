@@ -56,7 +56,7 @@ setup/service_account: kustomize
 
 .PHONY: code/run/service_account
 code/run/service_account: setup/service_account
-	@oc login --token=$(shell oc serviceaccounts get-token cloud-resource-operator -n ${NAMESPACE}) --server=$(shell sh -c "oc cluster-info | grep -Eo 'https?://[-a-zA-Z0-9\.:]*'") --kubeconfig=TMP_SA_KUBECONFIG --insecure-skip-tls-verify=true
+	@oc login --token=$(shell oc create token cloud-resource-operator -n ${NAMESPACE} --duration=24h) --server=$(shell sh -c "oc cluster-info | grep -Eo 'https?://[-a-zA-Z0-9\.:]*'") --kubeconfig=TMP_SA_KUBECONFIG --insecure-skip-tls-verify=true
 	WATCH_NAMESPACE=$(NAMESPACE) go run ./main.go
 
 .PHONY: code/gen
