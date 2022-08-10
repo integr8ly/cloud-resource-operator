@@ -157,7 +157,10 @@ func (c *CloudWatch) DeleteAnomalyDetectorRequest(input *DeleteAnomalyDetectorIn
 
 // DeleteAnomalyDetector API operation for Amazon CloudWatch.
 //
-// Deletes the specified anomaly detection model from your account.
+// Deletes the specified anomaly detection model from your account. For more
+// information about how to delete an anomaly detection model, see Deleting
+// an anomaly detection model (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Create_Anomaly_Detection_Alarm.html#Delete_Anomaly_Detection_Model)
+// in the CloudWatch User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -3236,16 +3239,16 @@ func (c *CloudWatch) PutMetricDataRequest(input *PutMetricDataInput) (req *reque
 // with one PutMetricData request, and supports retrieving percentile statistics
 // on this data.
 //
-// Each PutMetricData request is limited to 40 KB in size for HTTP POST requests.
+// Each PutMetricData request is limited to 1 MB in size for HTTP POST requests.
 // You can send a payload compressed by gzip. Each request is also limited to
-// no more than 20 different metrics.
+// no more than 1000 different metrics.
 //
 // Although the Value parameter accepts numbers of type Double, CloudWatch rejects
 // values that are either too small or too large. Values must be in the range
 // of -2^360 to 2^360. In addition, special values (for example, NaN, +Infinity,
 // -Infinity) are not supported.
 //
-// You can use up to 10 dimensions per metric to further clarify what data the
+// You can use up to 30 dimensions per metric to further clarify what data the
 // metric collects. Each dimension consists of a Name and Value pair. For more
 // information about specifying dimensions, see Publishing Metrics (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/publishingMetrics.html)
 // in the Amazon CloudWatch User Guide.
@@ -4163,6 +4166,40 @@ type CompositeAlarm struct {
 	// state.
 	ActionsEnabled *bool `type:"boolean"`
 
+	// When the value is ALARM, it means that the actions are suppressed because
+	// the suppressor alarm is in ALARM When the value is WaitPeriod, it means that
+	// the actions are suppressed because the composite alarm is waiting for the
+	// suppressor alarm to go into into the ALARM state. The maximum waiting time
+	// is as specified in ActionsSuppressorWaitPeriod. After this time, the composite
+	// alarm performs its actions. When the value is ExtensionPeriod, it means that
+	// the actions are suppressed because the composite alarm is waiting after the
+	// suppressor alarm went out of the ALARM state. The maximum waiting time is
+	// as specified in ActionsSuppressorExtensionPeriod. After this time, the composite
+	// alarm performs its actions.
+	ActionsSuppressedBy *string `type:"string" enum:"ActionsSuppressedBy"`
+
+	// Captures the reason for action suppression.
+	ActionsSuppressedReason *string `type:"string"`
+
+	// Actions will be suppressed if the suppressor alarm is in the ALARM state.
+	// ActionsSuppressor can be an AlarmName or an Amazon Resource Name (ARN) from
+	// an existing alarm.
+	ActionsSuppressor *string `min:"1" type:"string"`
+
+	// The maximum time in seconds that the composite alarm waits after suppressor
+	// alarm goes out of the ALARM state. After this time, the composite alarm performs
+	// its actions.
+	//
+	// ExtensionPeriod is required only when ActionsSuppressor is specified.
+	ActionsSuppressorExtensionPeriod *int64 `type:"integer"`
+
+	// The maximum time in seconds that the composite alarm waits for the suppressor
+	// alarm to go into the ALARM state. After this time, the composite alarm performs
+	// its actions.
+	//
+	// WaitPeriod is required only when ActionsSuppressor is specified.
+	ActionsSuppressorWaitPeriod *int64 `type:"integer"`
+
 	// The actions to execute when this alarm transitions to the ALARM state from
 	// any other state. Each action is specified as an Amazon Resource Name (ARN).
 	AlarmActions []*string `type:"list"`
@@ -4197,7 +4234,10 @@ type CompositeAlarm struct {
 	// An explanation for the alarm state, in JSON format.
 	StateReasonData *string `type:"string"`
 
-	// The time stamp of the last update to the alarm state.
+	// The timestamp of the last change to the alarm's StateValue.
+	StateTransitionedTimestamp *time.Time `type:"timestamp"`
+
+	// Tracks the timestamp of any state update, even if StateValue doesn't change.
 	StateUpdatedTimestamp *time.Time `type:"timestamp"`
 
 	// The state value for the alarm.
@@ -4225,6 +4265,36 @@ func (s CompositeAlarm) GoString() string {
 // SetActionsEnabled sets the ActionsEnabled field's value.
 func (s *CompositeAlarm) SetActionsEnabled(v bool) *CompositeAlarm {
 	s.ActionsEnabled = &v
+	return s
+}
+
+// SetActionsSuppressedBy sets the ActionsSuppressedBy field's value.
+func (s *CompositeAlarm) SetActionsSuppressedBy(v string) *CompositeAlarm {
+	s.ActionsSuppressedBy = &v
+	return s
+}
+
+// SetActionsSuppressedReason sets the ActionsSuppressedReason field's value.
+func (s *CompositeAlarm) SetActionsSuppressedReason(v string) *CompositeAlarm {
+	s.ActionsSuppressedReason = &v
+	return s
+}
+
+// SetActionsSuppressor sets the ActionsSuppressor field's value.
+func (s *CompositeAlarm) SetActionsSuppressor(v string) *CompositeAlarm {
+	s.ActionsSuppressor = &v
+	return s
+}
+
+// SetActionsSuppressorExtensionPeriod sets the ActionsSuppressorExtensionPeriod field's value.
+func (s *CompositeAlarm) SetActionsSuppressorExtensionPeriod(v int64) *CompositeAlarm {
+	s.ActionsSuppressorExtensionPeriod = &v
+	return s
+}
+
+// SetActionsSuppressorWaitPeriod sets the ActionsSuppressorWaitPeriod field's value.
+func (s *CompositeAlarm) SetActionsSuppressorWaitPeriod(v int64) *CompositeAlarm {
+	s.ActionsSuppressorWaitPeriod = &v
 	return s
 }
 
@@ -4285,6 +4355,12 @@ func (s *CompositeAlarm) SetStateReason(v string) *CompositeAlarm {
 // SetStateReasonData sets the StateReasonData field's value.
 func (s *CompositeAlarm) SetStateReasonData(v string) *CompositeAlarm {
 	s.StateReasonData = &v
+	return s
+}
+
+// SetStateTransitionedTimestamp sets the StateTransitionedTimestamp field's value.
+func (s *CompositeAlarm) SetStateTransitionedTimestamp(v time.Time) *CompositeAlarm {
+	s.StateTransitionedTimestamp = &v
 	return s
 }
 
@@ -5745,7 +5821,7 @@ func (s *DescribeInsightRulesOutput) SetNextToken(v string) *DescribeInsightRule
 // InstanceId as a dimension name, and the actual instance ID as the value for
 // that dimension.
 //
-// You can assign up to 10 dimensions to a metric.
+// You can assign up to 30 dimensions to a metric.
 type Dimension struct {
 	_ struct{} `type:"structure"`
 
@@ -8807,7 +8883,7 @@ type MetricDatum struct {
 	// Array of numbers representing the values for the metric during the period.
 	// Each unique value is listed just once in this array, and the corresponding
 	// number in the Counts array specifies the number of times that value occurred
-	// during the period. You can include up to 150 unique values in each PutMetricData
+	// during the period. You can include up to 500 unique values in each PutMetricData
 	// action that specifies a Values array.
 	//
 	// Although the Values array accepts numbers of type Double, CloudWatch rejects
@@ -9654,6 +9730,25 @@ type PutCompositeAlarmInput struct {
 	// state of the composite alarm. The default is TRUE.
 	ActionsEnabled *bool `type:"boolean"`
 
+	// Actions will be suppressed if the suppressor alarm is in the ALARM state.
+	// ActionsSuppressor can be an AlarmName or an Amazon Resource Name (ARN) from
+	// an existing alarm.
+	ActionsSuppressor *string `min:"1" type:"string"`
+
+	// The maximum time in seconds that the composite alarm waits after suppressor
+	// alarm goes out of the ALARM state. After this time, the composite alarm performs
+	// its actions.
+	//
+	// ExtensionPeriod is required only when ActionsSuppressor is specified.
+	ActionsSuppressorExtensionPeriod *int64 `type:"integer"`
+
+	// The maximum time in seconds that the composite alarm waits for the suppressor
+	// alarm to go into the ALARM state. After this time, the composite alarm performs
+	// its actions.
+	//
+	// WaitPeriod is required only when ActionsSuppressor is specified.
+	ActionsSuppressorWaitPeriod *int64 `type:"integer"`
+
 	// The actions to execute when this alarm transitions to the ALARM state from
 	// any other state. Each action is specified as an Amazon Resource Name (ARN).
 	//
@@ -9766,6 +9861,9 @@ func (s PutCompositeAlarmInput) GoString() string {
 // Validate inspects the fields of the type to determine if they are valid.
 func (s *PutCompositeAlarmInput) Validate() error {
 	invalidParams := request.ErrInvalidParams{Context: "PutCompositeAlarmInput"}
+	if s.ActionsSuppressor != nil && len(*s.ActionsSuppressor) < 1 {
+		invalidParams.Add(request.NewErrParamMinLen("ActionsSuppressor", 1))
+	}
 	if s.AlarmName == nil {
 		invalidParams.Add(request.NewErrParamRequired("AlarmName"))
 	}
@@ -9798,6 +9896,24 @@ func (s *PutCompositeAlarmInput) Validate() error {
 // SetActionsEnabled sets the ActionsEnabled field's value.
 func (s *PutCompositeAlarmInput) SetActionsEnabled(v bool) *PutCompositeAlarmInput {
 	s.ActionsEnabled = &v
+	return s
+}
+
+// SetActionsSuppressor sets the ActionsSuppressor field's value.
+func (s *PutCompositeAlarmInput) SetActionsSuppressor(v string) *PutCompositeAlarmInput {
+	s.ActionsSuppressor = &v
+	return s
+}
+
+// SetActionsSuppressorExtensionPeriod sets the ActionsSuppressorExtensionPeriod field's value.
+func (s *PutCompositeAlarmInput) SetActionsSuppressorExtensionPeriod(v int64) *PutCompositeAlarmInput {
+	s.ActionsSuppressorExtensionPeriod = &v
+	return s
+}
+
+// SetActionsSuppressorWaitPeriod sets the ActionsSuppressorWaitPeriod field's value.
+func (s *PutCompositeAlarmInput) SetActionsSuppressorWaitPeriod(v int64) *PutCompositeAlarmInput {
+	s.ActionsSuppressorWaitPeriod = &v
 	return s
 }
 
@@ -10314,7 +10430,7 @@ type PutMetricAlarmInput struct {
 	//
 	// However, if the metric is published with multiple types of units and you
 	// don't specify a unit, the alarm's behavior is not defined and it behaves
-	// predictably.
+	// unpredictably.
 	//
 	// We recommend omitting Unit so that you don't inadvertently specify an incorrect
 	// unit that is not published for this metric. Doing so causes the alarm to
@@ -10573,8 +10689,8 @@ func (s PutMetricAlarmOutput) GoString() string {
 type PutMetricDataInput struct {
 	_ struct{} `type:"structure"`
 
-	// The data for the metric. The array can include no more than 20 metrics per
-	// call.
+	// The data for the metric. The array can include no more than 1000 metrics
+	// per call.
 	//
 	// MetricData is a required field
 	MetricData []*MetricDatum `type:"list" required:"true"`
@@ -11675,6 +11791,26 @@ func (s UntagResourceOutput) String() string {
 // value will be replaced with "sensitive".
 func (s UntagResourceOutput) GoString() string {
 	return s.String()
+}
+
+const (
+	// ActionsSuppressedByWaitPeriod is a ActionsSuppressedBy enum value
+	ActionsSuppressedByWaitPeriod = "WaitPeriod"
+
+	// ActionsSuppressedByExtensionPeriod is a ActionsSuppressedBy enum value
+	ActionsSuppressedByExtensionPeriod = "ExtensionPeriod"
+
+	// ActionsSuppressedByAlarm is a ActionsSuppressedBy enum value
+	ActionsSuppressedByAlarm = "Alarm"
+)
+
+// ActionsSuppressedBy_Values returns all elements of the ActionsSuppressedBy enum
+func ActionsSuppressedBy_Values() []string {
+	return []string{
+		ActionsSuppressedByWaitPeriod,
+		ActionsSuppressedByExtensionPeriod,
+		ActionsSuppressedByAlarm,
+	}
 }
 
 const (
