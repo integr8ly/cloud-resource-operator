@@ -35,6 +35,7 @@ Prerequisites:
 - [operator-sdk](https://github.com/operator-framework/operator-sdk) version v1.14.0.
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
+- [OPM](https://docs.openshift.com/container-platform/4.6/cli_reference/opm-cli.html)
 
 Ensure you are running at least `Go 1.18`.
 ```shell script
@@ -206,6 +207,7 @@ and `PREVIOUS_OPERATOR_VERSIONS` contain coma seperated list of all previous bun
 These steps detail how to deploy CRO through the Operator Lifecycle Manager (OLM) for development purposes.
 
 To deploy a new development release through OLM, we need a bundle, index, and operator container image.
+* In order to pull the base image you need to be logged in to [RedHat Container Registry](https://access.redhat.com/RegistryAuthentication).
 * The bundle contains manifests and metadata for a single operator version
 * The index contains a database of pointers to the operator manifest content and refers to the bundle(s)
 
