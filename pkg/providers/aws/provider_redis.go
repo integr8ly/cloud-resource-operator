@@ -131,74 +131,17 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	cacheSvc := elasticache.New(sess)
-	rgs, err := getReplicationGroups(cacheSvc)
+	maintenanceWindow, err := resources.VerifyRedisMaintenanceWindow(ctx, p.Client, r.Namespace, r.Name)
 	if err != nil {
-		// return nil error so this function can be requeueed
-		errMsg := "error getting replication groups"
-		logger.Info(errMsg, err)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-	}
-	// check if the cluster has already been created
-	var foundCache *elasticache.ReplicationGroup
-	for _, c := range rgs {
-		if *c.ReplicationGroupId == *elasticacheCreateConfig.ReplicationGroupId {
-			foundCache = c
-			break
-		}
+		msg := "failed to verify if redis updates are allowed"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	if foundCache != nil {
-		updatesAllowed, _ := resources.VerifyRedisUpdatesAllowed(ctx, p.Client, r.Namespace, r.Name)
-		if err != nil {
-			msg := "failed to verify if updates are allowed"
-			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
-
-		cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
-		if err != nil {
-			errMsg := "failed to describe clusters"
-			return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
-		}
-		var replicationGroupClusters []elasticache.CacheCluster
-		for _, checkedCluster := range cacheClustersOutput.CacheClusters {
-			cluster := *checkedCluster
-			if resources.SafeStringDereference(cluster.ReplicationGroupId) == *foundCache.ReplicationGroupId {
-				replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
-
-				if checkedCluster.EngineVersion != nil && r.Status.Version != *checkedCluster.EngineVersion {
-					r.Status.Version = *checkedCluster.EngineVersion
-				}
-			}
-		}
-
-		if updatesAllowed {
-			// check if any modifications are required to bring the elasticache instance up to date with the strategy map.
-			modifyInput, err := buildElasticacheUpdateStrategy(ec2.New(sess), elasticacheCreateConfig, foundCache, replicationGroupClusters, logger)
-			if err != nil {
-				errMsg := "failed to build elasticache modify strategy"
-				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
-			if modifyInput == nil {
-				logger.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
-			}
-
-			// modifications are required to bring the elasticache instance up to date with the strategy map, perform updates.
-			if modifyInput != nil {
-				logger.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
-				if _, err := cacheSvc.ModifyReplicationGroup(modifyInput); err != nil {
-					errMsg := "failed to modify elasticache cluster"
-					return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-				}
-				logger.Infof("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
-			}
-			if len(serviceUpdates.updates) > 0 {
-				err = p.applySpecifiedSecurityUpdates(cacheSvc, foundCache, serviceUpdates)
-				if err != nil {
-					errMsg := "there was an error applying critical security updates"
-					return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-				}
-			}
+	if maintenanceWindow {
+		msg, err := p.checkAndApplyMaintenanceUpdates(ctx, r, elasticache.New(sess), ec2.New(sess), elasticacheCreateConfig, serviceUpdates)
+		// if there is a status update or error return to controller
+		if err != nil || msg != "" {
+			return nil, msg, err
 		}
 	}
 
@@ -250,7 +193,24 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// create the aws elasticache cluster
-	return p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg, serviceUpdates, isEnabled)
+	redis, reconcileStatus, err := p.createElasticacheCluster(ctx, r, elasticache.New(sess), sts.New(sess), ec2.New(sess), elasticacheCreateConfig, stratCfg, serviceUpdates, isEnabled)
+	if err != nil {
+		errMsg := "failed to reconcile redis instance"
+		return nil, reconcileStatus, errorUtil.Wrap(err, errMsg)
+	}
+	if redis == nil {
+		return nil, reconcileStatus, nil
+	}
+
+	// set updates allowed to false on the CR after successful reconcile
+	if maintenanceWindow {
+		r.Spec.MaintenanceWindow = false
+		if err := p.Client.Update(ctx, r); err != nil {
+			return nil, "failed to set redis allowUpdates to false", err
+		}
+	}
+
+	return redis, reconcileStatus, nil
 }
 
 func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, _ *StrategyConfig, serviceUpdates *ServiceUpdate, standaloneNetworkExists bool) (*providers.RedisCluster, types.StatusMessage, error) {
@@ -410,6 +370,80 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// return secret information
 	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(fmt.Sprintf("successfully created and tagged, aws elasticache status is %s", *foundCache.Status)), nil
+}
+
+func (p *RedisProvider) checkAndApplyMaintenanceUpdates(ctx context.Context, r *v1alpha1.Redis, cacheSvc elasticacheiface.ElastiCacheAPI, ec2Svc ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, serviceUpdates *ServiceUpdate) (croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "checkAndApplyMaintenanceUpdates")
+	// verify and build elasticache create config
+	if err := p.buildElasticacheCreateStrategy(ctx, r, ec2Svc, elasticacheConfig); err != nil {
+		errMsg := "failed to build and verify aws elasticache create strategy"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	rgs, err := getReplicationGroups(cacheSvc)
+	if err != nil {
+		// return error so this function can be requeueed
+		errMsg := "error getting replication groups"
+		logger.Info(errMsg, err)
+		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+	// check if the cluster has already been created
+	var foundCache *elasticache.ReplicationGroup
+	for _, c := range rgs {
+		if *c.ReplicationGroupId == *elasticacheConfig.ReplicationGroupId {
+			foundCache = c
+			break
+		}
+	}
+
+	if foundCache != nil {
+		cacheClustersOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{})
+		if err != nil {
+			errMsg := "failed to describe clusters"
+			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		}
+
+		var replicationGroupClusters []elasticache.CacheCluster
+		for _, checkedCluster := range cacheClustersOutput.CacheClusters {
+			cluster := *checkedCluster
+			if resources.SafeStringDereference(cluster.ReplicationGroupId) == *foundCache.ReplicationGroupId {
+				replicationGroupClusters = append(replicationGroupClusters, *checkedCluster)
+
+				if checkedCluster.EngineVersion != nil && r.Status.Version != *checkedCluster.EngineVersion {
+					r.Status.Version = *checkedCluster.EngineVersion
+				}
+			}
+		}
+
+		// check if any modifications are required to bring the elasticache instance up to date with the strategy map.
+		modifyInput, err := buildElasticacheUpdateStrategy(ec2Svc, elasticacheConfig, foundCache, replicationGroupClusters, logger)
+		if err != nil {
+			errMsg := "failed to build elasticache modify strategy"
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		if modifyInput == nil {
+			logger.Infof("elasticache replication group %s is as expected", *foundCache.ReplicationGroupId)
+		}
+
+		// modifications are required to bring the elasticache instance up to date with the strategy map, perform updates.
+		if modifyInput != nil {
+			logger.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
+			if _, err := cacheSvc.ModifyReplicationGroup(modifyInput); err != nil {
+				errMsg := "failed to modify elasticache cluster"
+				return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+			statusMsg := fmt.Sprintf("set pending modifications to elasticache replication group %s", *foundCache.ReplicationGroupId)
+			logger.Info(statusMsg)
+			return croType.StatusMessage(statusMsg), nil
+		}
+		if serviceUpdates != nil && len(serviceUpdates.updates) > 0 {
+			err = p.applySpecifiedSecurityUpdates(cacheSvc, foundCache, serviceUpdates)
+			if err != nil {
+				errMsg := "there was an error applying critical security updates"
+				return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+		}
+	}
+	return "", nil
 }
 
 // buildRedisTagCreateStrategy Tags RDS resources
@@ -781,7 +815,7 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 	modifyInput.ReplicationGroupId = foundConfig.ReplicationGroupId
 
 	// check to see if the cache node type requires a modification.
-	if *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
+	if elasticacheConfig.CacheNodeType != nil && *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
 		// we need to determine if the proposed cache node type is supported in the availability zones that the instance is
 		// deployed into.
 		//
@@ -927,7 +961,7 @@ func (p *RedisProvider) buildElasticacheCreateStrategy(ctx context.Context, r *v
 		return errorUtil.Wrap(err, "")
 	}
 
-	if elasticacheConfig.SecurityGroupIds == nil {
+	if foundSecGroup != nil && elasticacheConfig.SecurityGroupIds == nil {
 		elasticacheConfig.SecurityGroupIds = []*string{
 			aws.String(*foundSecGroup.GroupId),
 		}

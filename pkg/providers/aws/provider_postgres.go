@@ -154,57 +154,10 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	updatesAllowed, err := resources.VerifyPostgresUpdatesAllowed(ctx, p.Client, pg.Namespace, pg.Name)
+	maintenanceWindow, err := resources.VerifyPostgresMaintenanceWindow(ctx, p.Client, pg.Namespace, pg.Name)
 	if err != nil {
 		msg := "failed to verify if postgres updates are allowed"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-	}
-
-	if updatesAllowed {
-		session := rds.New(sess)
-		pi, err := getRDSInstances(session)
-		if err != nil {
-			msg := "failed to get rds replication groups"
-			return nil, croType.StatusMessage(msg), err
-		}
-		foundInstance := getFoundInstance(pi, rdsCfg)
-
-		if foundInstance != nil && rdsCfg.EngineVersion != nil {
-			engineVersionUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundInstance.EngineVersion, *rdsCfg.EngineVersion)
-			if err != nil {
-				msg := "failed to verify if engine version upgrade is needed"
-				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-			}
-
-			if engineVersionUpgradeNeeded {
-				mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance, pg)
-				if err != nil {
-					errMsg := fmt.Sprintf("error building update config for rds instance: %s", *foundInstance.DBInstanceIdentifier)
-					return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-				}
-				if mi != nil {
-					_, err := session.ModifyDBInstance(mi)
-					if err != nil {
-						errMsg := fmt.Sprintf("error experienced trying to modify db instance: %s", *foundInstance.DBInstanceIdentifier)
-						return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-					}
-					statusMsg := fmt.Sprintf("set pending modifications for rds instance: %s", *foundInstance.DBInstanceIdentifier)
-					logger.Info(statusMsg)
-					return nil, croType.StatusMessage(statusMsg), nil
-				}
-			}
-
-			if len(serviceUpdates.updates) > 0 {
-				updating, message, err := p.rdsApplyServiceUpdates(session, serviceUpdates, foundInstance)
-				if err != nil {
-					errMsg := "failed to service update rds instance"
-					return nil, croType.StatusMessage(errMsg), err
-				}
-				if updating {
-					return nil, message, nil
-				}
-			}
-		}
 	}
 
 	// create credentials secret
@@ -215,6 +168,14 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create or update secret %s, action was %s", sec.Name, or)
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+	}
+
+	if maintenanceWindow {
+		msg, err := p.checkAndApplyMaintenanceUpdates(ctx, pg, rds.New(sess), ec2.New(sess), rdsCfg, serviceUpdates)
+		// if there is a status update or error return to controller
+		if err != nil || msg != "" {
+			return nil, msg, err
+		}
 	}
 
 	// check is a standalone network is required
@@ -277,8 +238,75 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, reconcileStatus, nil
 	}
 
+	// set updates allowed to false on the CR after successful reconcile
+	if maintenanceWindow {
+		pg.Spec.MaintenanceWindow = false
+		if err := p.Client.Update(ctx, pg); err != nil {
+			return nil, "failed to set postgres maintenanceWindow to false", err
+		}
+	}
+
 	return postgres, reconcileStatus, nil
 
+}
+
+func (p *PostgresProvider) checkAndApplyMaintenanceUpdates(ctx context.Context, pg *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput, serviceUpdates *ServiceUpdate) (croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "checkAndApplyMaintenanceUpdates")
+
+	// getting postgres user password from created secret
+	credSec := &v1.Secret{}
+	if err := p.Client.Get(ctx, types.NamespacedName{Name: pg.Name + defaultCredSecSuffix, Namespace: pg.Namespace}, credSec); err != nil {
+		msg := "failed to retrieve rds credential secret"
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
+	if postgresPass == "" {
+		msg := "unable to retrieve rds password"
+		return croType.StatusMessage(msg), errorUtil.Errorf(msg)
+	}
+
+	// verify and build rds create config
+	if err := p.buildRDSCreateStrategy(ctx, pg, ec2Svc, rdsCfg, postgresPass); err != nil {
+		msg := "failed to build and verify aws rds instance configuration"
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	pi, err := getRDSInstances(rdsSvc)
+	if err != nil {
+		msg := "failed to get rds replication groups"
+		return croType.StatusMessage(msg), err
+	}
+	foundInstance := getFoundInstance(pi, rdsCfg)
+
+	if foundInstance != nil {
+		mi, err := buildRDSUpdateStrategy(rdsCfg, foundInstance, pg)
+		if err != nil {
+			errMsg := fmt.Sprintf("error building update config for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		if mi != nil {
+			_, err := rdsSvc.ModifyDBInstance(mi)
+			if err != nil {
+				errMsg := fmt.Sprintf("error experienced trying to modify db instance: %s", *foundInstance.DBInstanceIdentifier)
+				return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+			statusMsg := fmt.Sprintf("set pending modifications for rds instance: %s", *foundInstance.DBInstanceIdentifier)
+			logger.Info(statusMsg)
+			return croType.StatusMessage(statusMsg), nil
+		}
+
+		if serviceUpdates != nil && len(serviceUpdates.updates) > 0 {
+			updating, message, err := p.rdsApplyServiceUpdates(rdsSvc, serviceUpdates, foundInstance)
+			if err != nil {
+				errMsg := "failed to service update rds instance"
+				return croType.StatusMessage(errMsg), err
+			}
+			if updating {
+				return message, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha1.Postgres, rdsSvc rdsiface.RDSAPI, ec2Svc ec2iface.EC2API, rdsCfg *rds.CreateDBInstanceInput, standaloneNetworkExists bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
@@ -774,7 +802,7 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.DeletionProtection = rdsConfig.DeletionProtection
 		updateFound = true
 	}
-	if *rdsConfig.Port != *foundConfig.Endpoint.Port {
+	if foundConfig.Endpoint != nil && *rdsConfig.Port != *foundConfig.Endpoint.Port {
 		mi.DBPortNumber = rdsConfig.Port
 		updateFound = true
 	}
@@ -946,7 +974,7 @@ func (p *PostgresProvider) buildRDSCreateStrategy(ctx context.Context, pg *v1alp
 		return errorUtil.Wrap(err, "")
 	}
 
-	if rdsCreateConfig.VpcSecurityGroupIds == nil {
+	if foundSecGroup != nil && rdsCreateConfig.VpcSecurityGroupIds == nil {
 		rdsCreateConfig.VpcSecurityGroupIds = []*string{
 			aws.String(*foundSecGroup.GroupId),
 		}

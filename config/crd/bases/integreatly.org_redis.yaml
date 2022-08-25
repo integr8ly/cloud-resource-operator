@@ -38,6 +38,8 @@ spec:
                 description: ApplyImmediately is only available to Postgres cr, for
                   blobstorage and redis cr's currently does nothing
                 type: boolean
+              maintenanceWindow:
+                type: boolean
               secretRef:
                 properties:
                   name:
