@@ -2,6 +2,9 @@ package resources
 
 import (
 	"context"
+	"reflect"
+	"testing"
+
 	croapis "github.com/integr8ly/cloud-resource-operator/apis"
 	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	v1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -10,10 +13,8 @@ import (
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"reflect"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"testing"
 )
 
 func buildTestScheme() (*runtime.Scheme, error) {
@@ -30,6 +31,18 @@ func buildTestScheme() (*runtime.Scheme, error) {
 
 func buildTestPostgresCR(allowUpdates bool) *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: croType.ResourceTypeSpec{
+			AllowUpdates: allowUpdates,
+		},
+	}
+}
+
+func buildTestRedisCR(allowUpdates bool) *v1alpha1.Redis {
+	return &v1alpha1.Redis{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -109,21 +122,30 @@ func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
 	}
 
 	type test struct {
-		name   string
-		client client.Client
-		want   bool
+		name    string
+		client  client.Client
+		want    bool
+		wantErr bool
 	}
 
 	tests := []test{
 		{
-			name:   "updates not allowed when value is false",
-			want:   false,
-			client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(false)),
+			name:    "updates not allowed when value is false",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(false)),
+			wantErr: false,
 		},
 		{
-			name:   "updates allowed when value is true",
-			want:   true,
-			client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(true)),
+			name:    "updates allowed when value is true",
+			want:    true,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(true)),
+			wantErr: false,
+		},
+		{
+			name:    "error getting postgres",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme),
+			wantErr: true,
 		},
 	}
 
@@ -131,12 +153,63 @@ func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := VerifyPostgresUpdatesAllowed(context.TODO(), tt.client, "test", "test")
 
-			if err != nil {
+			if (err != nil) != tt.wantErr {
 				t.Errorf("VerifyPostgresUpdatesAllowed() error: %v", err)
+				return
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("VerifyPostgresUpdatesAllowed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_VerifyRedisUpdatesAllowed(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type test struct {
+		name    string
+		client  client.Client
+		want    bool
+		wantErr bool
+	}
+
+	tests := []test{
+		{
+			name:    "updates not allowed when value is false",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(false)),
+			wantErr: false,
+		},
+		{
+			name:    "updates allowed when value is true",
+			want:    true,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(true)),
+			wantErr: false,
+		},
+		{
+			name:    "error getting redis",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := VerifyRedisUpdatesAllowed(context.TODO(), tt.client, "test", "test")
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("VerifyRedisUpdatesAllowed() error: %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VerifyRedisUpdatesAllowed() = %v, want %v", got, tt.want)
 			}
 		})
 	}
