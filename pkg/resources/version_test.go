@@ -29,26 +29,26 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildTestPostgresCR(allowUpdates bool) *v1alpha1.Postgres {
+func buildTestPostgresCR(maintenanceWindow bool) *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
 		},
 		Spec: croType.ResourceTypeSpec{
-			AllowUpdates: allowUpdates,
+			MaintenanceWindow: maintenanceWindow,
 		},
 	}
 }
 
-func buildTestRedisCR(allowUpdates bool) *v1alpha1.Redis {
+func buildTestRedisCR(maintenanceWindow bool) *v1alpha1.Redis {
 	return &v1alpha1.Redis{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
 		},
 		Spec: croType.ResourceTypeSpec{
-			AllowUpdates: allowUpdates,
+			MaintenanceWindow: maintenanceWindow,
 		},
 	}
 }
@@ -115,7 +115,7 @@ func Test_VerifyVersionUpgradeNeeded(t *testing.T) {
 	}
 }
 
-func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
+func Test_VerifyPostgresMaintenanceWindow(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -130,13 +130,13 @@ func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
 
 	tests := []test{
 		{
-			name:    "updates not allowed when value is false",
+			name:    "maintenance window set to false",
 			want:    false,
 			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(false)),
 			wantErr: false,
 		},
 		{
-			name:    "updates allowed when value is true",
+			name:    "maintenance window set to true",
 			want:    true,
 			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(true)),
 			wantErr: false,
@@ -151,21 +151,21 @@ func Test_VerifyPostgresUpdatesAllowed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := VerifyPostgresUpdatesAllowed(context.TODO(), tt.client, "test", "test")
+			got, err := VerifyPostgresMaintenanceWindow(context.TODO(), tt.client, "test", "test")
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("VerifyPostgresUpdatesAllowed() error: %v", err)
+				t.Errorf("VerifyPostgresMaintenanceWindow() error: %v", err)
 				return
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("VerifyPostgresUpdatesAllowed() = %v, want %v", got, tt.want)
+				t.Errorf("VerifyPostgresMaintenanceWindow() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_VerifyRedisUpdatesAllowed(t *testing.T) {
+func Test_VerifyRedisMaintenanceWindow(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -180,13 +180,13 @@ func Test_VerifyRedisUpdatesAllowed(t *testing.T) {
 
 	tests := []test{
 		{
-			name:    "updates not allowed when value is false",
+			name:    "maintenance window set to false",
 			want:    false,
 			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(false)),
 			wantErr: false,
 		},
 		{
-			name:    "updates allowed when value is true",
+			name:    "maintenance window set to true",
 			want:    true,
 			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(true)),
 			wantErr: false,
@@ -201,15 +201,15 @@ func Test_VerifyRedisUpdatesAllowed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := VerifyRedisUpdatesAllowed(context.TODO(), tt.client, "test", "test")
+			got, err := VerifyRedisMaintenanceWindow(context.TODO(), tt.client, "test", "test")
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("VerifyRedisUpdatesAllowed() error: %v", err)
+				t.Errorf("VerifyRedisMaintenanceWindow() error: %v", err)
 				return
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("VerifyRedisUpdatesAllowed() = %v, want %v", got, tt.want)
+				t.Errorf("VerifyRedisMaintenanceWindow() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+
 	"github.com/hashicorp/go-version"
 	v1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
@@ -23,7 +24,7 @@ func VerifyVersionUpgradeNeeded(currentVersion string, desiredVersion string) (b
 	return current.LessThan(desired), nil
 }
 
-func VerifyPostgresUpdatesAllowed(ctx context.Context, client k8sclient.Client, namespace string, name string) (bool, error) {
+func VerifyPostgresMaintenanceWindow(ctx context.Context, client k8sclient.Client, namespace string, name string) (bool, error) {
 	postgres := &v1.Postgres{}
 	if err := client.Get(ctx, k8sclient.ObjectKey{
 		Name:      name,
@@ -32,14 +33,14 @@ func VerifyPostgresUpdatesAllowed(ctx context.Context, client k8sclient.Client, 
 		return false, err
 	}
 
-	if postgres.Spec.AllowUpdates {
+	if postgres.Spec.MaintenanceWindow {
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func VerifyRedisUpdatesAllowed(ctx context.Context, client k8sclient.Client, namespace string, name string) (bool, error) {
+func VerifyRedisMaintenanceWindow(ctx context.Context, client k8sclient.Client, namespace string, name string) (bool, error) {
 	redis := &v1.Redis{}
 	if err := client.Get(ctx, k8sclient.ObjectKey{
 		Name:      name,
@@ -48,7 +49,7 @@ func VerifyRedisUpdatesAllowed(ctx context.Context, client k8sclient.Client, nam
 		return false, err
 	}
 
-	if redis.Spec.AllowUpdates {
+	if redis.Spec.MaintenanceWindow {
 		return true, nil
 	}
 

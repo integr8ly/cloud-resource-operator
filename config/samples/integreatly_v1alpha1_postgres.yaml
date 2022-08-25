@@ -14,3 +14,5 @@ spec:
   tier: development
   # the type i want for a postgres storage
   type: REPLACE_ME
+  # whether service updates should take place
+  maintenanceWindow: false
