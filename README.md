@@ -35,7 +35,7 @@ Prerequisites:
 - [operator-sdk](https://github.com/operator-framework/operator-sdk) version v1.14.0.
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
-- [OPM](https://docs.openshift.com/container-platform/4.6/cli_reference/opm-cli.html)
+- [OPM](https://docs.openshift.com/container-platform/4.11/cli_reference/opm-cli.html)
 
 Ensure you are running at least `Go 1.18`.
 ```shell script
