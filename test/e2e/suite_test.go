@@ -17,18 +17,18 @@ limitations under the License.
 package e2e
 
 import (
+	"testing"
+
 	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"testing"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -44,7 +44,6 @@ func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	// start test env
-	By("bootstrapping test environment")
 
 	useCluster := true
 	testEnv = &envtest.Environment{
@@ -61,25 +60,26 @@ func TestAPIs(t *testing.T) {
 		UserName: "system:admin",
 		Groups:   []string{"system:authenticated"},
 	}
-
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"E2E Test Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "E2E Test Suite")
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
+	done := make(chan interface{})
+	go func() {
+		logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
+		By("bootstrapping test environment")
 
-	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
+		err = integreatlyv1alpha1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
 
-	err = integreatlyv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+		err = configv1.AddToScheme(scheme.Scheme)
+		Expect(err).NotTo(HaveOccurred())
 
-	err = configv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
-	close(done)
-}, 60)
+		// +kubebuilder:scaffold:scheme
+		close(done)
+	}()
+	Eventually(done, 60).Should(BeClosed())
+})
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
