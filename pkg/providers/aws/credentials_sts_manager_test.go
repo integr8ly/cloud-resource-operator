@@ -41,13 +41,12 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 					Namespace: ns,
 				},
 				Data: map[string][]byte{
-					defaultRoleARNKeyName:   []byte("ROLE_ARN"),
-					defaultTokenPathKeyName: []byte("TOKEN_PATH"),
+					defaultRoleARNKeyName: []byte("ROLE_ARN"),
 				},
 			}),
 			wantErr:           false,
 			expectedRoleARN:   "ROLE_ARN",
-			expectedTokenPath: "TOKEN_PATH",
+			expectedTokenPath: defaultTokenPath,
 		},
 		{
 			name: "undefined role arn key in sts credentials secret",
@@ -57,27 +56,11 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 					Namespace: ns,
 				},
 				Data: map[string][]byte{
-					defaultRoleARNKeyName:   []byte(""),
-					defaultTokenPathKeyName: []byte("TOKEN_PATH"),
+					defaultRoleARNKeyName: []byte(""),
 				},
 			}),
 			wantErr:        true,
 			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultRoleARNKeyName, defaultSTSCredentialSecretName),
-		},
-		{
-			name: "undefined token path key in sts credentials secret",
-			client: fake.NewFakeClientWithScheme(scheme, &v12.Secret{
-				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      defaultSTSCredentialSecretName,
-					Namespace: ns,
-				},
-				Data: map[string][]byte{
-					defaultRoleARNKeyName:   []byte("ROLE_ARN"),
-					defaultTokenPathKeyName: []byte(""),
-				},
-			}),
-			wantErr:        true,
-			expectedErrMsg: fmt.Sprintf("%s key is undefined in secret %s", defaultTokenPathKeyName, defaultSTSCredentialSecretName),
 		},
 	}
 	for _, tc := range cases {
@@ -133,8 +116,7 @@ func TestSTSCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 					Namespace: ns,
 				},
 				Data: map[string][]byte{
-					defaultRoleARNKeyName:   []byte("ROLE_ARN"),
-					defaultTokenPathKeyName: []byte("TOKEN_PATH"),
+					defaultRoleARNKeyName: []byte("ROLE_ARN"),
 				},
 			}),
 			wantErr: false,
