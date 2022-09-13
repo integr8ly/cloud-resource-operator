@@ -46,8 +46,7 @@ const (
 	defaultVpcId                   = "testID"
 	testPreferredBackupWindow      = "02:40-03:10"
 	testPreferredMaintenanceWindow = "mon:00:29-mon:00:59"
-	testNewAwsEngineVersion        = "13.5"
-	testInvalidAwsEngineVersion    = "xyz"
+	testInvalidEngineVersion       = "xyz"
 )
 
 var (
@@ -504,22 +503,6 @@ func buildTestPostgresCR() *v1alpha1.Postgres {
 	}
 }
 
-func buildTestPostgresMaintenanceWindowCR() *v1alpha1.Postgres {
-	return &v1alpha1.Postgres{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-			Labels: map[string]string{
-				"productName": "test_product",
-			},
-		},
-		Spec: croType.ResourceTypeSpec{
-			MaintenanceWindow: true,
-			ApplyImmediately:  true,
-		},
-	}
-}
-
 func buildTestPostgresApplyImmediatelyCR() *v1alpha1.Postgres {
 	return &v1alpha1.Postgres{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -596,19 +579,6 @@ func builtTestCredSecret() *v1.Secret {
 	}
 }
 
-func builtInvalidTestCredSecret() *v1.Secret {
-	return &v1.Secret{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      "test-aws-rds-credentials",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{
-			"user":     []byte(""),
-			"password": []byte(""),
-		},
-	}
-}
-
 func buildDbInstanceGroupPending() []*rds.DBInstance {
 	return []*rds.DBInstance{
 		{
@@ -677,9 +647,33 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 }
 
 func buildAvailableDBInstanceVersion(testID string, version string) []*rds.DBInstance {
-	instances := buildAvailableDBInstance(testID)
-	instances[0].EngineVersion = aws.String(version)
-	return instances
+	return []*rds.DBInstance{
+		{
+			DBInstanceIdentifier:       aws.String(testID),
+			DBInstanceStatus:           aws.String("available"),
+			AutoMinorVersionUpgrade:    aws.Bool(false),
+			AvailabilityZone:           aws.String("test-availabilityZone"),
+			DBInstanceArn:              aws.String("arn-test"),
+			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
+			MasterUsername:             aws.String(defaultAwsPostgresUser),
+			DBName:                     aws.String(defaultAwsPostgresDatabase),
+			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
+			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
+			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
+			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+			EngineVersion:              aws.String(version),
+			Engine:                     aws.String(defaultAwsEngine),
+			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
+			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
+			MultiAZ:                    aws.Bool(true),
+			Endpoint: &rds.Endpoint{
+				Address:      aws.String("blob"),
+				HostedZoneId: aws.String("blog"),
+				Port:         aws.Int64(defaultAwsPostgresPort),
+			},
+		},
+	}
 }
 
 func buildPendingDBInstance(testID string) []*rds.DBInstance {
@@ -737,23 +731,6 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
 		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
 		EngineVersion:              aws.String(defaultAwsEngineVersion),
-		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
-		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
-		MultiAZ:                    aws.Bool(true),
-	}
-}
-
-func buildNewEngineCreateInput(testID string, version string) *rds.CreateDBInstanceInput {
-	return &rds.CreateDBInstanceInput{
-		DBInstanceIdentifier:       aws.String(testID),
-		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                       aws.Int64(defaultAwsPostgresPort),
-		BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
-		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
-		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
-		EngineVersion:              aws.String(version),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 		MultiAZ:                    aws.Bool(true),
@@ -862,6 +839,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		ec2Svc                  ec2iface.EC2API
 		postgresCfg             *rds.CreateDBInstanceInput
 		standaloneNetworkExists bool
+		maintenanceWindow       bool
 	}
 	tests := []struct {
 		name    string
@@ -909,6 +887,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             &rds.CreateDBInstanceInput{},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -978,6 +957,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1040,6 +1020,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1107,6 +1088,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
 				standaloneNetworkExists: false,
+				maintenanceWindow:       true,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1117,6 +1099,113 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: false,
+		},
+		{
+			name: "test rds requires modification error creating update strategy (valid_standalone_subnets)",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{}, nil
+					}
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: buildAvailableDBInstanceVersion(testIdentifier, testInvalidEngineVersion),
+						}, nil
+					}
+					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
+					}
+					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+						return &rds.DescribeDBSnapshotsOutput{
+							DBSnapshots: []*rds.DBSnapshot{
+								{
+									DBSnapshotArn:        &snapshotARN,
+									DBSnapshotIdentifier: &snapshotIdentifier,
+								},
+							},
+						}, nil
+					}
+					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return buildPendingMaintenanceActions()
+					}
+				}),
+				ec2Svc: &mockEc2Client{
+					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					},
+				},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "test error trying to modify available rds (valid_standalone_subnets)",
+			args: args{
+				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
+					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+						return &rds.DescribeDBSubnetGroupsOutput{}, nil
+					}
+					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: buildAvailableDBInstance(testIdentifier),
+						}, nil
+					}
+					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
+					}
+					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+						return &rds.DescribeDBSnapshotsOutput{
+							DBSnapshots: []*rds.DBSnapshot{
+								{
+									DBSnapshotArn:        &snapshotARN,
+									DBSnapshotIdentifier: &snapshotIdentifier,
+								},
+							},
+						}, nil
+					}
+					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+						return buildPendingMaintenanceActions()
+					}
+					rdsClient.modifyDBInstanceFn = func(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				ec2Svc: &mockEc2Client{
+					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					},
+				},
+				ctx:                     context.TODO(),
+				cr:                      buildTestPostgresCR(),
+				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Logger:            testLogger,
+				CredentialManager: nil,
+				ConfigManager:     nil,
+				TCPPinger:         buildMockConnectionTester(),
+			},
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name: "test rds exists and status is available and does not need to be modified (valid cluster bundle subnets)",
@@ -1174,6 +1263,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildAvailableCreateInput(testIdentifier),
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1241,6 +1331,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
 				standaloneNetworkExists: false,
+				maintenanceWindow:       true,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1308,6 +1399,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildNewRequiresModificationsCreateInput(testIdentifier),
 				standaloneNetworkExists: false,
+				maintenanceWindow:       true,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1358,6 +1450,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
@@ -1387,6 +1480,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      nil,
 				postgresCfg:             nil,
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme),
@@ -1413,6 +1507,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      nil,
 				postgresCfg:             nil,
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme),
@@ -1446,6 +1541,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      nil,
 				postgresCfg:             nil,
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
@@ -1494,6 +1590,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             nil,
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
@@ -1542,6 +1639,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             nil,
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), &v1.Secret{
@@ -1578,7 +1676,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.reconcileRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists)
+			got, _, err := p.reconcileRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1798,485 +1896,6 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("deleteRDSInstance() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAWSPostgresProvider_checkAndApplyMaintenanceUpdates(t *testing.T) {
-	scheme, err := buildTestSchemePostgresql()
-	if err != nil {
-		logrus.Fatal(err)
-		t.Fatal("failed to build scheme", err)
-	}
-	testIdentifier := "test-id"
-	secName, err := BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
-	if err != nil {
-		logrus.Fatal(err)
-		t.Fatal("failed to build security name", err)
-	}
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-		TCPPinger         ConnectionTester
-	}
-	type args struct {
-		ctx            context.Context
-		cr             *v1alpha1.Postgres
-		rdsSvc         rdsiface.RDSAPI
-		ec2Svc         ec2iface.EC2API
-		postgresCfg    *rds.CreateDBInstanceInput
-		serviceUpdates *ServiceUpdate
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    croType.StatusMessage
-		wantErr bool
-		mockFn  func()
-	}{
-		{
-			name: "test rds no actions",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    "",
-			wantErr: false,
-		},
-		{
-			name: "test rds no engineversion",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    "",
-			wantErr: false,
-		},
-		{
-			name: "test rds same engineversion",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    "",
-			wantErr: false,
-		},
-		{
-			name: "test rds apply new engineversion",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstanceVersion(testIdentifier, "13.3"),
-						}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage(fmt.Sprintf("set pending modifications for rds instance: %s", testIdentifier)),
-			wantErr: false,
-		},
-		{
-			name: "fail test rds credential secret missing",
-			args: args{
-				ctx:            context.TODO(),
-				rdsSvc:         &mockRdsClient{},
-				ec2Svc:         &mockEc2Client{},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage("failed to retrieve rds credential secret"),
-			wantErr: true,
-		},
-		{
-			name: "fail test rds credential secret password missing",
-			args: args{
-				ctx:            context.TODO(),
-				rdsSvc:         &mockRdsClient{},
-				ec2Svc:         &mockEc2Client{},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtInvalidTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage("unable to retrieve rds password"),
-			wantErr: true,
-		},
-		{
-			name: "fail test rds error building create strategy",
-			args: args{
-				ctx:    context.TODO(),
-				rdsSvc: &mockRdsClient{},
-				ec2Svc: &mockEc2Client{
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return nil, genericAWSError
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage("failed to build and verify aws rds instance configuration"),
-			wantErr: true,
-		},
-		{
-			name: "fail test rds apply modifications",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstanceVersion(testIdentifier, "13.3"),
-						}, nil
-					},
-					modifyDBInstanceFn: func(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
-						return nil, genericAWSError
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:             buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg:    &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				serviceUpdates: &ServiceUpdate{},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage(fmt.Sprintf("error experienced trying to modify db instance: %s", testIdentifier)),
-			wantErr: true,
-		},
-		{
-			name: "test rds apply service updates",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
-						return &rds.ApplyPendingMaintenanceActionOutput{}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:          buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				serviceUpdates: &ServiceUpdate{
-					updates: []string{
-						"1642032001",
-					}},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage("completed check for service updates"),
-			wantErr: false,
-		},
-		{
-			name: "fail test rds apply service updates",
-			args: args{
-				ctx: context.TODO(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return &rds.DescribePendingMaintenanceActionsOutput{}, genericAWSError
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
-				cr:          buildTestPostgresMaintenanceWindowCR(),
-				postgresCfg: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
-				serviceUpdates: &ServiceUpdate{
-					updates: []string{
-						"1642032001",
-					}},
-			},
-			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresMaintenanceWindowCR(), builtTestCredSecret(), buildTestInfra()),
-				Logger:            testLogger,
-				CredentialManager: nil,
-				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
-			},
-			want:    croType.StatusMessage("failed to service update rds instance"),
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockFn != nil {
-				tt.mockFn()
-				defer func() {
-					timeOut = time.Minute * 5
-				}()
-			}
-			p := &PostgresProvider{
-				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-				TCPPinger:         tt.fields.TCPPinger,
-			}
-			got, err := p.checkAndApplyMaintenanceUpdates(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.serviceUpdates)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("checkAndApplyMaintenanceUpdates() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("checkAndApplyMaintenanceUpdates() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -2675,7 +2294,7 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 	}
 }
 
-func Test_rdsApplyStatusUpdates(t *testing.T) {
+func Test_rdsApplyServiceUpdates(t *testing.T) {
 	testIdentifier := "test-identifier"
 	scheme, err := buildTestSchemePostgresql()
 	if err != nil {
