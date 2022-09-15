@@ -12,6 +12,7 @@ UPGRADE ?= true
 CHANNEL ?= rhmi
 REDIS_NODE_SIZE ?= ""
 REDIS_NAME ?= example-redis
+PROVIDER=openshift # openshift/aws/gcp
 
 SHELL=/bin/bash
 
@@ -95,49 +96,25 @@ cluster/prepare: kustomize setup/service_account
 	-oc apply -f ./config/samples/cloud_resources_aws_strategies.yaml -n $(NAMESPACE)
 	$(KUSTOMIZE) build config/crd | oc apply -f -
 
-.PHONY: cluster/seed/workshop/blobstorage
-cluster/seed/workshop/blobstorage:
-	@cat config/samples/integreatly_v1alpha1_blobstorage.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
+.PHONY: cluster/seed/blobstorage
+cluster/seed/blobstorage:
+	@cat config/samples/integreatly_v1alpha1_blobstorage.yaml | sed "s/type: REPLACE_ME/type: $(PROVIDER)/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/managed/blobstorage
-cluster/seed/managed/blobstorage:
-	@cat config/samples/integreatly_v1alpha1_blobstorage.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+.PHONY: cluster/seed/redis
+cluster/seed/redis:
+	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: $(PROVIDER)/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/gcp/blobstorage
-cluster/seed/gcp/blobstorage:
-	@cat config/samples/integreatly_v1alpha1_blobstorage.yaml | sed "s/type: REPLACE_ME/type: gcp/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/workshop/redis
-cluster/seed/workshop/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: workshop/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/managed/redis
-cluster/seed/managed/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: managed/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/managed/redissnapshot
-cluster/seed/managed/redissnapshot:
+.PHONY: cluster/seed/redissnapshot
+cluster/seed/redissnapshot:
 	@cat config/samples/integreatly_v1alpha1_redissnapshot.yaml | sed "s/resourceName: REPLACE_ME/resourceName: example-redis/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/gcp/redis
-cluster/seed/gcp/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/type: REPLACE_ME/type: gcp/g" | oc apply -f - -n $(NAMESPACE)
+.PHONY: cluster/seed/postgres
+cluster/seed/postgres:
+	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: $(PROVIDER)/g" | oc apply -f - -n $(NAMESPACE)
 
-.PHONY: cluster/seed/workshop/postgres
-cluster/seed/workshop/postgres:
-	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/managed/postgres
-cluster/seed/managed/postgres:
-	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/managed/postgressnapshot
-cluster/seed/managed/postgressnapshot:
+.PHONY: cluster/seed/postgressnapshot
+cluster/seed/postgressnapshot:
 	@cat config/samples/integreatly_v1alpha1_postgressnapshot.yaml | sed "s/resourceName: REPLACE_ME/resourceName: example-postgres/g" | oc apply -f - -n $(NAMESPACE)
-
-.PHONY: cluster/seed/gcp/postgres
-cluster/seed/gcp/postgres:
-	@cat config/samples/integreatly_v1alpha1_postgres.yaml | sed "s/type: REPLACE_ME/type: gcp/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/clean
 cluster/clean:

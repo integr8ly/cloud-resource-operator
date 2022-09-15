@@ -36,7 +36,7 @@ func GetAWSRegion(ctx context.Context, c client.Client) (string, error) {
 	if infra.Status.PlatformStatus.Type == v1.AWSPlatformType {
 		return infra.Status.PlatformStatus.AWS.Region, nil
 	}
-	return "", errorUtil.New("infrastructure does not container aws region")
+	return "", errorUtil.New("infrastructure does not contain aws region")
 }
 
 func GetClusterInfrastructure(ctx context.Context, c client.Client) (*v1.Infrastructure, error) {

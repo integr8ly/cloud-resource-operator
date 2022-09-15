@@ -20,13 +20,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -74,11 +74,10 @@ func New(mgr manager.Manager) (*RedisReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	providerList := []providers.RedisProvider{
-		awsRedisProvider,
 		openshift.NewOpenShiftRedisProvider(client, logger),
-		gcp.NewGCPRedisProvider(client, logger),
+		awsRedisProvider,
+		gcp.NewGCPRedisProvider(client),
 	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &RedisReconciler{
