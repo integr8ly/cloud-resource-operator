@@ -3,12 +3,13 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	"time"
+
 	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -74,7 +75,7 @@ func OpenshiftVerifyRedisConnection(t TestingTB, ctx *TestingContext, namespace 
 	return nil
 }
 
-//tests deployment recovery on manual delete of deployment
+// tests deployment recovery on manual delete of deployment
 func OpenshiftVerifyRedisDeploymentRecovery(t TestingTB, ctx *TestingContext, namespace string) error {
 	testRedis, namespace, err := getBasicTestRedis(ctx, namespace)
 	if err != nil {

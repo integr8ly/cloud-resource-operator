@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"reflect"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -342,6 +343,7 @@ func Test_createRedisCluster(t *testing.T) {
 		redisConfig             *elasticache.CreateReplicationGroupInput
 		stratCfg                *StrategyConfig
 		standaloneNetworkExists bool
+		maintenanceWindow       bool
 		ServiceUpdate           *ServiceUpdate
 	}
 	type fields struct {
@@ -360,7 +362,7 @@ func Test_createRedisCluster(t *testing.T) {
 		mockFn  func()
 	}{
 		{
-			name: "test no error on cache clusters of type memcahced with no replicationgroupid",
+			name: "test no error on cache clusters of type memcached with no replicationgroupid",
 			args: args{
 				ctx: context.TODO(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -409,6 +411,7 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1106,6 +1109,7 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1182,6 +1186,7 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1245,6 +1250,7 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1321,6 +1327,295 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+		{
+			name: "test elasticache needs to be modified error creating update strategy (valid standalone subnets)",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
+				}),
+				r:      buildTestRedisCR(),
+				stsSvc: &mockStsClient{},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
+					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+						return nil, genericAWSError
+					}
+				}),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "test elasticache needs to be modified error modifying replication group (valid standalone subnets)",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
+					elasticacheClient.modifyReplicationGroupFn = func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				r:      buildTestRedisCR(),
+				stsSvc: &mockStsClient{},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
+				}),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "test elasticache needs to be modified service updates present (valid standalone subnets)",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String(defaultCacheNodeType)
+									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
+				}),
+				r:      buildTestRedisCR(),
+				stsSvc: &mockStsClient{},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
+				}),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				ServiceUpdate:           &ServiceUpdate{updates: []string{"test-service-update"}},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    buildTestRedisCluster(),
+			wantErr: false,
+		},
+		{
+			name: "test elasticache modification error applying service updates (valid standalone subnets)",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String(defaultCacheNodeType)
+									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
+					elasticacheClient.describeUpdateActionsFn = func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				r:      buildTestRedisCR(),
+				stsSvc: &mockStsClient{},
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
+				}),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				ServiceUpdate:           &ServiceUpdate{updates: []string{"test-service-update"}},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
+			},
+			fields: fields{
+				ConfigManager:     nil,
+				CredentialManager: nil,
+				Logger:            testLogger,
+				TCPPinger:         buildMockConnectionTester(),
+				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "test elasticache does not need to be modified maintenance window true (valid standalone subnets)",
+			args: args{
+				ctx: context.TODO(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.describeReplicationGroupsFn = func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
+						return &elasticache.DescribeReplicationGroupsOutput{
+							ReplicationGroups: []*elasticache.ReplicationGroup{
+								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+									group.ReplicationGroupId = aws.String("test-id")
+									group.Status = aws.String("available")
+									group.CacheNodeType = aws.String(defaultCacheNodeType)
+									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.NodeGroups = []*elasticache.NodeGroup{
+										{
+											NodeGroupId:      aws.String("primary-node"),
+											NodeGroupMembers: nil,
+											PrimaryEndpoint: &elasticache.Endpoint{
+												Address: testAddress,
+												Port:    testPort,
+											},
+											Status: aws.String("available"),
+										},
+									}
+								},
+								)},
+						}, nil
+					}
+					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
+						return &elasticache.DescribeCacheClustersOutput{}, nil
+					}
+				}),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: buildSecurityGroups(secName),
+						}, nil
+					}
+				}),
+				r:                       buildTestRedisCR(),
+				stsSvc:                  &mockStsClient{},
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       true,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1343,8 +1638,8 @@ func Test_createRedisCluster(t *testing.T) {
 								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
 									group.ReplicationGroupId = aws.String("test-id")
 									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String("test")
-									group.SnapshotRetentionLimit = aws.Int64(20)
+									group.CacheNodeType = aws.String(defaultCacheNodeType)
+									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
 											NodeGroupId:      aws.String("primary-node"),
@@ -1401,6 +1696,7 @@ func Test_createRedisCluster(t *testing.T) {
 				},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: false,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1456,6 +1752,7 @@ func Test_createRedisCluster(t *testing.T) {
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
 				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
 			},
 			fields: fields{
 				ConfigManager:     nil,
@@ -1484,7 +1781,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg, tt.args.ServiceUpdate, tt.args.standaloneNetworkExists)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.cacheSvc, tt.args.stsSvc, tt.args.ec2Svc, tt.args.redisConfig, tt.args.stratCfg, tt.args.ServiceUpdate, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2205,7 +2502,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 // apply critical security update return if it wants to apply it immediately - if true call the apply immediately logic next in the provider
 // having a return value.
 
-func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
+func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 	scheme, err := buildTestSchemeRedis()
 	if err != nil {
 		logrus.Fatal(err)
@@ -2612,9 +2909,9 @@ func TestRedisProvider_checkSpecifiedSecurityUpdates(t *testing.T) {
 				CacheSvc:          tt.fields.CacheSvc,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			err := p.checkSpecifiedSecurityUpdates(tt.args.cacheSvc, tt.args.replicationGroup, tt.args.specifiedUpdates)
+			err := p.applySpecifiedSecurityUpdates(tt.args.cacheSvc, tt.args.replicationGroup, tt.args.specifiedUpdates)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("checkSpecifiedSecurityUpdates() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("applylSpecifiedSecurityUpdates() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			tt.checkfunc(t, tt.args.cacheSvc)

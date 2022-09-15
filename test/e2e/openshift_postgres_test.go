@@ -3,9 +3,10 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
+	"time"
+
 	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 

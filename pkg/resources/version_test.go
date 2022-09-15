@@ -1,9 +1,57 @@
 package resources
 
 import (
+	"context"
 	"reflect"
 	"testing"
+
+	croapis "github.com/integr8ly/cloud-resource-operator/apis"
+	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	v1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/openshift/cloud-credential-operator/pkg/apis"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func buildTestScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	err := croapis.AddToScheme(scheme)
+	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = corev1.AddToScheme(scheme)
+	err = apis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
+	return scheme, nil
+}
+
+func buildTestPostgresCR(maintenanceWindow bool) *v1alpha1.Postgres {
+	return &v1alpha1.Postgres{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: croType.ResourceTypeSpec{
+			MaintenanceWindow: maintenanceWindow,
+		},
+	}
+}
+
+func buildTestRedisCR(maintenanceWindow bool) *v1alpha1.Redis {
+	return &v1alpha1.Redis{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: croType.ResourceTypeSpec{
+			MaintenanceWindow: maintenanceWindow,
+		},
+	}
+}
 
 func Test_VerifyVersionUpgradeNeeded(t *testing.T) {
 
@@ -62,7 +110,107 @@ func Test_VerifyVersionUpgradeNeeded(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("buildRDSUpdateStrategy() = %v, want %v", got, tt.want)
+			t.Errorf("VerifyVersionUpgradedNeeded() = %v, want %v", got, tt.want)
 		}
+	}
+}
+
+func Test_VerifyPostgresMaintenanceWindow(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type test struct {
+		name    string
+		client  client.Client
+		want    bool
+		wantErr bool
+	}
+
+	tests := []test{
+		{
+			name:    "maintenance window set to false",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(false)),
+			wantErr: false,
+		},
+		{
+			name:    "maintenance window set to true",
+			want:    true,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(true)),
+			wantErr: false,
+		},
+		{
+			name:    "error getting postgres",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := VerifyPostgresMaintenanceWindow(context.TODO(), tt.client, "test", "test")
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("VerifyPostgresMaintenanceWindow() error: %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VerifyPostgresMaintenanceWindow() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_VerifyRedisMaintenanceWindow(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type test struct {
+		name    string
+		client  client.Client
+		want    bool
+		wantErr bool
+	}
+
+	tests := []test{
+		{
+			name:    "maintenance window set to false",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(false)),
+			wantErr: false,
+		},
+		{
+			name:    "maintenance window set to true",
+			want:    true,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(true)),
+			wantErr: false,
+		},
+		{
+			name:    "error getting redis",
+			want:    false,
+			client:  moqClient.NewSigsClientMoqWithScheme(scheme),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := VerifyRedisMaintenanceWindow(context.TODO(), tt.client, "test", "test")
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("VerifyRedisMaintenanceWindow() error: %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VerifyRedisMaintenanceWindow() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

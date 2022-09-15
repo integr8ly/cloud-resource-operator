@@ -15,3 +15,5 @@ spec:
   type: REPLACE_ME
   # this value is not currently implemented for blobstorage
   applyImmediately: false
+  # this value is not currently implemented for blobstorage
+  maintenanceWindow: false
