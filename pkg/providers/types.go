@@ -13,8 +13,6 @@ import (
 type ResourceType string
 
 const (
-	ManagedDeploymentType = "managed"
-
 	AWSDeploymentStrategy       = "aws"
 	OpenShiftDeploymentStrategy = "openshift"
 	GCPDeploymentStrategy       = "gcp"

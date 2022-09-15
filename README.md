@@ -91,7 +91,7 @@ The operator expects two configmaps to exist in the namespace it is watching. Th
 ### Provider configmap
 The `cloud-resource-config` configmap defines which provider should be used to provision a specific resource type. Different deployment types can contain different `resource type > provider` mappings.
 An example can be seen [here](config/samples/cloud_resource_config.yaml).
-For example, a `workshop` deployment type might choose to deploy a Postgres resource type in-cluster (`openshift`), while a `managed` deployment type might choose `AWS` to deploy an RDS instance instead. 
+For example, a `openshift` deployment type might choose to deploy a Postgres resource type in-cluster (`openshift`), while a `aws` deployment type might choose `AWS` to deploy an RDS instance instead. 
 
 ### Strategy configmap
 A config map object is expected to exist for each provider (Currently `AWS` or `Openshift`) that will be used by the operator. 
@@ -105,7 +105,7 @@ An example of a Postgres custom resource can be seen [here](./config/samples/int
 Each custom resource contains:
 - A `secretRef`, containing the name of the secret that will be created by the operator with connection details to the resource
 - A `tier`, in this case `production`, which means a production worthy Postgres instance will be deployed 
-- A `type`, in this case `managed`, which will resolve to a cloud provider specified in the `cloud-resource-config` configmap
+- A `type`, in this case `openshift`, which will resolve to a cloud provider specified in the `cloud-resource-config` configmap
 
 ```yaml
 spec:
@@ -114,8 +114,8 @@ spec:
     name: example-postgres-sec
   # i want a postgres storage of a development-level tier
   tier: production
-  # i want a postgres storage for the type managed
-  type: managed
+  # i want a postgres storage for the type aws
+  type: aws
 ```
 
 ## Resource tagging
@@ -124,7 +124,7 @@ Postgres, Redis and Blobstorage resources are tagged with the following key valu
 ```bash
 integreatly.org/clusterID: #clusterid
 integreatly.org/product-name: #product name
-integreatly.org/resource-type: #managed/workshop 
+integreatly.org/resource-type: #openshift/aws/gcp 
 integreatly.org/resource-name: #postgres/redis/blobstorage
 ```
 
@@ -345,7 +345,7 @@ Navigating to **Installed Operators** -> **Cloud Resource Operator** -> **Subscr
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
 - `Resource type` - Something that can be requested from the operator via a custom resource e.g. `blobstorage`, `redis`
 - `Resource` - The result of a resource type created via a provider e.g. `S3 Bucket`, `Azure Blob`
-- `Deployment type` - Groups mappings of resource types to providers (see [here](config/samples/cloud_resource_config.yaml)) e.g. `managed`, `workshop`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
+- `Deployment type` - Groups mappings of resource types to providers (see [here](config/samples/cloud_resource_config.yaml)) e.g. `openshift`, `aws`, `gcp`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
 - `Deployment tier` - Provides a layer of abstraction, which allows the end user to request a resource of a certain level (for example, a `production` worthy Postgres instance), without being concerned with provider-specific deployment details (such as storage capacity, for example). 
 
 ### Design

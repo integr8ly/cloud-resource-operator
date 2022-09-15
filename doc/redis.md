@@ -4,7 +4,7 @@
 To seed a Kubernetes/Openshift cluster with an example Redis resource:
 ```
 $ make cluster/prepare 
-$ make cluster/seed/redis
+$ make cluster/seed/redis PROVIDER=openshift
 ```
 
 ### AWS Strategy

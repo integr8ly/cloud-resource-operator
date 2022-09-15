@@ -4,7 +4,7 @@
 To seed a Kubernetes/Openshift cluster with an example Blob Storage resource:
 ```
 $ make cluster/prepare 
-$ make cluster/seed/blobstorage
+$ make cluster/seed/blobstorage PROVIDER=openshift
 ```
 
 ### AWS Strategy
