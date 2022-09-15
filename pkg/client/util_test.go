@@ -60,7 +60,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				deploymentType: "aws",
 				tier:           "production",
 				productName:    "test",
 				name:           "test",
@@ -79,7 +79,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -94,7 +94,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				deploymentType: "aws",
 				tier:           "production",
 				name:           "test",
 				productName:    "test",
@@ -118,7 +118,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -133,7 +133,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
+				deploymentType: "openshift",
 				tier:           "development",
 				name:           "test",
 				productName:    "test",
@@ -199,7 +199,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "managed",
+				deploymentType:   "aws",
 				tier:             "production",
 				productName:      "test",
 				name:             "test",
@@ -219,7 +219,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -234,7 +234,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "managed",
+				deploymentType:   "aws",
 				productName:      "test",
 				tier:             "production",
 				name:             "test",
@@ -259,7 +259,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -275,7 +275,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "workshop",
+				deploymentType:   "openshift",
 				tier:             "development",
 				productName:      "test",
 				name:             "test",
@@ -295,7 +295,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "managed",
+				deploymentType:   "aws",
 				tier:             "production",
 				productName:      "test",
 				name:             "test",
@@ -319,7 +319,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -334,7 +334,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "managed",
+				deploymentType:   "aws",
 				productName:      "test",
 				tier:             "production",
 				name:             "test",
@@ -363,7 +363,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -379,7 +379,7 @@ func TestReconcilePostgres(t *testing.T) {
 			args: args{
 				ctx:              context.TODO(),
 				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "workshop",
+				deploymentType:   "openshift",
 				tier:             "development",
 				productName:      "test",
 				name:             "test",
@@ -438,7 +438,7 @@ func TestReconcileRedis(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				deploymentType: "aws",
 				tier:           "production",
 				productName:    "test",
 				name:           "test",
@@ -457,7 +457,7 @@ func TestReconcileRedis(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -472,7 +472,7 @@ func TestReconcileRedis(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				deploymentType: "aws",
 				tier:           "production",
 				productName:    "test",
 				name:           "test",
@@ -496,7 +496,7 @@ func TestReconcileRedis(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -511,7 +511,7 @@ func TestReconcileRedis(t *testing.T) {
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
+				deploymentType: "openshift",
 				tier:           "development",
 				productName:    "test",
 				name:           "test",

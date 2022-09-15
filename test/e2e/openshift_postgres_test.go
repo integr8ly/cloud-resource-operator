@@ -430,7 +430,7 @@ func getBasicTestPostgres(ctx *TestingContext, namespace string) (*v1alpha1.Post
 				Namespace: namespace,
 			},
 			Tier: "development",
-			Type: "workshop",
+			Type: "openshift",
 		},
 	}, namespace, nil
 }

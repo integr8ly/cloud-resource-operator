@@ -75,7 +75,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string]string{
-			ManagedDeploymentType: string(testDtcJSON),
+			AWSDeploymentStrategy: string(testDtcJSON),
 		},
 	})
 	cases := []struct {
@@ -92,7 +92,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 			cmName:      "test",
 			cmNamespace: "test",
 			client:      fakeClient,
-			deployType:  ManagedDeploymentType,
+			deployType:  AWSDeploymentStrategy,
 			validateConfig: func(dtc *DeploymentStrategyMapping) error {
 				if dtc.BlobStorage != AWSDeploymentStrategy {
 					return errors.New("strategy mapping has incorrect structure")

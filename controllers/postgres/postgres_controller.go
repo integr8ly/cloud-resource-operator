@@ -83,7 +83,11 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), awsPostgresProvider, gcp.NewGCPPostgresProvider(client, logger)}
+	providerList := []providers.PostgresProvider{
+		openshift.NewOpenShiftPostgresProvider(client, clientSet, logger),
+		awsPostgresProvider,
+		gcp.NewGCPPostgresProvider(client),
+	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &PostgresReconciler{
 		Client:           client,
