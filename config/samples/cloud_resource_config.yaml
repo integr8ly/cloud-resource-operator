@@ -3,9 +3,9 @@ apiVersion: v1
 metadata:
   name: cloud-resource-config
 data:
-  managed: |
-    {"blobstorage":"aws","redis":"aws", "postgres":"aws"}
-  workshop: |
+  openshift: |
     {"blobstorage":"openshift", "redis":"openshift", "postgres":"openshift"}
+  aws: |
+    {"blobstorage":"aws","redis":"aws", "postgres":"aws"}
   gcp: |
     {"blobstorage":"gcp", "redis":"gcp", "postgres":"gcp"}

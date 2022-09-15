@@ -110,7 +110,7 @@ func getBasicBlobstorage(ctx *TestingContext, namespace string) (*v1alpha1.BlobS
 				Namespace: namespace,
 			},
 			Tier: "development",
-			Type: "workshop",
+			Type: "openshift",
 		},
 	}, namespace, nil
 }
