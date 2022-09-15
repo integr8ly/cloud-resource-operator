@@ -20,6 +20,7 @@ Operator is running.
 |      [SMTP](./doc/smtp.md)     	|     :x:     	|  :heavy_check_mark:  	|
 
 ## Running the Cloud Resource Operator
+
 ## Locally
 
 ## Supported Openshift Versions
