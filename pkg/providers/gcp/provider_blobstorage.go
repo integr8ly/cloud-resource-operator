@@ -48,7 +48,7 @@ func (bsp BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.B
 		errMsg := fmt.Sprintf("failed to reconcile gcp blob storage provider credentials for blob storage instance %s", bs.Name)
 		return nil, types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return nil, "", nil
 }
 
@@ -58,7 +58,7 @@ func (bsp BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.B
 		errMsg := fmt.Sprintf("failed to reconcile gcp blob storage provider credentials for blob storage instance %s", bs.Name)
 		return types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return "", nil
 }
 
