@@ -48,7 +48,7 @@ func (pp PostgresProvider) ReconcilePostgres(ctx context.Context, p *v1alpha1.Po
 		errMsg := fmt.Sprintf("failed to reconcile gcp postgres provider credentials for postgres instance %s", p.Name)
 		return nil, types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return nil, "", nil
 }
 
@@ -58,7 +58,7 @@ func (pp PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Postg
 		errMsg := fmt.Sprintf("failed to reconcile gcp postgres provider credentials for postgres instance %s", p.Name)
 		return types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return "", nil
 }
 

@@ -48,7 +48,7 @@ func (rp RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		errMsg := fmt.Sprintf("failed to reconcile gcp redis provider credentials for redis instance %s", r.Name)
 		return nil, types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return nil, "", nil
 }
 
@@ -58,7 +58,7 @@ func (rp RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (typ
 		errMsg := fmt.Sprintf("failed to reconcile gcp redis provider credentials for redis instance %s", r.Name)
 		return types.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
-	//TODO implement me
+	// TODO implement me
 	return "", nil
 }
 
