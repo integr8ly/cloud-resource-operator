@@ -27,6 +27,7 @@ var (
 		"roles/redis.admin",
 		"roles/cloudsql.admin",
 	}
+	timeOut = time.Minute * 5
 )
 
 type Credentials struct {
@@ -64,7 +65,7 @@ func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Con
 	if err != nil {
 		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile gcp credential request %s", name)
 	}
-	err = wait.PollImmediate(time.Second*5, time.Minute*5, func() (done bool, err error) {
+	err = wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
 		if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
 			if errors.IsNotFound(err) {
 				return false, nil

@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"k8s.io/apimachinery/pkg/types"
+
 	v1 "k8s.io/api/core/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -106,6 +109,20 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 			cmNamespace: "test",
 			deployType:  "test",
 			client:      fakeClient,
+			expectError: true,
+		},
+		{
+			name:        "failed to read provider config from configmap",
+			cmName:      "test",
+			cmNamespace: "test",
+			deployType:  "test",
+			client: func() client.Client {
+				mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+				mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					return errors.New("failed to read provider config from configmap")
+				}
+				return mc
+			}(),
 			expectError: true,
 		},
 	}
