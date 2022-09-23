@@ -17,10 +17,12 @@ Follow this guide to install [the latest version of oc](https://docs.openshift.c
 export ns=cloud-resource-operator
 ```
 
-* Create an AWS redis instance with `tier` set to `production` that you will run the load test against.
+* Create an openshift/aws/gcp redis instance with `tier` set to `production` that you will run the load test against.
+Set the environment variable `PROVIDER` to the relevant deployment type
 
 ```
-cat deploy/crds/integreatly_v1alpha1_redis_cr.yaml | sed "s/type: REPLACE_ME/type: aws/g" | sed "s/tier: development/tier: production/g" | oc apply -f - -n $ns
+export PROVIDER=aws
+cat deploy/crds/integreatly_v1alpha1_redis_cr.yaml | sed "s/type: REPLACE_ME/type: $PROVIDER/g" | sed "s/tier: development/tier: production/g" | oc apply -f - -n $ns
 ```
 
 * Start the load generator pod, build the redis-load program locally and copy it to the pod.
