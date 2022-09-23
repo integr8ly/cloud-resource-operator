@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -228,6 +229,102 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 			}
 			if statusMessage != tt.want {
 				t.Errorf("DeletePostgres() statusMessage = %v, want %v", statusMessage, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_GetName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{
+			name: "success getting postgres provider name",
+			want: postgresProviderName,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := PostgresProvider{}
+			if got := pp.GetName(); got != tt.want {
+				t.Errorf("GetName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_SupportsStrategy(t *testing.T) {
+	type args struct {
+		deploymentStrategy string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "postgres provider supports strategy",
+			args: args{
+				deploymentStrategy: providers.GCPDeploymentStrategy,
+			},
+			want: true,
+		},
+		{
+			name: "postgres provider does not support strategy",
+			args: args{
+				deploymentStrategy: providers.AWSDeploymentStrategy,
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := PostgresProvider{}
+			if got := pp.SupportsStrategy(tt.args.deploymentStrategy); got != tt.want {
+				t.Errorf("SupportsStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		p *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "get postgres default reconcile time",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+		{
+			name: "get postgres non-default reconcile time",
+			args: args{
+				p: &v1alpha1.Postgres{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := PostgresProvider{}
+			if got := pp.GetReconcileTime(tt.args.p); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

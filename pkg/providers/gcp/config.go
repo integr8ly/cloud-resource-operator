@@ -12,7 +12,7 @@ import (
 const (
 	DefaultConfigMapName = "cloud-resources-gcp-strategies"
 	defaultReconcileTime = time.Second * 30
-	DefaultFinalizer             = "finalizers.cloud-resources-operator.integreatly.org"
+	DefaultFinalizer     = "finalizers.cloud-resources-operator.integreatly.org"
 )
 
 //DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
