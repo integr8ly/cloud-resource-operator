@@ -56,7 +56,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful creation",
+			name: "test successful creation (aws)",
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
@@ -90,7 +90,41 @@ func TestReconcileBlobStorage(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function",
+			name: "test successful creation (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         fake.NewFakeClientWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc:     nil,
+			},
+			want: &v1alpha1.BlobStorage{
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (aws)",
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
@@ -119,6 +153,45 @@ func TestReconcileBlobStorage(t *testing.T) {
 				},
 				Spec: croType.ResourceTypeSpec{
 					Type: "aws",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         fake.NewFakeClientWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				name:           "test",
+				productName:    "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc: func(cr v1.Object) error {
+					cr.SetLabels(map[string]string{
+						"cro": "test",
+					})
+					return nil
+				},
+			},
+			want: &v1alpha1.BlobStorage{
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"cro": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -434,7 +507,7 @@ func TestReconcileRedis(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful creation",
+			name: "test successful creation (aws)",
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
@@ -468,7 +541,41 @@ func TestReconcileRedis(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function",
+			name: "test successful creation (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         fake.NewFakeClientWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc:     nil,
+			},
+			want: &v1alpha1.Redis{
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (aws)",
 			args: args{
 				ctx:            context.TODO(),
 				client:         fake.NewFakeClientWithScheme(scheme),
@@ -497,6 +604,45 @@ func TestReconcileRedis(t *testing.T) {
 				},
 				Spec: croType.ResourceTypeSpec{
 					Type: "aws",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         fake.NewFakeClientWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc: func(cr v1.Object) error {
+					cr.SetLabels(map[string]string{
+						"cro": "test",
+					})
+					return nil
+				},
+			},
+			want: &v1alpha1.Redis{
+				ObjectMeta: v1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"cro": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",

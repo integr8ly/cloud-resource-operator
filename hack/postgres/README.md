@@ -2,14 +2,15 @@
 
 Scripts and helpers for working with postgres 
 
-## Load Testing Postgres AWS (RDS)
+## Load Testing Postgres
 ### Usage 
 #### Prerequisites
 ```
 export ns=cloud-resources-load-test
-# Spin up openshift `postgres` instance
+# Spin up openshift/aws/gcp `postgres` instance
+# to do that replace the value of PROVIDER env var with the relevant deployment type
 make cluster/prepare NAMESPACE=$ns
-make cluster/seed/postgres NAMESPACE=$ns PROVIDER=openshift
+make cluster/seed/postgres NAMESPACE=$ns PROVIDER=aws
 make run NAMESPACE=$ns
 
 

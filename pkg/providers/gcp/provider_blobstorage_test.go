@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
+	"time"
 )
 
 func TestNewGCPBlobStorageProvider(t *testing.T) {
@@ -227,6 +228,102 @@ func TestBlobStorageProvider_DeleteStorage(t *testing.T) {
 			}
 			if statusMessage != tt.want {
 				t.Errorf("DeleteStorage() statusMessage = %v, want %v", statusMessage, tt.want)
+			}
+		})
+	}
+}
+
+func TestBlobStorageProvider_GetName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{
+			name: "success getting blob storage provider name",
+			want: blobstorageProviderName,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bsp := BlobStorageProvider{}
+			if got := bsp.GetName(); got != tt.want {
+				t.Errorf("GetName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBlobStorageProvider_SupportsStrategy(t *testing.T) {
+	type args struct {
+		deploymentStrategy string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "blob storage provider supports strategy",
+			args: args{
+				deploymentStrategy: providers.GCPDeploymentStrategy,
+			},
+			want: true,
+		},
+		{
+			name: "blob storage provider does not support strategy",
+			args: args{
+				deploymentStrategy: providers.AWSDeploymentStrategy,
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bsp := BlobStorageProvider{}
+			if got := bsp.SupportsStrategy(tt.args.deploymentStrategy); got != tt.want {
+				t.Errorf("SupportsStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		bs *v1alpha1.BlobStorage
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "get blob storage default reconcile time",
+			args: args{
+				bs: &v1alpha1.BlobStorage{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+		{
+			name: "get blob storage non-default reconcile time",
+			args: args{
+				bs: &v1alpha1.BlobStorage{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bsp := BlobStorageProvider{}
+			if got := bsp.GetReconcileTime(tt.args.bs); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}

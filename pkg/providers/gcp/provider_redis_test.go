@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
+	"time"
 )
 
 func TestNewGCPRedisProvider(t *testing.T) {
@@ -227,6 +228,102 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 			}
 			if statusMessage != tt.want {
 				t.Errorf("DeleteRedis() statusMessage = %v, want %v", statusMessage, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_GetName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{
+			name: "success getting redis provider name",
+			want: redisProviderName,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := RedisProvider{}
+			if got := rp.GetName(); got != tt.want {
+				t.Errorf("GetName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_SupportsStrategy(t *testing.T) {
+	type args struct {
+		deploymentStrategy string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "redis provider supports strategy",
+			args: args{
+				deploymentStrategy: providers.GCPDeploymentStrategy,
+			},
+			want: true,
+		},
+		{
+			name: "redis provider does not support strategy",
+			args: args{
+				deploymentStrategy: providers.AWSDeploymentStrategy,
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := RedisProvider{}
+			if got := rp.SupportsStrategy(tt.args.deploymentStrategy); got != tt.want {
+				t.Errorf("SupportsStrategy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_GetReconcileTime(t *testing.T) {
+	type args struct {
+		r *v1alpha1.Redis
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "get redis default reconcile time",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseComplete,
+					},
+				},
+			},
+			want: defaultReconcileTime,
+		},
+		{
+			name: "get redis non-default reconcile time",
+			args: args{
+				r: &v1alpha1.Redis{
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseInProgress,
+					},
+				},
+			},
+			want: time.Second * 60,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := RedisProvider{}
+			if got := rp.GetReconcileTime(tt.args.r); got != tt.want {
+				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}
