@@ -2,15 +2,22 @@ package gcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"reflect"
 	"testing"
 	"time"
 
+	croApis "github.com/integr8ly/cloud-resource-operator/apis"
+	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+	"github.com/sirupsen/logrus"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,39 +25,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestNewGCPPostgresProvider(t *testing.T) {
-	type args struct {
-		client client.Client
-	}
-	tests := []struct {
-		name string
-		args args
-		want *PostgresProvider
-	}{
-		{
-			name: "placeholder test",
-			args: args{},
-			want: &PostgresProvider{
-				Client:            nil,
-				CredentialManager: NewCredentialMinterCredentialManager(nil),
-				ConfigManager:     NewDefaultConfigManager(nil),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := NewGCPPostgresProvider(tt.args.client); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewGCPPostgresProvider() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 	type fields struct {
 		Client            client.Client
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -66,13 +46,14 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 		fields           fields
 		args             args
 		postgresInstance *providers.PostgresInstance
-		statusMessage    types.StatusMessage
+		want             types.StatusMessage
 		wantErr          bool
 	}{
 		{
 			name: "failure creating postgres instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -84,7 +65,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 				},
 			},
 			postgresInstance: nil,
-			statusMessage:    "failed to reconcile gcp postgres provider credentials for postgres instance " + postgresProviderName,
+			want:             "failed to reconcile gcp postgres provider credentials for postgres instance " + postgresProviderName,
 			wantErr:          true,
 		},
 		{
@@ -110,6 +91,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -121,69 +103,11 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 				},
 			},
 			postgresInstance: nil,
-			statusMessage:    "",
+			want:             "",
 			wantErr:          false,
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pp := NewGCPPostgresProvider(tt.fields.Client)
-			postgresInstance, statusMessage, err := pp.ReconcilePostgres(tt.args.ctx, tt.args.p)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(postgresInstance, tt.postgresInstance) {
-				t.Errorf("ReconcilePostgres() postgresInstance = %v, want %v", postgresInstance, tt.postgresInstance)
-			}
-			if statusMessage != tt.statusMessage {
-				t.Errorf("ReconcilePostgres() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
-			}
-		})
-	}
-}
-
-func TestPostgresProvider_DeletePostgres(t *testing.T) {
-	type fields struct {
-		Client            client.Client
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-	}
-	type args struct {
-		ctx context.Context
-		p   *v1alpha1.Postgres
-	}
-	scheme := runtime.NewScheme()
-	err := cloudcredentialv1.Install(scheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    types.StatusMessage
-		wantErr bool
-	}{
 		{
-			name: "failure deleting postgres instance",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
-			},
-			args: args{
-				ctx: context.TODO(),
-				p: &v1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName,
-						Namespace: testNs,
-					},
-				},
-			},
-			want:    "failed to reconcile gcp postgres provider credentials for postgres instance " + postgresProviderName,
-			wantErr: true,
-		},
-		{
-			name: "success deleting postgres instance",
+			name: "success creating finalizer",
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
@@ -205,13 +129,15 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				p: &v1alpha1.Postgres{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName,
-						Namespace: testNs,
+						Name:       postgresProviderName,
+						Namespace:  testNs,
+						Finalizers: []string{DefaultFinalizer},
 					},
 				},
 			},
@@ -221,14 +147,435 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pp := NewGCPPostgresProvider(tt.fields.Client)
-			statusMessage, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
+			pp := NewGCPPostgresProvider(tt.fields.Client, tt.fields.Logger)
+			postgresInstance, statusMessage, err := pp.ReconcilePostgres(tt.args.ctx, tt.args.p)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(postgresInstance, tt.postgresInstance) {
+				t.Errorf("ReconcilePostgres() postgresInstance = %v, want %v", postgresInstance, tt.postgresInstance)
+			}
+			if statusMessage != tt.want {
+				t.Errorf("ReconcilePostgres() statusMessage = %v, want %v", statusMessage, tt.want)
+			}
+		})
+	}
+
+}
+
+func buildTestScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	err := corev1.AddToScheme(scheme)
+	err = croApis.AddToScheme(scheme)
+	return scheme, err
+}
+
+func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
+
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client            client.Client
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		Logger            *logrus.Entry
+	}
+	type args struct {
+		ctx             context.Context
+		p               *v1alpha1.Postgres
+		sqladminService *gcpiface.MockSqlClient
+	}
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "if instance is not nil and state is PENDING_DELETE return status message",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{
+									Name:  "testcloudsqldb-id",
+									State: "PENDING_DELETE",
+								},
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "postgres instance testcloudsqldb-id is already deleting",
+			wantErr: false,
+		},
+		{
+			name: "if instance is not nil, delete is not in progress delete function returns error",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{
+									Name:  "testcloudsqldb-id",
+									State: "RUNNABLE",
+								},
+							},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return nil, errors.New("failed to delete cloudSQL instance: testcloudsqldb-id")
+					}
+				}),
+			},
+			want:    "failed to delete postgres instance: testcloudsqldb-id",
+			wantErr: true,
+		},
+		{
+			name: "error when getting cloud sql instances",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{},
+							},
+						}, fmt.Errorf("cannot retrieve sql instances from gcp")
+					}
+				}),
+			},
+			want:    "cannot retrieve sql instances from gcp",
+			wantErr: true,
+		},
+		{
+			name: "Error deleting cloudSQL secrets",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.DeleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "failed to delete cloudSQL secrets",
+			wantErr: true,
+		},
+		{
+			name: "successful run of delete function when cloudsql object is already deleted",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "successful run of delete function when cloudsql object is not already deleted",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{
+									Name:  "testcloudsqldb-id",
+									State: "RUNNABLE",
+								},
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "delete detected, Instances.Delete() started",
+			wantErr: false,
+		},
+		{
+			name: "want error when running delete function when cloudsql object is not already deleted but delete errors",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					}),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{
+									Name:  "testcloudsqldb-id",
+									State: "RUNNABLE",
+								},
+							},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return nil, errors.New("delete error")
+					}
+				}),
+			},
+			want:    "failed to delete postgres instance: testcloudsqldb-id",
+			wantErr: true,
+		},
+		{
+			name: "want error when no annotation on postgres cr",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return nil
+					}
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+						switch cr := obj.(type) {
+						case *cloudcredentialv1.CredentialsRequest:
+							cr.Status.Provisioned = true
+							cr.Status.ProviderStatus = &runtime.RawExtension{Raw: []byte("{ \"serviceAccountID\":\"serviceAccountID\"}")}
+						case *corev1.Secret:
+							cr.Data = map[string][]byte{defaultCredentialsServiceAccount: []byte("{}")}
+						}
+						return nil
+					}
+					return mc
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "unable to find instance name from annotation",
+			wantErr: true,
+		},
+		{
+			name: "Error failed to update instance as part of finalizer reconcile",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "failed to update instance as part of finalizer reconcile",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.sqladminService, tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if statusMessage != tt.want {
-				t.Errorf("DeletePostgres() statusMessage = %v, want %v", statusMessage, tt.want)
+			if got != tt.want {
+				t.Errorf("DeletePostgres() statusMessage = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -325,6 +672,425 @@ func TestPostgresProvider_GetReconcileTime(t *testing.T) {
 			pp := PostgresProvider{}
 			if got := pp.GetReconcileTime(tt.args.p); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	now := time.Now()
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx             context.Context
+		p               *v1alpha1.Postgres
+		sqladminService *gcpiface.MockSqlClient
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "Deletion timestamp does exist",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "want error when no annotation on postgres cr",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              postgresProviderName,
+						Namespace:         testNs,
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "unable to find instance name from annotation",
+			wantErr: true,
+		},
+		{
+			name: "annotation found on postgres cr",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "successfully retrieved cluster ID",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "failed to get cluster ID",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "failed to get cluster id while exposing information metric for testcloudsqldb-id",
+			wantErr: true,
+		},
+		{
+			name: "build postgres status metrics label successful",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+							Labels: map[string]string{
+								"clusterID": "cluster",
+							},
+						},
+						Status: types.ResourceTypeStatus{
+							Phase: types.PhaseComplete,
+						},
+					},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			pp.setPostgresDeletionTimestampMetric(tt.args.ctx, tt.args.p)
+		})
+	}
+}
+
+func TestPostgresProvider_DeletePostgres(t *testing.T) {
+
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	now := time.Now()
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		ctx             context.Context
+		p               *v1alpha1.Postgres
+		sqladminService *gcpiface.MockSqlClient
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "failed to reconcile gcp postgres provider credentials for postgres instance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return nil, fmt.Errorf("failed to reconcile gcp postgres provider credentials for postgres instance")
+					},
+				},
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "failed to reconcile gcp postgres provider credentials for postgres instance gcp-cloudsql",
+			wantErr: true,
+		},
+		{
+			name: "error building cloudSQL admin service",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+				},
+					&v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							},
+						},
+					},
+					&v1.Infrastructure{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "cluster",
+						},
+						Status: v1.InfrastructureStatus{
+							InfrastructureName: "cluster",
+						},
+					},
+				),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+						DeletionTimestamp: &metav1.Time{Time: now},
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+			},
+			want:    "error building cloudSQL admin service",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			got, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("DeletePostgres() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
