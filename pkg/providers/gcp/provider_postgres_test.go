@@ -11,6 +11,7 @@ import (
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +22,7 @@ import (
 func TestNewGCPPostgresProvider(t *testing.T) {
 	type args struct {
 		client client.Client
+		logger *logrus.Entry
 	}
 	tests := []struct {
 		name string
@@ -29,7 +31,9 @@ func TestNewGCPPostgresProvider(t *testing.T) {
 	}{
 		{
 			name: "placeholder test",
-			args: args{},
+			args: args{
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
 			want: &PostgresProvider{
 				Client:            nil,
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
@@ -39,7 +43,7 @@ func TestNewGCPPostgresProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewGCPPostgresProvider(tt.args.client); !reflect.DeepEqual(got, tt.want) {
+			if got := NewGCPPostgresProvider(tt.args.client, tt.args.logger); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewGCPPostgresProvider() = %v, want %v", got, tt.want)
 			}
 		})
@@ -51,6 +55,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 		Client            client.Client
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -73,6 +78,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 			name: "failure creating postgres instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -110,6 +116,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -127,7 +134,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pp := NewGCPPostgresProvider(tt.fields.Client)
+			pp := NewGCPPostgresProvider(tt.fields.Client, tt.fields.Logger)
 			postgresInstance, statusMessage, err := pp.ReconcilePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
@@ -148,6 +155,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 		Client            client.Client
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -169,6 +177,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 			name: "failure deleting postgres instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -205,6 +214,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -221,14 +231,14 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pp := NewGCPPostgresProvider(tt.fields.Client)
-			statusMessage, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
+			pp := NewGCPPostgresProvider(tt.fields.Client, tt.fields.Logger)
+			got, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if statusMessage != tt.want {
-				t.Errorf("DeletePostgres() statusMessage = %v, want %v", statusMessage, tt.want)
+			if got != tt.want {
+				t.Errorf("DeletePostgres() statusMessage = %v, want %v", got, tt.want)
 			}
 		})
 	}
