@@ -257,3 +257,7 @@ coverage:
 .PHONY: setup/sts
 setup/sts:
 	NAMESPACE=$(NAMESPACE) ./scripts/sts/create-rhoam-policy.sh
+
+.PHONY: gosec
+gosec:
+	gosec -exclude=G601,G101,G402,G404 -exclude-dir=hack/redis ./...
