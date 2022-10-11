@@ -12,3 +12,6 @@ RUN mkdir -p $GOPATH/src/github.com/operator-framework \
     && make install \
     && chmod -R 0777 $GOPATH \
     && rm -rf $GOPATH/.cache
+
+# install gosec
+RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.11.0
