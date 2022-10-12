@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"reflect"
+	"testing"
+
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"os"
-	"reflect"
-	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
@@ -76,7 +77,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
@@ -360,7 +361,7 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)

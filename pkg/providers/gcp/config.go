@@ -3,19 +3,21 @@ package gcp
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 const (
-	DefaultConfigMapName = "cloud-resources-gcp-strategies"
-	defaultReconcileTime = time.Second * 30
-	DefaultFinalizer     = "finalizers.cloud-resources-operator.integreatly.org"
+	DefaultConfigMapName       = "cloud-resources-gcp-strategies"
+	defaultReconcileTime       = time.Second * 30
+	DefaultFinalizer           = "cloud-resources-operator.integreatly.org/finalizers"
+	defaultGcpIdentifierLength = 40
 )
 
-//DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
+// DefaultConfigMapNamespace is the default namespace that Configmaps will be created in
 var DefaultConfigMapNamespace, _ = k8sutil.GetWatchNamespace()
 
 type StrategyConfig struct {

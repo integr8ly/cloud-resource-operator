@@ -13,6 +13,7 @@ coverage:
     - "**/*_moq.go"
     - "pkg/providers/types.go"
     - "pkg/client/fake"
+    - "pkg/providers/gcp/gcpiface"
 
   status:
     project:
