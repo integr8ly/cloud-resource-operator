@@ -79,10 +79,13 @@ func IsLastResource(ctx context.Context, c client.Client) (bool, error) {
 		msg := "failed to retrieve postgres cr(s)"
 		return false, errorUtil.Wrap(err, msg)
 	}
+	if len(postgresList.Items) > 1 {
+		return false, nil
+	}
 	var redisList = &v1alpha1.RedisList{}
 	if err := c.List(ctx, redisList, &listOptions); err != nil {
 		msg := "failed to retrieve redis cr(s)"
 		return false, errorUtil.Wrap(err, msg)
 	}
-	return len(postgresList.Items) == 0 && len(redisList.Items) == 1, nil
+	return (len(postgresList.Items) + len(redisList.Items)) == 1, nil
 }

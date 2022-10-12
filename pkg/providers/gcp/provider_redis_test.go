@@ -11,6 +11,7 @@ import (
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +22,7 @@ import (
 func TestNewGCPRedisProvider(t *testing.T) {
 	type args struct {
 		client client.Client
+		logger *logrus.Entry
 	}
 	tests := []struct {
 		name string
@@ -29,7 +31,9 @@ func TestNewGCPRedisProvider(t *testing.T) {
 	}{
 		{
 			name: "placeholder test",
-			args: args{},
+			args: args{
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
 			want: &RedisProvider{
 				Client:            nil,
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
@@ -39,7 +43,7 @@ func TestNewGCPRedisProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewGCPRedisProvider(tt.args.client); !reflect.DeepEqual(got, tt.want) {
+			if got := NewGCPRedisProvider(tt.args.client, tt.args.logger); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewGCPRedisProvider() = %v, want %v", got, tt.want)
 			}
 		})
@@ -49,6 +53,7 @@ func TestNewGCPRedisProvider(t *testing.T) {
 func TestRedisProvider_ReconcileRedis(t *testing.T) {
 	type fields struct {
 		Client            client.Client
+		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
 	}
@@ -73,6 +78,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 			name: "failure creating redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -110,6 +116,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -127,7 +134,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rp := NewGCPRedisProvider(tt.fields.Client)
+			rp := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
 			redisCluster, statusMessage, err := rp.CreateRedis(tt.args.ctx, tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateRedis() error = %v, wantErr %v", err, tt.wantErr)
@@ -146,6 +153,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 func TestRedisProvider_DeleteRedis(t *testing.T) {
 	type fields struct {
 		Client            client.Client
+		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
 	}
@@ -205,6 +213,7 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 					}
 					return mc
 				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -221,7 +230,7 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rp := NewGCPRedisProvider(tt.fields.Client)
+			rp := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
 			statusMessage, err := rp.DeleteRedis(tt.args.ctx, tt.args.r)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteRedis() error = %v, wantErr %v", err, tt.wantErr)

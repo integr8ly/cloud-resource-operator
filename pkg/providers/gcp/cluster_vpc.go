@@ -1,0 +1,63 @@
+package gcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	compute "cloud.google.com/go/compute/apiv1"
+	"github.com/googleapis/gax-go/v2/apierror"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	errorUtil "github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	utils "k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+func getClusterVpc(ctx context.Context, c client.Client, networkClient *compute.NetworksClient, logger *logrus.Entry) (*computepb.Network, error) {
+	// get cluster id
+	clusterID, err := resources.GetClusterID(ctx, c)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+
+	// get project ID
+	projectID, err := resources.GetGCPProject(ctx, c)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting project name")
+	}
+
+	// get networks with a name that matches clusterID
+	netIterator := networkClient.List(ctx, &computepb.ListNetworksRequest{
+		Project: projectID,
+		Filter:  utils.String(fmt.Sprintf("name = \"%s-*\"", clusterID)),
+	})
+	var networks []*computepb.Network
+	for {
+		n, err := netIterator.Next()
+		if err != nil {
+			var ae *apierror.APIError
+			if errors.As(err, &ae) {
+				return nil, errorUtil.Wrap(err, "error getting networks from gcp")
+			}
+			break
+		}
+		networks = append(networks, n)
+	}
+
+	// confirm only one network matched the clusterID
+	if len(networks) != 1 {
+		return nil, fmt.Errorf("cannot determine cluster vpc. matching networks found %d", len(networks))
+	}
+
+	network := networks[0]
+
+	// check the network has at least two subnets
+	if len(network.Subnetworks) < defaultNumberOfExpectedSubnets {
+		return nil, fmt.Errorf("found cluster vpc has only %d subnetworks, expected at least 2", len(network.Subnetworks))
+	}
+
+	logger.Infof("found cluster %s vpc %s", clusterID, *network.Name)
+	return network, nil
+}

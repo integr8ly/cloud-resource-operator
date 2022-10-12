@@ -3,6 +3,8 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"time"
+
 	v1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	errorUtil "github.com/pkg/errors"
 	v12 "k8s.io/api/core/v1"
@@ -12,7 +14,6 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"time"
 )
 
 const (
@@ -26,6 +27,7 @@ var (
 		"roles/storage.admin",
 		"roles/redis.admin",
 		"roles/cloudsql.admin",
+		"roles/servicenetworking.networksAdmin",
 	}
 	timeOut = time.Minute * 5
 )
