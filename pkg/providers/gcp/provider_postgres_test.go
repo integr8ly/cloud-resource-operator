@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	"reflect"
 	"testing"
 	"time"
@@ -158,8 +159,9 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 		Logger            *logrus.Entry
 	}
 	type args struct {
-		ctx context.Context
-		p   *v1alpha1.Postgres
+		ctx             context.Context
+		p               *v1alpha1.Postgres
+		sqladminService *sqladmin.Service
 	}
 	scheme := runtime.NewScheme()
 	err := cloudcredentialv1.Install(scheme)
@@ -176,8 +178,9 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "failure deleting postgres instance",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: &CredentialManagerMock{},
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -231,8 +234,13 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pp := NewGCPPostgresProvider(tt.fields.Client, tt.fields.Logger)
-			got, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
+			pp := PostgresProvider{
+				Client:            nil,
+				Logger:            nil,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     nil,
+			}
+			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.sqladminService, tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
