@@ -35,6 +35,7 @@ type Credentials struct {
 	ServiceAccountJson []byte
 }
 
+//go:generate moq -out credentials_moq.go . CredentialManager
 type CredentialManager interface {
 	ReconcileProviderCredentials(ctx context.Context, ns string) (*Credentials, error)
 	ReconcileCredentials(ctx context.Context, name string, ns string, roles []string) (*v1.CredentialsRequest, *Credentials, error)

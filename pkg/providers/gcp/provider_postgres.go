@@ -95,6 +95,11 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 		return "error building cloudSQL admin service", err
 	}
 
+	return pp.deleteCloudSQLInstance(ctx, sqladminService, p)
+}
+
+func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService *sqladmin.Service, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
+	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
 	// get cloudSQL instance
 	instances, err := getCloudSQLInstances(sqladminService)
 	if err != nil {
@@ -122,7 +127,7 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 	if foundInstance != nil {
 		if foundInstance.State != "RUNNABLE" {
 			statusMessage := fmt.Sprintf("delete detected, DeletePostgres() is in progress, current cloudSQL status is %s", foundInstance.State)
-			logger.Info(statusMessage)
+			pp.Logger.Info(statusMessage)
 			return croType.StatusMessage(statusMessage), nil
 		}
 		// delete if not in progress
@@ -155,7 +160,6 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
-	return croType.StatusEmpty, nil
 }
 
 func getCloudSQLInstances(sqladminService *sqladmin.Service) ([]*sqladmin.DatabaseInstance, error) {
