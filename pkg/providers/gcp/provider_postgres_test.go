@@ -2,30 +2,29 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	croApis "github.com/integr8ly/cloud-resource-operator/apis"
-	"google.golang.org/api/googleapi"
-	"google.golang.org/api/option"
-	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	"net/http"
-	"net/http/httptest"
-	"reflect"
-	"testing"
-	"time"
-
-	apimachinery "k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/api/option"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	apimachinery "k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
+	"sync"
+	"testing"
+	"time"
 )
 
 func TestNewGCPPostgresProvider(t *testing.T) {
@@ -157,14 +156,23 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 			}
 		})
 	}
+
 }
 
-func buildCloudSQLServiceMock(function func(w http.ResponseWriter, h *http.Request)) *sqladmin.Service {
+func buildCloudSQLServiceMock(t *testing.T, reqs ...*Request) *sqladmin.Service {
 	ctx := context.Background()
-	cloudsqlservermock := httptest.NewServer(http.HandlerFunc(function))
-	defer cloudsqlservermock.Close()
-	svc, _ := sqladmin.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(cloudsqlservermock.URL))
-	// to do consider how to handle this error.
+	svc, cleanup, err := NewSQLAdminService(
+		ctx,
+		reqs...,
+	)
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			t.Fatalf("%v", err)
+		}
+	}()
 	return svc
 }
 
@@ -206,7 +214,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "failure deleting postgres instance",
 			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: &CredentialManagerMock{},
 			},
@@ -218,7 +226,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
-				sqladminService: buildCloudSQLServiceMock(nil),
+				sqladminService: buildCloudSQLServiceMock(t, ListInstanceSuccess(nil)),
 			},
 			want:    "failed to reconcile gcp postgres provider credentials for postgres instance " + postgresProviderName,
 			wantErr: true,
@@ -253,7 +261,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: buildCloudSQLServiceMock(nil),
+				sqladminService: buildCloudSQLServiceMock(t, ListInstanceSuccess(nil)),
 			},
 			want:    "",
 			wantErr: false,
@@ -288,7 +296,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: buildCloudSQLServiceMock(nil),
+				sqladminService: buildCloudSQLServiceMock(t, ListInstanceSuccess(nil)),
 			},
 			want:    "",
 			wantErr: false,
@@ -326,23 +334,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
-				sqladminService: buildCloudSQLServiceMock(func(w http.ResponseWriter, r *http.Request) {
-					resp := &sqladmin.InstancesListResponse{
-						Items:           nil,
-						Kind:            "",
-						NextPageToken:   "",
-						Warnings:        nil,
-						ServerResponse:  googleapi.ServerResponse{},
-						ForceSendFields: nil,
-						NullFields:      nil,
-					}
-					b, err := json.Marshal(resp)
-					if err != nil {
-						http.Error(w, "unable to marshal request: "+err.Error(), http.StatusBadRequest)
-						return
-					}
-					w.Write(b)
-				}),
+				sqladminService: buildCloudSQLServiceMock(t, ListInstanceSuccess(nil)),
 			},
 			want:    "unable to find instance name from annotation",
 			wantErr: true,
@@ -366,6 +358,34 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 			}
 		})
 	}
+}
+func ListInstanceSuccess(items []*sqladmin.DatabaseInstance) *Request {
+	dbs := &sqladmin.InstancesListResponse{}
+	if items != nil {
+		dbs.Items = items
+	} else {
+		dbs.Items = []*sqladmin.DatabaseInstance{
+			{
+				Name: "testcloudsqldb-id",
+			},
+		}
+	}
+
+	r := &Request{
+		reqMethod: http.MethodGet,
+		reqPath:   fmt.Sprintf("/sql/v1beta4/projects/%s/instances?alt=json&prettyPrint=false", "rhoam-317914"),
+		handle: func(resp http.ResponseWriter, req *http.Request) {
+			b, err := dbs.MarshalJSON()
+			if err != nil {
+				http.Error(resp, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			resp.WriteHeader(http.StatusOK)
+			resp.Write(b)
+		},
+		reqCt: 1,
+	}
+	return r
 }
 
 func TestPostgresProvider_GetName(t *testing.T) {
@@ -462,4 +482,72 @@ func TestPostgresProvider_GetReconcileTime(t *testing.T) {
 			}
 		})
 	}
+}
+
+func NewSQLAdminService(ctx context.Context, reqs ...*Request) (*sqladmin.Service, func() error, error) {
+	mc, url, cleanup := httpClient(reqs...)
+	client, err := sqladmin.NewService(
+		ctx,
+		option.WithHTTPClient(mc),
+		option.WithEndpoint(url),
+	)
+	return client, cleanup, err
+}
+
+func httpClient(requests ...*Request) (*http.Client, string, func() error) {
+	// Create a TLS Server that responses to the requests defined
+	s := httptest.NewServer(http.HandlerFunc(
+		func(resp http.ResponseWriter, req *http.Request) {
+			for _, r := range requests {
+				if r.matches(req) {
+					r.handle(resp, req)
+					return
+				}
+			}
+			// Unexpected requests should throw an error
+			resp.WriteHeader(http.StatusNotImplemented)
+			// TODO: follow error format better?
+			resp.Write([]byte(fmt.Sprintf("unexpected request sent to mock client: %v", req)))
+		},
+	))
+	// cleanup stops the test server and checks for uncalled requests
+	cleanup := func() error {
+		s.Close()
+		for i, e := range requests {
+			if e.reqCt > 0 {
+				return fmt.Errorf("%d calls left for specified call in pos %d: %v", e.reqCt, i, e)
+			}
+		}
+		return nil
+	}
+
+	return s.Client(), s.URL, cleanup
+
+}
+
+type Request struct {
+	sync.Mutex
+
+	reqMethod string
+	reqPath   string
+	reqCt     int
+
+	handle func(resp http.ResponseWriter, req *http.Request)
+}
+
+// matches returns true if a given http.Request should be handled by this Request.
+func (r *Request) matches(hR *http.Request) bool {
+	r.Lock()
+	defer r.Unlock()
+	if r.reqMethod != "" && strings.ToLower(r.reqMethod) != strings.ToLower(hR.Method) {
+		return false
+	}
+	if r.reqPath != "" && r.reqPath != hR.URL.Path {
+		return false
+	}
+	if r.reqCt <= 0 {
+		return false
+	}
+	r.reqCt--
+	return true
 }
