@@ -118,7 +118,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 	var foundInstance *sqladmin.DatabaseInstance
 	for _, instance := range instances {
 		if instance.Name == instanceName {
-			logrus.Infof("found matching instance bu name: %s", instanceName)
+			logrus.Infof("found matching instance by name: %s", instanceName)
 			foundInstance = instance
 			break
 		}
@@ -160,6 +160,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
+	return croType.StatusEmpty, nil
 }
 
 func getCloudSQLInstances(sqladminService *sqladmin.Service) ([]*sqladmin.DatabaseInstance, error) {
