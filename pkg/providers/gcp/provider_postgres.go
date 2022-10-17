@@ -36,6 +36,20 @@ type PostgresProvider struct {
 	ConfigManager     ConfigManager
 }
 
+// wrapper for real client
+type sqlClient struct {
+	SQLAdminService
+	sqlAdminService *sqladmin.Service
+}
+
+func (r *sqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
+	return r.sqlAdminService.Instances.List(project).Do()
+}
+
+func (r *sqlClient) DeleteInstance(ctx context.Context, projectID, instanceName string) (*sqladmin.Operation, error) {
+	return r.sqlAdminService.Instances.Delete(projectID, instanceName).Context(ctx).Do()
+}
+
 func NewGCPPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
 	return &PostgresProvider{
 		Client:            client,
@@ -94,11 +108,13 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 	if err != nil {
 		return "error building cloudSQL admin service", err
 	}
-
-	return pp.deleteCloudSQLInstance(ctx, sqladminService, p)
+	sqlClient := &sqlClient{
+		sqlAdminService: sqladminService,
+	}
+	return pp.deleteCloudSQLInstance(ctx, sqlClient, p)
 }
 
-func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService *sqladmin.Service, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
+func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService SQLAdminService, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
 	// get cloudSQL instance
 	instances, err := getCloudSQLInstances(sqladminService)
@@ -131,7 +147,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 			return croType.StatusMessage(statusMessage), nil
 		}
 		// delete if not in progress
-		_, err = sqladminService.Instances.Delete(projectID, instanceName).Context(ctx).Do()
+		_, err = sqladminService.DeleteInstance(ctx, projectID, instanceName)
 		if err != nil {
 			return croType.StatusMessage(fmt.Sprintf("failed to delete cloudSQL instance: %s", instanceName)), err
 		}
@@ -163,9 +179,9 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 	return croType.StatusEmpty, nil
 }
 
-func getCloudSQLInstances(sqladminService *sqladmin.Service) ([]*sqladmin.DatabaseInstance, error) {
+func getCloudSQLInstances(service SQLAdminService) ([]*sqladmin.DatabaseInstance, error) {
 	// check for existing instance
-	instances, err := sqladminService.Instances.List(projectID).Do()
+	instances, err := service.InstancesList(projectID)
 	if err != nil {
 		return nil, err
 	}
