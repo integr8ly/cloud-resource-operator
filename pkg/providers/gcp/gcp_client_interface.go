@@ -1,6 +1,9 @@
 package gcp
 
-import sqladmin "google.golang.org/api/sqladmin/v1beta4"
+import (
+	"context"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
+)
 
 type SQLAdminService interface {
 	InstancesList(string) (*sqladmin.InstancesListResponse, error)
