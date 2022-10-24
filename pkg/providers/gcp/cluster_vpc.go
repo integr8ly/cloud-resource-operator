@@ -2,11 +2,9 @@ package gcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	compute "cloud.google.com/go/compute/apiv1"
-	"github.com/googleapis/gax-go/v2/apierror"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -15,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func getClusterVpc(ctx context.Context, c client.Client, networkClient *compute.NetworksClient, logger *logrus.Entry) (*computepb.Network, error) {
+func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.NetworksAPI, logger *logrus.Entry) (*computepb.Network, error) {
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -29,21 +27,12 @@ func getClusterVpc(ctx context.Context, c client.Client, networkClient *compute.
 	}
 
 	// get networks with a name that matches clusterID
-	netIterator := networkClient.List(ctx, &computepb.ListNetworksRequest{
+	networks, err := networkClient.List(ctx, &computepb.ListNetworksRequest{
 		Project: projectID,
 		Filter:  utils.String(fmt.Sprintf("name = \"%s-*\"", clusterID)),
 	})
-	var networks []*computepb.Network
-	for {
-		n, err := netIterator.Next()
-		if err != nil {
-			var ae *apierror.APIError
-			if errors.As(err, &ae) {
-				return nil, errorUtil.Wrap(err, "error getting networks from gcp")
-			}
-			break
-		}
-		networks = append(networks, n)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting networks from gcp")
 	}
 
 	// confirm only one network matched the clusterID

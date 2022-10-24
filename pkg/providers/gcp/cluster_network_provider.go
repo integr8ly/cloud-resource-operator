@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	compute "cloud.google.com/go/compute/apiv1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -38,25 +38,24 @@ type NetworkManager interface {
 var _ NetworkManager = (*NetworkProvider)(nil)
 
 type NetworkProvider struct {
-	Client       client.Client
-	NetworkApi   *compute.NetworksClient
-	ServicesApi  *servicenetworking.APIService
-	AddressApi   *compute.GlobalAddressesClient
-	Logger       *logrus.Entry
-	IsSTSCluster bool
+	Client      client.Client
+	NetworkApi  gcpiface.NetworksAPI
+	ServicesApi gcpiface.ServicesAPI
+	AddressApi  gcpiface.AddressAPI
+	Logger      *logrus.Entry
 }
 
 // initialises the three required clients
 func NewNetworkManager(ctx context.Context, opt option.ClientOption, client client.Client, logger *logrus.Entry) (*NetworkProvider, error) {
-	networkApi, err := compute.NewNetworksRESTClient(ctx, opt)
+	networksApi, err := gcpiface.NewNetworksAPI(ctx, opt)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "Failed to initialise network client")
 	}
-	servicesApi, err := servicenetworking.NewService(ctx, opt)
+	servicesApi, err := gcpiface.NewServicesAPI(ctx, opt)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "Failed to initialise servicenetworking client")
 	}
-	addressApi, err := compute.NewGlobalAddressesRESTClient(ctx, opt)
+	addressApi, err := gcpiface.NewAddressAPI(ctx, opt)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "Failed to initialise address client")
 	}
@@ -65,7 +64,7 @@ func NewNetworkManager(ctx context.Context, opt option.ClientOption, client clie
 	}
 	return &NetworkProvider{
 		Client:      client,
-		NetworkApi:  networkApi,
+		NetworkApi:  networksApi,
 		ServicesApi: servicesApi,
 		AddressApi:  addressApi,
 		Logger:      logger.WithField("provider", "gcp_network_provider"),
@@ -140,6 +139,9 @@ func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenet
 		}
 		// if the ip range is present, and is ready for use
 		// possible states for address are RESERVING, RESERVED, IN_USE
+		if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
+			return nil, errors.New("ip address range does not exist or is pending creation")
+		}
 		if address != nil && address.GetStatus() == computepb.Address_RESERVED.String() {
 			err = n.createServiceConnection(clusterVpc, projectID, ipRange)
 			if err != nil {
@@ -235,7 +237,7 @@ func (n *NetworkProvider) DeleteNetworkIpRange(ctx context.Context) error {
 			return err
 		}
 		if service != nil && service.ReservedPeeringRanges[0] == address.GetName() {
-			return errorUtil.Wrap(err, "failed to delete ip address range, service connection still present")
+			return errors.New("failed to delete ip address range, service connection still present")
 		}
 		// delete ip address range
 		err = n.deleteAddressRange(ctx, projectID, ipRange)
@@ -266,27 +268,24 @@ func (n *NetworkProvider) ComponentsExist(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, errorUtil.Wrap(err, "failed to retrieve ip address range")
 	}
+	if address != nil {
+		n.Logger.Infof("ip address range %s deletion in progress", address.GetName())
+		return true, nil
+	}
 	// get service connection
 	service, err := n.getServiceConnection(clusterVpc, projectID)
 	if err != nil {
 		return false, err
 	}
-	if address == nil && service == nil {
-		return false, nil
-	}
-	if address != nil {
-		n.Logger.Infof("ip address range %s deletion in progress", address.GetName())
-	}
 	if service != nil {
 		n.Logger.Infof("service connection %s deletion in progress", service.Service)
+		return true, nil
 	}
-	return true, nil
+	return false, nil
 }
 
 func (n *NetworkProvider) getServiceConnection(clusterVpc *computepb.Network, projectID string) (*servicenetworking.Connection, error) {
-	call := n.ServicesApi.Services.Connections.List(fmt.Sprintf("services/%s", defaultServiceConnectionURI))
-	call.Network(fmt.Sprintf("projects/%s/global/networks/%s", projectID, clusterVpc.GetName()))
-	resp, err := call.Do()
+	resp, err := n.ServicesApi.ConnectionsList(clusterVpc, projectID, fmt.Sprintf("services/%s", defaultServiceConnectionURI))
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +297,7 @@ func (n *NetworkProvider) getServiceConnection(clusterVpc *computepb.Network, pr
 
 func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network, projectID string, ipRange string) error {
 	n.Logger.Infof("creating service connection %s", defaultServiceConnectionName)
-	_, err := n.ServicesApi.Services.Connections.Create(
+	_, err := n.ServicesApi.ConnectionsCreate(
 		fmt.Sprintf("services/%s", defaultServiceConnectionURI),
 		&servicenetworking.Connection{
 			Network: fmt.Sprintf("projects/%s/global/networks/%s", projectID, clusterVpc.GetName()),
@@ -306,7 +305,7 @@ func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network,
 				ipRange,
 			},
 		},
-	).Do()
+	)
 	if err != nil {
 		return err
 	}
@@ -315,15 +314,14 @@ func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network,
 
 func (n *NetworkProvider) deleteServiceConnection(service *servicenetworking.Connection) error {
 	n.Logger.Infof("deleting service connection %s", service.Service)
-	resp, err := n.ServicesApi.Services.Connections.DeleteConnection(
+	resp, err := n.ServicesApi.ConnectionsDelete(
 		fmt.Sprintf("services/%s/connections/%s", defaultServiceConnectionURI, defaultServiceConnectionName),
 		&servicenetworking.DeleteConnectionRequest{
 			ConsumerNetwork: service.Network,
-		}).Do()
+		})
 	if err != nil {
 		return err
 	}
-	n.Logger.Infof("delete service resp: %v", resp)
 	if !resp.Done {
 		return errors.New("service connection deletion in progress")
 	}
@@ -341,7 +339,7 @@ func (n *NetworkProvider) getAddressRange(ctx context.Context, projectID string,
 			return nil, errorUtil.Wrap(err, "unknown error getting addresses from gcp")
 		}
 		if gerr.Code != http.StatusNotFound {
-			return nil, errorUtil.Wrap(err, "unknown error getting addresses from gcp")
+			return nil, errorUtil.Wrap(err, fmt.Sprintf("unexpected error %d getting addresses from gcp", gerr.Code))
 		}
 	}
 	return address, nil
@@ -349,7 +347,7 @@ func (n *NetworkProvider) getAddressRange(ctx context.Context, projectID string,
 
 func (n *NetworkProvider) createAddressRange(ctx context.Context, clusterVpc *computepb.Network, projectID string, ipRange string) error {
 	n.Logger.Infof("creating address %s", ipRange)
-	op, err := n.AddressApi.Insert(ctx, &computepb.InsertGlobalAddressRequest{
+	return n.AddressApi.Insert(ctx, &computepb.InsertGlobalAddressRequest{
 		Project: projectID,
 		AddressResource: &computepb.Address{
 			AddressType:  utils.String(computepb.Address_INTERNAL.String()),
@@ -360,28 +358,14 @@ func (n *NetworkProvider) createAddressRange(ctx context.Context, clusterVpc *co
 			Purpose:      utils.String(computepb.Address_VPC_PEERING.String()),
 		},
 	})
-	if err != nil {
-		return err
-	}
-	if err = op.Wait(ctx); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (n *NetworkProvider) deleteAddressRange(ctx context.Context, projectID string, ipRange string) error {
 	n.Logger.Infof("deleting address %s", ipRange)
-	op, err := n.AddressApi.Delete(ctx, &computepb.DeleteGlobalAddressRequest{
+	return n.AddressApi.Delete(ctx, &computepb.DeleteGlobalAddressRequest{
 		Project: projectID,
 		Address: ipRange,
 	})
-	if err != nil {
-		return err
-	}
-	if err = op.Wait(ctx); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (n *NetworkProvider) getPeeringConnection(ctx context.Context, clusterVpc *computepb.Network) *computepb.NetworkPeering {
@@ -400,18 +384,11 @@ func (n *NetworkProvider) getPeeringConnection(ctx context.Context, clusterVpc *
 
 func (n *NetworkProvider) deletePeeringConnection(ctx context.Context, clusterVpc *computepb.Network, projectID string) error {
 	n.Logger.Infof("deleting peering %s", defaultServiceConnectionName)
-	op, err := n.NetworkApi.RemovePeering(ctx, &computepb.RemovePeeringNetworkRequest{
+	return n.NetworkApi.RemovePeering(ctx, &computepb.RemovePeeringNetworkRequest{
 		Project: projectID,
 		Network: clusterVpc.GetName(),
 		NetworksRemovePeeringRequestResource: &computepb.NetworksRemovePeeringRequest{
 			Name: utils.String(defaultServiceConnectionName),
 		},
 	})
-	if err != nil {
-		return err
-	}
-	if err = op.Wait(ctx); err != nil {
-		return err
-	}
-	return nil
 }

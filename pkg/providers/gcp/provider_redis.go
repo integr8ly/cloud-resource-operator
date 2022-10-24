@@ -12,6 +12,7 @@ import (
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -74,7 +75,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
-	if address == nil {
+	if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
 		return nil, croType.StatusMessage("network ip address range creation in progress"), nil
 	}
 	logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
