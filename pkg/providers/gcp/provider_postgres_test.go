@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"reflect"
 	"testing"
 	"time"
 
-	croApis "github.com/integr8ly/cloud-resource-operator/apis"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
+
 	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -115,13 +115,6 @@ func TestPostgresProvider_createCloudSQLInstance(t *testing.T) {
 		})
 	}
 
-}
-
-func buildTestScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-	err := corev1.AddToScheme(scheme)
-	err = croApis.AddToScheme(scheme)
-	return scheme, err
 }
 
 func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
