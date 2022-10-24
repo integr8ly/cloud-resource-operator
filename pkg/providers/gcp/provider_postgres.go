@@ -23,7 +23,7 @@ import (
 var _ providers.PostgresProvider = (*PostgresProvider)(nil)
 
 const (
-	postgresProviderName         = "gcp"
+	postgresProviderName         = "gcp-cloudsql"
 	projectID                    = "rhoam-317914"
 	ResourceIdentifierAnnotation = "resourceIdentifier"
 	defaultCredSecSuffix         = "-gcp-sql-credentials"
@@ -141,8 +141,8 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 	}
 	// check instance state
 	if foundInstance != nil {
-		if foundInstance.State != "RUNNABLE" {
-			statusMessage := fmt.Sprintf("delete detected, DeletePostgres() is in progress, current cloudSQL status is %s", foundInstance.State)
+		if foundInstance.State == "PENDING_DELETE" {
+			statusMessage := fmt.Sprintf("instance delete pending, current cloudSQL status is %s", foundInstance.State)
 			pp.Logger.Info(statusMessage)
 			return croType.StatusMessage(statusMessage), nil
 		}
@@ -165,7 +165,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 	}
 	err = pp.Client.Delete(ctx, sec)
 	if err != nil && !k8serr.IsNotFound(err) {
-		msg := "failed to deleted cloudSQL secrets"
+		msg := "failed to delete cloudSQL secrets"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
@@ -180,7 +180,6 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 }
 
 func getCloudSQLInstances(service SQLAdminService) ([]*sqladmin.DatabaseInstance, error) {
-	// check for existing instance
 	instances, err := service.InstancesList(projectID)
 	if err != nil {
 		return nil, err
