@@ -3,10 +3,9 @@ package client
 import (
 	"context"
 	"errors"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
-
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -170,8 +169,9 @@ func TestReconcilePostgres(t *testing.T) {
 
 	upgradePostgres := &v1alpha1.Postgres{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
+			Name:            "test",
+			Namespace:       "test",
+			ResourceVersion: "0",
 		},
 	}
 
@@ -414,6 +414,7 @@ func TestReconcileRedis(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+
 	type args struct {
 		ctx              context.Context
 		client           client.Client
