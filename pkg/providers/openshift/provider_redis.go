@@ -537,10 +537,10 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 
 func int32Ptr(i int32) *int32 { return &i }
 
-// controllerutil.CreateOrUpdate without mutating the original runtime.Object provided
-func immutableCreateOrUpdate(ctx context.Context, c client.Client, o client.Object, cb func(existing runtime.Object) error) (controllerutil.OperationResult, error) {
-
-	return controllerutil.CreateOrUpdate(ctx, c, o, func() error {
-		return cb(o)
+// controllerutil.CreateOrUpdate without mutating the original client.Object provided
+func immutableCreateOrUpdate(ctx context.Context, c client.Client, o runtime.Object, cb func(existing runtime.Object) error) (controllerutil.OperationResult, error) {
+	copiedObj := o.DeepCopyObject()
+	return controllerutil.CreateOrUpdate(ctx, c, copiedObj.(client.Object), func() error {
+		return cb(copiedObj)
 	})
 }
