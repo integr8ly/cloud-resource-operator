@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -59,6 +60,8 @@ type PostgresReconciler struct {
 	resourceProvider *resources.ReconcileResourceProvider
 	providerList     []providers.PostgresProvider
 }
+
+var _ reconcile.Reconciler = &PostgresReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*PostgresReconciler, error) {
@@ -126,14 +129,13 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups="cloudcredential.openshift.io",resources=credentialsrequests,verbs="*",namespace=cloud-resource-operator
 // +kubebuilder:rbac:groups=operators.coreos.com,resources=catalogsources,verbs=get;update;patch,namespace=cloud-resource-operator
 
-func (r *PostgresReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling Postgres")
-	ctx := context.TODO()
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.Client)
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, req.Namespace, r.Client)
 
 	// Fetch the Postgres instance
 	instance := &v1alpha1.Postgres{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

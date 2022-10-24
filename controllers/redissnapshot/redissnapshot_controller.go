@@ -37,6 +37,7 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -52,6 +53,8 @@ type RedisSnapshotReconciler struct {
 	provider      providers.RedisSnapshotProvider
 	ConfigManager croAws.ConfigManager
 }
+
+var _ reconcile.Reconciler = &RedisSnapshotReconciler{}
 
 func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
 	restConfig := controllerruntime.GetConfigOrDie()
@@ -88,13 +91,12 @@ func (r *RedisSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RedisSnapshotReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *RedisSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling redis snapshot")
-	ctx := context.TODO()
 
 	// Fetch the RedisSnapshot instance
 	instance := &integreatlyv1alpha1.RedisSnapshot{}
-	err := r.Client.Get(ctx, request.NamespacedName, instance)
+	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

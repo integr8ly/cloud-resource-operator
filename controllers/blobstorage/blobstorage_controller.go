@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -55,6 +56,8 @@ type BlobStorageReconciler struct {
 	resourceProvider *resources.ReconcileResourceProvider
 	providerList     []providers.BlobStorageProvider
 }
+
+var _ reconcile.Reconciler = &BlobStorageReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
@@ -90,14 +93,13 @@ func (r *BlobStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *BlobStorageReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *BlobStorageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling BlobStorage")
-	ctx := context.TODO()
-	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, request.Namespace, r.Client)
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, req.Namespace, r.Client)
 
 	// Fetch the BlobStorage instance
 	instance := &v1alpha1.BlobStorage{}
-	err := r.Client.Get(ctx, request.NamespacedName, instance)
+	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
