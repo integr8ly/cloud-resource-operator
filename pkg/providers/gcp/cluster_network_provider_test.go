@@ -18,7 +18,6 @@ import (
 	"go.uber.org/multierr"
 	"google.golang.org/api/googleapi"
 	servicenetworking "google.golang.org/api/servicenetworking/v1"
-	"google.golang.org/genproto/googleapis/cloud/compute/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,7 +94,7 @@ func buildTestInvalidInfrastructure() *v1.Infrastructure {
 	}
 }
 
-func buildValidGcpListNetworks(req *compute.ListNetworksRequest) ([]*compute.Network, error) {
+func buildValidGcpListNetworks(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
 	return testBuildNetwork(req, buildValidGcpNetwork)
 }
 
@@ -107,9 +106,9 @@ func buildValidGcpListNetworksPeering(req *computepb.ListNetworksRequest) ([]*co
 	return testBuildNetwork(req, buildValidGcpNetworkPeering)
 }
 
-func testBuildNetwork(req *compute.ListNetworksRequest, buildNetwork func(string) *computepb.Network) ([]*compute.Network, error) {
+func testBuildNetwork(req *computepb.ListNetworksRequest, buildNetwork func(string) *computepb.Network) ([]*computepb.Network, error) {
 	clusterID := retrieveTestClusterId(resources.SafeStringDereference(req.Filter))
-	return []*compute.Network{
+	return []*computepb.Network{
 		buildNetwork(clusterID),
 	}, nil
 }
@@ -190,7 +189,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *compute.Address
+		want    *computepb.Address
 		wantErr bool
 	}{
 		{
