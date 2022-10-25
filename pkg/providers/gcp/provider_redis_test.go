@@ -43,8 +43,8 @@ func TestNewGCPRedisProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewGCPRedisProvider(tt.args.client, tt.args.logger); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewGCPRedisProvider() = %v, want %v", got, tt.want)
+			if got := NewGCPRedisProvider(tt.args.client, tt.args.logger); got == nil {
+				t.Errorf("NewGCPRedisProvider() got = %v, want non-nil result", got)
 			}
 		})
 	}
@@ -75,7 +75,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name: "failure creating redis instance",
+			name: "success creating redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
@@ -90,61 +90,26 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 				},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to reconcile gcp redis provider credentials for redis instance " + redisProviderName,
-			wantErr:       true,
-		},
-		{
-			name: "success creating redis instance",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-						return nil
-					}
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return nil
-					}
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *cloudcredentialv1.CredentialsRequest:
-							cr.Status.Provisioned = true
-							cr.Status.ProviderStatus = &runtime.RawExtension{Raw: []byte("{ \"serviceAccountID\":\"serviceAccountID\"}")}
-						case *corev1.Secret:
-							cr.Data = map[string][]byte{defaultCredentialsServiceAccount: []byte("{}")}
-						}
-						return nil
-					}
-					return mc
-				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				ctx: context.TODO(),
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      redisProviderName,
-						Namespace: testNs,
-					},
-				},
-			},
-			redisCluster:  nil,
-			statusMessage: "",
+			statusMessage: "successfully created and tagged, gcp elasticache",
 			wantErr:       false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rp := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
-			redisCluster, statusMessage, err := rp.CreateRedis(tt.args.ctx, tt.args.r)
+			p := RedisProvider{
+				Client: tt.fields.Client,
+				Logger: tt.fields.Logger,
+			}
+			redisCluster, statusMessage, err := p.createRedisCluster(tt.args.ctx, tt.args.r)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateRedis() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("createRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(redisCluster, tt.redisCluster) {
-				t.Errorf("CreateRedis() redisCluster = %v, want %v", redisCluster, tt.redisCluster)
+				t.Errorf("createRedisCluster() redisCluster = %v, want %v", redisCluster, tt.redisCluster)
 			}
 			if statusMessage != tt.statusMessage {
-				t.Errorf("CreateRedis() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
+				t.Errorf("createRedisCluster() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
 			}
 		})
 	}
@@ -158,8 +123,10 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx context.Context
-		r   *v1alpha1.Redis
+		ctx            context.Context
+		r              *v1alpha1.Redis
+		networkManager NetworkManager
+		isLastResource bool
 	}
 	scheme := runtime.NewScheme()
 	err := cloudcredentialv1.Install(scheme)
@@ -177,6 +144,7 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 			name: "failure deleting redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -186,8 +154,10 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
+				networkManager: buildMockNetworkManager(),
+				isLastResource: false,
 			},
-			want:    "failed to reconcile gcp redis provider credentials for redis instance " + redisProviderName,
+			want:    "failed to update instance as part of finalizer reconcile",
 			wantErr: true,
 		},
 		{
@@ -223,6 +193,8 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
+				networkManager: buildMockNetworkManager(),
+				isLastResource: true,
 			},
 			want:    "",
 			wantErr: false,
@@ -230,14 +202,14 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rp := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
-			statusMessage, err := rp.DeleteRedis(tt.args.ctx, tt.args.r)
+			p := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
+			statusMessage, err := p.deleteRedisCluster(tt.args.ctx, tt.args.networkManager, tt.args.r, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("DeleteRedis() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if statusMessage != tt.want {
-				t.Errorf("DeleteRedis() statusMessage = %v, want %v", statusMessage, tt.want)
+				t.Errorf("deleteRedisCluster() statusMessage = %v, want %v", statusMessage, tt.want)
 			}
 		})
 	}

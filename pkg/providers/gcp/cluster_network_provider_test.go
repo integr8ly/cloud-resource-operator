@@ -99,7 +99,11 @@ func buildValidGcpListNetworks(req *compute.ListNetworksRequest) ([]*compute.Net
 	return testBuildNetwork(req, buildValidGcpNetwork)
 }
 
-func buildValidGcpListNetworksPeering(req *compute.ListNetworksRequest) ([]*compute.Network, error) {
+func buildValidEmptyGcpListNetworksPeering(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
+	return testBuildNetwork(req, buildEmptyGcpNetworkPeering)
+}
+
+func buildValidGcpListNetworksPeering(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
 	return testBuildNetwork(req, buildValidGcpNetworkPeering)
 }
 
@@ -124,8 +128,14 @@ func buildValidGcpNetwork(clusterID string) *computepb.Network {
 	}
 }
 
-func buildValidGcpNetworkPeering(clusterID string) *computepb.Network {
+func buildEmptyGcpNetworkPeering(clusterID string) *computepb.Network {
 	net := buildValidGcpNetwork(clusterID)
+	net.Peerings = []*computepb.NetworkPeering{}
+	return net
+}
+
+func buildValidGcpNetworkPeering(clusterID string) *computepb.Network {
+	net := buildEmptyGcpNetworkPeering(clusterID)
 	net.Peerings = append(net.Peerings, &computepb.NetworkPeering{
 		Name: utils.String(defaultServiceConnectionName),
 	})
@@ -526,6 +536,27 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 			want:    nil,
 			wantErr: true,
 		},
+		{
+			name: "error retrieving service connections - post creation",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(req *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
+					}
+				}),
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFnTwo = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
+						return nil, errors.New("failed to list")
+					}
+				}),
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -577,11 +608,21 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "delete peering does not exist",
+			name: "delete peering does not exist - nil",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+			},
+			wantErr: false,
+		},
+		{
+			name: "delete peering does not exist - empty",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidEmptyGcpListNetworksPeering
 				}),
 			},
 			wantErr: false,
@@ -722,6 +763,22 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 					servicesClient.ConnectionsDeleteFn = func(string, *servicenetworking.DeleteConnectionRequest) (*servicenetworking.Operation, error) {
 						return nil, errors.New("failed to delete")
 					}
+				}),
+			},
+			wantErr: true,
+		},
+		{
+			name: "error deleting service connection, response in progress",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFn = func(clusterVpc *computepb.Network, projectID, parent string) (*servicenetworking.ListConnectionsResponse, error) {
+						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
+					}
+					servicesClient.Done = false
 				}),
 			},
 			wantErr: true,

@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,7 +98,7 @@ func (pp *PostgresProvider) ReconcilePostgres(ctx context.Context, p *v1alpha1.P
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
-	if address == nil {
+	if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
 		return nil, croType.StatusMessage("network ip address range creation in progress"), nil
 	}
 	logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())

@@ -91,13 +91,13 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 	logger.Infof("created network service connection %s", service.Service)
 
+	//TODO implement me
+	return p.createRedisCluster(ctx, r)
+}
+
+func (p *RedisProvider) createRedisCluster(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
 	// TODO implement me
-	return &providers.RedisCluster{
-		DeploymentDetails: &providers.RedisDeploymentDetails{
-			URI:  "test",
-			Port: 1234,
-		},
-	}, "", nil
+	return nil, croType.StatusMessage("successfully created and tagged, gcp elasticache"), nil
 }
 
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {

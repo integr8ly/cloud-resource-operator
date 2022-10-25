@@ -59,10 +59,13 @@ type MockServicesClient struct {
 	ConnectionsCreateFn  func(string, *servicenetworking.Connection) (*servicenetworking.Operation, error)
 	ConnectionsDeleteFn  func(string, *servicenetworking.DeleteConnectionRequest) (*servicenetworking.Operation, error)
 	call                 int
+	Done                 bool
 }
 
 func GetMockServicesClient(modifyFn func(servicesClient *MockServicesClient)) *MockServicesClient {
-	mock := &MockServicesClient{}
+	mock := &MockServicesClient{
+		Done: true,
+	}
 	if modifyFn != nil {
 		modifyFn(mock)
 	}
@@ -87,7 +90,7 @@ func (m *MockServicesClient) ConnectionsCreate(parent string, connection *servic
 		return m.ConnectionsCreateFn(parent, connection)
 	}
 	return &servicenetworking.Operation{
-		Done: true,
+		Done: m.Done,
 	}, nil
 }
 
@@ -96,6 +99,6 @@ func (m *MockServicesClient) ConnectionsDelete(name string, deleteconnectionrequ
 		return m.ConnectionsDeleteFn(name, deleteconnectionrequest)
 	}
 	return &servicenetworking.Operation{
-		Done: true,
+		Done: m.Done,
 	}, nil
 }
