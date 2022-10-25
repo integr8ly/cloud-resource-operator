@@ -2838,7 +2838,7 @@ func TestAddAnnotation_ClientUpdate(t *testing.T) {
 			args: args{
 				client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.UpdateFunc = func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					mockClient.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
 					return mockClient
@@ -2854,7 +2854,7 @@ func TestAddAnnotation_ClientUpdate(t *testing.T) {
 			args: args{
 				client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.UpdateFunc = func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					mockClient.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return errors.New("failed to add annotation")
 					}
 					return mockClient
