@@ -128,7 +128,7 @@ cluster/seed/managed/postgressnapshot:
 
 .PHONY: cluster/clean
 cluster/clean:
-	@$(KUSTOMIZE) build config/crd | kubectl delete -f -
+	@$(KUSTOMIZE) build config/crd | oc delete -f -
 	@$(KUSTOMIZE) build config/rbac | oc delete --force -f -	
 	oc delete project $(NAMESPACE)
 

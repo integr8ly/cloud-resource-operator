@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -2808,6 +2809,71 @@ func TestNewAWSPostgresProvider(t *testing.T) {
 			}
 			if got == nil {
 				t.Errorf("NewAWSPostgresProvider() got = %v, want non-nil result", got)
+			}
+		})
+	}
+}
+
+func TestAddAnnotation_ClientUpdate(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
+	type args struct {
+		ctx    context.Context
+		cr     *v1alpha1.Postgres
+		client func() client.Client
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "success add annotation",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.UpdateFunc = func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+						return nil
+					}
+					return mockClient
+				},
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
+			},
+			want:    "",
+			wantErr: false,
+		},
+		{
+			name: "fail add annotation",
+			args: args{
+				client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.UpdateFunc = func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+						return errors.New("failed to add annotation")
+					}
+					return mockClient
+				},
+				ctx: context.TODO(),
+				cr:  buildTestPostgresCR(),
+			},
+			want:    "failed to add annotation",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := addAnnotation(tt.args.ctx, tt.args.client(), tt.args.cr, "test")
+			if err != nil {
+				if strings.Compare(string(msg), tt.want) != 0 {
+					t.Errorf("addAnnotation() got = %v, want %v", string(msg), tt.want)
+				}
+				return
 			}
 		})
 	}
