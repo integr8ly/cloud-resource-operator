@@ -57,7 +57,7 @@ func NewNetworkManager(ctx context.Context, opt option.ClientOption, client clie
 	}
 	addressApi, err := gcpiface.NewAddressAPI(ctx, opt)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "Failed to initialise address client")
+		return nil, errorUtil.Wrap(err, "Failed to initialise addresses client")
 	}
 	if logger == nil {
 		logger = logrus.NewEntry(logrus.StandardLogger())
