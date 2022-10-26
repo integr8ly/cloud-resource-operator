@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	testNs = "testNs"
+	testNs   = "testNs"
+	testName = "testName"
 )
 
 func TestNewCredentialMinterCredentialManager(t *testing.T) {

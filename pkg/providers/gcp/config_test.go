@@ -2,7 +2,11 @@ package gcp
 
 import (
 	"context"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
@@ -57,10 +61,29 @@ func TestConfigMapConfigManager_ReadStorageStrategy(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "placeholder test",
-			fields:  fields{},
-			args:    args{},
-			want:    nil,
+			name: "placeholder test",
+			fields: fields{
+				client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(nil)
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj runtime.Object) error {
+						switch cr := obj.(type) {
+						case *corev1.ConfigMap:
+							cr.Data = map[string]string{"redis": `{"development":{"region":"region","projectID":"projectID"}}`}
+						}
+						return nil
+					}
+					return mc
+				}(),
+			},
+			args: args{
+				ctx:  context.TODO(),
+				rt:   "redis",
+				tier: "development",
+			},
+			want: &StrategyConfig{
+				Region:    "region",
+				ProjectID: "projectID",
+			},
 			wantErr: false,
 		},
 	}

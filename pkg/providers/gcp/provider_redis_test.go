@@ -1,7 +1,13 @@
 package gcp
 
 import (
+	redis "cloud.google.com/go/redis/apiv1"
 	"context"
+	"fmt"
+	"github.com/googleapis/gax-go/v2"
+	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
+	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	"reflect"
 	"testing"
 	"time"
@@ -90,7 +96,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 				},
 			},
 			redisCluster:  nil,
-			statusMessage: "successfully created and tagged, gcp elasticache",
+			statusMessage: "successfully created gcp redis",
 			wantErr:       false,
 		},
 	}
@@ -115,7 +121,7 @@ func TestRedisProvider_ReconcileRedis(t *testing.T) {
 	}
 }
 
-func TestRedisProvider_DeleteRedis(t *testing.T) {
+func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -124,8 +130,9 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 	}
 	type args struct {
 		ctx            context.Context
-		r              *v1alpha1.Redis
 		networkManager NetworkManager
+		redisClient    gcpiface.RedisAPI
+		r              *v1alpha1.Redis
 		isLastResource bool
 	}
 	scheme := runtime.NewScheme()
@@ -141,44 +148,52 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "failure deleting redis instance",
+			name: "failed to retrieve gcp redis strategy config",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj runtime.Object) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      redisProviderName,
+						Name:      testName,
 						Namespace: testNs,
 					},
 				},
-				networkManager: buildMockNetworkManager(),
+				networkManager: nil,
 				isLastResource: false,
 			},
-			want:    "failed to update instance as part of finalizer reconcile",
+			want:    "failed to retrieve gcp redis strategy config",
 			wantErr: true,
 		},
 		{
-			name: "success deleting redis instance",
+			name: "success triggering redis deletion",
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-						return nil
-					}
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return nil
-					}
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj runtime.Object) error {
 						switch cr := obj.(type) {
-						case *cloudcredentialv1.CredentialsRequest:
-							cr.Status.Provisioned = true
-							cr.Status.ProviderStatus = &runtime.RawExtension{Raw: []byte("{ \"serviceAccountID\":\"serviceAccountID\"}")}
-						case *corev1.Secret:
-							cr.Data = map[string][]byte{defaultCredentialsServiceAccount: []byte("{}")}
+						case *v1.Infrastructure:
+							cr.Status.PlatformStatus = &v1.PlatformStatus{
+								GCP: &v1.GCPPlatformStatus{
+									ProjectID: "projectID",
+									Region:    "regionID",
+								},
+							}
+							cr.Status.PlatformStatus.Type = v1.GCPPlatformType
+						case *corev1.ConfigMap:
+							cr.Data = map[string]string{"redis": `{"development":{}}`}
 						}
+						return nil
+					}
+					mc.UpdateFunc = func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
 					return mc
@@ -189,21 +204,39 @@ func TestRedisProvider_DeleteRedis(t *testing.T) {
 				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      redisProviderName,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
 						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
 					},
 				},
 				networkManager: buildMockNetworkManager(),
-				isLastResource: true,
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
+						return []*redispb.Instance{
+							{
+								Name: testName,
+							},
+						}, nil
+					}
+					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
+						return &redis.DeleteInstanceOperation{}, nil
+					}
+				}),
+				isLastResource: false,
 			},
-			want:    "",
+			want:    "successfully deleted gcp redis",
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
-			statusMessage, err := p.deleteRedisCluster(tt.args.ctx, tt.args.networkManager, tt.args.r, tt.args.isLastResource)
+			statusMessage, err := p.deleteRedisCluster(tt.args.ctx, tt.args.networkManager, tt.args.redisClient, tt.args.r, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
