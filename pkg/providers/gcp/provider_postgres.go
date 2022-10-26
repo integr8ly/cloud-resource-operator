@@ -23,8 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ providers.PostgresProvider = (*PostgresProvider)(nil)
-
 const (
 	postgresProviderName         = "gcp-cloudsql"
 	ResourceIdentifierAnnotation = "resourceIdentifier"
