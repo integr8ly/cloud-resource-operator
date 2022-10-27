@@ -15,7 +15,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.58.0
 	github.com/prometheus/client_golang v1.12.2
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/afero v1.8.2
+	github.com/spf13/afero v1.9.2
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129
 	k8s.io/api v0.24.3
 	k8s.io/apiextensions-apiserver v0.24.3
