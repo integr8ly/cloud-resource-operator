@@ -19,7 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const redisProviderName = "gcp-memorystore"
+const (
+	redisInstanceNameFormat = "projects/%s/locations/%s/instances/%s"
+	redisProviderName       = "gcp-memorystore"
+)
 
 type RedisProvider struct {
 	Client            client.Client
@@ -138,7 +141,7 @@ func (rp *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager 
 	var statusMessage string
 	_, deleteInstanceRequest, strategyConfig, err := rp.getRedisConfig(ctx, r)
 	if err != nil {
-		statusMessage = "failed to retrieve gcp redis strategy config"
+		statusMessage = "failed to retrieve redis strategy config"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	redisInstances, err := rp.getRedisInstances(ctx, redisClient, strategyConfig.ProjectID, strategyConfig.Region)
@@ -155,15 +158,16 @@ func (rp *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager 
 	}
 	if foundInstance != nil {
 		if foundInstance.State == redispb.Instance_DELETING {
-			statusMessage = fmt.Sprintf("redis instance %s is already deleting", r.Name)
-			return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+			statusMessage = fmt.Sprintf("deletion in progress for redis instance %s", r.Name)
+			return croType.StatusMessage(statusMessage), nil
 		}
 		_, err = redisClient.DeleteInstance(ctx, deleteInstanceRequest)
 		if err != nil {
-			statusMessage = "failed to delete redis instance" + r.Name
+			statusMessage = fmt.Sprintf("failed to delete redis instance %s", r.Name)
 			return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
-		return "delete detected, deleteRedisInstance started", nil
+		statusMessage = fmt.Sprintf("delete detected, redis instance %s started", r.Name)
+		return croType.StatusMessage(statusMessage), nil
 	}
 
 	// remove networking components
@@ -173,11 +177,11 @@ func (rp *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager 
 			return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
 		if err = networkManager.DeleteNetworkService(ctx); err != nil {
-			statusMessage = "failed to delete cluster network peering"
+			statusMessage = "failed to delete network service"
 			return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
 		if err = networkManager.DeleteNetworkIpRange(ctx); err != nil {
-			statusMessage = "failed to delete gcp networking"
+			statusMessage = "failed to delete network ip range"
 			return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
 		if exist, err := networkManager.ComponentsExist(ctx); err != nil || exist {
@@ -193,10 +197,10 @@ func (rp *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager 
 	// remove the finalizer added by the provider
 	resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 	if err = rp.Client.Update(ctx, r); err != nil {
-		statusMessage = "failed to update instance as part of finalizer reconcile"
+		statusMessage = fmt.Sprintf("failed to update instance %s as part of finalizer reconcile", r.Name)
 		return croType.StatusMessage(statusMessage), errorUtil.Wrapf(err, statusMessage)
 	}
-	statusMessage = "successfully deleted gcp redis"
+	statusMessage = fmt.Sprintf("successfully deleted redis instance %s", r.Name)
 	return croType.StatusMessage(statusMessage), nil
 }
 
@@ -238,11 +242,11 @@ func (rp *RedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) 
 	instanceName := annotations.Get(r, ResourceIdentifierAnnotation)
 	if instanceName == "" {
 		errMsg := "unable to find instance name from annotation"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, nil, nil, fmt.Errorf(errMsg)
 	}
 	var createInstanceRequest *redispb.CreateInstanceRequest // TODO (MGDAPI-4667): create a request with all required fields
 	deleteInstanceRequest := &redispb.DeleteInstanceRequest{
-		Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", strategyConfig.ProjectID, strategyConfig.Region, instanceName),
+		Name: fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, instanceName),
 	}
 	return createInstanceRequest, deleteInstanceRequest, strategyConfig, nil
 }
