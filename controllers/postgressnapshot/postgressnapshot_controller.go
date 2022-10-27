@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -56,6 +57,8 @@ type PostgresSnapshotReconciler struct {
 	provider      providers.PostgresSnapshotProvider
 	ConfigManager croAws.ConfigManager
 }
+
+var _ reconcile.Reconciler = &PostgresSnapshotReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
@@ -93,13 +96,12 @@ func (r *PostgresSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresSnapshotReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling postgres snapshot")
-	ctx := context.TODO()
 
 	// Fetch the PostgresSnapshot instance
 	instance := &integreatlyv1alpha1.PostgresSnapshot{}
-	err := r.Client.Get(ctx, request.NamespacedName, instance)
+	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

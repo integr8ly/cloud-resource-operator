@@ -186,9 +186,6 @@ var redisGaugeMetrics = []CroGaugeMetric{
 	},
 }
 
-// blank assignment to verify that ReconcileCloudMetrics implements reconcile.Reconciler
-var _ reconcile.Reconciler = &CloudMetricsReconciler{}
-
 // PostgresReconciler reconciles a Postgres object
 type CloudMetricsReconciler struct {
 	k8sclient.Client
@@ -197,6 +194,9 @@ type CloudMetricsReconciler struct {
 	postgresProviderList []providers.PostgresMetricsProvider
 	redisProviderList    []providers.RedisMetricsProvider
 }
+
+// blank assignment to verify that ReconcileCloudMetrics implements reconcile.Reconciler
+var _ reconcile.Reconciler = &CloudMetricsReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*CloudMetricsReconciler, error) {
@@ -253,9 +253,8 @@ func (r *CloudMetricsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *CloudMetricsReconciler) Reconcile(request ctrl.Request) (ctrl.Result, error) {
+func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling CloudMetrics")
-	ctx := context.TODO()
 
 	// scrapedMetrics stores the GenericCloudMetric which are returned from the providers
 	var scrapedMetrics []*providers.GenericCloudMetric
