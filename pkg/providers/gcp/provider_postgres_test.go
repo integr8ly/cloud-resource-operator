@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"reflect"
 	"testing"
 	"time"
@@ -186,7 +187,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 	type args struct {
 		ctx             context.Context
 		p               *v1alpha1.Postgres
-		sqladminService *mockSqlClient
+		sqladminService *gcpiface.MockSqlClient
 	}
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -228,8 +229,8 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(func(sqlClient *mockSqlClient) {
-					sqlClient.instancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
@@ -241,7 +242,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 			},
-			want:    "instance delete pending, current cloudSQL status is PENDING_DELETE",
+			want:    "postgres instance testcloudsqldb-id is already deleting",
 			wantErr: false,
 		},
 		{
@@ -274,8 +275,8 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(func(sqlClient *mockSqlClient) {
-					sqlClient.instancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
@@ -285,12 +286,12 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 							},
 						}, nil
 					}
-					sqlClient.deleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
 						return nil, errors.New("failed to delete cloudSQL instance: testcloudsqldb-id")
 					}
 				}),
 			},
-			want:    "failed to delete cloudSQL instance: testcloudsqldb-id",
+			want:    "failed to delete postgres instance: testcloudsqldb-id",
 			wantErr: true,
 		},
 		{
@@ -323,8 +324,8 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(func(sqlClient *mockSqlClient) {
-					sqlClient.instancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{},
@@ -359,7 +360,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "failed to delete cloudSQL secrets",
 			wantErr: true,
@@ -394,7 +395,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "",
 			wantErr: false,
@@ -429,8 +430,8 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(func(sqlClient *mockSqlClient) {
-					sqlClient.instancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
@@ -475,8 +476,8 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(func(sqlClient *mockSqlClient) {
-					sqlClient.instancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
@@ -486,12 +487,12 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 							},
 						}, nil
 					}
-					sqlClient.deleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
 						return nil, errors.New("delete error")
 					}
 				}),
 			},
-			want:    "failed to delete cloudSQL instance: testcloudsqldb-id",
+			want:    "failed to delete postgres instance: testcloudsqldb-id",
 			wantErr: true,
 		},
 		{
@@ -527,7 +528,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "unable to find instance name from annotation",
 			wantErr: true,
@@ -555,7 +556,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "failed to update instance as part of finalizer reconcile",
 			wantErr: true,
@@ -692,7 +693,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 	type args struct {
 		ctx             context.Context
 		p               *v1alpha1.Postgres
-		sqladminService *mockSqlClient
+		sqladminService *gcpiface.MockSqlClient
 	}
 	tests := []struct {
 		name    string
@@ -729,7 +730,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "",
 			wantErr: false,
@@ -762,7 +763,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "unable to find instance name from annotation",
 			wantErr: true,
@@ -798,7 +799,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "",
 			wantErr: false,
@@ -843,7 +844,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "",
 			wantErr: false,
@@ -880,7 +881,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "failed to get cluster id while exposing information metric for testcloudsqldb-id",
 			wantErr: true,
@@ -931,7 +932,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "",
 			wantErr: false,
@@ -966,7 +967,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 	type args struct {
 		ctx             context.Context
 		p               *v1alpha1.Postgres
-		sqladminService *mockSqlClient
+		sqladminService *gcpiface.MockSqlClient
 	}
 	tests := []struct {
 		name    string
@@ -1020,7 +1021,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "failed to reconcile gcp postgres provider credentials for postgres instance gcp-cloudsql",
 			wantErr: true,
@@ -1070,7 +1071,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
-				sqladminService: getMockSQLClient(nil),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
 			want:    "error building cloudSQL admin service",
 			wantErr: true,

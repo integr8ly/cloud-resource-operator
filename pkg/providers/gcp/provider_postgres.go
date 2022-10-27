@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -38,7 +39,7 @@ type PostgresProvider struct {
 
 // wrapper for real client
 type sqlClient struct {
-	SQLAdminService
+	gcpiface.SQLAdminService
 	sqlAdminService *sqladmin.Service
 }
 
@@ -89,21 +90,21 @@ func (pp *PostgresProvider) ReconcilePostgres(ctx context.Context, p *v1alpha1.P
 	return nil, "", nil
 }
 
+// DeletePostgres will set the postgres deletion timestamp, reconcile provider credentials so that the postgres instance
+// can be accessed, build the cloudSQL service using these credentials and call the deleteCloudSQLInstance function to
+// perform the delete action.
 func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "DeletePostgres")
 	logger.Infof("reconciling postgres %s", p.Name)
 
-	// set postgres deletion timestamp metric
 	pp.setPostgresDeletionTimestampMetric(ctx, p)
 
-	// get provider gcp creds to access the postgres instance
 	creds, err := pp.CredentialManager.ReconcileProviderCredentials(ctx, p.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile gcp postgres provider credentials for postgres instance %s", p.Name)
 		return croType.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	// build cloudSQL service
 	sqladminService, err := sqladmin.NewService(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson))
 	if err != nil {
 		return "error building cloudSQL admin service", err
@@ -114,12 +115,15 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 	return pp.deleteCloudSQLInstance(ctx, sqlClient, p)
 }
 
-func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService SQLAdminService, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
+// deleteCloudSQLInstance will retrieve instances from gcp, find the instance required using the resourceIdentifierAnnotation
+// and delete this instance if it is not already pending delete. The credentials and finalizer are then removed.
+func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService gcpiface.SQLAdminService, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
-	// get cloudSQL instance
+
 	instances, err := getCloudSQLInstances(sqladminService)
 	if err != nil {
-		return "cannot retrieve sql instances from gcp", err
+		msg := "cannot retrieve sql instances from gcp"
+		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 	logrus.Info("listed sql instances from gcp")
 
@@ -130,7 +134,6 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 		return croType.StatusMessage(msg), fmt.Errorf(msg)
 	}
 
-	// check if instance exists
 	var foundInstance *sqladmin.DatabaseInstance
 	for _, instance := range instances {
 		if instance.Name == instanceName {
@@ -139,23 +142,23 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 			break
 		}
 	}
-	// check instance state
+
 	if foundInstance != nil {
 		if foundInstance.State == "PENDING_DELETE" {
-			statusMessage := fmt.Sprintf("instance delete pending, current cloudSQL status is %s", foundInstance.State)
+			statusMessage := fmt.Sprintf("postgres instance %s is already deleting", instanceName)
 			pp.Logger.Info(statusMessage)
 			return croType.StatusMessage(statusMessage), nil
 		}
-		// delete if not in progress
+
 		_, err = sqladminService.DeleteInstance(ctx, projectID, instanceName)
 		if err != nil {
-			return croType.StatusMessage(fmt.Sprintf("failed to delete cloudSQL instance: %s", instanceName)), err
+			msg := fmt.Sprintf("failed to delete postgres instance: %s", instanceName)
+			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 		}
 		logrus.Info("triggered Instances.Delete()")
 		return "delete detected, Instances.Delete() started", nil
 	}
 
-	// delete credential secret
 	logger.Info("deleting cloudSQL secret")
 	sec := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,7 +172,6 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	// remove finalizer
 	resources.RemoveFinalizer(&p.ObjectMeta, DefaultFinalizer)
 	if err := pp.Client.Update(ctx, p); err != nil {
 		msg := "failed to update instance as part of finalizer reconcile"
@@ -179,7 +181,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 	return croType.StatusEmpty, nil
 }
 
-func getCloudSQLInstances(service SQLAdminService) ([]*sqladmin.DatabaseInstance, error) {
+func getCloudSQLInstances(service gcpiface.SQLAdminService) ([]*sqladmin.DatabaseInstance, error) {
 	instances, err := service.InstancesList(projectID)
 	if err != nil {
 		return nil, err
@@ -193,14 +195,13 @@ func getCloudSQLInstances(service SQLAdminService) ([]*sqladmin.DatabaseInstance
 // https://github.com/kubernetes/kube-state-metrics/blob/0bfc2981f9c281c78e33052abdc2d621630562b9/internal/store/pod.go#L200-L218
 func (pp *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Context, p *v1alpha1.Postgres) {
 	if p.DeletionTimestamp != nil && !p.DeletionTimestamp.IsZero() {
-		// build instance name
 
 		instanceName := annotations.Get(p, ResourceIdentifierAnnotation)
 
 		if instanceName == "" {
 			logrus.Errorf("unable to find instance name from annotation")
 		}
-		// get Cluster Id
+
 		logrus.Info("setting postgres information metric")
 		clusterID, err := resources.GetClusterID(ctx, pp.Client)
 		if err != nil {
