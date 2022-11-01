@@ -1,7 +1,7 @@
 # cloud.google.com/go v0.94.1
 ## explicit; go 1.11
 cloud.google.com/go/compute/metadata
-# github.com/aws/aws-sdk-go v1.44.45
+# github.com/aws/aws-sdk-go v1.44.127
 ## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/arn
