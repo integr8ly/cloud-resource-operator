@@ -149,7 +149,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "if instance is not nil and state is PENDING_DELETE return status message",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -176,7 +176,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "if instance is not nil, delete is not in progress delete function returns error",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -206,7 +206,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "error when getting cloud sql instances",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -231,7 +231,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 			name: "Error deleting cloudSQL secrets",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure())
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure(nil))
 					mc.DeleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -252,7 +252,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "successful run of delete function when cloudsql object is already deleted",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -268,7 +268,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "successful run of delete function when cloudsql object is not already deleted",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -295,7 +295,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "want error when running delete function when cloudsql object is not already deleted but delete errors",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -325,7 +325,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "want error when no annotation on postgres cr",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresWithoutAnnotation(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresWithoutAnnotation(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -342,7 +342,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 			name: "Error failed to update instance as part of finalizer reconcile",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure())
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}

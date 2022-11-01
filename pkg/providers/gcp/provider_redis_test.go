@@ -4,6 +4,7 @@ import (
 	redis "cloud.google.com/go/redis/apiv1"
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/googleapis/gax-go/v2"
 	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
@@ -140,6 +141,9 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
 	tests := []struct {
 		name    string
 		fields  fields
@@ -150,25 +154,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "success triggering redis deletion for an existing instance",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -189,7 +178,7 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
 						return []*redispb.Instance{
 							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName),
+								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
 								State: redispb.Instance_READY,
 							},
 						}, nil
@@ -206,28 +195,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "success reconciling when the found instance is already in progress of deletion",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -248,7 +219,7 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
 						return []*redispb.Instance{
 							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName),
+								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
 								State: redispb.Instance_DELETING,
 							},
 						}, nil
@@ -265,28 +236,25 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "success reconciling when the instance deletion and cleanup have completed",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+					&v1alpha1.Redis{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								ResourceIdentifierAnnotation: testName,
+							},
+							Finalizers: []string{
+								DefaultFinalizer,
+							},
+							Name:      testName,
+							Namespace: testNs,
+						},
+						Spec: types.ResourceTypeSpec{
+							Tier: "development",
+						},
+					},
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -296,8 +264,9 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						Annotations: map[string]string{
 							ResourceIdentifierAnnotation: testName,
 						},
-						Name:      testName,
-						Namespace: testNs,
+						Name:            testName,
+						Namespace:       testNs,
+						ResourceVersion: "999",
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -316,25 +285,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "fail to delete redis instance",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -355,7 +309,7 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
 						return []*redispb.Instance{
 							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName),
+								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
 								State: redispb.Instance_READY,
 							},
 						}, nil
@@ -397,25 +351,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		{
 			name: "fail to retrieve redis instances",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -445,22 +384,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "fail to update redis instance as part of finalizer reconcile",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -499,22 +426,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "fail to delete cluster network peering",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -558,22 +473,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "fail to delete network service",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -620,22 +523,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "fail to delete network ip range",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -685,22 +576,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "successfully reconcile when components deletion is in progress",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -753,22 +632,10 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 			name: "fail to check if components exist",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						case *corev1.ConfigMap:
-							cr.Data = map[string]string{"redis": `{"development":{}}`}
-						}
-						return nil
-					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestGcpInfrastructure(nil),
+						buildTestGcpStrategyConfigMap(nil),
+					)
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("generic error")
 					}
@@ -940,6 +807,13 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		ctx context.Context
 		r   *v1alpha1.Redis
 	}
+	scheme := runtime.NewScheme()
+	err := cloudcredentialv1.Install(scheme)
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	_ = v1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 	tests := []struct {
 		name                  string
 		fields                fields
@@ -952,23 +826,10 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		{
 			name: "successfully retrieve gcp redis config",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
@@ -992,11 +853,11 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 			},
 			createInstanceRequest: nil,
 			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName),
+				Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
 			},
 			strategyConfig: &StrategyConfig{
-				Region:    "region",
-				ProjectID: "projectID",
+				Region:    gcpTestRegion,
+				ProjectID: gcpTestProjectId,
 			},
 			wantErr: false,
 		},
@@ -1024,22 +885,9 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		{
 			name: "fail to retrieve default gcp project",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(map[string]*string{"projectID": aws.String("")}),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
@@ -1062,23 +910,9 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		{
 			name: "fail to retrieve default gcp region",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(map[string]*string{"region": aws.String("")}),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
@@ -1101,23 +935,10 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		{
 			name: "fail to retrieve redis instance from cr annotations",
 			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						switch cr := obj.(type) {
-						case *v1.Infrastructure:
-							cr.Status.PlatformStatus = &v1.PlatformStatus{
-								GCP: &v1.GCPPlatformStatus{
-									ProjectID: "projectID",
-									Region:    "region",
-								},
-								Type: v1.GCPPlatformType,
-							}
-						}
-						return nil
-					}
-					return mc
-				}(),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpInfrastructure(nil),
+					buildTestGcpStrategyConfigMap(nil),
+				),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
@@ -1194,13 +1015,13 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 			args: args{
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName)}}, nil
+						return []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)}}, nil
 					}
 				}),
-				projectID: "projectID",
-				region:    "region",
+				projectID: gcpTestProjectId,
+				region:    gcpTestRegion,
 			},
-			want:    []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, "projectID", "region", testName)}},
+			want:    []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)}},
 			wantErr: false,
 		},
 		{
@@ -1212,8 +1033,8 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 						return nil, fmt.Errorf("generic error")
 					}
 				}),
-				projectID: "projectID",
-				region:    "region",
+				projectID: gcpTestProjectId,
+				region:    gcpTestRegion,
 			},
 			want:    nil,
 			wantErr: true,
