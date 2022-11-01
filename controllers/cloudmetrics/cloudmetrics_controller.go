@@ -267,7 +267,8 @@ func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// loop through the redis crs and scrape the related provider specific metrics
-	for _, redis := range redisInstances.Items {
+	for index := range redisInstances.Items {
+		redis := redisInstances.Items[index]
 		r.logger.Infof("beginning to scrape metrics for redis cr: %s", redis.Name)
 		for _, p := range r.redisProviderList {
 			// only scrape metrics on supported strategies
@@ -304,7 +305,8 @@ func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		r.logger.Error(err)
 	}
-	for _, postgres := range postgresInstances.Items {
+	for index := range postgresInstances.Items {
+		postgres := postgresInstances.Items[index]
 		r.logger.Infof("beginning to scrape metrics for postgres cr: %s", postgres.Name)
 		for _, p := range r.postgresProviderList {
 			// only scrape metrics on supported strategies
