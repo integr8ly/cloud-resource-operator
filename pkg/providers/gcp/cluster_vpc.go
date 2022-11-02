@@ -13,17 +13,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.NetworksAPI, logger *logrus.Entry) (*computepb.Network, error) {
+func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.NetworksAPI, projectID string, logger *logrus.Entry) (*computepb.Network, error) {
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
-	}
-
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, c)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting project name")
 	}
 
 	// get networks with a name that matches clusterID

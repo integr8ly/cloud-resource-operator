@@ -24,6 +24,9 @@ const (
 	defaultIpRangePostfix          = "ip-range"
 	defaultIpRangeCIDRMask         = 22
 	defaultNumberOfExpectedSubnets = 2
+	defaultServicesFormat          = "services/%s"
+	defaultServiceConnectionFormat = defaultServicesFormat + "/connections/%s"
+	defaultNetworksFormat          = "projects/%s/global/networks/%s"
 )
 
 type NetworkManager interface {
@@ -43,10 +46,11 @@ type NetworkProvider struct {
 	ServicesApi gcpiface.ServicesAPI
 	AddressApi  gcpiface.AddressAPI
 	Logger      *logrus.Entry
+	ProjectID   string
 }
 
 // initialises the three required clients
-func NewNetworkManager(ctx context.Context, opt option.ClientOption, client client.Client, logger *logrus.Entry) (*NetworkProvider, error) {
+func NewNetworkManager(ctx context.Context, projectID string, opt option.ClientOption, client client.Client, logger *logrus.Entry) (*NetworkProvider, error) {
 	networksApi, err := gcpiface.NewNetworksAPI(ctx, opt)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "Failed to initialise network client")
@@ -68,38 +72,32 @@ func NewNetworkManager(ctx context.Context, opt option.ClientOption, client clie
 		ServicesApi: servicesApi,
 		AddressApi:  addressApi,
 		Logger:      logger.WithField("provider", "gcp_network_provider"),
+		ProjectID:   projectID,
 	}, nil
 }
 
 func (n *NetworkProvider) CreateNetworkIpRange(ctx context.Context) (*computepb.Address, error) {
-	// get cluster vpc
-	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
-	}
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting project id")
 	}
 	// build ip address range name
 	ipRange, err := resources.BuildInfraName(ctx, n.Client, defaultIpRangePostfix, defaultGcpIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to build ip address range infra name")
 	}
-	// retrieve ip address range
-	address, err := n.getAddressRange(ctx, projectID, ipRange)
+	address, err := n.getAddressRange(ctx, ipRange)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
 	}
 	// if it does not exist, create it
 	if address == nil {
-		err := n.createAddressRange(ctx, clusterVpc, projectID, ipRange)
+		err := n.createAddressRange(ctx, clusterVpc, ipRange)
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to create ip address range")
 		}
 		// check if address exists
-		address, err = n.getAddressRange(ctx, projectID, ipRange)
+		address, err = n.getAddressRange(ctx, ipRange)
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
 		}
@@ -110,18 +108,11 @@ func (n *NetworkProvider) CreateNetworkIpRange(ctx context.Context) (*computepb.
 // Creates the network service connection and will return the service if it has been created successfully
 // This automatically creates a peering connection to the clusterVpc named after the service connection
 func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenetworking.Connection, error) {
-	// get cluster vpc
-	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting project name")
-	}
-	// get service connection
-	service, err := n.getServiceConnection(clusterVpc, projectID)
+	service, err := n.getServiceConnection(clusterVpc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to retrieve service connection")
 	}
@@ -132,8 +123,7 @@ func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenet
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to build ip address range infra name")
 		}
-		// retrieve ip range
-		address, err := n.getAddressRange(ctx, projectID, ipRange)
+		address, err := n.getAddressRange(ctx, ipRange)
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
 		}
@@ -143,12 +133,12 @@ func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenet
 			return nil, errors.New("ip address range does not exist or is pending creation")
 		}
 		if address != nil && address.GetStatus() == computepb.Address_RESERVED.String() {
-			err = n.createServiceConnection(clusterVpc, projectID, ipRange)
+			err = n.createServiceConnection(clusterVpc, ipRange)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to create service connection")
 			}
 			// check if service exists
-			service, err = n.getServiceConnection(clusterVpc, projectID)
+			service, err = n.getServiceConnection(clusterVpc)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to retrieve service connection")
 			}
@@ -160,22 +150,14 @@ func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenet
 // Removes the peering connection from the cluster vpc
 // The service connection removal can get stuck if this is not performed first
 func (n *NetworkProvider) DeleteNetworkPeering(ctx context.Context) error {
-	// get cluster vpc
-	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return errorUtil.Wrap(err, "error getting project name")
-	}
-	// get peering connection
 	peering := n.getPeeringConnection(ctx, clusterVpc)
 	// if it exists, delete it
 	if peering != nil {
-		// delete peering connection
-		err = n.deletePeeringConnection(ctx, clusterVpc, projectID)
+		err = n.deletePeeringConnection(ctx, clusterVpc)
 		if err != nil {
 			return errorUtil.Wrap(err, "failed to delete peering connection")
 		}
@@ -186,22 +168,16 @@ func (n *NetworkProvider) DeleteNetworkPeering(ctx context.Context) error {
 // This deletes the network service connection, but can get stuck if peering
 // has not been removed
 func (n *NetworkProvider) DeleteNetworkService(ctx context.Context) error {
-	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return errorUtil.Wrap(err, "error getting project name")
-	}
-	// get service connection
-	service, err := n.getServiceConnection(clusterVpc, projectID)
+	service, err := n.getServiceConnection(clusterVpc)
 	if err != nil {
 		return err
 	}
+	// if the service exists, delete it
 	if service != nil {
-		// delete service connection
 		err := n.deleteServiceConnection(service)
 		if err != nil {
 			return err
@@ -211,36 +187,29 @@ func (n *NetworkProvider) DeleteNetworkService(ctx context.Context) error {
 }
 
 func (n *NetworkProvider) DeleteNetworkIpRange(ctx context.Context) error {
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return errorUtil.Wrap(err, "error getting project name")
-	}
 	// build ip address range name
 	ipRange, err := resources.BuildInfraName(ctx, n.Client, defaultIpRangePostfix, defaultGcpIdentifierLength)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to build ip address range infra name")
 	}
-	// get ip address range
-	address, err := n.getAddressRange(ctx, projectID, ipRange)
+	address, err := n.getAddressRange(ctx, ipRange)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to retrieve ip address range")
 	}
+	// if the address exists, delete it
 	if address != nil {
-		clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+		clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 		if err != nil {
 			return errorUtil.Wrap(err, "failed to get cluster vpc")
 		}
-		// get service connection
-		service, err := n.getServiceConnection(clusterVpc, projectID)
+		service, err := n.getServiceConnection(clusterVpc)
 		if err != nil {
 			return err
 		}
 		if service != nil && service.ReservedPeeringRanges[0] == address.GetName() {
 			return errors.New("failed to delete ip address range, service connection still present")
 		}
-		// delete ip address range
-		err = n.deleteAddressRange(ctx, projectID, ipRange)
+		err = n.deleteAddressRange(ctx, ipRange)
 		if err != nil {
 			return errorUtil.Wrap(err, "failed to delete ip address range")
 		}
@@ -249,22 +218,16 @@ func (n *NetworkProvider) DeleteNetworkIpRange(ctx context.Context) error {
 }
 
 func (n *NetworkProvider) ComponentsExist(ctx context.Context) (bool, error) {
-	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "failed to get cluster vpc")
-	}
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, n.Client)
-	if err != nil {
-		return false, errorUtil.Wrap(err, "error getting project name")
 	}
 	// build ip address range name
 	ipRange, err := resources.BuildInfraName(ctx, n.Client, defaultIpRangePostfix, defaultGcpIdentifierLength)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "failed to build ip address range infra name")
 	}
-	// get ip address range
-	address, err := n.getAddressRange(ctx, projectID, ipRange)
+	address, err := n.getAddressRange(ctx, ipRange)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "failed to retrieve ip address range")
 	}
@@ -272,8 +235,7 @@ func (n *NetworkProvider) ComponentsExist(ctx context.Context) (bool, error) {
 		n.Logger.Infof("ip address range %s deletion in progress", address.GetName())
 		return true, nil
 	}
-	// get service connection
-	service, err := n.getServiceConnection(clusterVpc, projectID)
+	service, err := n.getServiceConnection(clusterVpc)
 	if err != nil {
 		return false, err
 	}
@@ -284,8 +246,8 @@ func (n *NetworkProvider) ComponentsExist(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (n *NetworkProvider) getServiceConnection(clusterVpc *computepb.Network, projectID string) (*servicenetworking.Connection, error) {
-	resp, err := n.ServicesApi.ConnectionsList(clusterVpc, projectID, fmt.Sprintf("services/%s", defaultServiceConnectionURI))
+func (n *NetworkProvider) getServiceConnection(clusterVpc *computepb.Network) (*servicenetworking.Connection, error) {
+	resp, err := n.ServicesApi.ConnectionsList(clusterVpc, n.ProjectID, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI))
 	if err != nil {
 		return nil, err
 	}
@@ -295,12 +257,12 @@ func (n *NetworkProvider) getServiceConnection(clusterVpc *computepb.Network, pr
 	return resp.Connections[0], nil
 }
 
-func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network, projectID string, ipRange string) error {
+func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network, ipRange string) error {
 	n.Logger.Infof("creating service connection %s", defaultServiceConnectionName)
 	_, err := n.ServicesApi.ConnectionsCreate(
-		fmt.Sprintf("services/%s", defaultServiceConnectionURI),
+		fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI),
 		&servicenetworking.Connection{
-			Network: fmt.Sprintf("projects/%s/global/networks/%s", projectID, clusterVpc.GetName()),
+			Network: fmt.Sprintf(defaultNetworksFormat, n.ProjectID, clusterVpc.GetName()),
 			ReservedPeeringRanges: []string{
 				ipRange,
 			},
@@ -315,7 +277,7 @@ func (n *NetworkProvider) createServiceConnection(clusterVpc *computepb.Network,
 func (n *NetworkProvider) deleteServiceConnection(service *servicenetworking.Connection) error {
 	n.Logger.Infof("deleting service connection %s", service.Service)
 	resp, err := n.ServicesApi.ConnectionsDelete(
-		fmt.Sprintf("services/%s/connections/%s", defaultServiceConnectionURI, defaultServiceConnectionName),
+		fmt.Sprintf(defaultServiceConnectionFormat, defaultServiceConnectionURI, defaultServiceConnectionName),
 		&servicenetworking.DeleteConnectionRequest{
 			ConsumerNetwork: service.Network,
 		})
@@ -328,10 +290,10 @@ func (n *NetworkProvider) deleteServiceConnection(service *servicenetworking.Con
 	return nil
 }
 
-func (n *NetworkProvider) getAddressRange(ctx context.Context, projectID string, ipRange string) (*computepb.Address, error) {
+func (n *NetworkProvider) getAddressRange(ctx context.Context, ipRange string) (*computepb.Address, error) {
 	address, err := n.AddressApi.Get(ctx, &computepb.GetGlobalAddressRequest{
 		Address: ipRange,
-		Project: projectID,
+		Project: n.ProjectID,
 	})
 	if err != nil {
 		var gerr *googleapi.Error
@@ -345,10 +307,10 @@ func (n *NetworkProvider) getAddressRange(ctx context.Context, projectID string,
 	return address, nil
 }
 
-func (n *NetworkProvider) createAddressRange(ctx context.Context, clusterVpc *computepb.Network, projectID string, ipRange string) error {
+func (n *NetworkProvider) createAddressRange(ctx context.Context, clusterVpc *computepb.Network, ipRange string) error {
 	n.Logger.Infof("creating address %s", ipRange)
 	return n.AddressApi.Insert(ctx, &computepb.InsertGlobalAddressRequest{
-		Project: projectID,
+		Project: n.ProjectID,
 		AddressResource: &computepb.Address{
 			AddressType:  utils.String(computepb.Address_INTERNAL.String()),
 			IpVersion:    utils.String(computepb.Address_IPV4.String()),
@@ -360,10 +322,10 @@ func (n *NetworkProvider) createAddressRange(ctx context.Context, clusterVpc *co
 	})
 }
 
-func (n *NetworkProvider) deleteAddressRange(ctx context.Context, projectID string, ipRange string) error {
+func (n *NetworkProvider) deleteAddressRange(ctx context.Context, ipRange string) error {
 	n.Logger.Infof("deleting address %s", ipRange)
 	return n.AddressApi.Delete(ctx, &computepb.DeleteGlobalAddressRequest{
-		Project: projectID,
+		Project: n.ProjectID,
 		Address: ipRange,
 	})
 }
@@ -382,10 +344,10 @@ func (n *NetworkProvider) getPeeringConnection(ctx context.Context, clusterVpc *
 	return nil
 }
 
-func (n *NetworkProvider) deletePeeringConnection(ctx context.Context, clusterVpc *computepb.Network, projectID string) error {
+func (n *NetworkProvider) deletePeeringConnection(ctx context.Context, clusterVpc *computepb.Network) error {
 	n.Logger.Infof("deleting peering %s", defaultServiceConnectionName)
 	return n.NetworkApi.RemovePeering(ctx, &computepb.RemovePeeringNetworkRequest{
-		Project: projectID,
+		Project: n.ProjectID,
 		Network: clusterVpc.GetName(),
 		NetworksRemovePeeringRequestResource: &computepb.NetworksRemovePeeringRequest{
 			Name: utils.String(defaultServiceConnectionName),

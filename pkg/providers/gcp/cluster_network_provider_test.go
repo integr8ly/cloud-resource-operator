@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -62,6 +63,15 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
+func buildTestStrategyConfig() *StrategyConfig {
+	return &StrategyConfig{
+		Region:         gcpTestRegion,
+		ProjectID:      gcpTestProjectId,
+		CreateStrategy: json.RawMessage(`{}`),
+		DeleteStrategy: json.RawMessage(`{}`),
+	}
+}
+
 // buildTestGcpInfrastructure Builds a default Infrastructure CR if nil map parameter is passed in
 // If the map parameter is not nil, it will assign custom values to the relevant Infrastructure property
 func buildTestGcpInfrastructure(argsMap map[string]*string) *v1.Infrastructure {
@@ -93,21 +103,6 @@ func buildTestGcpInfrastructure(argsMap map[string]*string) *v1.Infrastructure {
 		}
 	}
 	return &infra
-}
-
-func buildTestInvalidInfrastructure() *v1.Infrastructure {
-	return &v1.Infrastructure{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster",
-		},
-		Status: v1.InfrastructureStatus{
-			InfrastructureName: gcpTestClusterName,
-			Platform:           v1.GCPPlatformType,
-			PlatformStatus: &v1.PlatformStatus{
-				Type: v1.AWSPlatformType,
-			},
-		},
-	}
 }
 
 func buildValidGcpListNetworks(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
@@ -198,7 +193,7 @@ func buildValidListConnectionsResponse(name string, projectID string, parent str
 
 func buildValidConnection(name string, projectID string, parent string) *servicenetworking.Connection {
 	return &servicenetworking.Connection{
-		Network: fmt.Sprintf("projects/%s/global/networks/%s", projectID, name),
+		Network: fmt.Sprintf(defaultNetworksFormat, projectID, name),
 		Peering: defaultServiceConnectionName,
 		Service: parent,
 		ReservedPeeringRanges: []string{
@@ -216,6 +211,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		Client     client.Client
 		NetworkApi gcpiface.NetworksAPI
 		AddressApi gcpiface.AddressAPI
+		ProjectID  string
 	}
 	type args struct {
 		ctx context.Context
@@ -275,15 +271,6 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			name: "error no cluster vpc present",
 			fields: fields{
 				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    nil,
@@ -381,6 +368,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				Client:     tt.fields.Client,
 				NetworkApi: tt.fields.NetworkApi,
 				AddressApi: tt.fields.AddressApi,
+				ProjectID:  tt.fields.ProjectID,
 			}
 			got, err := n.CreateNetworkIpRange(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -404,6 +392,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		NetworkApi  gcpiface.NetworksAPI
 		AddressApi  gcpiface.AddressAPI
 		ServicesApi gcpiface.ServicesAPI
+		ProjectID   string
 	}
 	type args struct {
 		ctx context.Context
@@ -432,8 +421,9 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
-			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf("services/%s", defaultServiceConnectionURI)),
+			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI)),
 			wantErr: false,
 		},
 		{
@@ -466,23 +456,15 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
-			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf("services/%s", defaultServiceConnectionURI)),
+			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI)),
 			wantErr: false,
 		},
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
 				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    nil,
@@ -600,6 +582,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				NetworkApi:  tt.fields.NetworkApi,
 				AddressApi:  tt.fields.AddressApi,
 				ServicesApi: tt.fields.ServicesApi,
+				ProjectID:   tt.fields.ProjectID,
 			}
 			got, err := n.CreateNetworkService(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -670,14 +653,6 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			wantErr: true,
-		},
-		{
 			name: "error deleting peering",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
@@ -716,6 +691,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		Client      client.Client
 		NetworkApi  gcpiface.NetworksAPI
 		ServicesApi gcpiface.ServicesAPI
+		ProjectID   string
 	}
 	type args struct {
 		ctx context.Context
@@ -738,6 +714,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
 			wantErr: false,
 		},
@@ -756,14 +733,6 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 			name: "error no cluster vpc present",
 			fields: fields{
 				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			wantErr: true,
-		},
-		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			wantErr: true,
@@ -798,6 +767,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 						return nil, errors.New("failed to delete")
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
 			wantErr: true,
 		},
@@ -814,6 +784,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 					}
 					servicesClient.Done = false
 				}),
+				ProjectID: gcpTestProjectId,
 			},
 			wantErr: true,
 		},
@@ -825,6 +796,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 				Client:      tt.fields.Client,
 				NetworkApi:  tt.fields.NetworkApi,
 				ServicesApi: tt.fields.ServicesApi,
+				ProjectID:   tt.fields.ProjectID,
 			}
 			err := n.DeleteNetworkService(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -845,6 +817,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		NetworkApi  gcpiface.NetworksAPI
 		ServicesApi gcpiface.ServicesAPI
 		AddressApi  gcpiface.AddressAPI
+		ProjectID   string
 	}
 	type args struct {
 		ctx context.Context
@@ -882,14 +855,6 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
 			},
 			wantErr: false,
-		},
-		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			wantErr: true,
 		},
 		{
 			name: "googleapi error retrieving ip address range",
@@ -973,6 +938,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
 			wantErr: true,
 		},
@@ -1004,6 +970,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 				NetworkApi:  tt.fields.NetworkApi,
 				AddressApi:  tt.fields.AddressApi,
 				ServicesApi: tt.fields.ServicesApi,
+				ProjectID:   tt.fields.ProjectID,
 			}
 			err := n.DeleteNetworkIpRange(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
@@ -1024,6 +991,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		NetworkApi  gcpiface.NetworksAPI
 		ServicesApi gcpiface.ServicesAPI
 		AddressApi  gcpiface.AddressAPI
+		ProjectID   string
 	}
 	type args struct {
 		ctx context.Context
@@ -1066,6 +1034,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
+				ProjectID: gcpTestProjectId,
 			},
 			want:    true,
 			wantErr: false,
@@ -1074,15 +1043,6 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 			name: "error no cluster vpc present",
 			fields: fields{
 				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			want:    false,
-			wantErr: true,
-		},
-		{
-			name: "error infrastructure does not contain gcp project",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInvalidInfrastructure()),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    false,

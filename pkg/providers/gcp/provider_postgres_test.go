@@ -135,6 +135,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		sqladminService *gcpiface.MockSqlClient
 		networkManager  NetworkManager
 		isLastResource  bool
+		projectID       string
 	}
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -169,6 +170,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				isLastResource: false,
+				projectID:      gcpTestProjectId,
 			},
 			want:    "postgres instance testcloudsqldb-id is already deleting",
 			wantErr: false,
@@ -199,6 +201,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				isLastResource: false,
+				projectID:      gcpTestProjectId,
 			},
 			want:    "failed to delete postgres instance: testcloudsqldb-id",
 			wantErr: true,
@@ -223,6 +226,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				isLastResource: false,
+				projectID:      gcpTestProjectId,
 			},
 			want:    "cannot retrieve sql instances from gcp",
 			wantErr: true,
@@ -245,6 +249,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				networkManager:  buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(nil),
 				isLastResource:  false,
+				projectID:       gcpTestProjectId,
 			},
 			want:    "failed to delete cloudSQL secrets",
 			wantErr: true,
@@ -261,6 +266,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				networkManager:  buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(nil),
 				isLastResource:  false,
+				projectID:       gcpTestProjectId,
 			},
 			want:    "",
 			wantErr: false,
@@ -288,6 +294,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				isLastResource: false,
+				projectID:      gcpTestProjectId,
 			},
 			want:    "delete detected, Instances.Delete() started",
 			wantErr: false,
@@ -318,6 +325,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				isLastResource: false,
+				projectID:      gcpTestProjectId,
 			},
 			want:    "failed to delete postgres instance: testcloudsqldb-id",
 			wantErr: true,
@@ -334,6 +342,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				networkManager:  buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(nil),
 				isLastResource:  false,
+				projectID:       gcpTestProjectId,
 			},
 			want:    "unable to find instance name from annotation",
 			wantErr: true,
@@ -364,6 +373,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				networkManager:  buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(nil),
 				isLastResource:  false,
+				projectID:       gcpTestProjectId,
 			},
 			want:    "failed to update instance as part of finalizer reconcile",
 			wantErr: true,
@@ -377,7 +387,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
+			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.projectID, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeletePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
