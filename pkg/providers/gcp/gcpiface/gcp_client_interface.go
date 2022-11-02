@@ -7,7 +7,8 @@ import (
 
 type SQLAdminService interface {
 	InstancesList(string) (*sqladmin.InstancesListResponse, error)
-	DeleteInstance(context.Context, string, string) (*sqladmin.Operation, error)
+	DeleteInstance(context.Context, *sqladmin.InstancesDeleteCall) (*sqladmin.Operation, error)
+	CreateInstance(context.Context, string, sqladmin.DatabaseInstance) (sqladmin.Operation, error)
 }
 
 // MockSqlClient mock client
@@ -32,6 +33,8 @@ func (m *MockSqlClient) DeleteInstance(ctx context.Context, projectID, instanceN
 	}
 	return nil, nil
 }
+
+// TODO add create instance function
 
 func GetMockSQLClient(modifyFn func(sqlClient *MockSqlClient)) *MockSqlClient {
 	mock := &MockSqlClient{}
