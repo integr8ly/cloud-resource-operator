@@ -62,8 +62,11 @@ func TestPostgresProvider_createCloudSQLInstance(t *testing.T) {
 		Logger            *logrus.Entry
 	}
 	type args struct {
-		ctx context.Context
-		p   *v1alpha1.Postgres
+		ctx             context.Context
+		p               *v1alpha1.Postgres
+		sqladminService *gcpiface.MockSqlClient
+		networkManager  NetworkManager
+		isLastResource  bool
 	}
 	scheme := runtime.NewScheme()
 	err := cloudcredentialv1.Install(scheme)
