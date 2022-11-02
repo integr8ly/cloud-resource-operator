@@ -32,7 +32,7 @@ func Test_getClusterVpc(t *testing.T) {
 		{
 			name: "successfully get cluster vpc",
 			args: args{
-				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				networkClient: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -51,7 +51,7 @@ func Test_getClusterVpc(t *testing.T) {
 		{
 			name: "error getting cluster vpc",
 			args: args{
-				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				networkClient: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = func(lnr *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
 						return nil, errors.New("failed to list networks")
@@ -64,7 +64,7 @@ func Test_getClusterVpc(t *testing.T) {
 		{
 			name: "error getting cluster vpc, no networks listed",
 			args: args{
-				client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				networkClient: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    nil,
@@ -73,7 +73,7 @@ func Test_getClusterVpc(t *testing.T) {
 		{
 			name: "error getting cluster vpc, multiple networks with cluster ID",
 			args: args{
-				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				networkClient: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildInvalidGcpListNetworksMultiple
 				}),
@@ -84,7 +84,7 @@ func Test_getClusterVpc(t *testing.T) {
 		{
 			name: "error getting cluster vpc, insufficient subnets",
 			args: args{
-				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				networkClient: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildInvalidGcpListNetworksOneSubnet
 				}),

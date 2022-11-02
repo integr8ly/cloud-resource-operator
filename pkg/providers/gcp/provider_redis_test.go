@@ -3,6 +3,7 @@ package gcp
 import (
 	redis "cloud.google.com/go/redis/apiv1"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/googleapis/gax-go/v2"
@@ -833,7 +834,10 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{}, nil
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
 					},
 				},
 			},
@@ -851,13 +855,15 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: nil,
+			createInstanceRequest: &redispb.CreateInstanceRequest{},
 			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
 				Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
 			},
 			strategyConfig: &StrategyConfig{
-				Region:    gcpTestRegion,
-				ProjectID: gcpTestProjectId,
+				Region:         gcpTestRegion,
+				ProjectID:      gcpTestProjectId,
+				CreateStrategy: json.RawMessage(`{}`),
+				DeleteStrategy: json.RawMessage(`{}`),
 			},
 			wantErr: false,
 		},
@@ -1055,6 +1061,130 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getRedisInstances() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_buildRedisConfig(t *testing.T) {
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		r              *v1alpha1.Redis
+		strategyConfig *StrategyConfig
+	}
+	tests := []struct {
+		name                  string
+		fields                fields
+		args                  args
+		createInstanceRequest *redispb.CreateInstanceRequest
+		deleteInstanceRequest *redispb.DeleteInstanceRequest
+		wantErr               bool
+	}{
+		{
+			name:   "success building redis delete request from strategy config",
+			fields: fields{},
+			args: args{
+				r: nil,
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+					DeleteStrategy: json.RawMessage(fmt.Sprintf(`{"name":"projects/%s/locations/%s/instances/%s"}`, gcpTestProjectId, gcpTestRegion, testName)),
+				},
+			},
+			createInstanceRequest: &redispb.CreateInstanceRequest{},
+			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
+				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
+			},
+			wantErr: false,
+		},
+		{
+			name:   "success building redis delete request from redis cr annotations",
+			fields: fields{},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+					},
+				},
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+					DeleteStrategy: json.RawMessage(`{}`),
+				},
+			},
+			createInstanceRequest: &redispb.CreateInstanceRequest{},
+			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
+				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
+			},
+			wantErr: false,
+		},
+		{
+			name:   "fail to unmarshal gcp redis delete strategy",
+			fields: fields{},
+			args: args{
+				r: nil,
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+					DeleteStrategy: nil,
+				},
+			},
+			createInstanceRequest: nil,
+			deleteInstanceRequest: nil,
+			wantErr:               true,
+		},
+		{
+			name:   "fail to find redis instance name from annotations",
+			fields: fields{},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+				},
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+					DeleteStrategy: json.RawMessage(`{}`),
+				},
+			},
+			createInstanceRequest: nil,
+			deleteInstanceRequest: nil,
+			wantErr:               true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rp := &RedisProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+			}
+			createInstanceRequest, deleteInstanceRequest, err := rp.buildRedisConfig(tt.args.r, tt.args.strategyConfig)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("buildRedisConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(createInstanceRequest, tt.createInstanceRequest) {
+				t.Errorf("buildRedisConfig() createInstanceRequest = %v, want %v", createInstanceRequest, tt.createInstanceRequest)
+			}
+			if !reflect.DeepEqual(deleteInstanceRequest, tt.deleteInstanceRequest) {
+				t.Errorf("buildRedisConfig() deleteInstanceRequest = %v, want %v", deleteInstanceRequest, tt.deleteInstanceRequest)
 			}
 		})
 	}

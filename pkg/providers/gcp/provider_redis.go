@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
@@ -236,14 +237,28 @@ func (rp *RedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) 
 		rp.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
 		strategyConfig.Region = defaultRegion
 	}
-	instanceName := annotations.Get(r, ResourceIdentifierAnnotation)
-	if instanceName == "" {
-		errMsg := "unable to find instance name from annotation"
-		return nil, nil, nil, fmt.Errorf(errMsg)
-	}
-	var createInstanceRequest *redispb.CreateInstanceRequest // TODO (MGDAPI-4667): create a request with all required fields
-	deleteInstanceRequest := &redispb.DeleteInstanceRequest{
-		Name: fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, instanceName),
+	createInstanceRequest, deleteInstanceRequest, err := rp.buildRedisConfig(r, strategyConfig)
+	if err != nil {
+		return nil, nil, nil, errorUtil.Wrap(err, "failed to build redis config")
 	}
 	return createInstanceRequest, deleteInstanceRequest, strategyConfig, nil
+}
+
+func (rp *RedisProvider) buildRedisConfig(r *v1alpha1.Redis, strategyConfig *StrategyConfig) (*redispb.CreateInstanceRequest, *redispb.DeleteInstanceRequest, error) {
+	// TODO (MGDAPI-4667): create a request with all required fields
+	createInstanceRequest := &redispb.CreateInstanceRequest{}
+
+	deleteInstanceRequest := &redispb.DeleteInstanceRequest{}
+	if err := json.Unmarshal(strategyConfig.DeleteStrategy, deleteInstanceRequest); err != nil {
+		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp redis delete strategy")
+	}
+	if deleteInstanceRequest.Name == "" {
+		resourceID := annotations.Get(r, ResourceIdentifierAnnotation)
+		if resourceID == "" {
+			errMsg := "failed to find redis instance name from annotations"
+			return nil, nil, fmt.Errorf(errMsg)
+		}
+		deleteInstanceRequest.Name = fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, resourceID)
+	}
+	return createInstanceRequest, deleteInstanceRequest, nil
 }
