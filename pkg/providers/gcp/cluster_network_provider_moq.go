@@ -7,6 +7,7 @@ import (
 	"context"
 	servicenetworking "google.golang.org/api/servicenetworking/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	"net"
 	"sync"
 )
 
@@ -23,7 +24,7 @@ var _ NetworkManager = &NetworkManagerMock{}
 //			ComponentsExistFunc: func(contextMoqParam context.Context) (bool, error) {
 //				panic("mock out the ComponentsExist method")
 //			},
-//			CreateNetworkIpRangeFunc: func(contextMoqParam context.Context) (*computepb.Address, error) {
+//			CreateNetworkIpRangeFunc: func(contextMoqParam context.Context, iPNet *net.IPNet) (*computepb.Address, error) {
 //				panic("mock out the CreateNetworkIpRange method")
 //			},
 //			CreateNetworkServiceFunc: func(contextMoqParam context.Context) (*servicenetworking.Connection, error) {
@@ -49,7 +50,7 @@ type NetworkManagerMock struct {
 	ComponentsExistFunc func(contextMoqParam context.Context) (bool, error)
 
 	// CreateNetworkIpRangeFunc mocks the CreateNetworkIpRange method.
-	CreateNetworkIpRangeFunc func(contextMoqParam context.Context) (*computepb.Address, error)
+	CreateNetworkIpRangeFunc func(contextMoqParam context.Context, iPNet *net.IPNet) (*computepb.Address, error)
 
 	// CreateNetworkServiceFunc mocks the CreateNetworkService method.
 	CreateNetworkServiceFunc func(contextMoqParam context.Context) (*servicenetworking.Connection, error)
@@ -74,6 +75,8 @@ type NetworkManagerMock struct {
 		CreateNetworkIpRange []struct {
 			// ContextMoqParam is the contextMoqParam argument value.
 			ContextMoqParam context.Context
+			// IPNet is the iPNet argument value.
+			IPNet *net.IPNet
 		}
 		// CreateNetworkService holds details about calls to the CreateNetworkService method.
 		CreateNetworkService []struct {
@@ -137,19 +140,21 @@ func (mock *NetworkManagerMock) ComponentsExistCalls() []struct {
 }
 
 // CreateNetworkIpRange calls CreateNetworkIpRangeFunc.
-func (mock *NetworkManagerMock) CreateNetworkIpRange(contextMoqParam context.Context) (*computepb.Address, error) {
+func (mock *NetworkManagerMock) CreateNetworkIpRange(contextMoqParam context.Context, iPNet *net.IPNet) (*computepb.Address, error) {
 	if mock.CreateNetworkIpRangeFunc == nil {
 		panic("NetworkManagerMock.CreateNetworkIpRangeFunc: method is nil but NetworkManager.CreateNetworkIpRange was just called")
 	}
 	callInfo := struct {
 		ContextMoqParam context.Context
+		IPNet           *net.IPNet
 	}{
 		ContextMoqParam: contextMoqParam,
+		IPNet:           iPNet,
 	}
 	mock.lockCreateNetworkIpRange.Lock()
 	mock.calls.CreateNetworkIpRange = append(mock.calls.CreateNetworkIpRange, callInfo)
 	mock.lockCreateNetworkIpRange.Unlock()
-	return mock.CreateNetworkIpRangeFunc(contextMoqParam)
+	return mock.CreateNetworkIpRangeFunc(contextMoqParam, iPNet)
 }
 
 // CreateNetworkIpRangeCalls gets all the calls that were made to CreateNetworkIpRange.
@@ -158,9 +163,11 @@ func (mock *NetworkManagerMock) CreateNetworkIpRange(contextMoqParam context.Con
 //	len(mockedNetworkManager.CreateNetworkIpRangeCalls())
 func (mock *NetworkManagerMock) CreateNetworkIpRangeCalls() []struct {
 	ContextMoqParam context.Context
+	IPNet           *net.IPNet
 } {
 	var calls []struct {
 		ContextMoqParam context.Context
+		IPNet           *net.IPNet
 	}
 	mock.lockCreateNetworkIpRange.RLock()
 	calls = mock.calls.CreateNetworkIpRange

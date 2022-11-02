@@ -1,0 +1,13 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cloud-resources-gcp-strategies
+data:
+  blobstorage: |
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
+  redis: |
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
+  postgres: |
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
+  _network: |
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}

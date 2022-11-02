@@ -13,17 +13,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.NetworksAPI, logger *logrus.Entry) (*computepb.Network, error) {
+func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.NetworksAPI, projectID string, logger *logrus.Entry) (*computepb.Network, error) {
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
-	}
-
-	// get project ID
-	projectID, err := resources.GetGCPProject(ctx, c)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "error getting project name")
 	}
 
 	// get networks with a name that matches clusterID
@@ -34,16 +28,14 @@ func getClusterVpc(ctx context.Context, c client.Client, networkClient gcpiface.
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting networks from gcp")
 	}
-
 	// confirm only one network matched the clusterID
 	if len(networks) != 1 {
 		return nil, fmt.Errorf("cannot determine cluster vpc. matching networks found %d", len(networks))
 	}
-
 	network := networks[0]
 
 	// check the network has at least two subnets
-	if len(network.Subnetworks) < defaultNumberOfExpectedSubnets {
+	if len(network.GetSubnetworks()) < defaultNumberOfExpectedSubnets {
 		return nil, fmt.Errorf("found cluster vpc has only %d subnetworks, expected at least 2", len(network.Subnetworks))
 	}
 
