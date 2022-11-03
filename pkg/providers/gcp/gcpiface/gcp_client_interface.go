@@ -7,8 +7,9 @@ import (
 
 type SQLAdminService interface {
 	InstancesList(string) (*sqladmin.InstancesListResponse, error)
-	DeleteInstance(context.Context, *sqladmin.InstancesDeleteCall) (*sqladmin.Operation, error)
-	CreateInstance(context.Context, string, sqladmin.DatabaseInstance) (sqladmin.Operation, error)
+	DeleteInstance(context.Context, string, string) (*sqladmin.Operation, error)
+	CreateInstance(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
+	ModifyInstance(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 }
 
 // MockSqlClient mock client
@@ -16,6 +17,8 @@ type MockSqlClient struct {
 	SQLAdminService
 	InstancesListFn  func(string) (*sqladmin.InstancesListResponse, error)
 	DeleteInstanceFn func(context.Context, string, string) (*sqladmin.Operation, error)
+	CreateInstanceFn func(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.InstancesInsertCall, error)
+	ModifyInstanceFn func(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error)
 }
 
 func (m *MockSqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
@@ -34,7 +37,20 @@ func (m *MockSqlClient) DeleteInstance(ctx context.Context, projectID, instanceN
 	return nil, nil
 }
 
-// TODO add create instance function
+func (m *MockSqlClient) CreateInstance(ctx context.Context, projectID string, instance *sqladmin.DatabaseInstance) (*sqladmin.InstancesInsertCall, error) {
+	if m.CreateInstanceFn != nil {
+		return m.CreateInstanceFn(ctx, projectID, instance)
+	}
+	return nil, nil
+
+}
+
+func (m *MockSqlClient) ModifyInstance(ctx context.Context, projectID string, instance *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
+	if m.ModifyInstanceFn != nil {
+		return m.ModifyInstanceFn(ctx, projectID, instance.Name, instance)
+	}
+	return nil, nil
+}
 
 func GetMockSQLClient(modifyFn func(sqlClient *MockSqlClient)) *MockSqlClient {
 	mock := &MockSqlClient{}
