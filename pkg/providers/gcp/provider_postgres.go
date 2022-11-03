@@ -98,7 +98,13 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		errMsg := "failed to initialise network manager"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx)
+	// get cidr block from _network strat map, based on tier from postgres cr
+	ipRangeCidr, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, pg.Spec.Tier, logger)
+	if err != nil {
+		errMsg := "failed to reconcile network provider config"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
 	if err != nil {
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)

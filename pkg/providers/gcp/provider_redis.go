@@ -83,7 +83,13 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		statusMessage := "failed to initialise network manager"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx)
+	// get cidr block from _network strat map, based on tier from postgres cr
+	ipRangeCidr, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
+	if err != nil {
+		errMsg := "failed to reconcile network provider config"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
 	if err != nil {
 		statusMessage := "failed to create network service"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
