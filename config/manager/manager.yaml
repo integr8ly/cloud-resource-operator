@@ -18,6 +18,8 @@ spec:
       - name: cloud-resource-operator
         command:
         - cloud-resource-operator
+        args:
+        - --enable-leader-election
         image: controller
         imagePullPolicy: Always
         env:
