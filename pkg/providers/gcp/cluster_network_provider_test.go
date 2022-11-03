@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/apis"
 	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -28,11 +30,17 @@ import (
 )
 
 const (
-	gcpTestClusterName string = "gcp-test-cluster"
-	gcpTestNetworkName string = gcpTestClusterName + "-network"
-	gcpTestIpRangeName string = "gcptestclusteriprange"
-	gcpTestProjectId   string = "gcp-test-project"
-	gcpTestRegion      string = "europe-west2"
+	gcpTestClusterName      string = "gcp-test-cluster"
+	gcpTestNetworkName      string = gcpTestClusterName + "-network"
+	gcpTestIpRangeName      string = "gcptestclusteriprange"
+	gcpTestProjectId        string = "gcp-test-project"
+	gcpTestRegion           string = "europe-west2"
+	gcpTestInfraName        string = "gcp-test-cluster"
+	gcpTestMasterSubnetCidr string = "10.11.128.0/24"
+	gcpTestWorkerSubnetCidr string = "10.11.129.0/24"
+	gcpTestOverlappingCidr  string = "10.11.128.0/22"
+	gcpTestValidCidr        string = "10.11.132.0/22"
+	gcpTestInvalidCidr      string = "10.11.132.0/23"
 )
 
 func buildMockNetworkManager() *NetworkManagerMock {
@@ -202,6 +210,18 @@ func buildValidConnection(name string, projectID string, parent string) *service
 	}
 }
 
+func buildValidSubnet(name string, cidr string) *computepb.Subnetwork {
+	return &computepb.Subnetwork{
+		Name:        utils.String(name),
+		IpCidrRange: utils.String(cidr),
+	}
+}
+
+func buildIpRangeCidr(cidr string) *net.IPNet {
+	_, cidrRange, _ := net.ParseCIDR(cidr)
+	return cidrRange
+}
+
 func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -211,10 +231,12 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		Client     client.Client
 		NetworkApi gcpiface.NetworksAPI
 		AddressApi gcpiface.AddressAPI
+		SubnetsApi gcpiface.SubnetsApi
 		ProjectID  string
 	}
 	type args struct {
-		ctx context.Context
+		ctx         context.Context
+		ipRangeCidr *net.IPNet
 	}
 	tests := []struct {
 		name    string
@@ -230,11 +252,22 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
 					}
 				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
 			},
 			want:    buildValidGcpAddressRange(gcpTestIpRangeName),
 			wantErr: false,
@@ -246,7 +279,18 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
 				AddressApi: gcpiface.GetMockAddressClient(nil),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
 			},
 			want:    nil,
 			wantErr: false,
@@ -258,31 +302,59 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
 					}
 				}),
 			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
+			},
 			want:    buildValidGcpAddressRange(gcpTestIpRangeName),
 			wantErr: false,
 		},
 		{
-			name: "error no cluster vpc present",
-			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(nil),
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "googleapi error retrieving ip address range",
+			name: "create ip range created - mask only",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
+					}
+				}),
+			},
+			args: args{
+				ipRangeCidr: &net.IPNet{
+					Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+				},
+			},
+			want:    buildValidGcpAddressRange(gcpTestIpRangeName),
+			wantErr: false,
+		},
+		{
+			name: "googleapi error retrieving ip address range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return nil, &googleapi.Error{
@@ -298,14 +370,94 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			name: "unknown error retrieving ip address range",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return nil, errors.New("failed to get address")
+					}
+				}),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error no cluster vpc present",
+			fields: fields{
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(nil),
+				AddressApi: gcpiface.GetMockAddressClient(nil),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error retrieving cluster subnets",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
-				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return nil, errors.New("failed to get")
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return nil, errors.New("failed to get subnetworks")
 					}
 				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
+					}
+				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error overlapping cidr range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(nil),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestOverlappingCidr),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error invalid cidr range /23",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(nil),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestInvalidCidr),
 			},
 			want:    nil,
 			wantErr: true,
@@ -317,11 +469,22 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
-				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.InsertFn = func(*computepb.InsertGlobalAddressRequest) error {
-						return errors.New("failed to insert")
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
 					}
 				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.InsertFn = func(*computepb.InsertGlobalAddressRequest) error {
+						return errors.New("failed to insert address")
+					}
+				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
 			},
 			want:    nil,
 			wantErr: true,
@@ -333,6 +496,14 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return nil, &googleapi.Error{
@@ -340,6 +511,9 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 						}
 					}
 				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
 			},
 			want:    nil,
 			wantErr: true,
@@ -351,11 +525,22 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
-				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return nil, errors.New("failed to get")
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
 					}
 				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return nil, errors.New("failed to get address")
+					}
+				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
 			},
 			want:    nil,
 			wantErr: true,
@@ -367,10 +552,11 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				Logger:     logrus.NewEntry(logrus.StandardLogger()),
 				Client:     tt.fields.Client,
 				NetworkApi: tt.fields.NetworkApi,
+				SubnetApi:  tt.fields.SubnetsApi,
 				AddressApi: tt.fields.AddressApi,
 				ProjectID:  tt.fields.ProjectID,
 			}
-			got, err := n.CreateNetworkIpRange(tt.args.ctx)
+			got, err := n.CreateNetworkIpRange(tt.args.ctx, tt.args.ipRangeCidr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateNetworkIpRange() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -479,7 +665,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
 					servicesClient.ConnectionsListFn = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
-						return nil, errors.New("failed to list")
+						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
@@ -514,7 +700,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return nil, errors.New("failed to get")
+						return nil, errors.New("failed to get address")
 					}
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
@@ -566,7 +752,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
 					servicesClient.ConnectionsListFnTwo = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
-						return nil, errors.New("failed to list")
+						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
@@ -659,7 +845,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworksPeering
 					networksClient.RemovePeeringFn = func(req *computepb.RemovePeeringNetworkRequest) error {
-						return errors.New("failed remove peering")
+						return errors.New("failed to remove peering")
 					}
 				}),
 			},
@@ -746,7 +932,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
 					servicesClient.ConnectionsListFn = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
-						return nil, errors.New("failed to list")
+						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
@@ -764,7 +950,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 					servicesClient.ConnectionsDeleteFn = func(string, *servicenetworking.DeleteConnectionRequest) (*servicenetworking.Operation, error) {
-						return nil, errors.New("failed to delete")
+						return nil, errors.New("failed to delete services")
 					}
 				}),
 				ProjectID: gcpTestProjectId,
@@ -882,7 +1068,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return nil, errors.New("failed to get")
+						return nil, errors.New("failed to get address")
 					}
 				}),
 			},
@@ -915,7 +1101,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
 					servicesClient.ConnectionsListFn = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
-						return nil, errors.New("failed to list")
+						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
@@ -954,7 +1140,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
 					}
 					addressClient.DeleteFn = func(*computepb.DeleteGlobalAddressRequest) error {
-						return errors.New("failed to delete")
+						return errors.New("failed to delete address")
 					}
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
@@ -991,7 +1177,6 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		NetworkApi  gcpiface.NetworksAPI
 		ServicesApi gcpiface.ServicesAPI
 		AddressApi  gcpiface.AddressAPI
-		ProjectID   string
 	}
 	type args struct {
 		ctx context.Context
@@ -1034,7 +1219,6 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
 					}
 				}),
-				ProjectID: gcpTestProjectId,
 			},
 			want:    true,
 			wantErr: false,
@@ -1058,7 +1242,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 				AddressApi: gcpiface.GetMockAddressClient(nil),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
 					servicesClient.ConnectionsListFn = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
-						return nil, errors.New("failed to list")
+						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
@@ -1093,7 +1277,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return nil, errors.New("failed to get")
+						return nil, errors.New("failed to get address")
 					}
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
@@ -1117,7 +1301,131 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 				return
 			}
 			if got != tt.want {
-				t.Errorf("ComponentsExist() got = %v, want %v", got, tt.want)
+				t.Errorf("ComponentsExist() got = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client client.Client
+	}
+	type args struct {
+		ctx           context.Context
+		configManager ConfigManager
+		tier          string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *net.IPNet
+		wantErr bool
+	}{
+		{
+			name: "empty config returns /22 cidr",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				configManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+			},
+			want: &net.IPNet{
+				Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+			},
+			wantErr: false,
+		},
+		{
+			name: "error reading strategy config",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				configManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, fmt.Errorf("fail to read config")
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "success reading valid cidr range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				configManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(`{"CidrBlock": "10.0.0.0/22"}`),
+						}, nil
+					},
+				},
+			},
+			want:    buildIpRangeCidr("10.0.0.0/22"),
+			wantErr: false,
+		},
+		{
+			name: "error parsing invalid cidr range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				configManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(`{"CidrBlock": "1000.0.0.0/22"}`),
+						}, nil
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error reading invalid json cidr range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				configManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							CreateStrategy: json.RawMessage(`{ invalid json }`),
+						}, nil
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &NetworkProvider{
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+				Client: tt.fields.Client,
+			}
+			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, logrus.NewEntry(logrus.StandardLogger()))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ReconcileNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ReconcileNetworkProviderConfig() got = %s/%s, want %s/%s", got.IP.String(), got.Mask.String(), tt.want.IP.String(), tt.want.Mask.String())
 			}
 		})
 	}
