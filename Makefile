@@ -4,13 +4,11 @@ IMAGE_NAME ?= cloud-resource-operator
 OPERATOR_IMG = $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):v$(VERSION)
 MANIFEST_NAME ?= cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.40.0
-VERSION=0.41.0
+PREV_VERSION=0.41.0
+VERSION=0.42.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 UPGRADE ?= true
 CHANNEL ?= rhmi
-
-PREVIOUS_OPERATOR_VERSIONS="0.39.0,0.38.0,0.37.1,0.37.0,0.36.0,0.35.2,0.35.1,0.35.0,0.34.0,0.33.0,0.32.1,0.32.0,0.31.0,0.30.0,0.29.0,0.28.0,0.27.1,0.27.0,0.26.0,0.25.0,0.24.1,0.24.0,0.23.0"
 
 SHELL=/bin/bash
 
@@ -229,7 +227,7 @@ setup/moq:
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
-	@PREV_VERSION=$(PREV_VERSION) PREVIOUS_OPERATOR_VERSIONS=$(PREVIOUS_OPERATOR_VERSIONS) ./scripts/create-olm-bundle.sh
+	@PREV_VERSION=$(PREV_VERSION) ./scripts/create-olm-bundle.sh
 
 .PHONY: release/prepare
 release/prepare: gen/csv image/push create/olm/bundle
