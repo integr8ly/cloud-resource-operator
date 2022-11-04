@@ -113,6 +113,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups="",resources=persistentvolumes;configmaps,verbs="*"
 // +kubebuilder:rbac:groups="monitoring.coreos.com",resources=prometheusrules,verbs="*"
 // +kubebuilder:rbac:groups=integreatly.org,resources=postgres;postgressnapshots;redis;redissnapshots,verbs=list;watch
+// +kubebuilder:rbac:groups="coordination.k8s.io",resources=leases,verbs=create;get;list;update
 
 // Role permissions
 
