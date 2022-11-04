@@ -180,7 +180,7 @@ Cut a release on Github you need to be an [owner](OWNERS)
 
 Update the operator version in the following files:
 
-* Update `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) 
+* Update `VERSION` and `PREV_VERSION` in the [Makefile](Makefile) 
 
 * Generate a new cluster service version:
 ```sh
@@ -190,17 +190,13 @@ make gen/csv
 ```sh
 make create/olm/bundle
 ```
-NOTE: Make sure that the  `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) are updated correctly.
-
 * Generate and push new image, bundle and index
 ```sh
 make release/prepare
 ```
-NOTE: Make sure that the  `VERSION`, `PREV_VERSION` and `PREVIOUS_OPERATOR_VERSIONS` in the [Makefile](Makefile) are updated correctly.
 
 Example:
 Starting image for the bundles is 0.23.0, if you are releasing version 0.24.0, ensure that the `PREV_VERSION` is set to `0.23.0`, `VERSION` is set to `0.24.0`
-and `PREVIOUS_OPERATOR_VERSIONS` contain coma seperated list of all previous bundles, in this example it would contain only `0.23.0`.
 
 ### Deploy with OLM
 
@@ -213,7 +209,6 @@ To deploy a new development release through OLM, we need a bundle, index, and op
 
 The [Makefile](Makefile) automates the creation and tagging of these images, but some of the variables should be adjusted first:
 * `VERSION`: this should be set to the value for your development release - in this example we have set it to `10.0.0`
-* `PREVIOUS_OPERATOR_VERSIONS`: this variable determines which bundles to include in the index. As we do not plan to upgrade to this version it can be set to an empty string
 * `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
 * `UPGRADE`: set to `false` as this version will not replace a previous version
 
@@ -274,7 +269,6 @@ To perform a side-by-side upgrade of CRO through OLM, we must create bundle, ind
 First you must checkout the code for the version you would like to upgrade from. For the purposes of this guide we assume that you are upgrading from a tagged previous release. However, if you would like to test an upgrade from the current state of the master branch, follow the first part of the [Deploy with OLM](#deploy-with-olm) guide to create the initial version images. In this example we assume that the latest release is `v0.34.0`.
 
 The [Makefile](Makefile) provides an automated method of creating and pushing the index and bundle images for the latest version of CRO. It uses the latest version number from the [bundles](bundles/) to determine which version is newest. Some of the variables within the [Makefile](Makefile) should also be adjusted:
-* `PREVIOUS_OPERATOR_VERSIONS`: this variable determines which bundles to include in the index. As we do not plan to upgrade to this version it can be set to an empty string
 * `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
 * `UPGRADE`: set to `false` as this version will not replace a previous version
 
@@ -292,7 +286,6 @@ The development release must now be created that we will upgrade to - checkout t
 Adjust the [Makefile](Makefile) variables for the new development release:
 * `VERSION`: set this to the chosen version - `10.0.0`
 * `PREV_VERSION`: this is set to the version we are upgrading from - `0.34.0`
-* `PREVIOUS_OPERATOR_VERSIONS`: this contains a list of previous versions that the index will refer to. For our upgrade we only need the single previous version - `0.34.0`
 * `IMAGE_ORG`: this should be set to the quay organisation where the images will be pushed
 
 ```sh
