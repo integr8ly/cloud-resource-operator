@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
@@ -392,9 +394,14 @@ func (n *NetworkProvider) getClusterSubnets(ctx context.Context, clusterVpc *com
 	var subnets []*computepb.Subnetwork
 	clusterSubnets := clusterVpc.GetSubnetworks()
 	for i := range clusterSubnets {
+		name, region, err := parseSubnetUrl(clusterSubnets[i])
+		if err != nil {
+			return nil, err
+		}
 		subnet, err := n.SubnetApi.Get(ctx, &computepb.GetSubnetworkRequest{
 			Project:    n.ProjectID,
-			Subnetwork: clusterSubnets[i],
+			Subnetwork: name,
+			Region:     region,
 		})
 		if err != nil {
 			return nil, errorUtil.Wrapf(err, "failed to retrieve cluster subnet %s", subnet)
@@ -456,4 +463,28 @@ func validateCidrBlock(validateCIDR *net.IPNet, subnets []*computepb.Subnetwork)
 func isValidCIDRRange(validateCIDR *net.IPNet) bool {
 	mask, _ := validateCIDR.Mask.Size()
 	return mask <= defaultIpRangeCIDRMask
+}
+
+// parses a subnet URL in the format:
+// https://www.googleapis.com/compute/v1/projects/my-project-1234/regions/my-region/subnetworks/my-subnet-name
+func parseSubnetUrl(subnetUrl string) (string, string, error) {
+	parsed, err := url.Parse(subnetUrl)
+	if err != nil {
+		return "", "", errorUtil.Wrapf(err, "failed to parse subnet url %s", subnetUrl)
+	}
+	var name, region string
+	path := strings.Split(parsed.Path, "/")
+	for i := range path {
+		if path[i] == "regions" {
+			region = path[i+1]
+		}
+		if path[i] == "subnetworks" {
+			name = path[i+1]
+			break
+		}
+	}
+	if name == "" || region == "" {
+		return "", "", errors.New("failed to retrieve subnetwork name from URL")
+	}
+	return name, region, nil
 }

@@ -41,6 +41,7 @@ const (
 	gcpTestOverlappingCidr  string = "10.11.128.0/22"
 	gcpTestValidCidr        string = "10.11.132.0/22"
 	gcpTestInvalidCidr      string = "10.11.132.0/23"
+	gcpTestSubnetURL        string = "https://www.googleapis.com/compute/v1/projects/" + gcpTestProjectId + "/regions/" + gcpTestRegion + "/subnetworks/%s"
 )
 
 func buildMockNetworkManager() *NetworkManagerMock {
@@ -150,8 +151,8 @@ func buildValidGcpNetwork(clusterID string) *computepb.Network {
 	return &computepb.Network{
 		Name: utils.String(fmt.Sprintf("%s-network", clusterID)),
 		Subnetworks: []string{
-			fmt.Sprintf("%s-master-subnet", clusterID),
-			fmt.Sprintf("%s-worker-subnet", clusterID),
+			fmt.Sprintf(gcpTestSubnetURL, fmt.Sprintf("%s-master-subnet", clusterID)),
+			fmt.Sprintf(gcpTestSubnetURL, fmt.Sprintf("%s-worker-subnet", clusterID)),
 		},
 	}
 }
@@ -210,9 +211,11 @@ func buildValidConnection(name string, projectID string, parent string) *service
 	}
 }
 
-func buildValidSubnet(name string, cidr string) *computepb.Subnetwork {
+func buildValidSubnet(subnetUrl string, cidr string) *computepb.Subnetwork {
+	name, region, _ := parseSubnetUrl(subnetUrl)
 	return &computepb.Subnetwork{
 		Name:        utils.String(name),
+		Region:      utils.String(region),
 		IpCidrRange: utils.String(cidr),
 	}
 }
