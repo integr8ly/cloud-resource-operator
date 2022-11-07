@@ -27,7 +27,8 @@ import (
 )
 
 const (
-	gcpTestNetworkName string = "gcp-test-cluster-network"
+	gcpTestClusterName string = "gcp-test-cluster"
+	gcpTestNetworkName string = gcpTestClusterName + "-network"
 	gcpTestIpRangeName string = "gcptestclusteriprange"
 	gcpTestProjectId   string = "gcp-test-project"
 )
@@ -66,7 +67,7 @@ func buildTestGcpInfrastructure() *v1.Infrastructure {
 			Name: "cluster",
 		},
 		Status: v1.InfrastructureStatus{
-			InfrastructureName: "gcp-test-cluster",
+			InfrastructureName: gcpTestClusterName,
 			Platform:           v1.GCPPlatformType,
 			PlatformStatus: &v1.PlatformStatus{
 				Type: v1.GCPPlatformType,
@@ -85,7 +86,7 @@ func buildTestInvalidInfrastructure() *v1.Infrastructure {
 			Name: "cluster",
 		},
 		Status: v1.InfrastructureStatus{
-			InfrastructureName: "gcp-test-cluster",
+			InfrastructureName: gcpTestClusterName,
 			Platform:           v1.GCPPlatformType,
 			PlatformStatus: &v1.PlatformStatus{
 				Type: v1.AWSPlatformType,
@@ -106,6 +107,16 @@ func buildValidGcpListNetworksPeering(req *computepb.ListNetworksRequest) ([]*co
 	return testBuildNetwork(req, buildValidGcpNetworkPeering)
 }
 
+func buildInvalidGcpListNetworksOneSubnet(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
+	return testBuildNetwork(req, buildInvalidGcpNetworkOneSubnet)
+}
+
+func buildInvalidGcpListNetworksMultiple(req *computepb.ListNetworksRequest) ([]*computepb.Network, error) {
+	net, err := testBuildNetwork(req, buildValidGcpNetwork)
+	net = append(net, net[0])
+	return net, err
+}
+
 func testBuildNetwork(req *computepb.ListNetworksRequest, buildNetwork func(string) *computepb.Network) ([]*computepb.Network, error) {
 	clusterID := retrieveTestClusterId(resources.SafeStringDereference(req.Filter))
 	return []*computepb.Network{
@@ -123,6 +134,15 @@ func buildValidGcpNetwork(clusterID string) *computepb.Network {
 		Subnetworks: []string{
 			fmt.Sprintf("%s-master-subnet", clusterID),
 			fmt.Sprintf("%s-worker-subnet", clusterID),
+		},
+	}
+}
+
+func buildInvalidGcpNetworkOneSubnet(clusterID string) *computepb.Network {
+	return &computepb.Network{
+		Name: utils.String(fmt.Sprintf("%s-network", clusterID)),
+		Subnetworks: []string{
+			fmt.Sprintf("%s-master-subnet", clusterID),
 		},
 	}
 }

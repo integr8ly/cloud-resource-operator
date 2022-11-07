@@ -154,10 +154,6 @@ type AWSResourceTag struct {
 	Value string `json:"value"`
 }
 
-// GCPPlatformSpec holds the desired state of the Google Cloud Platform infrastructure provider.
-// This only includes fields that can be modified in the cluster.
-type GCPPlatformSpec struct{}
-
 // GCPPlatformStatus holds the current status of the Google Cloud Platform infrastructure provider.
 type GCPPlatformStatus struct {
 	// resourceGroupName is the Project ID for new GCP resources created for the cluster.
