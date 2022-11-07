@@ -90,8 +90,7 @@ cluster/prepare: kustomize setup/service_account
 	-oc new-project $(NAMESPACE) || true
 	-oc label namespace $(NAMESPACE) monitoring-key=middleware
 	-oc apply -f ./config/samples/cloud_resource_config.yaml -n $(NAMESPACE)
-	-oc apply -f ./config/samples/cloud_resource_openshift_strategies.yaml -n $(NAMESPACE)
-	-oc apply -f ./config/samples/cloud_resources_aws_strategies.yaml -n $(NAMESPACE)
+	-oc apply -f ./config/samples/cloud_resources_$(PROVIDER)_strategies.yaml -n $(NAMESPACE)
 	$(KUSTOMIZE) build config/crd | oc apply -f -
 
 .PHONY: cluster/seed/blobstorage
