@@ -31,6 +31,7 @@ const (
 	gcpTestNetworkName string = gcpTestClusterName + "-network"
 	gcpTestIpRangeName string = "gcptestclusteriprange"
 	gcpTestProjectId   string = "gcp-test-project"
+	gcpTestRegion      string = "europe-west2"
 )
 
 func buildMockNetworkManager() *NetworkManagerMock {
@@ -61,8 +62,10 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildTestGcpInfrastructure() *v1.Infrastructure {
-	return &v1.Infrastructure{
+// buildTestGcpInfrastructure Builds a default Infrastructure CR if nil map parameter is passed in
+// If the map parameter is not nil, it will assign custom values to the relevant Infrastructure property
+func buildTestGcpInfrastructure(argsMap map[string]*string) *v1.Infrastructure {
+	infra := v1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
 		},
@@ -73,11 +76,23 @@ func buildTestGcpInfrastructure() *v1.Infrastructure {
 				Type: v1.GCPPlatformType,
 				GCP: &v1.GCPPlatformStatus{
 					ProjectID: gcpTestProjectId,
-					Region:    "eu-west2",
+					Region:    gcpTestRegion,
 				},
 			},
 		},
 	}
+	if argsMap != nil {
+		if argsMap["infraName"] != nil {
+			infra.Status.InfrastructureName = *argsMap["infraName"]
+		}
+		if argsMap["projectID"] != nil {
+			infra.Status.PlatformStatus.GCP.ProjectID = *argsMap["projectID"]
+		}
+		if argsMap["region"] != nil {
+			infra.Status.PlatformStatus.GCP.Region = *argsMap["region"]
+		}
+	}
+	return &infra
 }
 
 func buildTestInvalidInfrastructure() *v1.Infrastructure {
@@ -215,7 +230,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "create ip range created",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -231,7 +246,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "create ip range in progress",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -243,7 +258,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "create ip range exists",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -259,7 +274,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    nil,
@@ -277,7 +292,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "googleapi error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -295,7 +310,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "unknown error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -311,7 +326,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "error creating ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -327,7 +342,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "googleapi error retrieving ip address range - post creation",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -345,7 +360,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		{
 			name: "unknown error retrieving ip address range - post creation",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -403,7 +418,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "create service network created",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -424,7 +439,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "create service network in progress",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -441,7 +456,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "create service network exists",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -458,7 +473,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    nil,
@@ -476,7 +491,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "error retrieving service connections",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -492,7 +507,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "googleapi error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -511,7 +526,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "unknown error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -528,7 +543,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "error ip address range does not exist",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -541,7 +556,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "error ip address range creation in progress",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -558,7 +573,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		{
 			name: "error retrieving service connections - post creation",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -619,7 +634,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		{
 			name: "delete peering",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworksPeering
 				}),
@@ -629,7 +644,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		{
 			name: "delete peering does not exist - nil",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -639,7 +654,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		{
 			name: "delete peering does not exist - empty",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidEmptyGcpListNetworksPeering
 				}),
@@ -649,7 +664,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			wantErr: true,
@@ -665,7 +680,7 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		{
 			name: "error deleting peering",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworksPeering
 					networksClient.RemovePeeringFn = func(req *computepb.RemovePeeringNetworkRequest) error {
@@ -714,7 +729,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "delete service connection",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -729,7 +744,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "delete service connection does not exist",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -740,7 +755,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			wantErr: true,
@@ -756,7 +771,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "error retrieving service connections",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -771,7 +786,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "error deleting service connections",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -789,7 +804,7 @@ func TestNetworkProvider_DeleteNetworkService(t *testing.T) {
 		{
 			name: "error deleting service connection, response in progress",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -843,7 +858,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "delete ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -859,7 +874,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "delete ip address range does not exist",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -879,7 +894,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "googleapi error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -896,7 +911,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "unknown error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -911,7 +926,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
@@ -924,7 +939,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "error retrieving service connections",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -944,7 +959,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "error service connection still present",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -964,7 +979,7 @@ func TestNetworkProvider_DeleteNetworkIpRange(t *testing.T) {
 		{
 			name: "error deleting ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -1023,7 +1038,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "ip address range exists",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -1041,7 +1056,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "service connection exists",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -1058,7 +1073,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "error no cluster vpc present",
 			fields: fields{
-				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(nil),
 			},
 			want:    false,
@@ -1076,7 +1091,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "error retrieving service connections",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -1093,7 +1108,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "googleapi error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
@@ -1112,7 +1127,7 @@ func TestNetworkProvider_ComponentsExist(t *testing.T) {
 		{
 			name: "unknown error retrieving ip address range",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
 					networksClient.ListFn = buildValidGcpListNetworks
 				}),
