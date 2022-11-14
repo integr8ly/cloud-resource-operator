@@ -62,19 +62,7 @@ type PostgresProvider struct {
 // wrapper for real client
 type sqlClient struct {
 	gcpiface.SQLAdminService
-	sqlAdminService  *sqladmin.Service
-	databaseInstance *sqladmin.DatabaseInstance
-}
-
-type DeleteInstancesRequest struct {
-	Name             string
-	databaseInstance *sqladmin.DatabaseInstance
-}
-
-type CreateInstancesRequest struct {
-	Name             string
-	ProjectID        string
-	databaseInstance *sqladmin.DatabaseInstance
+	sqlAdminService *sqladmin.Service
 }
 
 func (r *sqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
@@ -152,7 +140,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 
 	sqladminService, err := sqladmin.NewService(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson))
 	if err != nil {
-		errMsg := fmt.Sprintf("error building cloudSQL admin service")
+		errMsg := "error building cloudSQL admin service"
 		return nil, croType.StatusMessage(errMsg), err
 	}
 	sqlClient := &sqlClient{
@@ -325,11 +313,11 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if foundInstance.Name == "" {
-			statusMessage := fmt.Sprintf("unable to get name from instance delete call")
+			statusMessage := "unable to get name from instance delete call"
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if !foundInstance.Settings.DeletionProtectionEnabled {
-			_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, deleteInstanceRequest.Name)
+			_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
 			if err != nil {
 				msg := fmt.Sprintf("failed to delete postgres instance: %s", instanceName)
 				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)

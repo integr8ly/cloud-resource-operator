@@ -10,6 +10,7 @@ type SQLAdminService interface {
 	DeleteInstance(context.Context, string, string) (*sqladmin.Operation, error)
 	CreateInstance(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 	ModifyInstance(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
+	ListOperations()
 }
 
 // MockSqlClient mock client
