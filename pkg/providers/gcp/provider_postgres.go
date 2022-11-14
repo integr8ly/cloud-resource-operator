@@ -62,19 +62,7 @@ type PostgresProvider struct {
 // wrapper for real client
 type sqlClient struct {
 	gcpiface.SQLAdminService
-	sqlAdminService  *sqladmin.Service
-	databaseInstance *sqladmin.DatabaseInstance
-}
-
-type DeleteInstancesRequest struct {
-	Name             string
-	databaseInstance *sqladmin.DatabaseInstance
-}
-
-type CreateInstancesRequest struct {
-	Name             string
-	ProjectID        string
-	databaseInstance *sqladmin.DatabaseInstance
+	sqlAdminService *sqladmin.Service
 }
 
 func (r *sqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
@@ -153,7 +141,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 
 	sqladminService, err := sqladmin.NewService(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson))
 	if err != nil {
-		errMsg := fmt.Sprintf("error building cloudSQL admin service")
+		errMsg := "error building cloudSQL admin service"
 		return nil, croType.StatusMessage(errMsg), err
 	}
 	sqlClient := &sqlClient{
@@ -195,7 +183,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	return pp.reconcileCloudSQLInstance(ctx, p, sqlClient, createInstancesRequest, strategyConfig, maintenanceWindow)
 }
 
-func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, createInstancesRequest *CreateInstancesRequest, strategyConfig *StrategyConfig, maintenanceWindow bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *sqladmin.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindow bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
@@ -218,12 +206,12 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 		return nil, croType.StatusMessage(msg), errorUtil.Errorf(msg)
 	}
 
-	if err := pp.buildCloudSQLCreateStrategy(ctx, p, createInstancesRequest); err != nil {
+	if err := pp.buildCloudSQLCreateStrategy(ctx, p, cloudSQLCreateConfig); err != nil {
 		msg := "failed to build and verify gcp cloudSQL instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	foundInstance := getFoundInstance(instances, createInstancesRequest)
+	foundInstance := getFoundInstance(instances, cloudSQLCreateConfig.Name)
 
 	// TODO setPostgresServiceMaintenanceMetric
 	// TODO exposePostgresMetrics
@@ -235,12 +223,12 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 
 	if foundInstance == nil {
 		logger.Infof("no instance found, creating one")
-		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, createInstancesRequest.databaseInstance)
+		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, cloudSQLCreateConfig)
 		if err != nil {
 			msg := "failed to create gcp instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		annotations.Add(p, ResourceIdentifierAnnotation, createInstancesRequest.databaseInstance.Name)
+		annotations.Add(p, ResourceIdentifierAnnotation, cloudSQLCreateConfig.Name)
 		if err := pp.Client.Update(ctx, p); err != nil {
 			msg := "failed to add annotation"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -327,14 +315,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 		return croType.StatusMessage(msg), fmt.Errorf(msg)
 	}
 
-	var foundInstance *sqladmin.DatabaseInstance
-	for _, instance := range instances {
-		if instance.Name == instanceName {
-			logrus.Infof("found matching instance by name: %s", instanceName)
-			foundInstance = instance
-			break
-		}
-	}
+	foundInstance := getFoundInstance(instances, instanceName)
 
 	if foundInstance != nil {
 		if foundInstance.State == "PENDING_DELETE" {
@@ -343,7 +324,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if foundInstance.Name == "" {
-			statusMessage := fmt.Sprintf("unable to get name from instance delete call")
+			statusMessage := "unable to get name from instance delete call"
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if !foundInstance.Settings.DeletionProtectionEnabled {
@@ -357,9 +338,9 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 		}
 
 		update := &sqladmin.DatabaseInstance{
-			Name:     foundInstance.Name,
 			Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 		}
+
 		logrus.Info("modifying instance")
 		resp, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
 		if err != nil {
@@ -368,6 +349,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		logrus.Infof("MODIFIED instance DPA %v", foundInstance.Settings.DeletionProtectionEnabled)
+		return croType.StatusMessage("modifying instance"), nil
 	}
 
 	logger.Info("deleting cloudSQL secret")
@@ -465,7 +447,7 @@ func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instance
 	return labels
 }
 
-func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.Postgres) (*CreateInstancesRequest, *DeleteInstancesRequest, *StrategyConfig, error) {
+func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.Postgres) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, *StrategyConfig, error) {
 	strategyConfig, err := pp.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, p.Spec.Tier)
 	logrus.Infof("GET POSTGRES CONFIG strategyConfig.CreateStrategy %v", strategyConfig.CreateStrategy)
 	if err != nil {
@@ -501,9 +483,8 @@ func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.P
 	return createInstanceRequest, deleteInstanceRequest, strategyConfig, nil
 }
 
-func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*CreateInstancesRequest, *DeleteInstancesRequest, error) {
-
-	createInstanceRequest := &CreateInstancesRequest{}
+func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, error) {
+	createInstanceRequest := &sqladmin.DatabaseInstance{}
 	logrus.Infof("buildpostgresconfig createinstancerequest %v", createInstanceRequest)
 	if err := json.Unmarshal(strategyConfig.CreateStrategy, createInstanceRequest); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
@@ -516,7 +497,7 @@ func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyCo
 		}
 	}
 
-	deleteInstanceRequest := &DeleteInstancesRequest{}
+	deleteInstanceRequest := &sqladmin.DatabaseInstance{}
 	if err := json.Unmarshal(strategyConfig.DeleteStrategy, deleteInstanceRequest); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres delete request")
 	}
@@ -530,35 +511,32 @@ func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyCo
 	return createInstanceRequest, deleteInstanceRequest, nil
 }
 
-func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *v1alpha1.Postgres, cloudSQLCreateConfig *CreateInstancesRequest) error {
+func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance) error {
 	logrus.Infof("buildCloudSQLCreateStratefy %v", cloudSQLCreateConfig)
-	if cloudSQLCreateConfig.databaseInstance == nil {
-		cloudSQLCreateConfig.databaseInstance = &sqladmin.DatabaseInstance{}
+
+	if cloudSQLCreateConfig.DatabaseVersion == "" {
+		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
 	}
 
-	if cloudSQLCreateConfig.databaseInstance.DatabaseVersion == "" {
-		cloudSQLCreateConfig.databaseInstance.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
-	}
-
-	if cloudSQLCreateConfig.databaseInstance.Region == "" {
-		cloudSQLCreateConfig.databaseInstance.Region = defaultGCPCloudSQLRegion
+	if cloudSQLCreateConfig.Region == "" {
+		cloudSQLCreateConfig.Region = defaultGCPCloudSQLRegion
 	}
 
 	instanceName, err := pp.buildInstanceName(ctx, p)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to build instance name")
 	}
-	if cloudSQLCreateConfig.databaseInstance.Name == "" {
-		cloudSQLCreateConfig.databaseInstance.Name = instanceName
+	if cloudSQLCreateConfig.Name == "" {
+		cloudSQLCreateConfig.Name = instanceName
 	}
 
 	rootPassword := buildDefaultCloudSQLSecret(p)
-	if cloudSQLCreateConfig.databaseInstance.RootPassword == "" {
-		cloudSQLCreateConfig.databaseInstance.RootPassword = rootPassword.String()
+	if cloudSQLCreateConfig.RootPassword == "" {
+		cloudSQLCreateConfig.RootPassword = rootPassword.String()
 	}
 
-	if cloudSQLCreateConfig.databaseInstance.Settings == nil {
-		cloudSQLCreateConfig.databaseInstance.Settings = &sqladmin.Settings{
+	if cloudSQLCreateConfig.Settings == nil {
+		cloudSQLCreateConfig.Settings = &sqladmin.Settings{
 			Tier:                   defaultTier,
 			AvailabilityType:       defaultAvailabilityType,
 			StorageAutoResizeLimit: defaultStorageAutoResizeLimit,
@@ -578,17 +556,17 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 			},
 		}
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.Tier == "" {
-		cloudSQLCreateConfig.databaseInstance.Settings.Tier = defaultTier
+	if cloudSQLCreateConfig.Settings.Tier == "" {
+		cloudSQLCreateConfig.Settings.Tier = defaultTier
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.AvailabilityType == "" {
-		cloudSQLCreateConfig.databaseInstance.Settings.Tier = defaultAvailabilityType
+	if cloudSQLCreateConfig.Settings.AvailabilityType == "" {
+		cloudSQLCreateConfig.Settings.Tier = defaultAvailabilityType
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.StorageAutoResizeLimit == 0 {
-		cloudSQLCreateConfig.databaseInstance.Settings.StorageAutoResizeLimit = defaultStorageAutoResizeLimit
+	if cloudSQLCreateConfig.Settings.StorageAutoResizeLimit == 0 {
+		cloudSQLCreateConfig.Settings.StorageAutoResizeLimit = defaultStorageAutoResizeLimit
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration == nil {
-		cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{
+	if cloudSQLCreateConfig.Settings.BackupConfiguration == nil {
+		cloudSQLCreateConfig.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{
 			Enabled:                    defaultBackupConfigEnabled,
 			PointInTimeRecoveryEnabled: defaultPointInTimeRecoveryEnabled,
 			BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
@@ -597,14 +575,14 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 			},
 		}
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit == "" {
-		cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = defaultBackupRetentionSettingsRetentionUnit
+	if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit == "" {
+		cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = defaultBackupRetentionSettingsRetentionUnit
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups == 0 {
-		cloudSQLCreateConfig.databaseInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = defaultBackupRetentionSettingsRetainedBackups
+	if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups == 0 {
+		cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = defaultBackupRetentionSettingsRetainedBackups
 	}
-	if cloudSQLCreateConfig.databaseInstance.Settings.DataDiskSizeGb == 0 {
-		cloudSQLCreateConfig.databaseInstance.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
+	if cloudSQLCreateConfig.Settings.DataDiskSizeGb == 0 {
+		cloudSQLCreateConfig.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
 	}
 	return nil
 }
@@ -661,10 +639,10 @@ func (pp *PostgresProvider) createCloudSQLConnectionMetric(ctx context.Context, 
 
 }
 
-func getFoundInstance(instances []*sqladmin.DatabaseInstance, cloudSQLCreateConfig *CreateInstancesRequest) *sqladmin.DatabaseInstance {
+func getFoundInstance(instances []*sqladmin.DatabaseInstance, instanceName string) *sqladmin.DatabaseInstance {
 	var foundInstance *sqladmin.DatabaseInstance
 	for _, i := range instances {
-		if i.Name == cloudSQLCreateConfig.Name {
+		if i.Name == instanceName {
 			foundInstance = i
 			return foundInstance
 		}
