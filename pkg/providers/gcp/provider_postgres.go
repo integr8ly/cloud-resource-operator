@@ -3,8 +3,9 @@ package gcp
 import (
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"time"
+
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -15,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +27,6 @@ var _ providers.PostgresProvider = (*PostgresProvider)(nil)
 
 const (
 	postgresProviderName         = "gcp-cloudsql"
-	projectID                    = "rhoam-317914"
 	ResourceIdentifierAnnotation = "resourceIdentifier"
 	defaultCredSecSuffix         = "-gcp-sql-credentials"
 )
@@ -76,18 +77,49 @@ func (pp *PostgresProvider) GetReconcileTime(p *v1alpha1.Postgres) time.Duration
 }
 
 func (pp *PostgresProvider) ReconcilePostgres(ctx context.Context, p *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
-	_, err := pp.CredentialManager.ReconcileProviderCredentials(ctx, p.Namespace)
+	logger := pp.Logger.WithField("action", "CreatePostgres")
+	if err := resources.CreateFinalizer(ctx, pp.Client, p, DefaultFinalizer); err != nil {
+		return nil, "failed to set finalizer", err
+	}
+
+	creds, err := pp.CredentialManager.ReconcileProviderCredentials(ctx, p.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile gcp postgres provider credentials for postgres instance %s", p.Name)
 		return nil, croType.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	if err := resources.CreateFinalizer(ctx, pp.Client, p, DefaultFinalizer); err != nil {
-		return nil, "failed to set finalizer", err
+	networkManager, err := NewNetworkManager(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), pp.Client, logger)
+	if err != nil {
+		errMsg := "failed to initialise network manager"
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+	address, err := networkManager.CreateNetworkIpRange(ctx)
+	if err != nil {
+		msg := "failed to create network service"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+	if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
+		return nil, croType.StatusMessage("network ip address range creation in progress"), nil
+	}
+	logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
+
+	logger.Infof("creating network service connection")
+	service, err := networkManager.CreateNetworkService(ctx)
+	if err != nil {
+		msg := "failed to create network service"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+	if service == nil {
+		return nil, croType.StatusMessage("network service connection creation in progress"), nil
+	}
+	logger.Infof("created network service connection %s", service.Service)
 
 	// TODO implement me
-	return nil, "", nil
+	return pp.createCloudSQLInstance(ctx, p)
+}
+
+func (pp *PostgresProvider) createCloudSQLInstance(ctx context.Context, p *v1alpha1.Postgres) (*providers.PostgresInstance, croType.StatusMessage, error) {
+	return nil, croType.StatusEmpty, nil
 }
 
 // DeletePostgres will set the postgres deletion timestamp, reconcile provider credentials so that the postgres instance
@@ -112,18 +144,38 @@ func (pp *PostgresProvider) DeletePostgres(ctx context.Context, p *v1alpha1.Post
 	sqlClient := &sqlClient{
 		sqlAdminService: sqladminService,
 	}
-	return pp.deleteCloudSQLInstance(ctx, sqlClient, p)
+
+	isLastResource, err := resources.IsLastResource(ctx, pp.Client)
+	if err != nil {
+		errMsg := "failed to check if this cr is the last cr of type postgres and redis"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	networkManager, err := NewNetworkManager(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), pp.Client, logger)
+	if err != nil {
+		errMsg := "failed to initialise network manager"
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+
+	return pp.deleteCloudSQLInstance(ctx, networkManager, sqlClient, p, isLastResource)
 }
 
 // deleteCloudSQLInstance will retrieve instances from gcp, find the instance required using the resourceIdentifierAnnotation
 // and delete this instance if it is not already pending delete. The credentials and finalizer are then removed.
-func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladminService gcpiface.SQLAdminService, p *v1alpha1.Postgres) (croType.StatusMessage, error) {
+func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, p *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
 
-	instances, err := getCloudSQLInstances(sqladminService)
+	// TODO: replace with strategy config
+	projectID, err := resources.GetGCPProject(ctx, pp.Client)
 	if err != nil {
 		msg := "cannot retrieve sql instances from gcp"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	instances, err := getCloudSQLInstances(sqladminService, projectID)
+	if err != nil {
+		msg := "cannot retrieve sql instances from gcp"
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 	logrus.Info("listed sql instances from gcp")
 
@@ -153,7 +205,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 		_, err = sqladminService.DeleteInstance(ctx, projectID, instanceName)
 		if err != nil {
 			msg := fmt.Sprintf("failed to delete postgres instance: %s", instanceName)
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		logrus.Info("triggered Instances.Delete()")
 		return "delete detected, Instances.Delete() started", nil
@@ -172,16 +224,39 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, sqladmin
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
+	// remove networking components
+	if isLastResource {
+		if err := networkManager.DeleteNetworkPeering(ctx); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+		if err := networkManager.DeleteNetworkService(ctx); err != nil {
+			msg := "failed to delete cluster network peering"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+		if err := networkManager.DeleteNetworkIpRange(ctx); err != nil {
+			msg := "failed to delete aws networking"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+		if exist, err := networkManager.ComponentsExist(ctx); err != nil || exist {
+			if exist {
+				return croType.StatusMessage("network component deletion in progress"), nil
+			}
+			msg := "failed to check if components exist"
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+	}
+
 	resources.RemoveFinalizer(&p.ObjectMeta, DefaultFinalizer)
 	if err := pp.Client.Update(ctx, p); err != nil {
 		msg := "failed to update instance as part of finalizer reconcile"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	return croType.StatusEmpty, nil
 }
 
-func getCloudSQLInstances(service gcpiface.SQLAdminService) ([]*sqladmin.DatabaseInstance, error) {
+func getCloudSQLInstances(service gcpiface.SQLAdminService, projectID string) ([]*sqladmin.DatabaseInstance, error) {
 	instances, err := service.InstancesList(projectID)
 	if err != nil {
 		return nil, err

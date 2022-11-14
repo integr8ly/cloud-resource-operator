@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/spf13/afero"
-	"strings"
-	"testing"
 
 	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	v1 "k8s.io/api/core/v1"
@@ -431,177 +432,6 @@ func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 			}
 			if cm.configMapNamespace != tt.expectedNamespace {
 				t.Fatalf("unexpected namespace, expected %s but got %s", tt.expectedNamespace, cm.configMapNamespace)
-			}
-		})
-	}
-}
-
-func TestBuildInfraName(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx     context.Context
-		c       client.Client
-		postfix string
-		n       int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return an id used for infra resources",
-			args: args{
-				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				postfix: defaultSecurityGroupPostfix,
-				n:       defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testsecuritygroup",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme),
-				postfix: defaultSecurityGroupPostfix,
-				n:       defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildInfraName(tt.args.ctx, tt.args.c, tt.args.postfix, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.expected {
-				t.Fatalf("expected %s to equal %s", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx context.Context
-		c   client.Client
-		om  controllerruntime.ObjectMeta
-		n   int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return a timestamped infra name from object creation",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testtesttest000101010000000000UTC",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildTimestampedInfraNameFromObjectCreation(tt.args.ctx, tt.args.c, tt.args.om, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.expected {
-				t.Fatalf("expected %s to equal %s", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx context.Context
-		c   client.Client
-		om  controllerruntime.ObjectMeta
-		n   int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return a timestamped infra name from object",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testtesttest1652356208",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildTimestampedInfraNameFromObject(tt.args.ctx, tt.args.c, tt.args.om, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !strings.Contains(got, "testtesttest") {
-				t.Fatalf("expected %s to contain testtesttest", got)
 			}
 		})
 	}

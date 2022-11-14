@@ -1,5 +1,5 @@
-# cloud.google.com/go/compute v1.7.0
-## explicit; go 1.15
+# cloud.google.com/go/compute v1.10.0
+## explicit; go 1.17
 cloud.google.com/go/compute/apiv1
 cloud.google.com/go/compute/internal
 cloud.google.com/go/compute/metadata
@@ -137,7 +137,7 @@ github.com/google/gofuzz/bytesource
 # github.com/google/uuid v1.3.0
 ## explicit
 github.com/google/uuid
-# github.com/googleapis/enterprise-certificate-proxy v0.0.0-20220520183353-fd19c99a87aa
+# github.com/googleapis/enterprise-certificate-proxy v0.1.0
 ## explicit; go 1.18
 github.com/googleapis/enterprise-certificate-proxy/client
 github.com/googleapis/enterprise-certificate-proxy/client/util
@@ -290,7 +290,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/net v0.0.0-20220708220712-1185a9018129
+# golang.org/x/net v0.0.0-20220909164309-bea034e7d591
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -306,7 +306,7 @@ golang.org/x/net/internal/timeseries
 golang.org/x/net/proxy
 golang.org/x/net/publicsuffix
 golang.org/x/net/trace
-# golang.org/x/oauth2 v0.0.0-20220630143837-2104d58473e0
+# golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 ## explicit; go 1.17
 golang.org/x/oauth2
 golang.org/x/oauth2/authhandler
@@ -315,7 +315,7 @@ golang.org/x/oauth2/google/internal/externalaccount
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e
+# golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
@@ -352,7 +352,7 @@ golang.org/x/time/rate
 # gomodules.xyz/jsonpatch/v2 v2.2.0
 ## explicit; go 1.12
 gomodules.xyz/jsonpatch/v2
-# google.golang.org/api v0.84.0
+# google.golang.org/api v0.98.0
 ## explicit; go 1.15
 google.golang.org/api/googleapi
 google.golang.org/api/googleapi/transport
@@ -363,6 +363,7 @@ google.golang.org/api/internal/third_party/uritemplates
 google.golang.org/api/iterator
 google.golang.org/api/option
 google.golang.org/api/option/internaloption
+google.golang.org/api/servicenetworking/v1
 google.golang.org/api/sqladmin/v1beta4
 google.golang.org/api/transport/cert
 google.golang.org/api/transport/http
@@ -380,15 +381,15 @@ google.golang.org/appengine/internal/modules
 google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
-# google.golang.org/genproto v0.0.0-20220628213854-d9e0b6570c03
-## explicit; go 1.15
+# google.golang.org/genproto v0.0.0-20220915135415-7fd63a7952de
+## explicit; go 1.19
 google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/cloud/compute/v1
 google.golang.org/genproto/googleapis/cloud/extendedops
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.47.0
+# google.golang.org/grpc v1.48.0
 ## explicit; go 1.14
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -438,7 +439,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/protobuf v1.28.0
+# google.golang.org/protobuf v1.28.1
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/protojson
 google.golang.org/protobuf/encoding/prototext

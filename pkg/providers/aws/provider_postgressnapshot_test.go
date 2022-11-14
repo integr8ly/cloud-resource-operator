@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"reflect"
+	"testing"
+
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"os"
-	"reflect"
-	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
@@ -108,8 +109,8 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 	}
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
-	testIdentifier, err := BuildInfraNameFromObject(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
+	testIdentifier, err := resources.BuildInfraNameFromObject(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
@@ -413,7 +414,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 
 	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
