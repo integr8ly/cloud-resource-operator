@@ -30,6 +30,8 @@ type ResourceTypeSpec struct {
 	ApplyImmediately  bool       `json:"applyImmediately,omitempty"`
 	MaintenanceWindow bool       `json:"maintenanceWindow,omitempty"`
 	SecretRef         *SecretRef `json:"secretRef"`
+	// PriorityClassName defines priority class for the postgres/redis deployment (https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption)
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 type StatusPhase string

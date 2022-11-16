@@ -419,7 +419,8 @@ func buildDefaultPostgresDeployment(ps *v1alpha1.Postgres) *appsv1.Deployment {
 							},
 						},
 					},
-					Containers: buildDefaultPostgresPodContainers(ps),
+					Containers:        buildDefaultPostgresPodContainers(ps),
+					PriorityClassName: ps.Spec.PriorityClassName,
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{

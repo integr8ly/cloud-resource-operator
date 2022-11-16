@@ -40,6 +40,10 @@ spec:
                 type: boolean
               maintenanceWindow:
                 type: boolean
+              priorityClassName:
+                description: PriorityClassName defines priority class for the postgres/redis
+                  deployment (https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption)
+                type: string
               secretRef:
                 properties:
                   name:
