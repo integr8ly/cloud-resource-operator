@@ -421,7 +421,7 @@ func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, co
 
 	vpcCreateConfig := &CreateVpcInput{}
 	if err := json.Unmarshal(stratCfg.CreateStrategy, vpcCreateConfig); err != nil {
-		return nil, errorUtil.Wrap(err, "failed to unmarshal aws vpc create config")
+		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp vpc create config")
 	}
 
 	// if the config map is found and the _network block contains an entry, that is returned for use in the network creation

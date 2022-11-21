@@ -4,10 +4,10 @@ metadata:
   name: cloud-resources-gcp-strategies
 data:
   blobstorage: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
   redis: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
   postgres: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
   _network: |
-    {"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}
+    {"development": { "region": "", "projectID": "", "createStrategy": {}, "deleteStrategy": {} }}
