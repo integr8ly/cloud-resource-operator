@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	servicenetworking "google.golang.org/api/servicenetworking/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
@@ -43,6 +41,7 @@ type NetworkManager interface {
 	DeleteNetworkService(context.Context) error
 	DeleteNetworkIpRange(context.Context) error
 	ComponentsExist(context.Context) (bool, error)
+	ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error)
 }
 
 var _ NetworkManager = (*NetworkProvider)(nil)
@@ -179,7 +178,7 @@ func (n *NetworkProvider) DeleteNetworkPeering(ctx context.Context) error {
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
-	peering := n.getPeeringConnection(ctx, clusterVpc)
+	peering := n.getPeeringConnection(clusterVpc)
 	// if it exists, delete it
 	if peering != nil {
 		err = n.deletePeeringConnection(ctx, clusterVpc)
@@ -320,14 +319,8 @@ func (n *NetworkProvider) getAddressRange(ctx context.Context, ipRange string) (
 		Address: ipRange,
 		Project: n.ProjectID,
 	})
-	if err != nil {
-		var gerr *googleapi.Error
-		if !errors.As(err, &gerr) {
-			return nil, errorUtil.Wrap(err, "unknown error getting addresses from gcp")
-		}
-		if gerr.Code != http.StatusNotFound {
-			return nil, errorUtil.Wrap(err, fmt.Sprintf("unexpected error %d getting addresses from gcp", gerr.Code))
-		}
+	if err != nil && !resources.IsNotFoundError(err) {
+		return nil, fmt.Errorf("unexpected error getting addresses from gcp: %w", err)
 	}
 	return address, nil
 }
@@ -365,7 +358,7 @@ func (n *NetworkProvider) deleteAddressRange(ctx context.Context, ipRange string
 	})
 }
 
-func (n *NetworkProvider) getPeeringConnection(ctx context.Context, clusterVpc *computepb.Network) *computepb.NetworkPeering {
+func (n *NetworkProvider) getPeeringConnection(clusterVpc *computepb.Network) *computepb.NetworkPeering {
 	peerings := clusterVpc.GetPeerings()
 	if peerings == nil {
 		return nil
@@ -411,8 +404,8 @@ func (n *NetworkProvider) getClusterSubnets(ctx context.Context, clusterVpc *com
 	return subnets, nil
 }
 
-func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string, logger *logrus.Entry) (*net.IPNet, error) {
-	logger.Infof("fetching _network strategy config for tier %s", tier)
+func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+	n.Logger.Infof("fetching _network strategy config for tier %s", tier)
 
 	stratCfg, err := configManager.ReadStorageStrategy(ctx, providers.NetworkResourceType, tier)
 	if err != nil {
@@ -430,7 +423,7 @@ func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, co
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to parse cidr block from _network strategy")
 		}
-		logger.Infof("found vpc cidr block %s in network strategy tier %s", vpcCidr.String(), tier)
+		n.Logger.Infof("found vpc cidr block %s in network strategy tier %s", vpcCidr.String(), tier)
 		return vpcCidr, nil
 	}
 

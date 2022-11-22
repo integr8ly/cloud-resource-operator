@@ -39,6 +39,9 @@ var _ NetworkManager = &NetworkManagerMock{}
 //			DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
 //				panic("mock out the DeleteNetworkService method")
 //			},
+// 			ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+// 				panic("mock out the ReconcileNetworkProviderConfig method")
+// 			},
 //		}
 //
 //		// use mockedNetworkManager in code that requires NetworkManager
@@ -63,6 +66,9 @@ type NetworkManagerMock struct {
 
 	// DeleteNetworkServiceFunc mocks the DeleteNetworkService method.
 	DeleteNetworkServiceFunc func(contextMoqParam context.Context) error
+
+	// ReconcileNetworkProviderConfigFunc mocks the ReconcileNetworkProviderConfig method.
+	ReconcileNetworkProviderConfigFunc func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -98,13 +104,23 @@ type NetworkManagerMock struct {
 			// ContextMoqParam is the contextMoqParam argument value.
 			ContextMoqParam context.Context
 		}
+		// ReconcileNetworkProviderConfig holds details about calls to the ReconcileNetworkProviderConfig method.
+		ReconcileNetworkProviderConfig []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// ConfigManager is the configManager argument value.
+			ConfigManager ConfigManager
+			// Tier is the tier argument value.
+			Tier string
+		}
 	}
-	lockComponentsExist      sync.RWMutex
-	lockCreateNetworkIpRange sync.RWMutex
-	lockCreateNetworkService sync.RWMutex
-	lockDeleteNetworkIpRange sync.RWMutex
-	lockDeleteNetworkPeering sync.RWMutex
-	lockDeleteNetworkService sync.RWMutex
+	lockComponentsExist                sync.RWMutex
+	lockCreateNetworkIpRange           sync.RWMutex
+	lockCreateNetworkService           sync.RWMutex
+	lockDeleteNetworkIpRange           sync.RWMutex
+	lockDeleteNetworkPeering           sync.RWMutex
+	lockDeleteNetworkService           sync.RWMutex
+	lockReconcileNetworkProviderConfig sync.RWMutex
 }
 
 // ComponentsExist calls ComponentsExistFunc.
@@ -300,5 +316,44 @@ func (mock *NetworkManagerMock) DeleteNetworkServiceCalls() []struct {
 	mock.lockDeleteNetworkService.RLock()
 	calls = mock.calls.DeleteNetworkService
 	mock.lockDeleteNetworkService.RUnlock()
+	return calls
+}
+
+// ReconcileNetworkProviderConfig calls ReconcileNetworkProviderConfigFunc.
+func (mock *NetworkManagerMock) ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+	if mock.ReconcileNetworkProviderConfigFunc == nil {
+		panic("NetworkManagerMock.ReconcileNetworkProviderConfigFunc: method is nil but NetworkManager.ReconcileNetworkProviderConfig was just called")
+	}
+	callInfo := struct {
+		Ctx           context.Context
+		ConfigManager ConfigManager
+		Tier          string
+	}{
+		Ctx:           ctx,
+		ConfigManager: configManager,
+		Tier:          tier,
+	}
+	mock.lockReconcileNetworkProviderConfig.Lock()
+	mock.calls.ReconcileNetworkProviderConfig = append(mock.calls.ReconcileNetworkProviderConfig, callInfo)
+	mock.lockReconcileNetworkProviderConfig.Unlock()
+	return mock.ReconcileNetworkProviderConfigFunc(ctx, configManager, tier)
+}
+
+// ReconcileNetworkProviderConfigCalls gets all the calls that were made to ReconcileNetworkProviderConfig.
+// Check the length with:
+//     len(mockedNetworkManager.ReconcileNetworkProviderConfigCalls())
+func (mock *NetworkManagerMock) ReconcileNetworkProviderConfigCalls() []struct {
+	Ctx           context.Context
+	ConfigManager ConfigManager
+	Tier          string
+} {
+	var calls []struct {
+		Ctx           context.Context
+		ConfigManager ConfigManager
+		Tier          string
+	}
+	mock.lockReconcileNetworkProviderConfig.RLock()
+	calls = mock.calls.ReconcileNetworkProviderConfig
+	mock.lockReconcileNetworkProviderConfig.RUnlock()
 	return calls
 }
