@@ -1422,7 +1422,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: tt.fields.Client,
 			}
-			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, logrus.NewEntry(logrus.StandardLogger()))
+			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileNetworkProviderConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return

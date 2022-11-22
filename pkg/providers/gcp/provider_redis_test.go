@@ -64,72 +64,7 @@ func TestNewGCPRedisProvider(t *testing.T) {
 	}
 }
 
-func TestRedisProvider_ReconcileRedis(t *testing.T) {
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-	}
-	type args struct {
-		ctx context.Context
-		r   *v1alpha1.Redis
-	}
-	scheme := runtime.NewScheme()
-	err := cloudcredentialv1.Install(scheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	tests := []struct {
-		name          string
-		fields        fields
-		args          args
-		redisCluster  *providers.RedisCluster
-		statusMessage types.StatusMessage
-		wantErr       bool
-	}{
-		{
-			name: "success creating redis instance",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme()),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				ctx: context.TODO(),
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      redisProviderName,
-						Namespace: testNs,
-					},
-				},
-			},
-			redisCluster:  nil,
-			statusMessage: "successfully created gcp redis",
-			wantErr:       false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := RedisProvider{
-				Client: tt.fields.Client,
-				Logger: tt.fields.Logger,
-			}
-			redisCluster, statusMessage, err := p.createRedisCluster(tt.args.ctx, tt.args.r)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("createRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(redisCluster, tt.redisCluster) {
-				t.Errorf("createRedisCluster() redisCluster = %v, want %v", redisCluster, tt.redisCluster)
-			}
-			if statusMessage != tt.statusMessage {
-				t.Errorf("createRedisCluster() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
-			}
-		})
-	}
-}
-
-func TestRedisProvider_deleteRedisCluster(t *testing.T) {
+func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -140,7 +75,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 		ctx            context.Context
 		networkManager NetworkManager
 		redisClient    gcpiface.RedisAPI
-		deleteConfig   *redispb.DeleteInstanceRequest
 		strategyConfig *StrategyConfig
 		r              *v1alpha1.Redis
 		isLastResource bool
@@ -167,10 +101,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					buildTestGcpInfrastructure(nil),
 					buildTestGcpStrategyConfigMap(nil),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -196,7 +128,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   buildTestDeleteInstance(),
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
@@ -210,10 +141,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					buildTestGcpInfrastructure(nil),
 					buildTestGcpStrategyConfigMap(nil),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -239,7 +168,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   buildTestDeleteInstance(),
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
@@ -268,10 +196,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						},
 					},
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -290,12 +216,25 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return nil, nil
 					}
 				}),
-				deleteConfig:   buildTestDeleteInstance(),
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
-			want:    types.StatusMessage(fmt.Sprintf("successfully deleted redis instance %s", testName)),
+			want:    types.StatusMessage(fmt.Sprintf("successfully deleted gcp redis instance %s", testName)),
 			wantErr: false,
+		},
+		{
+			name:   "fail to build delete redis instance request",
+			fields: fields{},
+			args: args{
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+					DeleteStrategy: nil,
+				},
+			},
+			want:    types.StatusMessage("failed to build delete redis instance request"),
+			wantErr: true,
 		},
 		{
 			name: "fail to delete redis instance",
@@ -304,10 +243,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					buildTestGcpInfrastructure(nil),
 					buildTestGcpStrategyConfigMap(nil),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -333,7 +270,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, fmt.Errorf("generic error")
 					}
 				}),
-				deleteConfig:   buildTestDeleteInstance(),
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
@@ -347,7 +283,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					buildTestGcpInfrastructure(nil),
 					buildTestGcpStrategyConfigMap(nil),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				r: &v1alpha1.Redis{
@@ -368,7 +303,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 			},
 			want:    "failed to retrieve redis instances",
@@ -387,10 +321,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -411,7 +343,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
@@ -431,10 +362,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -460,7 +389,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: true,
 			},
@@ -480,10 +408,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -512,7 +438,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: true,
 			},
@@ -532,10 +457,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -567,7 +490,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: true,
 			},
@@ -587,10 +509,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -625,7 +545,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: true,
 			},
@@ -645,10 +564,8 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 					}
 					return mc
 				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				ctx: context.TODO(),
 				r: &v1alpha1.Redis{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
@@ -683,7 +600,6 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 						return &redis.DeleteInstanceOperation{}, nil
 					}
 				}),
-				deleteConfig:   &redispb.DeleteInstanceRequest{},
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: true,
 			},
@@ -693,14 +609,14 @@ func TestRedisProvider_deleteRedisCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewGCPRedisProvider(tt.fields.Client, tt.fields.Logger)
-			statusMessage, err := p.deleteRedisCluster(tt.args.ctx, tt.args.networkManager, tt.args.redisClient, tt.args.deleteConfig, tt.args.strategyConfig, tt.args.r, tt.args.isLastResource)
+			p := NewGCPRedisProvider(tt.fields.Client, logrus.NewEntry(logrus.StandardLogger()))
+			statusMessage, err := p.deleteRedisInstance(context.TODO(), tt.args.networkManager, tt.args.redisClient, tt.args.strategyConfig, tt.args.r, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("deleteRedisCluster() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("deleteRedisInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if statusMessage != tt.want {
-				t.Errorf("deleteRedisCluster() statusMessage = %v, want %v", statusMessage, tt.want)
+				t.Errorf("deleteRedisInstance() statusMessage = %v, want %v", statusMessage, tt.want)
 			}
 		})
 	}
@@ -802,7 +718,7 @@ func TestRedisProvider_GetReconcileTime(t *testing.T) {
 	}
 }
 
-func TestRedisProvider_getRedisConfig(t *testing.T) {
+func TestRedisProvider_getRedisStrategyConfig(t *testing.T) {
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -810,8 +726,7 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx context.Context
-		r   *v1alpha1.Redis
+		tier string
 	}
 	scheme := runtime.NewScheme()
 	err := cloudcredentialv1.Install(scheme)
@@ -821,13 +736,11 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	tests := []struct {
-		name                  string
-		fields                fields
-		args                  args
-		createInstanceRequest *redispb.CreateInstanceRequest
-		deleteInstanceRequest *redispb.DeleteInstanceRequest
-		strategyConfig        *StrategyConfig
-		wantErr               bool
+		name           string
+		fields         fields
+		args           args
+		strategyConfig *StrategyConfig
+		wantErr        bool
 	}{
 		{
 			name: "successfully retrieve gcp redis config",
@@ -836,7 +749,6 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 					buildTestGcpInfrastructure(nil),
 					buildTestGcpStrategyConfigMap(nil),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -847,22 +759,7 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				},
 			},
 			args: args{
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: testName,
-						},
-						Name:      testName,
-						Namespace: testNs,
-					},
-					Spec: types.ResourceTypeSpec{
-						Tier: "development",
-					},
-				},
-			},
-			createInstanceRequest: &redispb.CreateInstanceRequest{},
-			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
+				tier: "development",
 			},
 			strategyConfig: &StrategyConfig{
 				Region:         gcpTestRegion,
@@ -882,16 +779,10 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				},
 			},
 			args: args{
-				r: &v1alpha1.Redis{
-					Spec: types.ResourceTypeSpec{
-						Tier: "development",
-					},
-				},
+				tier: "development",
 			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			strategyConfig:        nil,
-			wantErr:               true,
+			strategyConfig: nil,
+			wantErr:        true,
 		},
 		{
 			name: "fail to retrieve default gcp project",
@@ -899,7 +790,6 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(map[string]*string{"projectID": utils.String("")}),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{}, nil
@@ -907,16 +797,10 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				},
 			},
 			args: args{
-				r: &v1alpha1.Redis{
-					Spec: types.ResourceTypeSpec{
-						Tier: "development",
-					},
-				},
+				tier: "development",
 			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			strategyConfig:        nil,
-			wantErr:               true,
+			strategyConfig: nil,
+			wantErr:        true,
 		},
 		{
 			name: "fail to retrieve default gcp region",
@@ -924,7 +808,6 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(map[string]*string{"region": utils.String("")}),
 				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{}, nil
@@ -932,66 +815,24 @@ func TestRedisProvider_getRedisConfig(t *testing.T) {
 				},
 			},
 			args: args{
-				r: &v1alpha1.Redis{
-					Spec: types.ResourceTypeSpec{
-						Tier: "development",
-					},
-				},
+				tier: "development",
 			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			strategyConfig:        nil,
-			wantErr:               true,
-		},
-		{
-			name: "fail to retrieve redis instance from cr annotations",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestGcpInfrastructure(nil),
-					buildTestGcpStrategyConfigMap(nil),
-				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{}, nil
-					},
-				},
-			},
-			args: args{
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      testName,
-						Namespace: testNs,
-					},
-					Spec: types.ResourceTypeSpec{
-						Tier: "development",
-					},
-				},
-			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			strategyConfig:        nil,
-			wantErr:               true,
+			strategyConfig: nil,
+			wantErr:        true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rp := &RedisProvider{
 				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			createInstanceRequest, deleteInstanceRequest, strategyConfig, err := rp.getRedisConfig(tt.args.ctx, tt.args.r)
+			strategyConfig, err := rp.getRedisStrategyConfig(context.TODO(), tt.args.tier)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getRedisConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("getRedisStrategyConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if !reflect.DeepEqual(createInstanceRequest, tt.createInstanceRequest) {
-				t.Errorf("getRedisConfig() createInstanceRequest = %v, createInstanceRequest expected %v", createInstanceRequest, tt.createInstanceRequest)
-			}
-			if deleteInstanceRequest != nil && (deleteInstanceRequest.Name != tt.deleteInstanceRequest.Name) {
-				t.Errorf("getRedisConfig() deleteInstanceRequest = %v, deleteInstanceRequest expected %v", deleteInstanceRequest.Name, tt.deleteInstanceRequest.Name)
 			}
 			if !reflect.DeepEqual(strategyConfig, tt.strategyConfig) {
 				t.Errorf("getRedisConfig() strategyConfig = %v, strategyConfig expected %v", strategyConfig, tt.strategyConfig)
@@ -1071,126 +912,127 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 	}
 }
 
-func TestRedisProvider_buildRedisConfig(t *testing.T) {
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-	}
-	type args struct {
-		r              *v1alpha1.Redis
-		strategyConfig *StrategyConfig
-	}
-	tests := []struct {
-		name                  string
-		fields                fields
-		args                  args
-		createInstanceRequest *redispb.CreateInstanceRequest
-		deleteInstanceRequest *redispb.DeleteInstanceRequest
-		wantErr               bool
-	}{
-		{
-			name:   "success building redis delete request from strategy config",
-			fields: fields{},
-			args: args{
-				r: nil,
-				strategyConfig: &StrategyConfig{
-					Region:         gcpTestRegion,
-					ProjectID:      gcpTestProjectId,
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: json.RawMessage(fmt.Sprintf(`{"name":"projects/%s/locations/%s/instances/%s"}`, gcpTestProjectId, gcpTestRegion, testName)),
-				},
-			},
-			createInstanceRequest: &redispb.CreateInstanceRequest{},
-			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
-			},
-			wantErr: false,
-		},
-		{
-			name:   "success building redis delete request from redis cr annotations",
-			fields: fields{},
-			args: args{
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: testName,
-						},
-						Name:      testName,
-						Namespace: testNs,
-					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         gcpTestRegion,
-					ProjectID:      gcpTestProjectId,
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: json.RawMessage(`{}`),
-				},
-			},
-			createInstanceRequest: &redispb.CreateInstanceRequest{},
-			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
-			},
-			wantErr: false,
-		},
-		{
-			name:   "fail to unmarshal gcp redis delete strategy",
-			fields: fields{},
-			args: args{
-				r: nil,
-				strategyConfig: &StrategyConfig{
-					Region:         gcpTestRegion,
-					ProjectID:      gcpTestProjectId,
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: nil,
-				},
-			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			wantErr:               true,
-		},
-		{
-			name:   "fail to find redis instance name from annotations",
-			fields: fields{},
-			args: args{
-				r: &v1alpha1.Redis{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      testName,
-						Namespace: testNs,
-					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         gcpTestRegion,
-					ProjectID:      gcpTestProjectId,
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: json.RawMessage(`{}`),
-				},
-			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			wantErr:               true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rp := &RedisProvider{
-				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-			}
-			createInstanceRequest, deleteInstanceRequest, err := rp.buildRedisConfig(tt.args.r, tt.args.strategyConfig)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("buildRedisConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(createInstanceRequest, tt.createInstanceRequest) {
-				t.Errorf("buildRedisConfig() createInstanceRequest = %v, want %v", createInstanceRequest, tt.createInstanceRequest)
-			}
-			if !reflect.DeepEqual(deleteInstanceRequest, tt.deleteInstanceRequest) {
-				t.Errorf("buildRedisConfig() deleteInstanceRequest = %v, want %v", deleteInstanceRequest, tt.deleteInstanceRequest)
-			}
-		})
-	}
-}
+//func TestRedisProvider_buildRedisConfig(t *testing.T) {
+//	type fields struct {
+//		Client            client.Client
+//		Logger            *logrus.Entry
+//		CredentialManager CredentialManager
+//		ConfigManager     ConfigManager
+//	}
+//	type args struct {
+//		ctx            context.Context
+//		r              *v1alpha1.Redis
+//		strategyConfig *StrategyConfig
+//	}
+//	tests := []struct {
+//		name                  string
+//		fields                fields
+//		args                  args
+//		createInstanceRequest *redispb.CreateInstanceRequest
+//		deleteInstanceRequest *redispb.DeleteInstanceRequest
+//		wantErr               bool
+//	}{
+//		{
+//			name:   "success building redis delete request from strategy config",
+//			fields: fields{},
+//			args: args{
+//				r: nil,
+//				strategyConfig: &StrategyConfig{
+//					Region:         gcpTestRegion,
+//					ProjectID:      gcpTestProjectId,
+//					CreateStrategy: json.RawMessage(`{}`),
+//					DeleteStrategy: json.RawMessage(fmt.Sprintf(`{"name":"projects/%s/locations/%s/instances/%s"}`, gcpTestProjectId, gcpTestRegion, testName)),
+//				},
+//			},
+//			createInstanceRequest: &redispb.CreateInstanceRequest{},
+//			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
+//				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
+//			},
+//			wantErr: false,
+//		},
+//		{
+//			name:   "success building redis delete request from redis cr annotations",
+//			fields: fields{},
+//			args: args{
+//				r: &v1alpha1.Redis{
+//					ObjectMeta: metav1.ObjectMeta{
+//						Annotations: map[string]string{
+//							ResourceIdentifierAnnotation: testName,
+//						},
+//						Name:      testName,
+//						Namespace: testNs,
+//					},
+//				},
+//				strategyConfig: &StrategyConfig{
+//					Region:         gcpTestRegion,
+//					ProjectID:      gcpTestProjectId,
+//					CreateStrategy: json.RawMessage(`{}`),
+//					DeleteStrategy: json.RawMessage(`{}`),
+//				},
+//			},
+//			createInstanceRequest: &redispb.CreateInstanceRequest{},
+//			deleteInstanceRequest: &redispb.DeleteInstanceRequest{
+//				Name: fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName),
+//			},
+//			wantErr: false,
+//		},
+//		{
+//			name:   "fail to unmarshal gcp redis delete strategy",
+//			fields: fields{},
+//			args: args{
+//				r: nil,
+//				strategyConfig: &StrategyConfig{
+//					Region:         gcpTestRegion,
+//					ProjectID:      gcpTestProjectId,
+//					CreateStrategy: json.RawMessage(`{}`),
+//					DeleteStrategy: nil,
+//				},
+//			},
+//			createInstanceRequest: nil,
+//			deleteInstanceRequest: nil,
+//			wantErr:               true,
+//		},
+//		{
+//			name:   "fail to find redis instance name from annotations",
+//			fields: fields{},
+//			args: args{
+//				r: &v1alpha1.Redis{
+//					ObjectMeta: metav1.ObjectMeta{
+//						Name:      testName,
+//						Namespace: testNs,
+//					},
+//				},
+//				strategyConfig: &StrategyConfig{
+//					Region:         gcpTestRegion,
+//					ProjectID:      gcpTestProjectId,
+//					CreateStrategy: json.RawMessage(`{}`),
+//					DeleteStrategy: json.RawMessage(`{}`),
+//				},
+//			},
+//			createInstanceRequest: nil,
+//			deleteInstanceRequest: nil,
+//			wantErr:               true,
+//		},
+//	}
+//	for _, tt := range tests {
+//		t.Run(tt.name, func(t *testing.T) {
+//			rp := &RedisProvider{
+//				Client:            tt.fields.Client,
+//				Logger:            tt.fields.Logger,
+//				CredentialManager: tt.fields.CredentialManager,
+//				ConfigManager:     tt.fields.ConfigManager,
+//			}
+//			createInstanceRequest, deleteInstanceRequest, err := rp.buildRedisConfig(context.TODO(), tt.args.r, tt.args.strategyConfig)
+//			if (err != nil) != tt.wantErr {
+//				t.Errorf("buildRedisConfig() error = %v, wantErr %v", err, tt.wantErr)
+//				return
+//			}
+//			if !reflect.DeepEqual(createInstanceRequest, tt.createInstanceRequest) {
+//				t.Errorf("buildRedisConfig() createInstanceRequest = %v, want %v", createInstanceRequest, tt.createInstanceRequest)
+//			}
+//			if !reflect.DeepEqual(deleteInstanceRequest, tt.deleteInstanceRequest) {
+//				t.Errorf("buildRedisConfig() deleteInstanceRequest = %v, want %v", deleteInstanceRequest, tt.deleteInstanceRequest)
+//			}
+//		})
+//	}
+//}

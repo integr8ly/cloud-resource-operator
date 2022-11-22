@@ -13,6 +13,8 @@ import (
 type RedisAPI interface {
 	ListInstances(context.Context, *redispb.ListInstancesRequest, ...gax.CallOption) ([]*redispb.Instance, error)
 	DeleteInstance(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
+	CreateInstance(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
+	GetInstance(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
 }
 
 type redisClient struct {
@@ -50,19 +52,35 @@ func (c *redisClient) DeleteInstance(ctx context.Context, req *redispb.DeleteIns
 	return c.redisService.DeleteInstance(ctx, req, opts...)
 }
 
+func (c *redisClient) CreateInstance(ctx context.Context, req *redispb.CreateInstanceRequest, opts ...gax.CallOption) (*redis.CreateInstanceOperation, error) {
+	return c.redisService.CreateInstance(ctx, req, opts...)
+}
+
+func (c *redisClient) GetInstance(ctx context.Context, req *redispb.GetInstanceRequest, opts ...gax.CallOption) (*redispb.Instance, error) {
+	return c.redisService.GetInstance(ctx, req, opts...)
+}
+
 type MockRedisClient struct {
 	RedisAPI
 	ListInstancesFn  func(context.Context, *redispb.ListInstancesRequest, ...gax.CallOption) ([]*redispb.Instance, error)
 	DeleteInstanceFn func(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
+	CreateInstanceFn func(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
+	GetInstanceFn    func(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
 }
 
 func GetMockRedisClient(modifyFn func(redisClient *MockRedisClient)) *MockRedisClient {
 	mock := &MockRedisClient{
-		ListInstancesFn: func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
+		ListInstancesFn: func(ctx context.Context, request *redispb.ListInstancesRequest, opts ...gax.CallOption) ([]*redispb.Instance, error) {
 			return []*redispb.Instance{}, nil
 		},
-		DeleteInstanceFn: func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
+		DeleteInstanceFn: func(ctx context.Context, request *redispb.DeleteInstanceRequest, opts ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 			return &redis.DeleteInstanceOperation{}, nil
+		},
+		CreateInstanceFn: func(ctx context.Context, request *redispb.CreateInstanceRequest, opts ...gax.CallOption) (*redis.CreateInstanceOperation, error) {
+			return &redis.CreateInstanceOperation{}, nil
+		},
+		GetInstanceFn: func(ctx context.Context, request *redispb.GetInstanceRequest, callOption ...gax.CallOption) (*redispb.Instance, error) {
+			return &redispb.Instance{}, nil
 		},
 	}
 	if modifyFn != nil {
@@ -83,4 +101,18 @@ func (m *MockRedisClient) DeleteInstance(ctx context.Context, req *redispb.Delet
 		return m.DeleteInstanceFn(ctx, req, opts...)
 	}
 	return &redis.DeleteInstanceOperation{}, nil
+}
+
+func (m *MockRedisClient) CreateInstance(ctx context.Context, req *redispb.CreateInstanceRequest, opts ...gax.CallOption) (*redis.CreateInstanceOperation, error) {
+	if m.CreateInstanceFn != nil {
+		return m.CreateInstanceFn(ctx, req, opts...)
+	}
+	return &redis.CreateInstanceOperation{}, nil
+}
+
+func (m *MockRedisClient) GetInstance(ctx context.Context, req *redispb.GetInstanceRequest, opts ...gax.CallOption) (*redispb.Instance, error) {
+	if m.GetInstanceFn != nil {
+		return m.GetInstanceFn(ctx, req, opts...)
+	}
+	return &redispb.Instance{}, nil
 }
