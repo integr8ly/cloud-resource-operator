@@ -319,7 +319,7 @@ func (n *NetworkProvider) getAddressRange(ctx context.Context, ipRange string) (
 		Address: ipRange,
 		Project: n.ProjectID,
 	})
-	if err != nil && !gcpiface.IsNotFound(err) {
+	if err != nil && !resources.IsNotFoundError(err) {
 		return nil, fmt.Errorf("unexpected error getting addresses from gcp: %w", err)
 	}
 	return address, nil

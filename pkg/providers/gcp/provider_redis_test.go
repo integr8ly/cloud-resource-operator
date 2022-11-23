@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"google.golang.org/api/servicenetworking/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	grpcCodes "google.golang.org/grpc/codes"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"net"
 	"reflect"
@@ -31,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var redisInstanceName = fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)
 
 func TestNewGCPRedisProvider(t *testing.T) {
 	type args struct {
@@ -90,7 +94,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "success triggering redis deletion for an existing instance",
+			name: "success triggering deletion for an existing redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(nil),
@@ -111,12 +115,10 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{
-							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
-								State: redispb.Instance_READY,
-							},
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							Name:  redisInstanceName,
+							State: redispb.Instance_READY,
 						}, nil
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
@@ -130,7 +132,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "success reconciling when the found instance is already in progress of deletion",
+			name: "success reconciling when an existing redis instance is already in progress of deletion",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(nil),
@@ -151,12 +153,10 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{
-							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
-								State: redispb.Instance_DELETING,
-							},
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							Name:  redisInstanceName,
+							State: redispb.Instance_DELETING,
 						}, nil
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
@@ -170,7 +170,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "success reconciling when the instance deletion and cleanup have completed",
+			name: "success reconciling when the redis instance deletion and cleanup have completed",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(nil),
@@ -207,8 +207,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 				}),
 				strategyConfig: buildTestStrategyConfig(),
@@ -252,12 +252,10 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{
-							{
-								Name:  fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
-								State: redispb.Instance_READY,
-							},
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							Name:  redisInstanceName,
+							State: redispb.Instance_READY,
 						}, nil
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
@@ -271,7 +269,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "fail to retrieve redis instances",
+			name: "fail to retrieve redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					buildTestGcpInfrastructure(nil),
@@ -292,14 +290,14 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return nil, fmt.Errorf("generic error")
 					}
 
 				}),
 				strategyConfig: buildTestStrategyConfig(),
 			},
-			want:    "failed to retrieve redis instances",
+			want:    types.StatusMessage("failed to fetch redis instance " + redisInstanceName),
 			wantErr: true,
 		},
 		{
@@ -330,8 +328,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -376,8 +374,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -425,8 +423,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -477,8 +475,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -532,8 +530,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -587,8 +585,8 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, nil
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return nil, resources.NewMockAPIError(grpcCodes.NotFound)
 					}
 					redisClient.DeleteInstanceFn = func(ctx context.Context, request *redispb.DeleteInstanceRequest, option ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 						return &redis.DeleteInstanceOperation{}, nil
@@ -861,13 +859,13 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 			args: args{
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)}}, nil
+						return []*redispb.Instance{{Name: redisInstanceName}}, nil
 					}
 				}),
 				projectID: gcpTestProjectId,
 				region:    gcpTestRegion,
 			},
-			want:    []*redispb.Instance{{Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)}},
+			want:    []*redispb.Instance{{Name: redisInstanceName}},
 			wantErr: false,
 		},
 		{
@@ -936,7 +934,7 @@ func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 				},
 			},
 			want: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
+				Name: redisInstanceName,
 			},
 			wantErr: false,
 		},
@@ -960,7 +958,7 @@ func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 				},
 			},
 			want: &redispb.DeleteInstanceRequest{
-				Name: fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName),
+				Name: redisInstanceName,
 			},
 			wantErr: false,
 		},

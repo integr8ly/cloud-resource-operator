@@ -129,7 +129,7 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	foundInstance, err := redisClient.GetInstance(ctx, &redispb.GetInstanceRequest{Name: createInstanceRequest.Instance.Name})
-	if err != nil && !gcpiface.IsNotFound(err) {
+	if err != nil && !resources.IsNotFoundError(err) {
 		statusMessage := fmt.Sprintf("failed to fetch redis instance %s", createInstanceRequest.InstanceId)
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
@@ -199,17 +199,10 @@ func (p *RedisProvider) deleteRedisInstance(ctx context.Context, networkManager 
 		statusMessage := "failed to build delete redis instance request"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
-	redisInstances, err := p.getRedisInstances(ctx, redisClient, strategyConfig.ProjectID, strategyConfig.Region)
-	if err != nil {
-		statusMessage := "failed to retrieve redis instances"
+	foundInstance, err := redisClient.GetInstance(ctx, &redispb.GetInstanceRequest{Name: deleteInstanceRequest.Name})
+	if err != nil && !resources.IsNotFoundError(err) {
+		statusMessage := fmt.Sprintf("failed to fetch redis instance %s", deleteInstanceRequest.Name)
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
-	}
-	var foundInstance *redispb.Instance
-	for _, instance := range redisInstances {
-		if instance.Name == deleteInstanceRequest.Name {
-			foundInstance = instance
-			break
-		}
 	}
 	if foundInstance != nil {
 		if foundInstance.State == redispb.Instance_DELETING {
