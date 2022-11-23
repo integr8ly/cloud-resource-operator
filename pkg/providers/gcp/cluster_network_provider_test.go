@@ -35,7 +35,6 @@ const (
 	gcpTestIpRangeName      string = "gcptestclusteriprange"
 	gcpTestProjectId        string = "gcp-test-project"
 	gcpTestRegion           string = "europe-west2"
-	gcpTestInfraName        string = "gcp-test-cluster"
 	gcpTestMasterSubnetCidr string = "10.11.128.0/24"
 	gcpTestWorkerSubnetCidr string = "10.11.129.0/24"
 	gcpTestOverlappingCidr  string = "10.11.128.0/22"

@@ -136,7 +136,7 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 	if foundInstance == nil {
 		_, err = redisClient.CreateInstance(ctx, createInstanceRequest)
 		if err != nil {
-			statusMessage := fmt.Sprintf("failed to create redis instance %s", r.Name)
+			statusMessage := fmt.Sprintf("failed to create redis instance %s", createInstanceRequest.InstanceId)
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
 		annotations.Add(r, ResourceIdentifierAnnotation, createInstanceRequest.InstanceId)
