@@ -9,7 +9,8 @@ VERSION=0.41.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 UPGRADE ?= true
 CHANNEL ?= rhmi
-PROVIDER ?= openshift # openshift/aws/gcp
+# openshift/aws/gcp
+PROVIDER ?= openshift
 PREVIOUS_OPERATOR_VERSIONS="0.39.0,0.38.0,0.37.1,0.37.0,0.36.0,0.35.2,0.35.1,0.35.0,0.34.0,0.33.0,0.32.1,0.32.0,0.31.0,0.30.0,0.29.0,0.28.0,0.27.1,0.27.0,0.26.0,0.25.0,0.24.1,0.24.0,0.23.0"
 
 SHELL=/bin/bash
@@ -90,8 +91,7 @@ cluster/prepare: kustomize setup/service_account
 	-oc new-project $(NAMESPACE) || true
 	-oc label namespace $(NAMESPACE) monitoring-key=middleware
 	-oc apply -f ./config/samples/cloud_resource_config.yaml -n $(NAMESPACE)
-	-oc apply -f ./config/samples/cloud_resource_openshift_strategies.yaml -n $(NAMESPACE)
-	-oc apply -f ./config/samples/cloud_resources_aws_strategies.yaml -n $(NAMESPACE)
+	-oc apply -f ./config/samples/cloud_resources_$(PROVIDER)_strategies.yaml -n $(NAMESPACE)
 	$(KUSTOMIZE) build config/crd | oc apply -f -
 
 .PHONY: cluster/seed/blobstorage

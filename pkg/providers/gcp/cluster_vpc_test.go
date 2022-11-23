@@ -95,7 +95,7 @@ func Test_getClusterVpc(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getClusterVpc(tt.args.ctx, tt.args.client, tt.args.networkClient, logrus.NewEntry(logrus.StandardLogger()))
+			got, err := getClusterVpc(tt.args.ctx, tt.args.client, tt.args.networkClient, gcpTestProjectId, logrus.NewEntry(logrus.StandardLogger()))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getClusterVpc() error = %v, wantErr %v", err, tt.wantErr)
 				return
