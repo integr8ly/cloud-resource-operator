@@ -49,7 +49,6 @@ const (
 	defaultDataDiskSizeGb                         = 20
 	defaultDeleteProtectionEnabled                = true
 	defaultIPConfigIPV4Enabled                    = true
-	defaultGCPPostgresPort                        = 5432
 )
 
 type PostgresProvider struct {
@@ -111,26 +110,26 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, "failed to set finalizer", err
 	}
 
-	createInstancesRequest, _, strategyConfig, err := pp.getPostgresConfig(ctx, p)
+	createInstancesRequest, _, strategyConfig, err := p.getPostgresConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	creds, err := pp.CredentialManager.ReconcileProviderCredentials(ctx, p.Namespace)
+	creds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, pg.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile gcp postgres provider credentials for postgres instance %s", pg.Name)
 		return nil, croType.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	maintenanceWindow, err := resources.VerifyPostgresMaintenanceWindow(ctx, pp.Client, p.Namespace, p.Name)
+	maintenanceWindow, err := resources.VerifyPostgresMaintenanceWindow(ctx, p.Client, pg.Namespace, pg.Name)
 	if err != nil {
 		msg := "failed to verify if postgres updates are allowed"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	sec := buildDefaultCloudSQLSecret(p)
-	result, err := controllerutil.CreateOrUpdate(ctx, pp.Client, sec, func() error {
+	sec := buildDefaultCloudSQLSecret(pg)
+	result, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func() error {
 		return nil
 	})
 	if err != nil {
@@ -147,7 +146,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		sqlAdminService: sqladminService,
 	}
 
-	networkManager, err := NewNetworkManager(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), pp.Client, logger)
+	networkManager, err := NewNetworkManager(ctx, strategyConfig.ProjectID, option.WithCredentialsJSON(creds.ServiceAccountJson), p.Client, logger)
 	if err != nil {
 		errMsg := "failed to initialise network manager"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -179,11 +178,11 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	}
 	logger.Infof("created network service connection %s", service.Service)
 
-	return pp.reconcileCloudSQLInstance(ctx, p, sqlClient, createInstancesRequest, strategyConfig, maintenanceWindow)
+	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, createInstancesRequest, strategyConfig, maintenanceWindow)
 }
 
-func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *sqladmin.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindow bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
-	logger := pp.Logger.WithField("action", "reconcileCloudSQLInstance")
+func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *sqladmin.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindow bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
 	instances, err := getCloudSQLInstances(sqladminService, strategyConfig.ProjectID)
@@ -194,7 +193,7 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 	logrus.Info("listed sql instances from gcp")
 
 	credSec := &v1.Secret{}
-	if err := pp.Client.Get(ctx, types.NamespacedName{Name: p.Name + defaultCredSecSuffix, Namespace: p.Namespace}, credSec); err != nil {
+	if err := p.Client.Get(ctx, types.NamespacedName{Name: pg.Name + defaultCredSecSuffix, Namespace: pg.Namespace}, credSec); err != nil {
 		msg := "failed to retrieve cloudSQL credential secret"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
@@ -205,14 +204,14 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 		return nil, croType.StatusMessage(msg), errorUtil.Errorf(msg)
 	}
 
-	if err := pp.buildCloudSQLCreateStrategy(ctx, p, cloudSQLCreateConfig); err != nil {
+	if err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig); err != nil {
 		msg := "failed to build and verify gcp cloudSQL instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	foundInstance := getFoundInstance(instances, cloudSQLCreateConfig.Name)
 
-	// TODO setPostgresServiceMaintenanceMetric,exposePostgresMetrics, createCloudSQLConnectionMetric
+	// TODO setPostgresServiceMaintenanceMetric,exposePostgresMetrics, createCloudSQLConnectionMetric see MGDAPI-4489
 	// TODO update strategy MGDAPI-4900
 
 	if foundInstance == nil {
@@ -222,8 +221,8 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 			msg := "failed to create cloudSQL instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		annotations.Add(p, ResourceIdentifierAnnotation, cloudSQLCreateConfig.Name)
-		if err := pp.Client.Update(ctx, p); err != nil {
+		annotations.Add(pg, ResourceIdentifierAnnotation, cloudSQLCreateConfig.Name)
+		if err := p.Client.Update(ctx, pg); err != nil {
 			msg := "failed to add annotation"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
@@ -281,15 +280,15 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, pg *v1alpha1.Post
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	return p.deleteCloudSQLInstance(ctx, projectID, networkManager, sqlClient, pg, isLastResource)
+	return p.deleteCloudSQLInstance(ctx, networkManager, sqlClient, pg, isLastResource)
 }
 
 // deleteCloudSQLInstance will retrieve instances from gcp, find the instance required using the resourceIdentifierAnnotation
 // and delete this instance if it is not already pending delete. The credentials and finalizer are then removed.
-func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, p *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
-	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
+func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, pg *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
+	logger := p.Logger.WithField("action", "deleteCloudSQLInstance")
 
-	_, _, strategyConfig, err := pp.getPostgresConfig(ctx, p)
+	_, _, strategyConfig, err := p.getPostgresConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -312,10 +311,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			p.Logger.Info(statusMessage)
 			return croType.StatusMessage(statusMessage), nil
 		}
-		if foundInstance.Name == "" {
-			statusMessage := "unable to get name from instance delete call"
-			return croType.StatusMessage(statusMessage), nil
-		}
+
 		if !foundInstance.Settings.DeletionProtectionEnabled {
 			_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
 			if err != nil {
@@ -370,11 +366,11 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		if err := networkManager.DeleteNetworkService(ctx); err != nil {
-			msg := "failed to delete cluster network peering"
+			msg := "failed to delete cluster network service"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		if err := networkManager.DeleteNetworkIpRange(ctx); err != nil {
-			msg := "failed to delete aws networking"
+			msg := "failed to delete network IP range"
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		if exist, err := networkManager.ComponentsExist(ctx); err != nil || exist {
@@ -445,48 +441,48 @@ func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instance
 	return labels
 }
 
-func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.Postgres) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, *StrategyConfig, error) {
-	strategyConfig, err := pp.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, p.Spec.Tier)
+func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.Postgres) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, *StrategyConfig, error) {
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, pg.Spec.Tier)
 	if err != nil {
 		errMsg := "failed to read gcp strategy config"
 		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
 	}
 
-	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, pp.Client, strategyConfig)
+	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp project"
 		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
 	}
 
 	if strategyConfig.ProjectID == "" {
-		pp.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
+		p.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
 		strategyConfig.ProjectID = defaultProject
 	}
 
-	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, pp.Client, strategyConfig)
+	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp region"
 		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
 	}
 	if strategyConfig.Region == "" {
-		pp.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
+		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
 		strategyConfig.Region = defaultRegion
 	}
 
-	createInstanceRequest, deleteInstanceRequest, err := pp.buildPostgresConfig(p, strategyConfig)
+	createInstanceRequest, deleteInstanceRequest, err := p.buildPostgresConfig(pg, strategyConfig)
 	if err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to build postgres config")
 	}
 	return createInstanceRequest, deleteInstanceRequest, strategyConfig, nil
 }
 
-func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, error) {
+func (p *PostgresProvider) buildPostgresConfig(pg *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, error) {
 	createInstanceRequest := &sqladmin.DatabaseInstance{}
 	if err := json.Unmarshal(strategyConfig.CreateStrategy, createInstanceRequest); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
 	}
 	if createInstanceRequest.Name == "" {
-		instanceName := annotations.Get(p, ResourceIdentifierAnnotation)
+		instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
 		if instanceName == "" {
 			errMsg := "failed to find postgres instance name from annotation"
 			return nil, nil, fmt.Errorf(errMsg)
@@ -498,7 +494,7 @@ func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyCo
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres delete request")
 	}
 	if deleteInstanceRequest.Name == "" {
-		instanceName := annotations.Get(p, ResourceIdentifierAnnotation)
+		instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
 		if instanceName == "" {
 			errMsg := "failed to find postgres instance name from annotation"
 			return nil, nil, fmt.Errorf(errMsg)
@@ -507,7 +503,7 @@ func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyCo
 	return createInstanceRequest, deleteInstanceRequest, nil
 }
 
-func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance) error {
+func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance) error {
 
 	if cloudSQLCreateConfig.DatabaseVersion == "" {
 		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
@@ -517,7 +513,7 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 		cloudSQLCreateConfig.Region = defaultGCPCloudSQLRegion
 	}
 
-	instanceName, err := pp.buildInstanceName(ctx, p)
+	instanceName, err := p.buildInstanceName(ctx, pg)
 	if err != nil {
 		return errorUtil.Wrapf(err, "failed to build instance name")
 	}
@@ -525,7 +521,7 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 		cloudSQLCreateConfig.Name = instanceName
 	}
 
-	rootPassword := buildDefaultCloudSQLSecret(p)
+	rootPassword := buildDefaultCloudSQLSecret(pg)
 	if cloudSQLCreateConfig.RootPassword == "" {
 		cloudSQLCreateConfig.RootPassword = rootPassword.String()
 	}
@@ -582,8 +578,8 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 	return nil
 }
 
-func (pp *PostgresProvider) buildInstanceName(ctx context.Context, p *v1alpha1.Postgres) (string, error) {
-	instanceName, err := resources.BuildInfraNameFromObject(ctx, pp.Client, p.ObjectMeta, defaultGCPIdentifierLength)
+func (p *PostgresProvider) buildInstanceName(ctx context.Context, pg *v1alpha1.Postgres) (string, error) {
+	instanceName, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGCPIdentifierLength)
 	if err != nil {
 		return "", errorUtil.Errorf("error occured building instance name: %v", err)
 	}

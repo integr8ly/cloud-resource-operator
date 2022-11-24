@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"testing"
 	"time"
+
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 
@@ -89,7 +90,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "if instance is not nil and state is PENDING_DELETE return status message",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				CredentialManager: &CredentialManagerMock{
 					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
 						return &Credentials{}, nil
@@ -133,7 +134,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "if instance is not nil, delete is not in progress delete function returns error",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -175,7 +176,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "error when getting cloud sql instances",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -211,7 +212,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 			name: "failed to retrieve postgres strategy config",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure())
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure(nil))
 					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
 						return fmt.Errorf("failed to retrieve postgres strategy config")
 					}
@@ -275,7 +276,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "successful run of delete function when cloudsql object is already deleted",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -302,7 +303,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "successful run of delete function when cloudsql object is not already deleted",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -341,7 +342,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "want error when running delete function when cloudsql object is not already deleted but delete errors",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -424,7 +425,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "error when modifying cloud sql instances",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
@@ -465,7 +466,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 		{
 			name: "failed to delete cluster network peering",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				CredentialManager: &CredentialManagerMock{
 					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
 						return &Credentials{}, nil
@@ -502,13 +503,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:     "testcloudsqldb-id",
-									State:    "RUNNABLE",
-									Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
-								},
-							},
+							Items: []*sqladmin.DatabaseInstance{},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -520,6 +515,241 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 			want:    "failed to delete cluster network peering",
 			wantErr: true,
 		},
+		{
+			name: "failed to delete cluster network service",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         defaultGCPCloudSQLRegion,
+							ProjectID:      "project-id",
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				networkManager: &NetworkManagerMock{
+					DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
+						return fmt.Errorf("generic error")
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return &sqladmin.Operation{}, nil
+					}
+				}),
+				isLastResource: true,
+			},
+			want:    "failed to delete cluster network service",
+			wantErr: true,
+		},
+		{
+			name: "failed to delete network IP range",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         defaultGCPCloudSQLRegion,
+							ProjectID:      "project-id",
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				networkManager: &NetworkManagerMock{
+					DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkIpRangeFunc: func(contextMoqParam context.Context) error {
+						return fmt.Errorf("generic error")
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return &sqladmin.Operation{}, nil
+					}
+				}),
+				isLastResource: true,
+			},
+			want:    "failed to delete network IP range",
+			wantErr: true,
+		},
+		{
+			name: "when network component deletion in progress return status message",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         defaultGCPCloudSQLRegion,
+							ProjectID:      "project-id",
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				networkManager: &NetworkManagerMock{
+					DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkIpRangeFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					ComponentsExistFunc: func(contextMoqParam context.Context) (bool, error) {
+						return true, nil
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return &sqladmin.Operation{}, nil
+					}
+				}),
+				isLastResource: true,
+			},
+			want:    "network component deletion in progress",
+			wantErr: false,
+		},
+		{
+			name: "failed to check if components exist",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				CredentialManager: &CredentialManagerMock{
+					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
+						return &Credentials{}, nil
+					},
+				},
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         defaultGCPCloudSQLRegion,
+							ProjectID:      "project-id",
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				p: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+						},
+					},
+				},
+				networkManager: &NetworkManagerMock{
+					DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					DeleteNetworkIpRangeFunc: func(contextMoqParam context.Context) error {
+						return nil
+					},
+					ComponentsExistFunc: func(contextMoqParam context.Context) (bool, error) {
+						return false, fmt.Errorf("generic error")
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
+						return &sqladmin.Operation{}, nil
+					}
+				}),
+				isLastResource: true,
+			},
+			want:    "failed to check if components exist",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -529,7 +759,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.projectID, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
+			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DeleteCloudSQLInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1085,7 +1315,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 		{
 			name: "error when retrieving cloudSQL instances",
 			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1110,7 +1340,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 		{
 			name: "error when retrieving cloudSQL secrets",
 			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1144,7 +1374,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					Name:      postgresProviderName + defaultCredSecSuffix,
 					Namespace: testNs,
 				},
-				}, buildTestPostgres(), buildTestGcpInfrastructure()),
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
 				ConfigManager:     nil,
@@ -1177,7 +1407,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						defaultPostgresUserKey:     []byte("user"),
 						defaultPostgresPasswordKey: []byte("password"),
 					},
-				}, buildTestPostgres(), buildTestGcpInfrastructure()),
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
 				ConfigManager:     nil,
@@ -1218,7 +1448,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						defaultPostgresUserKey:     []byte("user"),
 						defaultPostgresPasswordKey: []byte("password"),
 					},
-				}, buildTestPostgres(), buildTestGcpInfrastructure()),
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
 				ConfigManager:     nil,
@@ -1259,7 +1489,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						defaultPostgresUserKey:     []byte("user"),
 						defaultPostgresPasswordKey: []byte("password"),
 					},
-				}, buildTestPostgres(), buildTestGcpInfrastructure()),
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: NewCredentialMinterCredentialManager(nil),
 				ConfigManager:     nil,
@@ -1294,7 +1524,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 							defaultPostgresUserKey:     []byte("user"),
 							defaultPostgresPasswordKey: []byte("password"),
 						},
-					}, buildTestGcpInfrastructure())
+					}, buildTestGcpInfrastructure(nil))
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return fmt.Errorf("failed to add annotation")
 					}
@@ -1462,7 +1692,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 		{
 			name: "failed to reconcile gcp postgres provider credentials for postgres instance",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgres(), buildTestGcpInfrastructure()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: &CredentialManagerMock{
 					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
