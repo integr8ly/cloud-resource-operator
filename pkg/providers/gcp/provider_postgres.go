@@ -62,7 +62,19 @@ type PostgresProvider struct {
 // wrapper for real client
 type sqlClient struct {
 	gcpiface.SQLAdminService
-	sqlAdminService *sqladmin.Service
+	sqlAdminService  *sqladmin.Service
+	databaseInstance *sqladmin.DatabaseInstance
+}
+
+type DeleteInstancesRequest struct {
+	Name             string
+	databaseInstance *sqladmin.DatabaseInstance
+}
+
+type CreateInstancesRequest struct {
+	Name             string
+	ProjectID        string
+	databaseInstance *sqladmin.DatabaseInstance
 }
 
 func (r *sqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
@@ -78,7 +90,6 @@ func (r *sqlClient) CreateInstance(ctx context.Context, projectID string, databa
 }
 
 func (r *sqlClient) ModifyInstance(ctx context.Context, projectID string, instanceName string, databaseInstance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
-	logrus.Info("coming to you from MODIFY INSTANCE FUNCTION")
 	return r.sqlAdminService.Instances.Patch(projectID, instanceName, databaseInstance).Context(ctx).Do()
 }
 
@@ -141,7 +152,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 
 	sqladminService, err := sqladmin.NewService(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson))
 	if err != nil {
-		errMsg := "error building cloudSQL admin service"
+		errMsg := fmt.Sprintf("error building cloudSQL admin service")
 		return nil, croType.StatusMessage(errMsg), err
 	}
 	sqlClient := &sqlClient{
@@ -213,19 +224,14 @@ func (pp *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, p *v1
 
 	foundInstance := getFoundInstance(instances, cloudSQLCreateConfig.Name)
 
-	// TODO setPostgresServiceMaintenanceMetric
-	// TODO exposePostgresMetrics
-	// TODO createCloudSQLConnectionMetric
-
-	defer pp.createCloudSQLConnectionMetric(ctx, p, foundInstance)
-
-	// TODO if foundInstance != nil -> update strategy MGDAPI-4900
+	// TODO setPostgresServiceMaintenanceMetric,exposePostgresMetrics, createCloudSQLConnectionMetric
+	// TODO update strategy MGDAPI-4900
 
 	if foundInstance == nil {
 		logger.Infof("no instance found, creating one")
 		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, cloudSQLCreateConfig)
 		if err != nil {
-			msg := "failed to create gcp instance"
+			msg := "failed to create cloudSQL instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		annotations.Add(p, ResourceIdentifierAnnotation, cloudSQLCreateConfig.Name)
@@ -295,7 +301,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, pg *v1alpha1.Post
 func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, p *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
 	logger := pp.Logger.WithField("action", "deleteCloudSQLInstance")
 
-	_, deleteInstanceRequest, strategyConfig, err := pp.getPostgresConfig(ctx, p)
+	_, _, strategyConfig, err := pp.getPostgresConfig(ctx, p)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -310,11 +316,6 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 
 	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
 
-	if instanceName == "" {
-		msg := "unable to find instance name from annotation"
-		return croType.StatusMessage(msg), fmt.Errorf(msg)
-	}
-
 	foundInstance := getFoundInstance(instances, instanceName)
 
 	if foundInstance != nil {
@@ -324,7 +325,7 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if foundInstance.Name == "" {
-			statusMessage := "unable to get name from instance delete call"
+			statusMessage := fmt.Sprintf("unable to get name from instance delete call")
 			return croType.StatusMessage(statusMessage), nil
 		}
 		if !foundInstance.Settings.DeletionProtectionEnabled {
@@ -337,18 +338,27 @@ func (pp *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkM
 			return "delete detected, Instances.Delete() started", nil
 		}
 
+		if !foundInstance.Settings.DeletionProtectionEnabled {
+			_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
+			if err != nil {
+				msg := fmt.Sprintf("failed to delete postgres instance: %s", instanceName)
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
+			logrus.Info("triggered Instances.Delete()")
+			return "delete detected, Instances.Delete() started", nil
+		}
+
 		update := &sqladmin.DatabaseInstance{
-			Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+			Settings: &sqladmin.Settings{
+				ForceSendFields: []string{"DeletionProtectionEnabled"}, DeletionProtectionEnabled: false},
 		}
 
 		logrus.Info("modifying instance")
-		resp, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
+		_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
 		if err != nil {
 			msg := fmt.Sprintf("failed to modify cloudsql instance: %s", instanceName)
-			logrus.Infof("modify instance response: %v", resp)
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		logrus.Infof("MODIFIED instance DPA %v", foundInstance.Settings.DeletionProtectionEnabled)
 		return croType.StatusMessage("modifying instance"), nil
 	}
 
@@ -449,7 +459,6 @@ func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instance
 
 func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.Postgres) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, *StrategyConfig, error) {
 	strategyConfig, err := pp.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, p.Spec.Tier)
-	logrus.Infof("GET POSTGRES CONFIG strategyConfig.CreateStrategy %v", strategyConfig.CreateStrategy)
 	if err != nil {
 		errMsg := "failed to read gcp strategy config"
 		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
@@ -485,7 +494,6 @@ func (pp *PostgresProvider) getPostgresConfig(ctx context.Context, p *v1alpha1.P
 
 func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*sqladmin.DatabaseInstance, *sqladmin.DatabaseInstance, error) {
 	createInstanceRequest := &sqladmin.DatabaseInstance{}
-	logrus.Infof("buildpostgresconfig createinstancerequest %v", createInstanceRequest)
 	if err := json.Unmarshal(strategyConfig.CreateStrategy, createInstanceRequest); err != nil {
 		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
 	}
@@ -512,7 +520,6 @@ func (pp *PostgresProvider) buildPostgresConfig(p *v1alpha1.Postgres, strategyCo
 }
 
 func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance) error {
-	logrus.Infof("buildCloudSQLCreateStratefy %v", cloudSQLCreateConfig)
 
 	if cloudSQLCreateConfig.DatabaseVersion == "" {
 		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
@@ -560,7 +567,7 @@ func (pp *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, p *
 		cloudSQLCreateConfig.Settings.Tier = defaultTier
 	}
 	if cloudSQLCreateConfig.Settings.AvailabilityType == "" {
-		cloudSQLCreateConfig.Settings.Tier = defaultAvailabilityType
+		cloudSQLCreateConfig.Settings.AvailabilityType = defaultAvailabilityType
 	}
 	if cloudSQLCreateConfig.Settings.StorageAutoResizeLimit == 0 {
 		cloudSQLCreateConfig.Settings.StorageAutoResizeLimit = defaultStorageAutoResizeLimit
@@ -611,32 +618,6 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 	}
-}
-
-func (pp *PostgresProvider) createCloudSQLConnectionMetric(ctx context.Context, p *v1alpha1.Postgres, instance *sqladmin.DatabaseInstance) {
-	instanceName, err := pp.buildInstanceName(ctx, p)
-	if err != nil {
-		logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
-	}
-	logrus.Infof("testing and exposing postgres connection metric for: %s", instanceName)
-	clusterID, err := resources.GetClusterID(ctx, pp.Client)
-	if err != nil {
-		logrus.Errorf("failed to get cluster id while exposing connection metric for %v", instanceName)
-	}
-	genericLabels := buildPostgresGenericMetricLabels(p, clusterID, instanceName)
-
-	if instance == nil {
-		logrus.Infof("foundInstance is nil, setting createCloudSQLConnectionMetric to 0")
-		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
-		return
-	}
-	logrus.Infof("CONTENTS of instance : %v", instance)
-	if instance.IpAddresses == nil {
-		logrus.Infof("instance endpoint not yet available for: %s", instance.Name)
-		resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, 0)
-		return
-	}
-
 }
 
 func getFoundInstance(instances []*sqladmin.DatabaseInstance, instanceName string) *sqladmin.DatabaseInstance {
