@@ -54,7 +54,7 @@ const (
 	defaultAwsPostgresUser               = "postgres"
 	defaultAwsPubliclyAccessible         = false
 	defaultAwsSkipFinalSnapshot          = false
-	defaultCredSecSuffix                 = "-aws-rds-credentials"
+	defaultCredSecSuffix                 = "-aws-rds-credentials" // #nosec G101 -- false positive (ref: https://securego.io/docs/rules/g101.html)
 	defaultPostgresPasswordKey           = "password"
 	defaultPostgresUserKey               = "user"
 	defaultStorageEncrypted              = true
