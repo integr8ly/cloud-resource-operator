@@ -12,7 +12,6 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"net"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +33,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var redisInstanceName = fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, testName)
+const gcpTestRedisInstanceName = "projects/" + gcpTestProjectId + "/locations/" + gcpTestRegion + "/instances/" + testName
+
+func buildTestComputeAddress(argsMap map[string]string) *computepb.Address {
+	address := &computepb.Address{
+		Name:    utils.String(gcpTestIpRangeName),
+		Network: utils.String(fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName)),
+	}
+	if argsMap != nil {
+		if argsMap["status"] != "" {
+			address.Status = utils.String(argsMap["status"])
+		}
+	}
+	return address
+}
 
 func TestNewGCPRedisProvider(t *testing.T) {
 	type args struct {
@@ -117,7 +129,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
-							Name:  redisInstanceName,
+							Name:  gcpTestRedisInstanceName,
 							State: redispb.Instance_READY,
 						}, nil
 					}
@@ -155,7 +167,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
-							Name:  redisInstanceName,
+							Name:  gcpTestRedisInstanceName,
 							State: redispb.Instance_DELETING,
 						}, nil
 					}
@@ -254,7 +266,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
-							Name:  redisInstanceName,
+							Name:  gcpTestRedisInstanceName,
 							State: redispb.Instance_READY,
 						}, nil
 					}
@@ -297,7 +309,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				}),
 				strategyConfig: buildTestStrategyConfig(),
 			},
-			want:    types.StatusMessage("failed to fetch redis instance " + redisInstanceName),
+			want:    types.StatusMessage("failed to fetch redis instance " + gcpTestRedisInstanceName),
 			wantErr: true,
 		},
 		{
@@ -859,13 +871,13 @@ func TestRedisProvider_getRedisInstances(t *testing.T) {
 			args: args{
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
 					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{{Name: redisInstanceName}}, nil
+						return []*redispb.Instance{{Name: gcpTestRedisInstanceName}}, nil
 					}
 				}),
 				projectID: gcpTestProjectId,
 				region:    gcpTestRegion,
 			},
-			want:    []*redispb.Instance{{Name: redisInstanceName}},
+			want:    []*redispb.Instance{{Name: gcpTestRedisInstanceName}},
 			wantErr: false,
 		},
 		{
@@ -934,7 +946,7 @@ func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 				},
 			},
 			want: &redispb.DeleteInstanceRequest{
-				Name: redisInstanceName,
+				Name: gcpTestRedisInstanceName,
 			},
 			wantErr: false,
 		},
@@ -958,7 +970,7 @@ func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 				},
 			},
 			want: &redispb.DeleteInstanceRequest{
-				Name: redisInstanceName,
+				Name: gcpTestRedisInstanceName,
 			},
 			wantErr: false,
 		},
@@ -1017,12 +1029,18 @@ func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 }
 
 func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
-	networkAddress := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName)
+	scheme, _ := buildTestScheme()
 	parent := fmt.Sprintf(redisParentFormat, gcpTestProjectId, gcpTestRegion)
 	instanceID := "gcptestclustertestNstestName"
-	scheme, err := buildTestScheme()
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
+	redisInstance := &redispb.Instance{
+		Name:              fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, instanceID),
+		Tier:              redispb.Instance_STANDARD_HA,
+		ReadReplicasMode:  redispb.Instance_READ_REPLICAS_DISABLED,
+		MemorySizeGb:      redisMemorySizeGB,
+		AuthorizedNetwork: fmt.Sprintf("projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName),
+		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
+		ReservedIpRange:   gcpTestIpRangeName,
+		RedisVersion:      redisVersion,
 	}
 	type fields struct {
 		Client            client.Client
@@ -1034,7 +1052,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 		ctx            context.Context
 		r              *v1alpha1.Redis
 		strategyConfig *StrategyConfig
-		networkAddress string
+		address        *computepb.Address
 	}
 	tests := []struct {
 		name    string
@@ -1056,16 +1074,19 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 					},
 				},
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestRegion,
-					ProjectID:      gcpTestProjectId,
-					CreateStrategy: json.RawMessage(fmt.Sprintf(`{"parent":"%s", "instance_id": "%s", "instance": {} }`, parent, instanceID)),
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+					CreateStrategy: func() json.RawMessage {
+						redisInstance := `{"name":"","tier":0,"read_replicas_mode":0,"memory_size_gb":0,"authorized_network":"","connect_mode":0,"reserved_ip_range":"","redis_version":""}`
+						return json.RawMessage(fmt.Sprintf(`{"parent":"%s","instance_id":"%s","instance":%s}`, parent, instanceID, redisInstance))
+					}(),
 				},
-				networkAddress: networkAddress,
+				address: buildTestComputeAddress(nil),
 			},
 			want: &redispb.CreateInstanceRequest{
 				Parent:     parent,
 				InstanceId: instanceID,
-				Instance:   &redispb.Instance{},
+				Instance:   redisInstance,
 			},
 			wantErr: false,
 		},
@@ -1086,18 +1107,12 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
-				networkAddress: networkAddress,
+				address: buildTestComputeAddress(nil),
 			},
 			want: &redispb.CreateInstanceRequest{
 				Parent:     parent,
 				InstanceId: instanceID,
-				Instance: &redispb.Instance{
-					Name:              fmt.Sprintf(redisInstanceNameFormat, gcpTestProjectId, gcpTestRegion, instanceID),
-					Tier:              redispb.Instance_STANDARD_HA,
-					MemorySizeGb:      redisMemorySizeGB,
-					AuthorizedNetwork: strings.Split(networkAddress, "v1/")[1],
-					RedisVersion:      redisVersion,
-				},
+				Instance:   redisInstance,
 			},
 			wantErr: false,
 		},
@@ -1138,7 +1153,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
-				networkAddress: networkAddress,
+				address: buildTestComputeAddress(nil),
 			},
 			want:    nil,
 			wantErr: true,
@@ -1152,7 +1167,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.buildCreateInstanceRequest(context.TODO(), tt.args.r, tt.args.strategyConfig, tt.args.networkAddress)
+			got, err := p.buildCreateInstanceRequest(context.TODO(), tt.args.r, tt.args.strategyConfig, tt.args.address)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildCreateInstanceRequest() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1168,7 +1183,6 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1.AddToScheme(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
-	networkAddress := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName)
 	redisCR := &v1alpha1.Redis{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testName,
@@ -1209,10 +1223,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			args: args{
 				networkManager: &NetworkManagerMock{
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1297,10 +1308,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVING.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVING.String()}), nil
 					},
 				},
 				r: &v1alpha1.Redis{},
@@ -1320,10 +1328,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return nil, fmt.Errorf("generic error")
@@ -1346,10 +1351,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return nil, nil
@@ -1372,10 +1374,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1403,10 +1402,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1441,10 +1437,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1488,10 +1481,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1529,10 +1519,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 						}, nil
 					},
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil
@@ -1570,10 +1557,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			args: args{
 				networkManager: &NetworkManagerMock{
 					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return &computepb.Address{
-							Status:  utils.String(computepb.Address_RESERVED.String()),
-							Network: &networkAddress,
-						}, nil
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
 					},
 					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
 						return &servicenetworking.Connection{}, nil

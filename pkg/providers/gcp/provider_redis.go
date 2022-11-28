@@ -24,7 +24,7 @@ import (
 
 const (
 	redisInstanceNameFormat = "projects/%s/locations/%s/instances/%s"
-	redisMemorySizeGB       = 16
+	redisMemorySizeGB       = 1
 	redisParentFormat       = "projects/%s/locations/%s"
 	redisProviderName       = "gcp-memorystore"
 	redisVersion            = "REDIS_6_X"
@@ -123,7 +123,7 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 	}
 	p.Logger.Infof("created network service connection %s", service.Service)
 
-	createInstanceRequest, err := p.buildCreateInstanceRequest(ctx, r, strategyConfig, *address.Network)
+	createInstanceRequest, err := p.buildCreateInstanceRequest(ctx, r, strategyConfig, address)
 	if err != nil {
 		statusMessage := "failed to build create redis instance request"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
@@ -290,7 +290,7 @@ func (p *RedisProvider) getRedisStrategyConfig(ctx context.Context, tier string)
 	return strategyConfig, nil
 }
 
-func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alpha1.Redis, strategyConfig *StrategyConfig, networkAddress string) (*redispb.CreateInstanceRequest, error) {
+func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alpha1.Redis, strategyConfig *StrategyConfig, address *computepb.Address) (*redispb.CreateInstanceRequest, error) {
 	createInstanceRequest := &redispb.CreateInstanceRequest{}
 	if err := json.Unmarshal(strategyConfig.CreateStrategy, createInstanceRequest); err != nil {
 		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp redis create strategy")
@@ -305,14 +305,43 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		}
 		createInstanceRequest.InstanceId = instanceID
 	}
+	defaultInstance := &redispb.Instance{
+		Name:              fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, createInstanceRequest.InstanceId),
+		Tier:              redispb.Instance_STANDARD_HA,
+		ReadReplicasMode:  redispb.Instance_READ_REPLICAS_DISABLED,
+		MemorySizeGb:      redisMemorySizeGB,
+		AuthorizedNetwork: strings.Split(address.GetNetwork(), "v1/")[1],
+		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
+		ReservedIpRange:   address.GetName(),
+		RedisVersion:      redisVersion,
+	}
 	if createInstanceRequest.Instance == nil {
-		createInstanceRequest.Instance = &redispb.Instance{
-			Name:              fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, createInstanceRequest.InstanceId),
-			Tier:              redispb.Instance_STANDARD_HA,
-			MemorySizeGb:      redisMemorySizeGB,
-			AuthorizedNetwork: strings.Split(networkAddress, "v1/")[1],
-			RedisVersion:      redisVersion,
-		}
+		createInstanceRequest.Instance = defaultInstance
+		return createInstanceRequest, nil
+	}
+	if createInstanceRequest.Instance.Name == "" {
+		createInstanceRequest.Instance.Name = defaultInstance.Name
+	}
+	if createInstanceRequest.Instance.Tier == 0 {
+		createInstanceRequest.Instance.Tier = defaultInstance.Tier
+	}
+	if createInstanceRequest.Instance.ReadReplicasMode == 0 {
+		createInstanceRequest.Instance.ReadReplicasMode = defaultInstance.ReadReplicasMode
+	}
+	if createInstanceRequest.Instance.MemorySizeGb == 0 {
+		createInstanceRequest.Instance.MemorySizeGb = defaultInstance.MemorySizeGb
+	}
+	if createInstanceRequest.Instance.AuthorizedNetwork == "" {
+		createInstanceRequest.Instance.AuthorizedNetwork = defaultInstance.AuthorizedNetwork
+	}
+	if createInstanceRequest.Instance.ConnectMode == 0 {
+		createInstanceRequest.Instance.ConnectMode = defaultInstance.ConnectMode
+	}
+	if createInstanceRequest.Instance.ReservedIpRange == "" {
+		createInstanceRequest.Instance.ReservedIpRange = defaultInstance.ReservedIpRange
+	}
+	if createInstanceRequest.Instance.RedisVersion == "" {
+		createInstanceRequest.Instance.RedisVersion = defaultInstance.RedisVersion
 	}
 	return createInstanceRequest, nil
 }
