@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
@@ -23,7 +24,10 @@ import (
 
 const (
 	redisInstanceNameFormat = "projects/%s/locations/%s/instances/%s"
+	redisMemorySizeGB       = 1
+	redisParentFormat       = "projects/%s/locations/%s"
 	redisProviderName       = "gcp-memorystore"
+	redisVersion            = "REDIS_6_X"
 )
 
 type RedisProvider struct {
@@ -63,7 +67,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	logger := p.Logger.WithField("action", "CreateRedis")
 	logger.Infof("reconciling redis %s", r.Name)
 
-	_, _, strategyConfig, err := p.getRedisConfig(ctx, r)
+	strategyConfig, err := p.getRedisStrategyConfig(ctx, r.Spec.Tier)
 	if err != nil {
 		statusMessage := "failed to retrieve redis strategy config"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
@@ -83,8 +87,16 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		statusMessage := "failed to initialise network manager"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
-	// get cidr block from _network strat map, based on tier from postgres cr
-	ipRangeCidr, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier, logger)
+	redisClient, err := gcpiface.NewRedisAPI(ctx, clientOption)
+	if err != nil {
+		statusMessage := "could not initialise redis client"
+		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+	}
+	return p.createRedisInstance(ctx, networkManager, redisClient, strategyConfig, r)
+}
+
+func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager NetworkManager, redisClient gcpiface.RedisAPI, strategyConfig *StrategyConfig, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
+	ipRangeCidr, err := networkManager.ReconcileNetworkProviderConfig(ctx, p.ConfigManager, r.Spec.Tier)
 	if err != nil {
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -98,8 +110,8 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		statusMessage := "network ip address range creation in progress"
 		return nil, croType.StatusMessage(statusMessage), nil
 	}
-	logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
-	logger.Infof("creating network service connection")
+	p.Logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
+	p.Logger.Infof("creating network service connection")
 	service, err := networkManager.CreateNetworkService(ctx)
 	if err != nil {
 		statusMessage := "failed to create network service"
@@ -109,23 +121,50 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 		statusMessage := "network service connection creation in progress"
 		return nil, croType.StatusMessage(statusMessage), nil
 	}
-	logger.Infof("created network service connection %s", service.Service)
+	p.Logger.Infof("created network service connection %s", service.Service)
 
-	//TODO implement me
-	return p.createRedisCluster(ctx, r)
-}
-
-func (p *RedisProvider) createRedisCluster(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
-	// TODO implement me
-	statusMessage := "successfully created gcp redis"
-	return nil, croType.StatusMessage(statusMessage), nil
+	createInstanceRequest, err := p.buildCreateInstanceRequest(ctx, r, strategyConfig, address)
+	if err != nil {
+		statusMessage := "failed to build create redis instance request"
+		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+	}
+	foundInstance, err := redisClient.GetInstance(ctx, &redispb.GetInstanceRequest{Name: createInstanceRequest.Instance.Name})
+	if err != nil && !resources.IsNotFoundError(err) {
+		statusMessage := fmt.Sprintf("failed to fetch redis instance %s", createInstanceRequest.InstanceId)
+		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+	}
+	if foundInstance == nil {
+		_, err = redisClient.CreateInstance(ctx, createInstanceRequest)
+		if err != nil {
+			statusMessage := fmt.Sprintf("failed to create redis instance %s", createInstanceRequest.InstanceId)
+			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+		}
+		annotations.Add(r, ResourceIdentifierAnnotation, createInstanceRequest.InstanceId)
+		if err := p.Client.Update(ctx, r); err != nil {
+			statusMessage := "failed to add annotation to redis cr"
+			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+		}
+		statusMessage := "started creation of gcp redis instance"
+		return nil, croType.StatusMessage(statusMessage), nil
+	}
+	if foundInstance.State != redispb.Instance_READY {
+		statusMessage := fmt.Sprintf("creation in progress for redis instance %s", r.Name)
+		return nil, croType.StatusMessage(statusMessage), nil
+	}
+	rdd := &providers.RedisDeploymentDetails{
+		URI:  foundInstance.Host,
+		Port: int64(foundInstance.Port),
+	}
+	statusMessage := fmt.Sprintf("successfully created gcp redis instance %s", r.Name)
+	p.Logger.Info(statusMessage)
+	return &providers.RedisCluster{DeploymentDetails: rdd}, croType.StatusMessage(statusMessage), nil
 }
 
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "DeleteRedis")
 	logger.Infof("reconciling delete redis %s", r.Name)
 
-	_, deleteInstanceRequest, strategyConfig, err := p.getRedisConfig(ctx, r)
+	strategyConfig, err := p.getRedisStrategyConfig(ctx, r.Spec.Tier)
 	if err != nil {
 		statusMessage := "failed to retrieve redis strategy config"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
@@ -151,21 +190,19 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 		statusMessage := "could not initialise redis client"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
-	return p.deleteRedisCluster(ctx, networkManager, redisClient, deleteInstanceRequest, strategyConfig, r, isLastResource)
+	return p.deleteRedisInstance(ctx, networkManager, redisClient, strategyConfig, r, isLastResource)
 }
 
-func (p *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager NetworkManager, redisClient gcpiface.RedisAPI, deleteInstanceRequest *redispb.DeleteInstanceRequest, strategyConfig *StrategyConfig, r *v1alpha1.Redis, isLastResource bool) (croType.StatusMessage, error) {
-	redisInstances, err := p.getRedisInstances(ctx, redisClient, strategyConfig.ProjectID, strategyConfig.Region)
+func (p *RedisProvider) deleteRedisInstance(ctx context.Context, networkManager NetworkManager, redisClient gcpiface.RedisAPI, strategyConfig *StrategyConfig, r *v1alpha1.Redis, isLastResource bool) (croType.StatusMessage, error) {
+	deleteInstanceRequest, err := p.buildDeleteInstanceRequest(r, strategyConfig)
 	if err != nil {
-		statusMessage := "failed to retrieve redis instances"
+		statusMessage := "failed to build delete redis instance request"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
-	var foundInstance *redispb.Instance
-	for _, instance := range redisInstances {
-		if instance.Name == deleteInstanceRequest.Name {
-			foundInstance = instance
-			break
-		}
+	foundInstance, err := redisClient.GetInstance(ctx, &redispb.GetInstanceRequest{Name: deleteInstanceRequest.Name})
+	if err != nil && !resources.IsNotFoundError(err) {
+		statusMessage := fmt.Sprintf("failed to fetch redis instance %s", deleteInstanceRequest.Name)
+		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	if foundInstance != nil {
 		if foundInstance.State == redispb.Instance_DELETING {
@@ -211,7 +248,7 @@ func (p *RedisProvider) deleteRedisCluster(ctx context.Context, networkManager N
 		statusMessage := fmt.Sprintf("failed to update instance %s as part of finalizer reconcile", r.Name)
 		return croType.StatusMessage(statusMessage), errorUtil.Wrapf(err, statusMessage)
 	}
-	statusMessage := fmt.Sprintf("successfully deleted redis instance %s", r.Name)
+	statusMessage := fmt.Sprintf("successfully deleted gcp redis instance %s", r.Name)
 	return croType.StatusMessage(statusMessage), nil
 }
 
@@ -226,16 +263,16 @@ func (p *RedisProvider) getRedisInstances(ctx context.Context, redisClient gcpif
 	return instances, nil
 }
 
-func (p *RedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (*redispb.CreateInstanceRequest, *redispb.DeleteInstanceRequest, *StrategyConfig, error) {
-	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
+func (p *RedisProvider) getRedisStrategyConfig(ctx context.Context, tier string) (*StrategyConfig, error) {
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, tier)
 	if err != nil {
 		errMsg := "failed to read gcp strategy config"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
 	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp project"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
 	if strategyConfig.ProjectID == "" {
 		p.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
@@ -244,34 +281,82 @@ func (p *RedisProvider) getRedisConfig(ctx context.Context, r *v1alpha1.Redis) (
 	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp region"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
 	if strategyConfig.Region == "" {
 		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
 		strategyConfig.Region = defaultRegion
 	}
-	createInstanceRequest, deleteInstanceRequest, err := p.buildRedisConfig(r, strategyConfig)
-	if err != nil {
-		return nil, nil, nil, errorUtil.Wrap(err, "failed to build redis config")
-	}
-	return createInstanceRequest, deleteInstanceRequest, strategyConfig, nil
+	return strategyConfig, nil
 }
 
-func (p *RedisProvider) buildRedisConfig(r *v1alpha1.Redis, strategyConfig *StrategyConfig) (*redispb.CreateInstanceRequest, *redispb.DeleteInstanceRequest, error) {
-	// TODO (MGDAPI-4667): create a request with all required fields
+func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alpha1.Redis, strategyConfig *StrategyConfig, address *computepb.Address) (*redispb.CreateInstanceRequest, error) {
 	createInstanceRequest := &redispb.CreateInstanceRequest{}
+	if err := json.Unmarshal(strategyConfig.CreateStrategy, createInstanceRequest); err != nil {
+		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp redis create strategy")
+	}
+	if createInstanceRequest.Parent == "" {
+		createInstanceRequest.Parent = fmt.Sprintf(redisParentFormat, strategyConfig.ProjectID, strategyConfig.Region)
+	}
+	if createInstanceRequest.InstanceId == "" {
+		instanceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, r.ObjectMeta, defaultGcpIdentifierLength)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to build redis instance id from object")
+		}
+		createInstanceRequest.InstanceId = instanceID
+	}
+	defaultInstance := &redispb.Instance{
+		Name:              fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, createInstanceRequest.InstanceId),
+		Tier:              redispb.Instance_STANDARD_HA,
+		ReadReplicasMode:  redispb.Instance_READ_REPLICAS_DISABLED,
+		MemorySizeGb:      redisMemorySizeGB,
+		AuthorizedNetwork: strings.Split(address.GetNetwork(), "v1/")[1],
+		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
+		ReservedIpRange:   address.GetName(),
+		RedisVersion:      redisVersion,
+	}
+	if createInstanceRequest.Instance == nil {
+		createInstanceRequest.Instance = defaultInstance
+		return createInstanceRequest, nil
+	}
+	if createInstanceRequest.Instance.Name == "" {
+		createInstanceRequest.Instance.Name = defaultInstance.Name
+	}
+	if createInstanceRequest.Instance.Tier == 0 {
+		createInstanceRequest.Instance.Tier = defaultInstance.Tier
+	}
+	if createInstanceRequest.Instance.ReadReplicasMode == 0 {
+		createInstanceRequest.Instance.ReadReplicasMode = defaultInstance.ReadReplicasMode
+	}
+	if createInstanceRequest.Instance.MemorySizeGb == 0 {
+		createInstanceRequest.Instance.MemorySizeGb = defaultInstance.MemorySizeGb
+	}
+	if createInstanceRequest.Instance.AuthorizedNetwork == "" {
+		createInstanceRequest.Instance.AuthorizedNetwork = defaultInstance.AuthorizedNetwork
+	}
+	if createInstanceRequest.Instance.ConnectMode == 0 {
+		createInstanceRequest.Instance.ConnectMode = defaultInstance.ConnectMode
+	}
+	if createInstanceRequest.Instance.ReservedIpRange == "" {
+		createInstanceRequest.Instance.ReservedIpRange = defaultInstance.ReservedIpRange
+	}
+	if createInstanceRequest.Instance.RedisVersion == "" {
+		createInstanceRequest.Instance.RedisVersion = defaultInstance.RedisVersion
+	}
+	return createInstanceRequest, nil
+}
 
+func (p *RedisProvider) buildDeleteInstanceRequest(r *v1alpha1.Redis, strategyConfig *StrategyConfig) (*redispb.DeleteInstanceRequest, error) {
 	deleteInstanceRequest := &redispb.DeleteInstanceRequest{}
 	if err := json.Unmarshal(strategyConfig.DeleteStrategy, deleteInstanceRequest); err != nil {
-		return nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp redis delete strategy")
+		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp redis delete strategy")
 	}
 	if deleteInstanceRequest.Name == "" {
 		resourceID := annotations.Get(r, ResourceIdentifierAnnotation)
 		if resourceID == "" {
-			errMsg := "failed to find redis instance name from annotations"
-			return nil, nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("failed to find redis instance name from annotations")
 		}
 		deleteInstanceRequest.Name = fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, resourceID)
 	}
-	return createInstanceRequest, deleteInstanceRequest, nil
+	return deleteInstanceRequest, nil
 }
