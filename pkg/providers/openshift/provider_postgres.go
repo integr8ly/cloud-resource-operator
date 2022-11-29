@@ -41,7 +41,7 @@ var (
 	defaultPostgresUserKey     = "user"
 	defaultPostgresPasswordKey = "password"
 	defaultPostgresDatabaseKey = "database"
-	defaultCredentialsSec      = "postgres-credentials"
+	defaultCredentialsSec      = "postgres-credentials" // #nosec G101 -- false positive (ref: https://securego.io/docs/rules/g101.html)
 )
 
 // PostgresStrat to be used to unmarshal strat map
