@@ -28,7 +28,7 @@ import (
 func buildTestPostgres() *v1alpha1.Postgres {
 	postgres := buildTestPostgresWithoutAnnotation()
 	postgres.Annotations = map[string]string{
-		ResourceIdentifierAnnotation: "testcloudsqldb-id",
+		ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 	}
 	return postgres
 }
@@ -99,7 +99,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -117,7 +117,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:  "testcloudsqldb-id",
+									Name:  "gcptestclustertestNsgcpcloudsql",
 									State: "PENDING_DELETE",
 								},
 							},
@@ -127,7 +127,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "postgres instance testcloudsqldb-id is already deleting",
+			want:    "postgres instance gcptestclustertestNsgcpcloudsql is already deleting",
 			wantErr: false,
 		},
 
@@ -138,7 +138,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -156,7 +156,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:     "testcloudsqldb-id",
+									Name:     "gcptestclustertestNsgcpcloudsql",
 									State:    "RUNNABLE",
 									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 								},
@@ -164,13 +164,13 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return nil, errors.New("failed to delete cloudSQL instance: testcloudsqldb-id")
+						return nil, errors.New("failed to delete cloudSQL instance: gcptestclustertestNsgcpcloudsql")
 					}
 				}),
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "failed to delete postgres instance: testcloudsqldb-id",
+			want:    "failed to delete postgres instance: gcptestclustertestNsgcpcloudsql",
 			wantErr: true,
 		},
 		{
@@ -180,7 +180,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -221,7 +221,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -253,7 +253,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -280,7 +280,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -307,7 +307,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -325,7 +325,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:     "testcloudsqldb-id",
+									Name:     "gcptestclustertestNsgcpcloudsql",
 									State:    "RUNNABLE",
 									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 								},
@@ -346,7 +346,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -364,7 +364,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:     "testcloudsqldb-id",
+									Name:     "gcptestclustertestNsgcpcloudsql",
 									State:    "RUNNABLE",
 									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 								},
@@ -378,7 +378,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "failed to delete postgres instance: testcloudsqldb-id",
+			want:    "failed to delete postgres instance: gcptestclustertestNsgcpcloudsql",
 			wantErr: true,
 		},
 		{
@@ -394,7 +394,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -410,7 +410,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -429,7 +429,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -447,7 +447,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:     "testcloudsqldb-id",
+									Name:     "gcptestclustertestNsgcpcloudsql",
 									State:    "RUNNABLE",
 									Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
 								},
@@ -460,7 +460,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				}),
 				isLastResource: false,
 			},
-			want:    "failed to modify cloudsql instance: testcloudsqldb-id",
+			want:    "failed to modify cloudsql instance: gcptestclustertestNsgcpcloudsql",
 			wantErr: true,
 		},
 		{
@@ -475,7 +475,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -491,7 +491,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -527,7 +527,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -543,7 +543,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -582,7 +582,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -598,7 +598,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -640,7 +640,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -656,7 +656,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -701,7 +701,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return &StrategyConfig{
-							Region:         defaultGCPCloudSQLRegion,
+							Region:         gcpTestRegion,
 							ProjectID:      "project-id",
 							CreateStrategy: json.RawMessage(`{}`),
 							DeleteStrategy: json.RawMessage(`{}`),
@@ -717,7 +717,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
 				},
@@ -914,7 +914,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -983,7 +983,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -1006,7 +1006,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 							Name:      postgresProviderName,
 							Namespace: testNs,
 							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 							},
 						},
 					},
@@ -1028,7 +1028,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -1051,7 +1051,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 							Name:      postgresProviderName,
 							Namespace: testNs,
 							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 							},
 						},
 					},
@@ -1065,14 +1065,14 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
 				},
 				sqladminService: gcpiface.GetMockSQLClient(nil),
 			},
-			want:    "failed to get cluster id while exposing information metric for testcloudsqldb-id",
+			want:    "failed to get cluster id while exposing information metric for gcptestclustertestNsgcpcloudsql",
 			wantErr: true,
 		},
 		{
@@ -1088,7 +1088,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 							Name:      postgresProviderName,
 							Namespace: testNs,
 							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsqld",
 							},
 							Labels: map[string]string{
 								"clusterID": "cluster",
@@ -1116,7 +1116,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -1178,7 +1178,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 							Name:      postgresProviderName,
 							Namespace: testNs,
 							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 							},
 						},
 					},
@@ -1205,7 +1205,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -1228,7 +1228,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 							Name:      postgresProviderName,
 							Namespace: testNs,
 							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "testcloudsqldb-id",
+								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 							},
 						},
 					},
@@ -1255,7 +1255,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 						DeletionTimestamp: &metav1.Time{Time: now},
 					},
@@ -1353,7 +1353,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:  "testcloudsqldb-id",
+									Name:  "gcptestclustertestNsgcpcloudsql",
 									State: "RUNNABLE",
 								},
 							},
@@ -1397,6 +1397,109 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "success building cloudSQL create strategy using defaults when settings object is not nil",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte("user"),
+						defaultPostgresPasswordKey: []byte("password"),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+				}),
+				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
+					Settings: &sqladmin.Settings{
+						BackupConfiguration: &sqladmin.BackupConfiguration{BackupRetentionSettings: &sqladmin.BackupRetentionSettings{}},
+					},
+				},
+				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow: false,
+			},
+			want:    "started cloudSQL provision",
+			wantErr: false,
+		},
+		{
+			name: "success building cloudSQL create strategy using defaults when settings object is nil",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte("user"),
+						defaultPostgresPasswordKey: []byte("password"),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+				}),
+				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{},
+				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow:    false,
+			},
+			want:    "started cloudSQL provision",
+			wantErr: false,
+		},
+		{
+			name: "success building cloudSQL create strategy using defaults when backup config object is nil",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte("user"),
+						defaultPostgresPasswordKey: []byte("password"),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{},
+						}, nil
+					}
+				}),
+				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{Settings: &sqladmin.Settings{}},
+				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow:    false,
+			},
+			want:    "started cloudSQL provision",
+			wantErr: false,
+		},
+		{
 			name: "success finding instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -1420,7 +1523,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:  "testcloudsqldb-id",
+									Name:  "gcptestclustertestNsgcpcloudsql",
 									State: "RUNNABLE",
 								},
 							},
@@ -1428,7 +1531,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  "testcloudsqldb-id",
+					Name:  "gcptestclustertestNsgcpcloudsql",
 					State: "RUNNABLE",
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
@@ -1461,7 +1564,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
 								{
-									Name:  "testcloudsqldb-id",
+									Name:  "gcptestclustertestNsgcpcloudsql",
 									State: "PENDING_CREATE",
 								},
 							},
@@ -1469,13 +1572,13 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  "testcloudsqldb-id",
+					Name:  "gcptestclustertestNsgcpcloudsql",
 					State: "RUNNABLE",
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow: false,
 			},
-			want:    "creation of testcloudsqldb-id cloudSQL instance in progress",
+			want:    "creation of gcptestclustertestNsgcpcloudsql cloudSQL instance in progress",
 			wantErr: false,
 		},
 		{
@@ -1503,7 +1606,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					}
 				}),
 				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  "testcloudsqldb-id",
+					Name:  "gcptestclustertestNsgcpcloudsql",
 					State: "RUNNABLE",
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
@@ -1513,7 +1616,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "failed to add annotation to postgres CR",
+			name: "error creating cloudSQL instance",
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -1524,9 +1627,9 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 							defaultPostgresUserKey:     []byte("user"),
 							defaultPostgresPasswordKey: []byte("password"),
 						},
-					}, buildTestGcpInfrastructure(nil))
+					}, buildTestPostgres(), buildTestGcpInfrastructure(nil))
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return fmt.Errorf("failed to add annotation")
+						return errors.New("failed to add annotation")
 					}
 					return mc
 				}(),
@@ -1541,12 +1644,12 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:  "testcloudsqldb-id",
-									State: "RUNNABLE",
-								},
+								{},
 							},
 						}, nil
+					}
+					sqlClient.CreateInstanceFn = func(ctx context.Context, s string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return &sqladmin.Operation{}, nil
 					}
 				}),
 				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{},
@@ -1592,14 +1695,14 @@ func Test_getFoundInstance(t *testing.T) {
 			args: args{
 				instances: []*sqladmin.DatabaseInstance{
 					{
-						Name:  "testcloudsqldb-id",
+						Name:  "gcptestclustertestNsgcpcloudsql",
 						State: "RUNNABLE",
 					},
 				},
-				instanceName: "testcloudsqldb-id",
+				instanceName: "gcptestclustertestNsgcpcloudsql",
 			},
 			want: &sqladmin.DatabaseInstance{
-				Name:  "testcloudsqldb-id",
+				Name:  "gcptestclustertestNsgcpcloudsql",
 				State: "RUNNABLE",
 			},
 		},
@@ -1740,7 +1843,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 	}
 }
 
-func TestPostgresProvider_buildPostgresConfig(t *testing.T) {
+func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -1752,8 +1855,8 @@ func TestPostgresProvider_buildPostgresConfig(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		p              *v1alpha1.Postgres
-		strategyConfig *StrategyConfig
+		ctx context.Context
+		pg  *v1alpha1.Postgres
 	}
 	tests := []struct {
 		name                  string
@@ -1761,50 +1864,76 @@ func TestPostgresProvider_buildPostgresConfig(t *testing.T) {
 		args                  args
 		createInstanceRequest *sqladmin.DatabaseInstance
 		deleteInstanceRequest *sqladmin.DatabaseInstance
+		strategyConfig        *StrategyConfig
 		wantErr               bool
 	}{
 		{
 			name: "success building create instance request",
 			fields: fields{
-				Client: nil,
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					return mc
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				p: &v1alpha1.Postgres{
+				ctx: context.TODO(),
+				pg: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"name": "testcloudsqldb-id", "region": "us-central1"}`),
-					DeleteStrategy: json.RawMessage(`{}`),
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{
-				Name:   "testcloudsqldb-id",
-				Region: defaultGCPCloudSQLRegion,
-			},
+			createInstanceRequest: &sqladmin.DatabaseInstance{},
 			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
 		},
 		{
 			name: "failure building create instance request",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
 					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 						return errors.New("failed to unmarshal gcp postgres create request")
 					}
 					return mc
 				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: nil,
+							DeleteStrategy: nil,
+						}, nil
+					},
+				},
 			},
 			args: args{
-				p: &v1alpha1.Postgres{
+				pg: &v1alpha1.Postgres{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      postgresProviderName,
 						Namespace: testNs,
@@ -1813,117 +1942,82 @@ func TestPostgresProvider_buildPostgresConfig(t *testing.T) {
 						},
 					},
 				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: nil,
-					DeleteStrategy: nil,
-				},
 			},
 			createInstanceRequest: nil,
 			deleteInstanceRequest: nil,
-			wantErr:               true,
-		},
-		{
-			name: "failed to find postgres name from annotation - for create request",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						return errors.New("generic error")
-					}
-					return mc
-				}(),
-			},
-			args: args{
-				p: &v1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName,
-						Namespace: testNs,
-					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"name": "", "region": "us-central1"}`),
-					DeleteStrategy: json.RawMessage(`{}`),
-				},
-			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
-			wantErr:               true,
-		},
-		{
-			name: "failed to find postgres name from annotation - for delete request",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
-						return errors.New("generic error")
-					}
-					return mc
-				}(),
-			},
-			args: args{
-				p: &v1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName,
-						Namespace: testNs,
-					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: json.RawMessage(`{"name": "", "region": "us-central1"}`),
-				},
-			},
-			createInstanceRequest: nil,
-			deleteInstanceRequest: nil,
+			strategyConfig:        nil,
 			wantErr:               true,
 		},
 		{
 			name: "success building delete instance request",
 			fields: fields{
-				Client: nil,
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					mc.DeleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+						return nil
+					}
+					return mc
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				p: &v1alpha1.Postgres{
+				ctx: context.TODO(),
+				pg: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      postgresProviderName,
 						Namespace: testNs,
 						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "testcloudsqldb-id",
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
 						},
 					},
-				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{}`),
-					DeleteStrategy: json.RawMessage(`{"name": "testcloudsqldb-id", "region": "us-central1"}`),
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
 				},
 			},
 			createInstanceRequest: &sqladmin.DatabaseInstance{},
-			deleteInstanceRequest: &sqladmin.DatabaseInstance{
-				Name:   "testcloudsqldb-id",
-				Region: defaultGCPCloudSQLRegion,
-			},
-			wantErr: false,
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			strategyConfig:        buildTestStrategyConfig(),
+			wantErr:               false,
 		},
 		{
 			name: "failure building delete instance request",
 			fields: fields{
 				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
 					mc.DeleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 						return errors.New("failed to unmarshal gcp postgres create request")
 					}
 					return mc
 				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: nil,
+						}, nil
+					},
+				},
 			},
 			args: args{
-				p: &v1alpha1.Postgres{
+				pg: &v1alpha1.Postgres{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      postgresProviderName,
 						Namespace: testNs,
@@ -1932,36 +2026,122 @@ func TestPostgresProvider_buildPostgresConfig(t *testing.T) {
 						},
 					},
 				},
-				strategyConfig: &StrategyConfig{
-					Region:         defaultGCPCloudSQLRegion,
-					ProjectID:      "sample-project-id",
-					CreateStrategy: nil,
-					DeleteStrategy: nil,
-				},
 			},
 			createInstanceRequest: nil,
 			deleteInstanceRequest: nil,
+			strategyConfig:        nil,
 			wantErr:               true,
+		},
+		{
+			name: "If strategyConfig.ProjectID is empty, log and set it to default project",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					return mc
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      "",
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
+						},
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
+				},
+			},
+			createInstanceRequest: &sqladmin.DatabaseInstance{},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			strategyConfig:        buildTestStrategyConfig(),
+			wantErr:               false,
+		},
+		{
+			name: "If strategyConfig.Region is empty, log and set it to default project",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					return mc
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         "",
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: json.RawMessage(`{}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
+						},
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
+				},
+			},
+			createInstanceRequest: &sqladmin.DatabaseInstance{},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			strategyConfig:        buildTestStrategyConfig(),
+			wantErr:               false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pp := &PostgresProvider{
+			p := &PostgresProvider{
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, got1, err := pp.buildPostgresConfig(tt.args.p, tt.args.strategyConfig)
+			got, got1, got2, err := p.getPostgresConfig(tt.args.ctx, tt.args.pg)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("buildPostgresConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("getPostgresConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.createInstanceRequest) {
-				t.Errorf("buildPostgresConfig() got = %v, want %v", got, tt.createInstanceRequest)
+				t.Errorf("getPostgresConfig() got = %v, want %v", got, tt.createInstanceRequest)
 			}
 			if !reflect.DeepEqual(got1, tt.deleteInstanceRequest) {
-				t.Errorf("buildPostgresConfig() got1 = %v, want %v", got1, tt.deleteInstanceRequest)
+				t.Errorf("getPostgresConfig() got1 = %v, want %v", got1, tt.deleteInstanceRequest)
+			}
+			if !reflect.DeepEqual(got2, tt.strategyConfig) {
+				t.Errorf("getPostgresConfig() got2 = %v, want %v", got2, tt.strategyConfig)
 			}
 		})
 	}
