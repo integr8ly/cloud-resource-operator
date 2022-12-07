@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"testing"
 	"time"
-
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 
@@ -113,14 +112,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:  "gcptestclustertestNsgcpcloudsql",
-									State: "PENDING_DELETE",
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:  "gcptestclustertestNsgcpcloudsql",
+							State: "PENDING_DELETE",
 						}, nil
 					}
 				}),
@@ -152,15 +147,11 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:     "gcptestclustertestNsgcpcloudsql",
-									State:    "RUNNABLE",
-									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:     "gcptestclustertestNsgcpcloudsql",
+							State:    "RUNNABLE",
+							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -174,7 +165,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error when getting cloud sql instances",
+			name: "error when getting cloud sql instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				ConfigManager: &ConfigManagerMock{
@@ -194,6 +185,9 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return nil, fmt.Errorf("cannot retrieve sql instance from gcp")
+					}
 					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
 							Items: []*sqladmin.DatabaseInstance{
@@ -205,7 +199,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "cannot retrieve sql instances from gcp",
+			want:    "cannot retrieve sql instance from gcp",
 			wantErr: true,
 		},
 		{
@@ -321,15 +315,11 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:     "gcptestclustertestNsgcpcloudsql",
-									State:    "RUNNABLE",
-									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:     "gcptestclustertestNsgcpcloudsql",
+							State:    "RUNNABLE",
+							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 						}, nil
 					}
 				}),
@@ -360,15 +350,11 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:     "gcptestclustertestNsgcpcloudsql",
-									State:    "RUNNABLE",
-									Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:     "gcptestclustertestNsgcpcloudsql",
+							State:    "RUNNABLE",
+							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -443,15 +429,11 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				p:              buildTestPostgres(),
 				networkManager: buildMockNetworkManager(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:     "gcptestclustertestNsgcpcloudsql",
-									State:    "RUNNABLE",
-									Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:     "gcptestclustertestNsgcpcloudsql",
+							State:    "RUNNABLE",
+							Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
 						}, nil
 					}
 					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
@@ -1215,56 +1197,6 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 			want:    "failed to reconcile gcp postgres provider credentials for postgres instance gcp-cloudsql",
 			wantErr: true,
 		},
-		{
-			name: "error building cloudSQL admin service",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-					Name:      postgresProviderName + defaultCredSecSuffix,
-					Namespace: testNs,
-				},
-				},
-					&v1alpha1.Postgres{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      postgresProviderName,
-							Namespace: testNs,
-							Annotations: map[string]string{
-								ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
-							},
-						},
-					},
-					&v1.Infrastructure{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "cluster",
-						},
-						Status: v1.InfrastructureStatus{
-							InfrastructureName: "cluster",
-						},
-					},
-				),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: &CredentialManagerMock{
-					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
-						return &Credentials{}, nil
-					},
-				},
-			},
-			args: args{
-				ctx: context.TODO(),
-				p: &v1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName,
-						Namespace: testNs,
-						Annotations: map[string]string{
-							ResourceIdentifierAnnotation: "gcptestclustertestNsgcpcloudsql",
-						},
-						DeletionTimestamp: &metav1.Time{Time: now},
-					},
-				},
-				sqladminService: gcpiface.GetMockSQLClient(nil),
-			},
-			want:    "error building cloudSQL admin service",
-			wantErr: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1313,7 +1245,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "error when retrieving cloudSQL instances",
+			name: "error when retrieving cloudSQL instance",
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -1324,76 +1256,15 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ctx: context.TODO(),
 				p:   buildTestPostgres(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, errors.New("cannot retrieve sql instances from gcp")
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return nil, errors.New("cannot retrieve sql instance from gcp")
 					}
 				}),
-				cloudSQLCreateConfig: nil,
+				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
 				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow:    false,
 			},
-			want:    "cannot retrieve sql instances from gcp",
-			wantErr: true,
-		},
-		{
-			name: "error when retrieving cloudSQL secrets",
-			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestPostgres(), buildTestGcpInfrastructure(nil)),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			args: args{
-				ctx: context.TODO(),
-				p:   buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:  "gcptestclustertestNsgcpcloudsql",
-									State: "RUNNABLE",
-								},
-							},
-						}, nil
-					}
-				}),
-				cloudSQLCreateConfig: nil,
-				strategyConfig:       &StrategyConfig{ProjectID: "test-project-id"},
-				maintenanceWindow:    false,
-			},
-			want:    "failed to retrieve cloudSQL credential secret",
-			wantErr: true,
-		},
-		{
-			name: "error when retrieving postgres password",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-					Name:      postgresProviderName + defaultCredSecSuffix,
-					Namespace: testNs,
-				},
-				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: NewCredentialMinterCredentialManager(nil),
-				ConfigManager:     nil,
-			},
-			args: args{
-				ctx: context.TODO(),
-				p:   buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-				}),
-				cloudSQLCreateConfig: nil,
-				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
-				maintenanceWindow:    false,
-			},
-			want:    "unable to retrieve postgres password",
+			want:    "cannot retrieve sql instance from gcp",
 			wantErr: true,
 		},
 		{
@@ -1560,20 +1431,16 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ctx: context.TODO(),
 				p:   buildTestPostgres(),
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{
-									Name:  "gcptestclustertestNsgcpcloudsql",
-									State: "PENDING_CREATE",
-								},
-							},
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:  "gcptestclustertestNsgcpcloudsql",
+							State: "PENDING_CREATE",
 						}, nil
 					}
 				}),
 				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
 					Name:  "gcptestclustertestNsgcpcloudsql",
-					State: "RUNNABLE",
+					State: "PENDING_CREATE",
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow: false,
@@ -1675,50 +1542,6 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			}
 			if got1 != tt.want {
 				t.Errorf("reconcileCloudSQLInstance() got1 = %v, want %v", got1, tt.want)
-			}
-		})
-	}
-}
-
-func Test_getFoundInstance(t *testing.T) {
-	type args struct {
-		instances    []*sqladmin.DatabaseInstance
-		instanceName string
-	}
-	tests := []struct {
-		name string
-		args args
-		want *sqladmin.DatabaseInstance
-	}{
-		{
-			name: "successfully found instance",
-			args: args{
-				instances: []*sqladmin.DatabaseInstance{
-					{
-						Name:  "gcptestclustertestNsgcpcloudsql",
-						State: "RUNNABLE",
-					},
-				},
-				instanceName: "gcptestclustertestNsgcpcloudsql",
-			},
-			want: &sqladmin.DatabaseInstance{
-				Name:  "gcptestclustertestNsgcpcloudsql",
-				State: "RUNNABLE",
-			},
-		},
-		{
-			name: "no instance found",
-			args: args{
-				instances:    nil,
-				instanceName: "",
-			},
-			want: nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := getFoundInstance(tt.args.instances, tt.args.instanceName); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getFoundInstance() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1906,8 +1729,8 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{},
-			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			createInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
 		},
@@ -1990,8 +1813,8 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{},
-			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			createInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
 		},
@@ -2071,8 +1894,8 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{},
-			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			createInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
 		},
@@ -2115,8 +1938,8 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{},
-			deleteInstanceRequest: &sqladmin.DatabaseInstance{},
+			createInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: "gcptestclustertestNsgcpcloudsql"},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
 		},

@@ -2,6 +2,7 @@ package gcpiface
 
 import (
 	"context"
+	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 )
 
@@ -10,7 +11,7 @@ type SQLAdminService interface {
 	DeleteInstance(context.Context, string, string) (*sqladmin.Operation, error)
 	CreateInstance(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 	ModifyInstance(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
-	ListOperations()
+	GetInstance(context.Context, string, string) (*sqladmin.DatabaseInstance, error)
 }
 
 // MockSqlClient mock client
@@ -20,6 +21,7 @@ type MockSqlClient struct {
 	DeleteInstanceFn func(context.Context, string, string) (*sqladmin.Operation, error)
 	CreateInstanceFn func(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 	ModifyInstanceFn func(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
+	GetInstanceFn    func(context.Context, string, string) (*sqladmin.DatabaseInstance, error)
 }
 
 func (m *MockSqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
@@ -53,10 +55,54 @@ func (m *MockSqlClient) ModifyInstance(ctx context.Context, projectID string, in
 	return nil, nil
 }
 
+func (m *MockSqlClient) GetInstance(ctx context.Context, projectID string, instanceName string) (*sqladmin.DatabaseInstance, error) {
+	if m.GetInstanceFn != nil {
+		return m.GetInstanceFn(ctx, projectID, instanceName)
+	}
+	return nil, nil
+}
+
 func GetMockSQLClient(modifyFn func(sqlClient *MockSqlClient)) *MockSqlClient {
 	mock := &MockSqlClient{}
 	if modifyFn != nil {
 		modifyFn(mock)
 	}
 	return mock
+}
+
+func NewSQLAdminService(ctx context.Context, opt option.ClientOption) (SQLAdminService, error) {
+	sqladminService, err := sqladmin.NewService(ctx, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlClient{
+		sqlAdminService: sqladminService,
+	}, nil
+
+}
+
+// wrapper for real client
+type sqlClient struct {
+	SQLAdminService
+	sqlAdminService *sqladmin.Service
+}
+
+func (r *sqlClient) InstancesList(project string) (*sqladmin.InstancesListResponse, error) {
+	return r.sqlAdminService.Instances.List(project).Do()
+}
+
+func (r *sqlClient) DeleteInstance(ctx context.Context, projectID, instanceName string) (*sqladmin.Operation, error) {
+	return r.sqlAdminService.Instances.Delete(projectID, instanceName).Context(ctx).Do()
+}
+
+func (r *sqlClient) CreateInstance(ctx context.Context, projectID string, databaseInstance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+	return r.sqlAdminService.Instances.Insert(projectID, databaseInstance).Context(ctx).Do()
+}
+
+func (r *sqlClient) ModifyInstance(ctx context.Context, projectID string, instanceName string, databaseInstance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+	return r.sqlAdminService.Instances.Patch(projectID, instanceName, databaseInstance).Context(ctx).Do()
+}
+
+func (r *sqlClient) GetInstance(ctx context.Context, projectID string, instanceName string) (*sqladmin.DatabaseInstance, error) {
+	return r.sqlAdminService.Instances.Get(projectID, instanceName).Context(ctx).Do()
 }
