@@ -47,6 +47,8 @@ const (
 	defaultDataDiskSizeGb                         = 20
 	defaultDeleteProtectionEnabled                = true
 	defaultIPConfigIPV4Enabled                    = true
+	defaultGCPPostgresPort                        = 5432
+	defaultDeploymentDatabase                     = "postgres"
 )
 
 type PostgresProvider struct {
@@ -149,7 +151,11 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 	logger := p.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
-	sec := buildDefaultCloudSQLSecret(pg)
+	sec, err := buildDefaultCloudSQLSecret(pg)
+	if err != nil {
+		msg := "failed to build default cloudSQL secret"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
 	result, err := controllerutil.CreateOrUpdate(ctx, p.Client, sec, func() error {
 		return nil
 	})
@@ -158,7 +164,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	if err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig); err != nil {
+	if err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig, sec); err != nil {
 		msg := "failed to build and verify gcp cloudSQL instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
@@ -193,7 +199,14 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(msg), nil
 	}
 
-	return nil, "completed cloudSQL instance creation", nil
+	pdd := &providers.PostgresDeploymentDetails{
+		Username: string(sec.Data[defaultPostgresUserKey]),
+		Password: string(sec.Data[defaultPostgresPasswordKey]),
+		Host:     foundInstance.IpAddresses[0].IpAddress,
+		Database: defaultDeploymentDatabase,
+		Port:     defaultGCPPostgresPort,
+	}
+	return &providers.PostgresInstance{DeploymentDetails: pdd}, "completed cloudSQL instance creation", nil
 }
 
 // DeletePostgres will set the postgres deletion timestamp, reconcile provider credentials so that the postgres instance
@@ -400,7 +413,7 @@ func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.P
 
 	instanceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
 	if err != nil {
-		return nil, nil, nil, errorUtil.Wrapf(err, "failed to retrieve rds config")
+		return nil, nil, nil, errorUtil.Wrapf(err, "failed to build cloudsql instance name")
 	}
 
 	cloudSQLCreateConfig := &sqladmin.DatabaseInstance{}
@@ -425,7 +438,7 @@ func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.P
 	return cloudSQLCreateConfig, cloudSQLDeleteConfig, strategyConfig, nil
 }
 
-func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance) error {
+func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance, sec *v1.Secret) error {
 
 	if cloudSQLCreateConfig.DatabaseVersion == "" {
 		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
@@ -443,12 +456,8 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 		cloudSQLCreateConfig.Name = instanceName
 	}
 
-	rootPassword, err := resources.GeneratePassword()
-	if err != nil {
-		return errorUtil.Wrapf(err, "failed to generate password")
-	}
 	if cloudSQLCreateConfig.RootPassword == "" {
-		cloudSQLCreateConfig.RootPassword = rootPassword
+		cloudSQLCreateConfig.RootPassword = string(sec.Data[defaultPostgresPasswordKey])
 	}
 
 	if cloudSQLCreateConfig.Settings == nil {
@@ -503,10 +512,10 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 	return nil
 }
 
-func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) *v1.Secret {
+func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 	password, err := resources.GeneratePassword()
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -518,5 +527,5 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) *v1.Secret {
 			defaultPostgresPasswordKey: password,
 		},
 		Type: v1.SecretTypeOpaque,
-	}
+	}, nil
 }
