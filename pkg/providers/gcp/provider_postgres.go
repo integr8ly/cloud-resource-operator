@@ -515,7 +515,8 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 	password, err := resources.GeneratePassword()
 	if err != nil {
-		return nil, nil
+		errMsg := "failed to generate password"
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
