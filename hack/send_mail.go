@@ -43,6 +43,7 @@ func main() {
 
 	// setup tls smtp client
 	fmt.Println("setting up tls connection . . . beep boop")
+	// #nosec G402, allowed as part of hack
 	tlsCfg := &tls.Config{
 		InsecureSkipVerify: false,
 		ServerName:         *smtpHostPtr,
