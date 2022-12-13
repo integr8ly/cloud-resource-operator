@@ -58,3 +58,52 @@ func TestIsNotFoundError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsConflictError(t *testing.T) {
+	type args struct {
+		err error
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "error of type google http conflict",
+			args: args{
+				err: &googleHTTP.Error{
+					Code: http.StatusConflict,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "error of type google grpc conflict",
+			args: args{
+				err: NewMockAPIError(grpcCodes.AlreadyExists),
+			},
+			want: true,
+		},
+		{
+			name: "error of type kubernetes conflict",
+			args: args{
+				err: errors.NewAlreadyExists(schema.GroupResource{}, ""),
+			},
+			want: true,
+		},
+		{
+			name: "error of unknown type",
+			args: args{
+				err: fmt.Errorf("generic error"),
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsConflictError(tt.args.err); got != tt.want {
+				t.Errorf("IsConflictError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
