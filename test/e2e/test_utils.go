@@ -198,6 +198,7 @@ func NewTestingHTTPClient(kubeConfig *rest.Config) (*http.Client, error) {
 	}
 
 	transport := &http.Transport{
+		// #nosec G402 selfSignedCerts is a dynamic value
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: selfSignedCerts},
 	}
 
