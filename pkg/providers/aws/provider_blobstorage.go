@@ -334,7 +334,7 @@ func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v
 }
 
 func (p *BlobStorageProvider) getDefaultS3Tags(ctx context.Context, cr *v1alpha1.BlobStorage) ([]*s3.Tag, error) {
-	tags, _, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	tags, _, err := resources.GetDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
 	if err != nil {
 		msg := "Failed to get default s3 tags"
 		return nil, errorUtil.Wrapf(err, msg)

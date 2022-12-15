@@ -8,7 +8,11 @@ import (
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"google.golang.org/api/servicenetworking/v1"
 	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	"google.golang.org/genproto/googleapis/type/dayofweek"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"net"
 	"reflect"
@@ -98,6 +102,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
+	instanceID := fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName)
 	tests := []struct {
 		name    string
 		fields  fields
@@ -140,7 +145,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
-			want:    types.StatusMessage(fmt.Sprintf("delete detected, redis instance %s started", testName)),
+			want:    types.StatusMessage(fmt.Sprintf("delete detected, gcp redis instance %s deletion started", instanceID)),
 			wantErr: false,
 		},
 		{
@@ -178,7 +183,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
-			want:    types.StatusMessage(fmt.Sprintf("deletion in progress for redis instance %s", testName)),
+			want:    types.StatusMessage(fmt.Sprintf("deletion in progress for gcp redis instance %s", instanceID)),
 			wantErr: false,
 		},
 		{
@@ -226,7 +231,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
-			want:    types.StatusMessage(fmt.Sprintf("successfully deleted gcp redis instance %s", testName)),
+			want:    types.StatusMessage(fmt.Sprintf("successfully deleted gcp redis instance %s", instanceID)),
 			wantErr: false,
 		},
 		{
@@ -239,7 +244,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 					DeleteStrategy: nil,
 				},
 			},
-			want:    types.StatusMessage("failed to build delete redis instance request"),
+			want:    types.StatusMessage("failed to build delete gcp redis instance request"),
 			wantErr: true,
 		},
 		{
@@ -277,7 +282,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				strategyConfig: buildTestStrategyConfig(),
 				isLastResource: false,
 			},
-			want:    types.StatusMessage(fmt.Sprintf("failed to delete redis instance %s", testName)),
+			want:    types.StatusMessage(fmt.Sprintf("failed to delete gcp redis instance %s", instanceID)),
 			wantErr: true,
 		},
 		{
@@ -309,7 +314,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 				}),
 				strategyConfig: buildTestStrategyConfig(),
 			},
-			want:    types.StatusMessage("failed to fetch redis instance " + gcpTestRedisInstanceName),
+			want:    types.StatusMessage("failed to fetch gcp redis instance " + gcpTestRedisInstanceName),
 			wantErr: true,
 		},
 		{
@@ -1041,6 +1046,12 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
 		ReservedIpRange:   gcpTestIpRangeName,
 		RedisVersion:      redisVersion,
+		Labels: map[string]string{
+			"integreatly-org_clusterid":     gcpTestClusterName,
+			"integreatly-org_resource-name": "testname",
+			"integreatly-org_resource-type": "",
+			"red-hat-managed":               "true",
+		},
 	}
 	type fields struct {
 		Client            client.Client
@@ -1064,7 +1075,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 		{
 			name: "success building redis create instance request from strategy config",
 			fields: fields{
-				Client: nil,
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 			},
 			args: args{
 				r: &v1alpha1.Redis{
@@ -1077,8 +1088,8 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 					Region:    gcpTestRegion,
 					ProjectID: gcpTestProjectId,
 					CreateStrategy: func() json.RawMessage {
-						redisInstance := `{"name":"","tier":0,"read_replicas_mode":0,"memory_size_gb":0,"authorized_network":"","connect_mode":0,"reserved_ip_range":"","redis_version":""}`
-						return json.RawMessage(fmt.Sprintf(`{"parent":"%s","instance_id":"%s","instance":%s}`, parent, instanceID, redisInstance))
+						instance := `{"name":"","tier":0,"read_replicas_mode":0,"memory_size_gb":0,"authorized_network":"","connect_mode":0,"reserved_ip_range":"","redis_version":""}`
+						return json.RawMessage(fmt.Sprintf(`{"parent":"%s","instance_id":"%s","instance":%s}`, parent, instanceID, instance))
 					}(),
 				},
 				address: buildTestComputeAddress(nil),
@@ -1189,6 +1200,17 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			Namespace: testNs,
 		},
 	}
+	redisWithMaintenanceWindow := &v1alpha1.Redis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testName,
+			Namespace: testNs,
+		},
+		Spec: types.ResourceTypeSpec{
+			MaintenanceWindow: true,
+		},
+	}
+	instanceID := fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, "gcptestclustertestNstestName")
+	instanceID2 := fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, "gcptestcluster")
 	type fields struct {
 		Client            client.Client
 		Logger            *logrus.Entry
@@ -1213,7 +1235,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 		{
 			name: "success creating a gcp redis instance",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisCR),
 				ConfigManager: &ConfigManagerMock{
 					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
 						return nil, nil
@@ -1242,8 +1264,8 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					}
 				}),
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestProjectId,
-					ProjectID:      gcpTestRegion,
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
 				r: &v1alpha1.Redis{
@@ -1259,7 +1281,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			redisCluster: &providers.RedisCluster{
 				DeploymentDetails: &providers.RedisDeploymentDetails{},
 			},
-			statusMessage: "successfully created gcp redis instance " + testName,
+			statusMessage: types.StatusMessage("successfully reconciled gcp redis instance " + instanceID),
 			wantErr:       false,
 		},
 		{
@@ -1298,26 +1320,6 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			wantErr:       true,
 		},
 		{
-			name:   "network ip address range creation in progress",
-			fields: fields{},
-			args: args{
-				networkManager: &NetworkManagerMock{
-					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
-						return &net.IPNet{
-							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
-						}, nil
-					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVING.String()}), nil
-					},
-				},
-				r: &v1alpha1.Redis{},
-			},
-			redisCluster:  nil,
-			statusMessage: "network ip address range creation in progress",
-			wantErr:       false,
-		},
-		{
 			name:   "fail to create network service",
 			fields: fields{},
 			args: args{
@@ -1339,29 +1341,6 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			redisCluster:  nil,
 			statusMessage: "failed to create network service",
 			wantErr:       true,
-		},
-		{
-			name:   "network service connection creation in progress",
-			fields: fields{},
-			args: args{
-				networkManager: &NetworkManagerMock{
-					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
-						return &net.IPNet{
-							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
-						}, nil
-					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
-					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return nil, nil
-					},
-				},
-				r: &v1alpha1.Redis{},
-			},
-			redisCluster:  nil,
-			statusMessage: "network service connection creation in progress",
-			wantErr:       false,
 		},
 		{
 			name:   "fail to build create redis instance request",
@@ -1386,7 +1365,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 				r: &v1alpha1.Redis{},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to build create redis instance request",
+			statusMessage: "failed to build gcp create redis instance request",
 			wantErr:       true,
 		},
 		{
@@ -1414,14 +1393,14 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					}
 				}),
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestProjectId,
-					ProjectID:      gcpTestRegion,
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
 				r: &v1alpha1.Redis{},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to fetch redis instance gcptestcluster",
+			statusMessage: types.StatusMessage(fmt.Sprintf("failed to fetch gcp redis instance %s", instanceID2)),
 			wantErr:       true,
 		},
 		{
@@ -1452,14 +1431,14 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					}
 				}),
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestProjectId,
-					ProjectID:      gcpTestRegion,
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
 				r: &v1alpha1.Redis{},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to create redis instance gcptestcluster",
+			statusMessage: types.StatusMessage(fmt.Sprintf("failed to create gcp redis instance %s", instanceID2)),
 			wantErr:       true,
 		},
 		{
@@ -1534,14 +1513,14 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					}
 				}),
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestProjectId,
-					ProjectID:      gcpTestRegion,
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
 				r: redisCR,
 			},
 			redisCluster:  nil,
-			statusMessage: "started creation of gcp redis instance",
+			statusMessage: types.StatusMessage(fmt.Sprintf("started creation of gcp redis instance %s", instanceID)),
 			wantErr:       false,
 		},
 		{
@@ -1576,8 +1555,8 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					}
 				}),
 				strategyConfig: &StrategyConfig{
-					Region:         gcpTestProjectId,
-					ProjectID:      gcpTestRegion,
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{}`),
 				},
 				r: &v1alpha1.Redis{
@@ -1591,8 +1570,352 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 				},
 			},
 			redisCluster:  nil,
-			statusMessage: "creation in progress for redis instance " + testName,
+			statusMessage: types.StatusMessage(fmt.Sprintf("gcp redis instance %s is not ready yet, current state is %s", instanceID, redispb.Instance_CREATING.String())),
 			wantErr:       false,
+		},
+		{
+			name: "fail to verify if redis updates are allowed",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State: redispb.Instance_READY,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster:  nil,
+			statusMessage: types.StatusMessage("failed to verify if redis updates are allowed"),
+			wantErr:       true,
+		},
+		{
+			name: "success updating a gcp redis instance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisWithMaintenanceWindow),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:        redispb.Instance_READY,
+							RedisVersion: redisVersion,
+						}, nil
+					}
+					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
+						return &redis.UpdateInstanceOperation{}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{"instance":{"memory_size_gb": 3}}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster: &providers.RedisCluster{
+				DeploymentDetails: &providers.RedisDeploymentDetails{},
+			},
+			statusMessage: types.StatusMessage("successfully reconciled gcp redis instance " + instanceID),
+			wantErr:       false,
+		},
+		{
+			name: "success upgrading a gcp redis instance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisWithMaintenanceWindow),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:        redispb.Instance_READY,
+							RedisVersion: "REDIS_5_0",
+							MemorySizeGb: redisMemorySizeGB,
+							Labels: map[string]string{
+								"integreatly.org/clusterID":     gcpTestClusterName,
+								"integreatly.org/resource-type": "",
+								"integreatly.org/resource-name": testName,
+								resources.TagManagedKey:         "true",
+							},
+						}, nil
+					}
+					redisClient.UpgradeInstanceFn = func(ctx context.Context, request *redispb.UpgradeInstanceRequest, option ...gax.CallOption) (*redis.UpgradeInstanceOperation, error) {
+						return &redis.UpgradeInstanceOperation{}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{"instance":{"redis_version":"REDIS_6_X"}}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster: &providers.RedisCluster{
+				DeploymentDetails: &providers.RedisDeploymentDetails{},
+			},
+			statusMessage: types.StatusMessage("successfully reconciled gcp redis instance " + instanceID),
+			wantErr:       false,
+		},
+		{
+			name: "failure updating a gcp redis instance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisWithMaintenanceWindow),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:        redispb.Instance_READY,
+							RedisVersion: redisVersion,
+						}, nil
+					}
+					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{"instance":{"memory_size_gb": 3}}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster:  nil,
+			statusMessage: types.StatusMessage("failed to update gcp redis instance " + instanceID),
+			wantErr:       true,
+		},
+		{
+			name: "failure upgrading a gcp redis instance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisWithMaintenanceWindow),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:        redispb.Instance_READY,
+							RedisVersion: "REDIS_5_0",
+							MemorySizeGb: redisMemorySizeGB,
+							Labels: map[string]string{
+								"integreatly.org/clusterID":     gcpTestClusterName,
+								"integreatly.org/resource-type": "",
+								"integreatly.org/resource-name": testName,
+								resources.TagManagedKey:         "true",
+							},
+						}, nil
+					}
+					redisClient.UpgradeInstanceFn = func(ctx context.Context, request *redispb.UpgradeInstanceRequest, option ...gax.CallOption) (*redis.UpgradeInstanceOperation, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{"instance":{"redis_version":"REDIS_6_X"}}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster:  nil,
+			statusMessage: types.StatusMessage("failed to upgrade gcp redis instance " + instanceID),
+			wantErr:       true,
+		},
+		{
+			name: "failure setting redis maintenance window to false",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisWithMaintenanceWindow)
+					mockClient.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:        redispb.Instance_READY,
+							RedisVersion: redisVersion,
+						}, nil
+					}
+					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
+						return &redis.UpdateInstanceOperation{}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{"instance":{"memory_size_gb": 3}}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster:  nil,
+			statusMessage: types.StatusMessage("failed to set redis maintenance window to false"),
+			wantErr:       true,
 		},
 	}
 	for _, tt := range tests {
@@ -1613,6 +1936,203 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			}
 			if statusMessage != tt.statusMessage {
 				t.Errorf("createRedisInstance() statusMessage = %v, want %v", statusMessage, tt.statusMessage)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_buildUpdateInstanceRequest(t *testing.T) {
+	type args struct {
+		instanceConfig *redispb.Instance
+		instance       *redispb.Instance
+	}
+	tests := []struct {
+		name string
+		args args
+		want *redispb.UpdateInstanceRequest
+	}{
+		{
+			name: "success building gcp redis update instance request when update is found",
+			args: args{
+				instanceConfig: &redispb.Instance{
+					Labels: map[string]string{
+						"testKey": "testValue",
+					},
+					RedisConfigs: map[string]string{
+						"testKey": "testValue",
+					},
+					MemorySizeGb: 1,
+
+					MaintenancePolicy: &redispb.MaintenancePolicy{
+						WeeklyMaintenanceWindow: []*redispb.WeeklyMaintenanceWindow{
+							{
+								Day: dayofweek.DayOfWeek_TUESDAY,
+								StartTime: &timeofday.TimeOfDay{
+									Hours: 9,
+								},
+								Duration: durationpb.New(time.Hour),
+							},
+						},
+					},
+				},
+				instance: &redispb.Instance{},
+			},
+			want: &redispb.UpdateInstanceRequest{
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"memory_size_gb", "labels", "redis_configs", "maintenance_policy"},
+				},
+				Instance: &redispb.Instance{
+					Labels: map[string]string{
+						"testKey": "testValue",
+					},
+					RedisConfigs: map[string]string{
+						"testKey": "testValue",
+					},
+					MemorySizeGb: 1,
+					MaintenancePolicy: &redispb.MaintenancePolicy{
+						WeeklyMaintenanceWindow: []*redispb.WeeklyMaintenanceWindow{
+							{
+								Day: dayofweek.DayOfWeek_TUESDAY,
+								StartTime: &timeofday.TimeOfDay{
+									Hours: 9,
+								},
+								Duration: durationpb.New(time.Hour),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "success skipping build of gcp redis update instance request when update is not found",
+			args: args{
+				instanceConfig: &redispb.Instance{},
+				instance:       &redispb.Instance{},
+			},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{}
+			if got := p.buildUpdateInstanceRequest(tt.args.instanceConfig, tt.args.instance); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildUpdateInstanceRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_buildUpgradeInstanceRequest(t *testing.T) {
+	type args struct {
+		instanceConfig *redispb.Instance
+		instance       *redispb.Instance
+	}
+	tests := []struct {
+		name string
+		args args
+		want *redispb.UpgradeInstanceRequest
+	}{
+		{
+			name: "success building gcp redis upgrade instance request when upgrade is found",
+			args: args{
+				instanceConfig: &redispb.Instance{
+					Name:         testName,
+					RedisVersion: redisVersion,
+				},
+				instance: &redispb.Instance{
+					Name:         testName,
+					RedisVersion: "REDIS_5_0",
+				},
+			},
+			want: &redispb.UpgradeInstanceRequest{
+				Name:         testName,
+				RedisVersion: redisVersion,
+			},
+		},
+		{
+			name: "success skipping build of gcp redis upgrade instance request when upgrade is not found",
+			args: args{
+				instanceConfig: &redispb.Instance{
+					Name:         testName,
+					RedisVersion: redisVersion,
+				},
+				instance: &redispb.Instance{
+					Name:         testName,
+					RedisVersion: redisVersion,
+				},
+			},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{}
+			if got := p.buildUpgradeInstanceRequest(tt.args.instanceConfig, tt.args.instance); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildUpgradeInstanceRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_isMaintenancePolicyOutdated(t *testing.T) {
+	type args struct {
+		a *redispb.MaintenancePolicy
+		b *redispb.MaintenancePolicy
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "instance policy is not outdated - both maintenance policies are undefined",
+			args: args{
+				a: nil,
+				b: nil,
+			},
+			want: false,
+		},
+		{
+			name: "instance policy is outdated - one maintenance policy is undefined",
+			args: args{
+				a: nil,
+				b: &redispb.MaintenancePolicy{},
+			},
+			want: true,
+		},
+		{
+			name: "instance policy is outdated - one maintenance window differs",
+			args: args{
+				a: &redispb.MaintenancePolicy{
+					WeeklyMaintenanceWindow: []*redispb.WeeklyMaintenanceWindow{{}},
+				},
+				b: &redispb.MaintenancePolicy{
+					WeeklyMaintenanceWindow: []*redispb.WeeklyMaintenanceWindow{
+						{
+							Day: dayofweek.DayOfWeek_TUESDAY,
+							StartTime: &timeofday.TimeOfDay{
+								Hours: 9,
+							},
+							Duration: durationpb.New(time.Hour),
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "instance policy is not outdated - deep equality",
+			args: args{
+				a: &redispb.MaintenancePolicy{},
+				b: &redispb.MaintenancePolicy{},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isMaintenancePolicyOutdated(tt.args.a, tt.args.b); got != tt.want {
+				t.Errorf("isMaintenancePolicyOutdated() = %v, want %v", got, tt.want)
 			}
 		})
 	}

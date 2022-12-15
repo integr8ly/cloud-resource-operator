@@ -728,7 +728,7 @@ func (p *PostgresProvider) getRDSConfig(ctx context.Context, r *v1alpha1.Postgre
 }
 
 func (p *PostgresProvider) getDefaultRdsTags(ctx context.Context, cr *v1alpha1.Postgres) ([]*rds.Tag, error) {
-	tags, _, err := getDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
+	tags, _, err := resources.GetDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
 	if err != nil {
 		msg := "Failed to get default RDS tags"
 		return nil, errorUtil.Wrapf(err, msg)

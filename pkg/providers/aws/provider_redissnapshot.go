@@ -141,7 +141,7 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 	// create snapshot of the redis instance
 	if foundSnapshot == nil {
 		logger.Info("creating redis snapshot")
-		tags, _, err := getDefaultResourceTags(ctx, p.client, redis.Spec.Type, snapshotName, redis.ObjectMeta.Labels["productName"])
+		tags, _, err := resources.GetDefaultResourceTags(ctx, p.client, redis.Spec.Type, snapshotName, redis.ObjectMeta.Labels["productName"])
 		if err != nil {
 			msg := "failed to get default redis tags"
 			return nil, "", errorUtil.Wrapf(err, msg)
