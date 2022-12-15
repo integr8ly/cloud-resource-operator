@@ -21,7 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	utils "k8s.io/utils/pointer"
@@ -123,26 +122,16 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
+	_, err = networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
 	if err != nil {
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
-	if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
-		return nil, croType.StatusMessage("network ip address range creation in progress"), nil
-	}
-	logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
-
-	logger.Infof("creating network service connection")
-	service, err := networkManager.CreateNetworkService(ctx)
+	_, err = networkManager.CreateNetworkService(ctx)
 	if err != nil {
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
-	if service == nil {
-		return nil, croType.StatusMessage("network service connection creation in progress"), nil
-	}
-	logger.Infof("created network service connection %s", service.Service)
 
 	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, cloudSQLCreateConfig, strategyConfig, maintenanceWindowEnabled)
 }
