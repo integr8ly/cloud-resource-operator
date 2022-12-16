@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	"reflect"
@@ -168,12 +169,12 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 					Value: aws.String("test"),
 				},
 				{
-					Key:   aws.String(tagDisplayName),
+					Key:   aws.String(resources.TagDisplayName),
 					Value: aws.String(defaultSubnetNameTagValue),
 				},
 				{
-					Key:   aws.String(tagManagedKey),
-					Value: aws.String(tagManagedVal),
+					Key:   aws.String(resources.TagManagedKey),
+					Value: aws.String(resources.TagManagedVal),
 				},
 				{
 					Key:   aws.String("test-key"),

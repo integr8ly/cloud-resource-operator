@@ -154,7 +154,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 						Value: aws.String("testtesttest000101010000000000UTC"),
 					},
 					{
-						Key:   aws.String(tagManagedKey),
+						Key:   aws.String(resources.TagManagedKey),
 						Value: aws.String("true"),
 					},
 				}

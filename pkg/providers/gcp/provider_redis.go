@@ -322,6 +322,10 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		}
 		createInstanceRequest.InstanceId = instanceID
 	}
+	tags, err := buildDefaultRedisTags(ctx, p.Client, r, createInstanceRequest)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to build gcp redis instance tags")
+	}
 	defaultInstance := &redispb.Instance{
 		Name:              fmt.Sprintf(redisInstanceNameFormat, strategyConfig.ProjectID, strategyConfig.Region, createInstanceRequest.InstanceId),
 		Tier:              redispb.Instance_STANDARD_HA,
@@ -331,6 +335,7 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
 		ReservedIpRange:   address.GetName(),
 		RedisVersion:      redisVersion,
+		Labels:            tags,
 	}
 	if createInstanceRequest.Instance == nil {
 		createInstanceRequest.Instance = defaultInstance
