@@ -322,7 +322,7 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		}
 		createInstanceRequest.InstanceId = instanceID
 	}
-	tags, err := buildDefaultRedisTags(ctx, p.Client, r, createInstanceRequest)
+	tags, err := buildDefaultRedisTags(ctx, p.Client, r)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to build gcp redis instance tags")
 	}
@@ -340,6 +340,12 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 	if createInstanceRequest.Instance == nil {
 		createInstanceRequest.Instance = defaultInstance
 		return createInstanceRequest, nil
+	}
+	if createInstanceRequest.Instance.Labels == nil {
+		createInstanceRequest.Instance.Labels = map[string]string{}
+	}
+	for key, value := range tags {
+		createInstanceRequest.Instance.Labels[key] = value
 	}
 	if createInstanceRequest.Instance.Name == "" {
 		createInstanceRequest.Instance.Name = defaultInstance.Name

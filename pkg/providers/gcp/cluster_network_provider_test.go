@@ -275,29 +275,6 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "create ip range in progress",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
-					networksClient.ListFn = buildValidGcpListNetworks
-				}),
-				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
-					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
-						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
-					}
-					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
-						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
-					}
-				}),
-				AddressApi: gcpiface.GetMockAddressClient(nil),
-			},
-			args: args{
-				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
-			},
-			want:    nil,
-			wantErr: false,
-		},
-		{
 			name: "create ip range exists",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
@@ -612,23 +589,6 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				ProjectID: gcpTestProjectId,
 			},
 			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI)),
-			wantErr: false,
-		},
-		{
-			name: "create service network in progress",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
-				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
-					networksClient.ListFn = buildValidGcpListNetworks
-				}),
-				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFn = func(req *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
-						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
-					}
-				}),
-				ServicesApi: gcpiface.GetMockServicesClient(nil),
-			},
-			want:    nil,
 			wantErr: false,
 		},
 		{

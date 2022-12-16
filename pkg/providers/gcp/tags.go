@@ -5,11 +5,10 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
-	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func buildDefaultRedisTags(ctx context.Context, client k8sclient.Client, r *v1alpha1.Redis, createInstanceRequest *redispb.CreateInstanceRequest) (map[string]string, error) {
+func buildDefaultRedisTags(ctx context.Context, client k8sclient.Client, r *v1alpha1.Redis) (map[string]string, error) {
 	defaultTags, _, err := resources.GetDefaultResourceTags(ctx, client, r.Spec.Type, r.Name, r.ObjectMeta.Labels["productName"])
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get default redis tags")
