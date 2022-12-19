@@ -44,7 +44,10 @@ type NetworkManager interface {
 	ReconcileNetworkProviderConfig(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error)
 }
 
-var _ NetworkManager = (*NetworkProvider)(nil)
+var (
+	_              NetworkManager = (*NetworkProvider)(nil)
+	defaultTimeout                = time.Minute
+)
 
 type NetworkProvider struct {
 	Client      client.Client
@@ -153,7 +156,7 @@ func (n *NetworkProvider) waitForAddress(ctx context.Context, ipRangeName string
 		return address, nil
 	case err := <-errorChan:
 		return nil, err
-	case <-time.After(time.Minute):
+	case <-time.After(defaultTimeout):
 		return nil, fmt.Errorf("waitForAddress() timed out")
 	}
 }
@@ -224,7 +227,7 @@ func (n *NetworkProvider) waitForConnection(clusterVpc *computepb.Network) (*ser
 		return connection, nil
 	case err := <-errorChan:
 		return nil, err
-	case <-time.After(time.Minute):
+	case <-time.After(defaultTimeout):
 		return nil, fmt.Errorf("waitForConnection() timed out")
 	}
 }

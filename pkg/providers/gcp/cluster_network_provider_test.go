@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis"
 	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
@@ -459,6 +460,33 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
 					addressClient.InsertFn = func(*computepb.InsertGlobalAddressRequest) error {
 						return errors.New("failed to insert address")
+					}
+				}),
+			},
+			args: args{
+				ipRangeCidr: buildIpRangeCidr(gcpTestValidCidr),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error waiting for ip address range creation",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				SubnetsApi: gcpiface.GetMockSubnetsClient(func(subnetClient *gcpiface.MockSubnetsClient) {
+					subnetClient.GetFn = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestMasterSubnetCidr), nil
+					}
+					subnetClient.GetFnTwo = func(req *computepb.GetSubnetworkRequest) (*computepb.Subnetwork, error) {
+						return buildValidSubnet(req.Subnetwork, gcpTestWorkerSubnetCidr), nil
+					}
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFnTwo = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return nil, fmt.Errorf("generic error")
 					}
 				}),
 			},
@@ -1388,6 +1416,190 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ReconcileNetworkProviderConfig() got = %s/%s, want %s/%s", got.IP.String(), got.Mask.String(), tt.want.IP.String(), tt.want.Mask.String())
+			}
+		})
+	}
+}
+
+func TestNetworkProvider_waitForAddress(t *testing.T) {
+	type fields struct {
+		AddressApi gcpiface.AddressAPI
+		ProjectID  string
+	}
+	type args struct {
+		ipRangeName string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *computepb.Address
+		wantErr bool
+		mockFn  func()
+	}{
+		{
+			name: "success waiting for address creation",
+			fields: fields{
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return &computepb.Address{}, nil
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args: args{
+				ipRangeName: "testIpRangeName",
+			},
+			want:    &computepb.Address{},
+			wantErr: false,
+		},
+		{
+			name: "failure waiting for address creation",
+			fields: fields{
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args: args{
+				ipRangeName: "testIpRangeName",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "timed out waiting for address creation",
+			fields: fields{
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return nil, nil
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args: args{
+				ipRangeName: "testIpRangeName",
+			},
+			want:    nil,
+			wantErr: true,
+			mockFn: func() {
+				defaultTimeout = time.Second * 1
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.mockFn != nil {
+				tt.mockFn()
+				defer func() {
+					defaultTimeout = time.Minute
+				}()
+			}
+			n := &NetworkProvider{
+				AddressApi: tt.fields.AddressApi,
+				Logger:     logrus.NewEntry(logrus.StandardLogger()),
+				ProjectID:  tt.fields.ProjectID,
+			}
+			got, err := n.waitForAddress(context.TODO(), tt.args.ipRangeName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("waitForAddress() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("waitForAddress() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNetworkProvider_waitForConnection(t *testing.T) {
+	type fields struct {
+		ServicesApi gcpiface.ServicesAPI
+		ProjectID   string
+	}
+	type args struct {
+		clusterVpc *computepb.Network
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *servicenetworking.Connection
+		wantErr bool
+		mockFn  func()
+	}{
+		{
+			name: "success waiting for connection creation",
+			fields: fields{
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFn = func(network *computepb.Network, s string, s2 string) (*servicenetworking.ListConnectionsResponse, error) {
+						return &servicenetworking.ListConnectionsResponse{
+							Connections: []*servicenetworking.Connection{{}},
+						}, nil
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args:    args{},
+			want:    &servicenetworking.Connection{},
+			wantErr: false,
+		},
+		{
+			name: "failure waiting for connection creation",
+			fields: fields{
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFn = func(network *computepb.Network, s string, s2 string) (*servicenetworking.ListConnectionsResponse, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args:    args{},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "timed out waiting for connection creation",
+			fields: fields{
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFn = func(network *computepb.Network, s string, s2 string) (*servicenetworking.ListConnectionsResponse, error) {
+						return &servicenetworking.ListConnectionsResponse{
+							Connections: []*servicenetworking.Connection{},
+						}, nil
+					}
+				}),
+				ProjectID: "testProjectID",
+			},
+			args:    args{},
+			want:    nil,
+			wantErr: true,
+			mockFn: func() {
+				defaultTimeout = time.Second * 1
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.mockFn != nil {
+				tt.mockFn()
+				defer func() {
+					defaultTimeout = time.Minute
+				}()
+			}
+			n := &NetworkProvider{
+				ServicesApi: tt.fields.ServicesApi,
+				Logger:      logrus.NewEntry(logrus.StandardLogger()),
+				ProjectID:   tt.fields.ProjectID,
+			}
+			got, err := n.waitForConnection(tt.args.clusterVpc)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("waitForConnection() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("waitForConnection() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

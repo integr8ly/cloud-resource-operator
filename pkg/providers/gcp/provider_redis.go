@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strings"
 	"time"
 
@@ -161,8 +162,11 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 				return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 			}
 		}
-		r.Spec.MaintenanceWindow = false
-		if err = p.Client.Update(ctx, r); err != nil {
+		_, err = controllerutil.CreateOrUpdate(ctx, p.Client, r, func() error {
+			r.Spec.MaintenanceWindow = false
+			return nil
+		})
+		if err != nil {
 			statusMessage := "failed to set redis maintenance window to false"
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
@@ -412,7 +416,7 @@ func (p *RedisProvider) buildUpdateInstanceRequest(instanceConfig *redispb.Insta
 		updateInstanceReq.Instance.RedisConfigs = instanceConfig.RedisConfigs
 		updateInstanceReq.UpdateMask.Paths = append(updateInstanceReq.UpdateMask.Paths, "redis_configs")
 	}
-	if !reflect.DeepEqual(instance.MaintenancePolicy.WeeklyMaintenanceWindow, instanceConfig.MaintenancePolicy.WeeklyMaintenanceWindow) {
+	if isMaintenancePolicyOutdated(instance.MaintenancePolicy, instanceConfig.MaintenancePolicy) {
 		updateFound = true
 		updateInstanceReq.Instance.MaintenancePolicy = instanceConfig.MaintenancePolicy
 		updateInstanceReq.UpdateMask.Paths = append(updateInstanceReq.UpdateMask.Paths, "maintenance_policy")
@@ -421,6 +425,16 @@ func (p *RedisProvider) buildUpdateInstanceRequest(instanceConfig *redispb.Insta
 		return nil
 	}
 	return updateInstanceReq
+}
+
+func isMaintenancePolicyOutdated(a *redispb.MaintenancePolicy, b *redispb.MaintenancePolicy) bool {
+	if a == nil && b == nil {
+		return false
+	}
+	if (a == nil && b != nil) || (a != nil && b == nil) {
+		return true
+	}
+	return !reflect.DeepEqual(a.WeeklyMaintenanceWindow, b.WeeklyMaintenanceWindow)
 }
 
 func (p *RedisProvider) buildUpgradeInstanceRequest(instanceConfig *redispb.Instance, instance *redispb.Instance) *redispb.UpgradeInstanceRequest {
