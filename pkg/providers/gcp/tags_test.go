@@ -41,9 +41,9 @@ func Test_buildDefaultRedisTags(t *testing.T) {
 				},
 			},
 			want: map[string]string{
-				"integreatly.org/clusterID":     gcpTestClusterName,
-				"integreatly.org/resource-name": testName,
-				"integreatly.org/resource-type": "testType",
+				"integreatly-org_clusterid":     gcpTestClusterName,
+				"integreatly-org_resource-name": "testname",
+				"integreatly-org_resource-type": "testtype",
 				resources.TagManagedKey:         "true",
 			},
 			wantErr: false,

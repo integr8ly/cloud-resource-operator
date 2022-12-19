@@ -1047,9 +1047,9 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 		ReservedIpRange:   gcpTestIpRangeName,
 		RedisVersion:      redisVersion,
 		Labels: map[string]string{
-			"integreatly.org/clusterID":     gcpTestClusterName,
-			"integreatly.org/resource-name": testName,
-			"integreatly.org/resource-type": "",
+			"integreatly-org_clusterid":     gcpTestClusterName,
+			"integreatly-org_resource-name": "testname",
+			"integreatly-org_resource-type": "",
 			"red-hat-managed":               "true",
 		},
 	}
