@@ -38,6 +38,7 @@ type RedisProvider struct {
 	Logger            *logrus.Entry
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
+	TCPPinger         resources.ConnectionTester
 }
 
 func NewGCPRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvider {
@@ -46,6 +47,7 @@ func NewGCPRedisProvider(client client.Client, logger *logrus.Entry) *RedisProvi
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigManager(client),
+		TCPPinger:         resources.NewConnectionTestManager(),
 	}
 }
 
@@ -124,14 +126,18 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		statusMessage := fmt.Sprintf("failed to fetch gcp redis instance %s", createInstanceRequest.Instance.Name)
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
+	defer p.exposeRedisInstanceMetrics(ctx, r, foundInstance)
 	if foundInstance == nil {
 		_, err = redisClient.CreateInstance(ctx, createInstanceRequest)
 		if err != nil {
 			statusMessage := fmt.Sprintf("failed to create gcp redis instance %s", createInstanceRequest.Instance.Name)
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
-		annotations.Add(r, ResourceIdentifierAnnotation, createInstanceRequest.InstanceId)
-		if err = p.Client.Update(ctx, r); err != nil {
+		_, err = controllerutil.CreateOrUpdate(ctx, p.Client, r, func() error {
+			annotations.Add(r, ResourceIdentifierAnnotation, createInstanceRequest.InstanceId)
+			return nil
+		})
+		if err != nil {
 			statusMessage := "failed to add annotation to redis cr"
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
@@ -225,6 +231,7 @@ func (p *RedisProvider) deleteRedisInstance(ctx context.Context, networkManager 
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	if foundInstance != nil {
+		p.exposeRedisInstanceMetrics(ctx, r, foundInstance)
 		if foundInstance.State == redispb.Instance_DELETING {
 			statusMessage := fmt.Sprintf("deletion in progress for gcp redis instance %s", deleteInstanceRequest.Name)
 			return croType.StatusMessage(statusMessage), nil
@@ -282,6 +289,55 @@ func (p *RedisProvider) getRedisInstances(ctx context.Context, redisClient gcpif
 		return nil, err
 	}
 	return instances, nil
+}
+
+func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alpha1.Redis, instance *redispb.Instance) {
+	instanceName := annotations.Get(r, ResourceIdentifierAnnotation)
+	if instanceName == "" {
+		p.Logger.Errorf("failed to find %s annotation while exposing metrics for redis instance %s", ResourceIdentifierAnnotation, instanceName)
+	}
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		p.Logger.Errorf("failed to get cluster id while exposing metrics for redis instance %s", instanceName)
+	}
+	genericLabels := resources.BuildRedisGenericMetricLabels(r, clusterID, instanceName, redisProviderName)
+	var instanceState string
+	if instance != nil {
+		instanceState = instance.State.String()
+	}
+	infoLabels := resources.BuildRedisInfoMetricLabels(r, instanceState, clusterID, instanceName, redisProviderName)
+	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
+	// a single metric should be exposed for each possible status phase
+	// the value of the metric should be 1.0 when the resource is in that phase
+	// the value of the metric should be 0.0 when the resource is not in that phase
+	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
+		labelsFailed := resources.BuildRedisStatusMetricsLabels(r, clusterID, instanceName, redisProviderName, phase)
+		resources.SetMetric(resources.DefaultRedisStatusMetricName, labelsFailed, resources.Btof64(r.Status.Phase == phase))
+	}
+	// set availability metric, based on the status flag on the memorystore redis instance in gcp
+	// the value of the metric should be 0 when the instance state is unhealthy
+	// the value of the metric should be 1 when the instance state is healthy
+	// more details on possible state values here: https://pkg.go.dev/cloud.google.com/go/redis@v1.10.0/apiv1beta1/redispb#Instance_State
+	var instanceHealthy float64
+	var instanceConnectable float64
+	if resources.Contains(healthyRedisInstanceStates(), instanceState) {
+		instanceHealthy = 1
+		if success := p.TCPPinger.TCPConnection(instance.Host, int(instance.Port)); success {
+			instanceConnectable = 1
+		}
+	}
+	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, instanceHealthy)
+	resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, instanceConnectable)
+
+}
+
+func healthyRedisInstanceStates() []string {
+	return []string{
+		redispb.Instance_CREATING.String(),
+		redispb.Instance_READY.String(),
+		redispb.Instance_UPDATING.String(),
+		redispb.Instance_DELETING.String(),
+	}
 }
 
 func (p *RedisProvider) getRedisStrategyConfig(ctx context.Context, tier string) (*StrategyConfig, error) {

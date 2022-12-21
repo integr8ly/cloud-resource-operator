@@ -60,17 +60,11 @@ func TestNewGCPRedisProvider(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *RedisProvider
 	}{
 		{
 			name: "placeholder test",
 			args: args{
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			want: &RedisProvider{
-				Client:            nil,
-				CredentialManager: NewCredentialMinterCredentialManager(nil),
-				ConfigManager:     NewDefaultConfigManager(nil),
 			},
 		},
 	}
@@ -1925,6 +1919,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			redisCluster, statusMessage, err := p.createRedisInstance(context.TODO(), tt.args.networkManager, tt.args.redisClient, tt.args.strategyConfig, tt.args.r)
 			if (err != nil) != tt.wantErr {
