@@ -582,12 +582,12 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 		}
 
 		logger.Infof("checking tags on peering connection")
-		peeringConnectionTags := ec2TagsToGeneric(peeringConnection.Tags)
+		peeringConnectionTags := ec2TagListToGenericList(peeringConnection.Tags)
 		if !resources.TagsContainsAll(defaultTags, peeringConnectionTags) {
 			logger.Info("creating tags on peering connection")
 			_, err = n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{peeringConnection.VpcPeeringConnectionId},
-				Tags:      genericToEc2Tags(defaultTags),
+				Tags:      genericListToEc2TagList(defaultTags),
 			})
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to tag peering connection")
@@ -917,14 +917,14 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to get default tags for security group")
 		}
-		securityGroupTags := ec2TagsToGeneric(standaloneSecGroup.Tags)
+		securityGroupTags := ec2TagListToGenericList(standaloneSecGroup.Tags)
 		if !resources.TagsContainsAll(defaultTags, securityGroupTags) {
 			logger.Infof("tagging security group %s", aws.StringValue(standaloneSecGroup.GroupId))
 			_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{
 					standaloneSecGroup.GroupId,
 				},
-				Tags: genericToEc2Tags(defaultTags),
+				Tags: genericListToEc2TagList(defaultTags),
 			})
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "unable to tag security group")
@@ -996,13 +996,13 @@ func (n *NetworkProvider) reconcileStandaloneRouteTableTags(ctx context.Context,
 		return errorUtil.Wrap(err, "failed to get default tags for route table")
 	}
 	for _, routeTable := range routeTables {
-		routeTableTags := ec2TagsToGeneric(routeTable.Tags)
+		routeTableTags := ec2TagListToGenericList(routeTable.Tags)
 		if !resources.TagsContainsAll(defaultTags, routeTableTags) {
 			_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 				Resources: []*string{
 					aws.String(*routeTable.RouteTableId),
 				},
-				Tags: genericToEc2Tags(defaultTags),
+				Tags: genericListToEc2TagList(defaultTags),
 			})
 			if err != nil {
 				return errorUtil.Wrap(err, "unable to tag route table")
@@ -1190,7 +1190,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		// ensure subnets have the correct tags
 		for _, sub := range subs {
 			logger.Infof("validating subnet %s", *sub.SubnetId)
-			if !resources.TagsContainsAll(ec2TagsToGeneric(subnetTags), ec2TagsToGeneric(sub.Tags)) {
+			if !resources.TagsContainsAll(ec2TagListToGenericList(subnetTags), ec2TagListToGenericList(sub.Tags)) {
 				if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Api, sub, logger); err != nil {
 					return nil, errorUtil.Wrap(err, "failed to tag subnet")
 				}
@@ -1239,7 +1239,7 @@ func (n *NetworkProvider) getCRORouteTables(ctx context.Context) ([]*ec2.RouteTa
 
 	var foundRouteTables []*ec2.RouteTable
 	for _, routeTable := range routeTables.RouteTables {
-		routeTableTags := ec2TagsToGeneric(routeTable.Tags)
+		routeTableTags := ec2TagListToGenericList(routeTable.Tags)
 		if resources.TagsContains(routeTableTags, croOwnerTag.Key, croOwnerTag.Value) {
 			foundRouteTables = append(foundRouteTables, routeTable)
 		}
@@ -1262,13 +1262,13 @@ func (n *NetworkProvider) reconcileVPCTags(ctx context.Context, vpc *ec2.Vpc) er
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get default tags for vpc")
 	}
-	vpcTags := ec2TagsToGeneric(vpc.Tags)
+	vpcTags := ec2TagListToGenericList(vpc.Tags)
 	if !resources.TagsContainsAll(defaultTags, vpcTags) {
 		_, err := n.Ec2Api.CreateTags(&ec2.CreateTagsInput{
 			Resources: []*string{
 				aws.String(*vpc.VpcId),
 			},
-			Tags: genericToEc2Tags(defaultTags),
+			Tags: genericListToEc2TagList(defaultTags),
 		})
 		if err != nil {
 			return errorUtil.Wrapf(err, "unable to tag vpc %s with state %s", *vpc.VpcId, *vpc.State)
@@ -1343,7 +1343,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 			}
 
 			// ensure tags exist on rds subnet group
-			subnetTags := rdsTagstoGeneric(tags.TagList)
+			subnetTags := rdsTagListToGenericList(tags.TagList)
 			if !resources.TagsContainsAll(defaultTags, subnetTags) {
 				err := n.updateRdsSubnetGroupTags(foundSubnetGroup, genericToRdsTags(defaultTags))
 				if err != nil {
@@ -1456,7 +1456,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 		CacheSubnetGroupDescription: aws.String(defaultSubnetGroupDesc),
 		CacheSubnetGroupName:        aws.String(subnetGroupName),
 		SubnetIds:                   subnetIDs,
-		Tags:                        genericToElasticacheTags(defaultTags),
+		Tags:                        genericListToElasticacheTagList(defaultTags),
 	}
 
 	logger.Infof("creating resource subnet group %s", subnetGroupName)
@@ -1814,7 +1814,7 @@ func getDefaultTagSpec(ctx context.Context, client client.Client, customTag *res
 	return []*ec2.TagSpecification{
 		{
 			ResourceType: aws.String(resourceType),
-			Tags:         genericToEc2Tags(tags),
+			Tags:         genericListToEc2TagList(tags),
 		},
 	}, nil
 }

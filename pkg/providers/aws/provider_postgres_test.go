@@ -182,14 +182,6 @@ func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func buildMockConnectionTester() *ConnectionTesterMock {
-	mockTester := &ConnectionTesterMock{}
-	mockTester.TCPConnectionFunc = func(host string, port int) bool {
-		return true
-	}
-	return mockTester
-}
-
 func (m *mockRdsClient) DescribeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
 	if m.describeDBInstancesFn == nil {
 		panic("mockEc2Client.DescribeDBInstances: method is nil")
@@ -861,7 +853,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		TCPPinger         ConnectionTester
+		TCPPinger         resources.ConnectionTester
 	}
 	type args struct {
 		ctx                     context.Context
@@ -925,7 +917,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -995,7 +987,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: defaultAwsPostgresUser,
@@ -1058,7 +1050,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1126,7 +1118,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1178,7 +1170,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: true,
@@ -1233,7 +1225,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: true,
@@ -1301,7 +1293,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1369,7 +1361,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1437,7 +1429,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1488,7 +1480,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			want: &providers.PostgresInstance{DeploymentDetails: &providers.PostgresDeploymentDetails{
 				Username: defaultAwsPostgresUser,
@@ -2647,7 +2639,7 @@ func TestReconcilePostgres(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		TCPPinger         ConnectionTester
+		TCPPinger         resources.ConnectionTester
 	}
 	type args struct {
 		ctx context.Context
@@ -2668,7 +2660,7 @@ func TestReconcilePostgres(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -2693,7 +2685,7 @@ func TestReconcilePostgres(t *testing.T) {
 						}, nil
 					},
 				},
-				TCPPinger: buildMockConnectionTester(),
+				TCPPinger: resources.BuildMockConnectionTester(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -2721,7 +2713,7 @@ func TestReconcilePostgres(t *testing.T) {
 						}, nil
 					},
 				},
-				TCPPinger: buildMockConnectionTester(),
+				TCPPinger: resources.BuildMockConnectionTester(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -2749,7 +2741,7 @@ func TestReconcilePostgres(t *testing.T) {
 						}, nil
 					},
 				},
-				TCPPinger: buildMockConnectionTester(),
+				TCPPinger: resources.BuildMockConnectionTester(),
 			},
 			args: args{
 				ctx: context.TODO(),

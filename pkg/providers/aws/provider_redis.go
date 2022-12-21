@@ -68,7 +68,7 @@ type RedisProvider struct {
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
 	CacheSvc          elasticacheiface.ElastiCacheAPI
-	TCPPinger         ConnectionTester
+	TCPPinger         resources.ConnectionTester
 }
 
 func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) (*RedisProvider, error) {
@@ -81,7 +81,7 @@ func NewAWSRedisProvider(client client.Client, logger *logrus.Entry) (*RedisProv
 		Logger:            logger.WithFields(logrus.Fields{"provider": redisProviderName}),
 		CredentialManager: cm,
 		ConfigManager:     NewDefaultConfigMapConfigManager(client),
-		TCPPinger:         NewConnectionTestManager(),
+		TCPPinger:         resources.NewConnectionTestManager(),
 	}, nil
 }
 
@@ -707,7 +707,7 @@ func (p *RedisProvider) getDefaultElasticacheTags(ctx context.Context, cr *v1alp
 		msg := "Failed to get default redis tags"
 		return nil, "", errorUtil.Wrapf(err, msg)
 	}
-	return genericToElasticacheTags(tags), clusterID, nil
+	return genericListToElasticacheTagList(tags), clusterID, nil
 }
 
 // buildElasticacheUpdateStrategy compare the current elasticache state to the proposed elasticache state from the
@@ -961,35 +961,6 @@ func (p *RedisProvider) configureElasticacheVpc(ctx context.Context, cacheSvc el
 	return nil
 }
 
-// returns generic labels to be added to every metric
-func buildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName string) map[string]string {
-	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = r.Name
-	labels["namespace"] = r.Namespace
-	labels["instanceID"] = cacheName
-	labels["productName"] = r.Labels["productName"]
-	labels["strategy"] = redisProviderName
-	return labels
-}
-
-// adds extra information to labels around resource
-func buildRedisInfoMetricLabels(r *v1alpha1.Redis, group *elasticache.ReplicationGroup, clusterID, cacheName string) map[string]string {
-	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
-	if group != nil {
-		labels["status"] = *group.Status
-		return labels
-	}
-	labels["status"] = "nil"
-	return labels
-}
-
-func buildRedisStatusMetricsLabels(r *v1alpha1.Redis, clusterID, cacheName string, phase croType.StatusPhase) map[string]string {
-	labels := buildRedisGenericMetricLabels(r, clusterID, cacheName)
-	labels["statusPhase"] = string(phase)
-	return labels
-}
-
 // used to expose an available and information metrics during reconcile
 func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Redis, instance *elasticache.ReplicationGroup) {
 	// build cache name
@@ -1006,10 +977,14 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	}
 
 	// build metric labels
-	infoLabels := buildRedisInfoMetricLabels(cr, instance, clusterID, cacheName)
+	var status string
+	if instance != nil {
+		status = resources.SafeStringDereference(instance.Status)
+	}
+	infoLabels := resources.BuildRedisInfoMetricLabels(cr, status, clusterID, cacheName, redisProviderName)
 
 	// build generic metrics
-	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
+	genericLabels := resources.BuildRedisGenericMetricLabels(cr, clusterID, cacheName, redisProviderName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
@@ -1020,7 +995,7 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	// the value of the metric should be 0.0 when the resource is not in that phase
 	// this follows the approach that pod status
 	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
-		labelsFailed := buildRedisStatusMetricsLabels(cr, clusterID, cacheName, phase)
+		labelsFailed := resources.BuildRedisStatusMetricsLabels(cr, clusterID, cacheName, redisProviderName, phase)
 		resources.SetMetric(resources.DefaultRedisStatusMetricName, labelsFailed, resources.Btof64(cr.Status.Phase == phase))
 	}
 
@@ -1054,7 +1029,7 @@ func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, cr 
 			return
 		}
 
-		labels := buildRedisStatusMetricsLabels(cr, clusterID, cacheName, cr.Status.Phase)
+		labels := resources.BuildRedisStatusMetricsLabels(cr, clusterID, cacheName, redisProviderName, cr.Status.Phase)
 		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(cr.DeletionTimestamp.Unix()))
 	}
 }
@@ -1130,7 +1105,7 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	}
 
 	// build generic labels to be added to metric
-	genericLabels := buildRedisGenericMetricLabels(cr, clusterID, cacheName)
+	genericLabels := resources.BuildRedisGenericMetricLabels(cr, clusterID, cacheName, redisProviderName)
 
 	// check if the node group is available
 	if cache == nil || cache.NodeGroups == nil {
