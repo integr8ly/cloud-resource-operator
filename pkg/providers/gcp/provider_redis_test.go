@@ -2132,3 +2132,124 @@ func Test_isMaintenancePolicyOutdated(t *testing.T) {
 		})
 	}
 }
+
+func TestRedisProvider_exposeRedisInstanceMetrics(t *testing.T) {
+	type fields struct {
+		Client    client.Client
+		TCPPinger resources.ConnectionTester
+	}
+	type args struct {
+		r        *v1alpha1.Redis
+		instance *redispb.Instance
+	}
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "success exposing gcp redis instance metrics",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &redispb.Instance{
+					State: redispb.Instance_READY,
+					Host:  "0.0.0.0",
+					Port:  5432,
+				},
+			},
+		},
+		{
+			name:   "exit early if the gcp redis instance is nil",
+			fields: fields{},
+			args:   args{},
+		},
+		{
+			name: "failure getting cluster id while exposing metrics for gcp redis instance",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+			},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &redispb.Instance{
+					State: redispb.Instance_READY,
+					Host:  "0.0.0.0",
+					Port:  5432,
+				},
+			},
+		},
+		{
+			name: "success exposing gcp redis instance metrics when ping instance fails",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: &resources.ConnectionTesterMock{
+					TCPConnectionFunc: func(host string, port int) bool {
+						return false
+					},
+				},
+			},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &redispb.Instance{
+					State: redispb.Instance_READY,
+					Host:  "0.0.0.0",
+					Port:  5432,
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{
+				Client:    tt.fields.Client,
+				Logger:    logrus.NewEntry(logrus.StandardLogger()),
+				TCPPinger: tt.fields.TCPPinger,
+			}
+			p.exposeRedisInstanceMetrics(context.TODO(), tt.args.r, tt.args.instance)
+		})
+	}
+}

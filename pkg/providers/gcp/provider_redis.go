@@ -292,6 +292,9 @@ func (p *RedisProvider) getRedisInstances(ctx context.Context, redisClient gcpif
 }
 
 func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alpha1.Redis, instance *redispb.Instance) {
+	if instance == nil {
+		return
+	}
 	instanceName := annotations.Get(r, ResourceIdentifierAnnotation)
 	if instanceName == "" {
 		p.Logger.Errorf("failed to find %s annotation while exposing metrics for redis instance %s", ResourceIdentifierAnnotation, instanceName)
@@ -299,12 +302,10 @@ func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alp
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
 		p.Logger.Errorf("failed to get cluster id while exposing metrics for redis instance %s", instanceName)
+		return
 	}
 	genericLabels := resources.BuildRedisGenericMetricLabels(r, clusterID, instanceName, redisProviderName)
-	var instanceState string
-	if instance != nil {
-		instanceState = instance.State.String()
-	}
+	instanceState := instance.State.String()
 	infoLabels := resources.BuildRedisInfoMetricLabels(r, instanceState, clusterID, instanceName, redisProviderName)
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 	// a single metric should be exposed for each possible status phase
@@ -328,7 +329,6 @@ func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alp
 	}
 	resources.SetMetric(resources.DefaultRedisAvailMetricName, genericLabels, instanceHealthy)
 	resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, instanceConnectable)
-
 }
 
 func healthyRedisInstanceStates() []string {
