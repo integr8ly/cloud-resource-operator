@@ -22,6 +22,18 @@ spec:
         - --enable-leader-election
         image: controller
         imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+              - ls
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          exec:
+            command:
+              - ls
+          initialDelaySeconds: 5
+          periodSeconds: 10
         env:
         - name: WATCH_NAMESPACE
           valueFrom:
