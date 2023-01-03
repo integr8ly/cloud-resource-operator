@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"reflect"
 	"strconv"
@@ -2897,6 +2898,66 @@ func TestAddAnnotation_ClientUpdate(t *testing.T) {
 				}
 				return
 			}
+		})
+	}
+}
+
+func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
+	type fields struct {
+		Client client.Client
+	}
+	type args struct {
+		cr *v1alpha1.Postgres
+	}
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "success setting postgres deletion timestamp metric",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+			},
+			args: args{
+				cr: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					},
+				},
+			},
+		},
+		{
+			name: "failure setting postgres deletion timestamp metric",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+			},
+			args: args{
+				cr: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client: tt.fields.Client,
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			}
+			p.setPostgresDeletionTimestampMetric(context.TODO(), tt.args.cr)
 		})
 	}
 }

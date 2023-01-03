@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"testing"
@@ -121,8 +123,9 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:  gcpTestPostgresInstanceName,
-							State: "PENDING_DELETE",
+							Name:        gcpTestPostgresInstanceName,
+							State:       "PENDING_DELETE",
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -156,9 +159,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -324,9 +328,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -359,9 +364,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -438,9 +444,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: true},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
@@ -747,6 +754,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
@@ -1212,6 +1220,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
@@ -1440,8 +1449,9 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:  gcpTestPostgresInstanceName,
-							State: "PENDING_CREATE",
+							Name:        gcpTestPostgresInstanceName,
+							State:       "PENDING_CREATE",
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -1541,8 +1551,9 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
-			_, got1, err := pp.reconcileCloudSQLInstance(tt.args.ctx, tt.args.p, tt.args.sqladminService, tt.args.cloudSQLCreateConfig, tt.args.strategyConfig, tt.args.maintenanceWindow)
+			_, got1, err := pp.reconcileCloudSQLInstance(tt.args.ctx, tt.args.p, tt.args.sqladminService, tt.args.cloudSQLCreateConfig, tt.args.strategyConfig, tt.args.maintenanceWindow, buildTestComputeAddress(nil))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileCloudSQLInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1657,6 +1668,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, statusMessage, err := pp.ReconcilePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
@@ -1973,6 +1985,124 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 			if !reflect.DeepEqual(got2, tt.strategyConfig) {
 				t.Errorf("getPostgresConfig() got2 = %v, want %v", got2, tt.strategyConfig)
 			}
+		})
+	}
+}
+
+func TestPostgresProvider_exposePostgresInstanceMetrics(t *testing.T) {
+	type fields struct {
+		Client    client.Client
+		TCPPinger resources.ConnectionTester
+	}
+	type args struct {
+		r        *v1alpha1.Postgres
+		instance *sqladmin.DatabaseInstance
+	}
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "success exposing gcp postgres instance metrics",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+		{
+			name:   "exit early if the gcp postgres instance is nil",
+			fields: fields{},
+			args:   args{},
+		},
+		{
+			name: "failure getting cluster id while exposing metrics for gcp postgres instance",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+		{
+			name: "success exposing gcp postgres instance metrics when ping instance fails",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: &resources.ConnectionTesterMock{
+					TCPConnectionFunc: func(host string, port int) bool {
+						return false
+					},
+				},
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:    tt.fields.Client,
+				Logger:    logrus.NewEntry(logrus.StandardLogger()),
+				TCPPinger: tt.fields.TCPPinger,
+			}
+			p.exposePostgresInstanceMetrics(context.TODO(), tt.args.r, tt.args.instance)
 		})
 	}
 }

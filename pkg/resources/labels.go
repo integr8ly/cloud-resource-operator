@@ -1,12 +1,12 @@
 package resources
 
 import (
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// BuildRedisGenericMetricLabels returns generic labels to be added to every metric
-func BuildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName, providerName string) map[string]string {
+// BuildGenericMetricLabels returns generic labels to be added to every metric
+func BuildGenericMetricLabels(r v1.ObjectMeta, clusterID, cacheName, providerName string) map[string]string {
 	return map[string]string{
 		"clusterID":   clusterID,
 		"resourceID":  r.Name,
@@ -17,9 +17,9 @@ func BuildRedisGenericMetricLabels(r *v1alpha1.Redis, clusterID, cacheName, prov
 	}
 }
 
-// BuildRedisInfoMetricLabels adds extra information to labels around resource
-func BuildRedisInfoMetricLabels(r *v1alpha1.Redis, status string, clusterID, cacheName, providerName string) map[string]string {
-	labels := BuildRedisGenericMetricLabels(r, clusterID, cacheName, providerName)
+// BuildInfoMetricLabels adds extra information to labels around resource
+func BuildInfoMetricLabels(r v1.ObjectMeta, status string, clusterID, cacheName, providerName string) map[string]string {
+	labels := BuildGenericMetricLabels(r, clusterID, cacheName, providerName)
 	if status != "" {
 		labels["status"] = status
 		return labels
@@ -28,8 +28,8 @@ func BuildRedisInfoMetricLabels(r *v1alpha1.Redis, status string, clusterID, cac
 	return labels
 }
 
-func BuildRedisStatusMetricsLabels(r *v1alpha1.Redis, clusterID, cacheName, providerName string, phase croType.StatusPhase) map[string]string {
-	labels := BuildRedisGenericMetricLabels(r, clusterID, cacheName, providerName)
+func BuildStatusMetricsLabels(r v1.ObjectMeta, clusterID, cacheName, providerName string, phase croType.StatusPhase) map[string]string {
+	labels := BuildGenericMetricLabels(r, clusterID, cacheName, providerName)
 	labels["statusPhase"] = string(phase)
 	return labels
 }
