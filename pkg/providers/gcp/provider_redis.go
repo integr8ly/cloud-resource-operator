@@ -293,15 +293,15 @@ func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alp
 		p.Logger.Errorf("failed to get cluster id while exposing metrics for redis instance %s", instanceName)
 		return
 	}
-	genericLabels := resources.BuildRedisGenericMetricLabels(r, clusterID, instanceName, redisProviderName)
+	genericLabels := resources.BuildGenericMetricLabels(r.ObjectMeta, clusterID, instanceName, redisProviderName)
 	instanceState := instance.State.String()
-	infoLabels := resources.BuildRedisInfoMetricLabels(r, instanceState, clusterID, instanceName, redisProviderName)
+	infoLabels := resources.BuildInfoMetricLabels(r.ObjectMeta, instanceState, clusterID, instanceName, redisProviderName)
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
 	// a single metric should be exposed for each possible status phase
 	// the value of the metric should be 1.0 when the resource is in that phase
 	// the value of the metric should be 0.0 when the resource is not in that phase
 	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
-		labelsFailed := resources.BuildRedisStatusMetricsLabels(r, clusterID, instanceName, redisProviderName, phase)
+		labelsFailed := resources.BuildStatusMetricsLabels(r.ObjectMeta, clusterID, instanceName, redisProviderName, phase)
 		resources.SetMetric(resources.DefaultRedisStatusMetricName, labelsFailed, resources.Btof64(r.Status.Phase == phase))
 	}
 	// set availability metric, based on the status flag on the memorystore redis instance in gcp
@@ -344,7 +344,7 @@ func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, r *
 			p.Logger.Errorf("failed to get cluster id while exposing metrics for redis instance %s", instanceName)
 			return
 		}
-		labels := resources.BuildRedisStatusMetricsLabels(r, clusterID, instanceName, redisProviderName, r.Status.Phase)
+		labels := resources.BuildStatusMetricsLabels(r.ObjectMeta, clusterID, instanceName, redisProviderName, r.Status.Phase)
 		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(r.DeletionTimestamp.Unix()))
 	}
 }

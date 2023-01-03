@@ -55,6 +55,7 @@ type PostgresProvider struct {
 	Logger            *logrus.Entry
 	CredentialManager CredentialManager
 	ConfigManager     ConfigManager
+	TCPPinger         resources.ConnectionTester
 }
 
 func NewGCPPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
@@ -63,6 +64,7 @@ func NewGCPPostgresProvider(client client.Client, logger *logrus.Entry) *Postgre
 		Logger:            logger.WithFields(logrus.Fields{"provider": postgresProviderName}),
 		CredentialManager: NewCredentialMinterCredentialManager(client),
 		ConfigManager:     NewDefaultConfigManager(client),
+		TCPPinger:         resources.NewConnectionTestManager(),
 	}
 }
 
@@ -163,8 +165,8 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		msg := "cannot retrieve sql instance from gcp"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
+	defer p.exposePostgresInstanceMetrics(ctx, pg, foundInstance)
 
-	// TODO setPostgresServiceMaintenanceMetric,exposePostgresMetrics, createCloudSQLConnectionMetric see MGDAPI-4489
 	// TODO update strategy MGDAPI-4900
 
 	if foundInstance == nil {
@@ -258,6 +260,7 @@ func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkMa
 	}
 
 	if foundInstance != nil && foundInstance.Name != "" {
+		p.exposePostgresInstanceMetrics(ctx, pg, foundInstance)
 		if foundInstance.State == "PENDING_DELETE" {
 			statusMessage := fmt.Sprintf("postgres instance %s is already deleting", cloudSQLDeleteConfig.Name)
 			p.Logger.Info(statusMessage)
@@ -499,6 +502,54 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 		cloudSQLCreateConfig.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
 	}
 	return nil
+}
+
+func (p *PostgresProvider) exposePostgresInstanceMetrics(ctx context.Context, pg *v1alpha1.Postgres, instance *sqladmin.DatabaseInstance) {
+	if instance == nil {
+		return
+	}
+	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
+	if instanceName == "" {
+		p.Logger.Errorf("failed to find %s annotation while exposing metrics for postgres instance", ResourceIdentifierAnnotation)
+	}
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		p.Logger.Errorf("failed to get cluster id while exposing metrics for postgres instance %s", instanceName)
+		return
+	}
+	genericLabels := resources.BuildGenericMetricLabels(pg.ObjectMeta, clusterID, instanceName, postgresProviderName)
+	instanceState := instance.State
+	infoLabels := resources.BuildInfoMetricLabels(pg.ObjectMeta, instanceState, clusterID, instanceName, postgresProviderName)
+	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
+	// a single metric should be exposed for each possible status phase
+	// the value of the metric should be 1.0 when the resource is in that phase
+	// the value of the metric should be 0.0 when the resource is not in that phase
+	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
+		labelsFailed := resources.BuildStatusMetricsLabels(pg.ObjectMeta, clusterID, instanceName, postgresProviderName, phase)
+		resources.SetMetric(resources.DefaultPostgresStatusMetricName, labelsFailed, resources.Btof64(pg.Status.Phase == phase))
+	}
+	// set availability metric, based on the status flag on the cloudsql postgres instance in gcp
+	// the value of the metric should be 0 when the instance state is unhealthy
+	// the value of the metric should be 1 when the instance state is healthy
+	// more details on possible state values here: https://pkg.go.dev/google.golang.org/api/sqladmin/v1beta4@v0.105.0#DatabaseInstance.State
+	var instanceHealthy float64
+	var instanceConnectable float64
+	if resources.Contains(healthyPostgresInstanceStates(), instanceState) {
+		instanceHealthy = 1
+		if success := p.TCPPinger.TCPConnection(instance.IpAddresses[0].IpAddress, defaultGCPPostgresPort); success {
+			instanceConnectable = 1
+		}
+	}
+	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, instanceHealthy)
+	resources.SetMetric(resources.DefaultPostgresConnectionMetricName, genericLabels, instanceConnectable)
+}
+
+func healthyPostgresInstanceStates() []string {
+	return []string{
+		"PENDING_CREATE",
+		"RUNNABLE",
+		"PENDING_DELETE",
+	}
 }
 
 func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {

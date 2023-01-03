@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"testing"
@@ -121,8 +122,9 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:  gcpTestPostgresInstanceName,
-							State: "PENDING_DELETE",
+							Name:        gcpTestPostgresInstanceName,
+							State:       "PENDING_DELETE",
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -156,9 +158,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -324,9 +327,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -359,9 +363,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: false},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: false},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
@@ -438,9 +443,10 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:     gcpTestPostgresInstanceName,
-							State:    "RUNNABLE",
-							Settings: &sqladmin.Settings{DeletionProtectionEnabled: true},
+							Name:        gcpTestPostgresInstanceName,
+							State:       "RUNNABLE",
+							Settings:    &sqladmin.Settings{DeletionProtectionEnabled: true},
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
@@ -747,6 +753,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, err := pp.deleteCloudSQLInstance(tt.args.ctx, tt.args.networkManager, tt.args.sqladminService, tt.args.p, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
@@ -1212,6 +1219,7 @@ func TestPostgresProvider_DeletePostgres(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, err := pp.DeletePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
@@ -1440,8 +1448,9 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
 						return &sqladmin.DatabaseInstance{
-							Name:  gcpTestPostgresInstanceName,
-							State: "PENDING_CREATE",
+							Name:        gcpTestPostgresInstanceName,
+							State:       "PENDING_CREATE",
+							IpAddresses: []*sqladmin.IpMapping{{}},
 						}, nil
 					}
 				}),
@@ -1541,6 +1550,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			_, got1, err := pp.reconcileCloudSQLInstance(tt.args.ctx, tt.args.p, tt.args.sqladminService, tt.args.cloudSQLCreateConfig, tt.args.strategyConfig, tt.args.maintenanceWindow)
 			if (err != nil) != tt.wantErr {
@@ -1657,6 +1667,7 @@ func TestPostgresProvider_ReconcilePostgres(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, statusMessage, err := pp.ReconcilePostgres(tt.args.ctx, tt.args.p)
 			if (err != nil) != tt.wantErr {
