@@ -844,77 +844,6 @@ func TestRedisProvider_getRedisStrategyConfig(t *testing.T) {
 	}
 }
 
-func TestRedisProvider_getRedisInstances(t *testing.T) {
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-	}
-	type args struct {
-		ctx         context.Context
-		redisClient gcpiface.RedisAPI
-		projectID   string
-		region      string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    []*redispb.Instance
-		wantErr bool
-	}{
-		{
-			name:   "successfully retrieve redis instances",
-			fields: fields{},
-			args: args{
-				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return []*redispb.Instance{{Name: gcpTestRedisInstanceName}}, nil
-					}
-				}),
-				projectID: gcpTestProjectId,
-				region:    gcpTestRegion,
-			},
-			want:    []*redispb.Instance{{Name: gcpTestRedisInstanceName}},
-			wantErr: false,
-		},
-		{
-			name:   "fail to retrieve redis instances",
-			fields: fields{},
-			args: args{
-				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
-					redisClient.ListInstancesFn = func(ctx context.Context, request *redispb.ListInstancesRequest, option ...gax.CallOption) ([]*redispb.Instance, error) {
-						return nil, fmt.Errorf("generic error")
-					}
-				}),
-				projectID: gcpTestProjectId,
-				region:    gcpTestRegion,
-			},
-			want:    nil,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rp := &RedisProvider{
-				Client:            tt.fields.Client,
-				Logger:            tt.fields.Logger,
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-			}
-			got, err := rp.getRedisInstances(tt.args.ctx, tt.args.redisClient, tt.args.projectID, tt.args.region)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getRedisInstances() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getRedisInstances() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestRedisProvider_buildDeleteInstanceRequest(t *testing.T) {
 	type fields struct {
 		Client            client.Client
@@ -2250,6 +2179,102 @@ func TestRedisProvider_exposeRedisInstanceMetrics(t *testing.T) {
 				TCPPinger: tt.fields.TCPPinger,
 			}
 			p.exposeRedisInstanceMetrics(context.TODO(), tt.args.r, tt.args.instance)
+		})
+	}
+}
+
+func TestRedisProvider_setRedisDeletionTimestampMetric(t *testing.T) {
+	type fields struct {
+		Client client.Client
+	}
+	type args struct {
+		ctx context.Context
+		r   *v1alpha1.Redis
+	}
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "success setting redis deletion timestamp metric",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						DeletionTimestamp: &metav1.Time{
+							Time: time.Now(),
+						},
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseDeleteInProgress,
+					},
+				},
+			},
+		},
+		{
+			name: "failure fetching resource identifier annotation",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						DeletionTimestamp: &metav1.Time{
+							Time: time.Now(),
+						},
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseDeleteInProgress,
+					},
+				},
+			},
+		},
+		{
+			name: "failure fetching cluster id",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						DeletionTimestamp: &metav1.Time{
+							Time: time.Now(),
+						},
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Status: types.ResourceTypeStatus{
+						Phase: types.PhaseDeleteInProgress,
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{
+				Client: tt.fields.Client,
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			}
+			p.setRedisDeletionTimestampMetric(tt.args.ctx, tt.args.r)
 		})
 	}
 }

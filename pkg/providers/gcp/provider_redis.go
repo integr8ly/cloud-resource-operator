@@ -189,7 +189,7 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "DeleteRedis")
 	logger.Infof("reconciling delete redis %s", r.Name)
-
+	p.setRedisDeletionTimestampMetric(ctx, r)
 	strategyConfig, err := p.getRedisStrategyConfig(ctx, r.Spec.Tier)
 	if err != nil {
 		statusMessage := "failed to retrieve redis strategy config"
@@ -280,17 +280,6 @@ func (p *RedisProvider) deleteRedisInstance(ctx context.Context, networkManager 
 	return croType.StatusMessage(statusMessage), nil
 }
 
-func (p *RedisProvider) getRedisInstances(ctx context.Context, redisClient gcpiface.RedisAPI, projectID, region string) ([]*redispb.Instance, error) {
-	request := redispb.ListInstancesRequest{
-		Parent: fmt.Sprintf("projects/%v/locations/%v", projectID, region),
-	}
-	instances, err := redisClient.ListInstances(ctx, &request)
-	if err != nil {
-		return nil, err
-	}
-	return instances, nil
-}
-
 func (p *RedisProvider) exposeRedisInstanceMetrics(ctx context.Context, r *v1alpha1.Redis, instance *redispb.Instance) {
 	if instance == nil {
 		return
@@ -337,6 +326,26 @@ func healthyRedisInstanceStates() []string {
 		redispb.Instance_READY.String(),
 		redispb.Instance_UPDATING.String(),
 		redispb.Instance_DELETING.String(),
+	}
+}
+
+// set metrics about the redis instance being deleted
+// works in a similar way to kube_pod_deletion_timestamp
+// https://github.com/kubernetes/kube-state-metrics/blob/0bfc2981f9c281c78e33052abdc2d621630562b9/internal/store/pod.go#L200-L218
+func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, r *v1alpha1.Redis) {
+	if r.DeletionTimestamp != nil && !r.DeletionTimestamp.IsZero() {
+		instanceName := annotations.Get(r, ResourceIdentifierAnnotation)
+		if instanceName == "" {
+			p.Logger.Errorf("failed to find %s annotation while exposing metrics for redis cr %s", ResourceIdentifierAnnotation, r.Name)
+			return
+		}
+		clusterID, err := resources.GetClusterID(ctx, p.Client)
+		if err != nil {
+			p.Logger.Errorf("failed to get cluster id while exposing metrics for redis instance %s", instanceName)
+			return
+		}
+		labels := resources.BuildRedisStatusMetricsLabels(r, clusterID, instanceName, redisProviderName, r.Status.Phase)
+		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(r.DeletionTimestamp.Unix()))
 	}
 }
 
