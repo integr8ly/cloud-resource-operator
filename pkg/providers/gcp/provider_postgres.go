@@ -536,8 +536,10 @@ func (p *PostgresProvider) exposePostgresInstanceMetrics(ctx context.Context, pg
 	var instanceConnectable float64
 	if resources.Contains(healthyPostgresInstanceStates(), instanceState) {
 		instanceHealthy = 1
-		if success := p.TCPPinger.TCPConnection(instance.IpAddresses[0].IpAddress, defaultGCPPostgresPort); success {
-			instanceConnectable = 1
+		if len(instance.IpAddresses) > 0 {
+			if success := p.TCPPinger.TCPConnection(instance.IpAddresses[0].IpAddress, defaultGCPPostgresPort); success {
+				instanceConnectable = 1
+			}
 		}
 	}
 	resources.SetMetric(resources.DefaultPostgresAvailMetricName, genericLabels, instanceHealthy)

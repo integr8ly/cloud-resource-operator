@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"testing"
@@ -1984,6 +1985,124 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 			if !reflect.DeepEqual(got2, tt.strategyConfig) {
 				t.Errorf("getPostgresConfig() got2 = %v, want %v", got2, tt.strategyConfig)
 			}
+		})
+	}
+}
+
+func TestPostgresProvider_exposePostgresInstanceMetrics(t *testing.T) {
+	type fields struct {
+		Client    client.Client
+		TCPPinger resources.ConnectionTester
+	}
+	type args struct {
+		r        *v1alpha1.Postgres
+		instance *sqladmin.DatabaseInstance
+	}
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "success exposing gcp postgres instance metrics",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+		{
+			name:   "exit early if the gcp postgres instance is nil",
+			fields: fields{},
+			args:   args{},
+		},
+		{
+			name: "failure getting cluster id while exposing metrics for gcp postgres instance",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+		{
+			name: "success exposing gcp postgres instance metrics when ping instance fails",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				TCPPinger: &resources.ConnectionTesterMock{
+					TCPConnectionFunc: func(host string, port int) bool {
+						return false
+					},
+				},
+			},
+			args: args{
+				r: &v1alpha1.Postgres{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+						Name:      testName,
+						Namespace: testNs,
+						Labels: map[string]string{
+							"productName": testName,
+						},
+					},
+				},
+				instance: &sqladmin.DatabaseInstance{
+					IpAddresses: []*sqladmin.IpMapping{{}},
+					State:       "PENDING_CREATE",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:    tt.fields.Client,
+				Logger:    logrus.NewEntry(logrus.StandardLogger()),
+				TCPPinger: tt.fields.TCPPinger,
+			}
+			p.exposePostgresInstanceMetrics(context.TODO(), tt.args.r, tt.args.instance)
 		})
 	}
 }
