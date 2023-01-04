@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -124,7 +126,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	_, err = networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
+	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
 	if err != nil {
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -135,10 +137,10 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, cloudSQLCreateConfig, strategyConfig, maintenanceWindowEnabled)
+	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, cloudSQLCreateConfig, strategyConfig, maintenanceWindowEnabled, address)
 }
 
-func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *sqladmin.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindowEnabled bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *sqladmin.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindowEnabled bool, address *computepb.Address) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
@@ -155,7 +157,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	if err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig, sec); err != nil {
+	if err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig, sec, address); err != nil {
 		msg := "failed to build and verify gcp cloudSQL instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
@@ -190,10 +192,16 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(msg), nil
 	}
 
+	var host string
+	for i := range foundInstance.IpAddresses {
+		if foundInstance.IpAddresses[i].Type == "PRIVATE" {
+			host = foundInstance.IpAddresses[i].IpAddress
+		}
+	}
 	pdd := &providers.PostgresDeploymentDetails{
 		Username: string(sec.Data[defaultPostgresUserKey]),
 		Password: string(sec.Data[defaultPostgresPasswordKey]),
-		Host:     foundInstance.IpAddresses[0].IpAddress,
+		Host:     host,
 		Database: defaultDeploymentDatabase,
 		Port:     defaultGCPPostgresPort,
 	}
@@ -430,7 +438,7 @@ func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.P
 	return cloudSQLCreateConfig, cloudSQLDeleteConfig, strategyConfig, nil
 }
 
-func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance, sec *v1.Secret) error {
+func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *sqladmin.DatabaseInstance, sec *v1.Secret, address *computepb.Address) error {
 
 	if cloudSQLCreateConfig.DatabaseVersion == "" {
 		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
@@ -469,7 +477,9 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 			DataDiskSizeGb:            defaultDataDiskSizeGb,
 			DeletionProtectionEnabled: defaultDeleteProtectionEnabled,
 			IpConfiguration: &sqladmin.IpConfiguration{
-				Ipv4Enabled: defaultIPConfigIPV4Enabled,
+				AllocatedIpRange: address.GetName(),
+				Ipv4Enabled:      defaultIPConfigIPV4Enabled,
+				PrivateNetwork:   strings.Split(address.GetNetwork(), "v1/")[1],
 			},
 		}
 	}
@@ -537,7 +547,13 @@ func (p *PostgresProvider) exposePostgresInstanceMetrics(ctx context.Context, pg
 	if resources.Contains(healthyPostgresInstanceStates(), instanceState) {
 		instanceHealthy = 1
 		if len(instance.IpAddresses) > 0 {
-			if success := p.TCPPinger.TCPConnection(instance.IpAddresses[0].IpAddress, defaultGCPPostgresPort); success {
+			var host string
+			for i := range instance.IpAddresses {
+				if instance.IpAddresses[i].Type == "PRIVATE" {
+					host = instance.IpAddresses[i].IpAddress
+				}
+			}
+			if success := p.TCPPinger.TCPConnection(host, defaultGCPPostgresPort); success {
 				instanceConnectable = 1
 			}
 		}

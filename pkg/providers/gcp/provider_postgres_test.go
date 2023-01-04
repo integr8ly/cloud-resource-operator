@@ -1553,7 +1553,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
-			_, got1, err := pp.reconcileCloudSQLInstance(tt.args.ctx, tt.args.p, tt.args.sqladminService, tt.args.cloudSQLCreateConfig, tt.args.strategyConfig, tt.args.maintenanceWindow)
+			_, got1, err := pp.reconcileCloudSQLInstance(tt.args.ctx, tt.args.p, tt.args.sqladminService, tt.args.cloudSQLCreateConfig, tt.args.strategyConfig, tt.args.maintenanceWindow, buildTestComputeAddress(nil))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileCloudSQLInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
