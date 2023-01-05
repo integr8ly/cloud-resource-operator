@@ -308,7 +308,7 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]*ec2.Tag, err
 		tags = resources.MergeTags(tags, infraTags)
 	}
 
-	return genericToEc2Tags(tags), nil
+	return genericListToEc2TagList(tags), nil
 }
 
 // Builds a list of valid subnet CIDR blocks

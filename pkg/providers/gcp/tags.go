@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
@@ -10,6 +11,9 @@ import (
 )
 
 func buildDefaultRedisTags(ctx context.Context, client k8sclient.Client, r *v1alpha1.Redis) (map[string]string, error) {
+	if r == nil {
+		return nil, fmt.Errorf("cannot build default gcp redis tags because the redis cr is nil")
+	}
 	defaultTags, _, err := resources.GetDefaultResourceTags(ctx, client, r.Spec.Type, r.Name, r.ObjectMeta.Labels["productName"])
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to get default redis tags")

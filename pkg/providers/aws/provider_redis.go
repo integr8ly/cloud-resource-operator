@@ -702,7 +702,7 @@ func (p *RedisProvider) getDefaultElasticacheTags(ctx context.Context, cr *v1alp
 		msg := "Failed to get default redis tags"
 		return nil, "", errorUtil.Wrapf(err, msg)
 	}
-	return genericToElasticacheTags(tags), clusterID, nil
+	return genericListToElasticacheTagList(tags), clusterID, nil
 }
 
 // buildElasticacheUpdateStrategy compare the current elasticache state to the proposed elasticache state from the

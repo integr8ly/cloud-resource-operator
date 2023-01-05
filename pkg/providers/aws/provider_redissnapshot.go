@@ -149,7 +149,7 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 		_, err = cacheSvc.CreateSnapshot(&elasticache.CreateSnapshotInput{
 			CacheClusterId: aws.String(cacheName),
 			SnapshotName:   aws.String(snapshotName),
-			Tags:           genericToElasticacheTags(tags),
+			Tags:           genericListToElasticacheTagList(tags),
 		})
 		if err != nil {
 			errMsg := "error creating elasticache snapshot"
