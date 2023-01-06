@@ -49,6 +49,10 @@ spec:
                 required:
                 - name
                 type: object
+              size:
+                description: Size allows defining the node size. It is only available
+                  to Redis CR. Blobstorage and Postgres CR's currently does nothing
+                type: string
               skipCreate:
                 type: boolean
               tier:

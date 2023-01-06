@@ -2,14 +2,14 @@ apiVersion: integreatly.org/v1alpha1
 kind: Redis
 metadata:
   # name must be between 1-40 characters
-  name: example-redis
+  name: REPLACE_ME
   labels:
   # label for the product we are installing , subject to change
     productName: productName
 spec:
   # i want my redis storage information output in a secret named example-redis-sec
   secretRef:
-    name: example-redis-sec
+    name: REPLACE_ME-sec
   # i want a redis storage of a development-level tier
   tier: development
   # the type i want for a redis storage
@@ -18,3 +18,5 @@ spec:
   applyImmediately: false
   # whether service updates should take place
   maintenanceWindow: false
+  # Optionally set the redis node size
+  size: REPLACE_ME

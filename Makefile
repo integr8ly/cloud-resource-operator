@@ -9,6 +9,8 @@ VERSION=0.42.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 UPGRADE ?= true
 CHANNEL ?= rhmi
+REDIS_NODE_SIZE ?= ""
+REDIS_NAME ?= example-redis
 
 SHELL=/bin/bash
 
@@ -102,11 +104,11 @@ cluster/seed/managed/blobstorage:
 
 .PHONY: cluster/seed/workshop/redis
 cluster/seed/workshop/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/type: REPLACE_ME/type: workshop/g" | oc apply -f - -n $(NAMESPACE)
+	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: workshop/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/seed/managed/redis
 cluster/seed/managed/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/type: REPLACE_ME/type: managed/g" | oc apply -f - -n $(NAMESPACE)
+	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: managed/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/seed/managed/redissnapshot
 cluster/seed/managed/redissnapshot:
