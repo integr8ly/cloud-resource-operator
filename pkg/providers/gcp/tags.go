@@ -29,3 +29,20 @@ func buildDefaultRedisTags(ctx context.Context, client k8sclient.Client, r *v1al
 	}
 	return tags, nil
 }
+
+func buildDefaultPostgresTags(ctx context.Context, client k8sclient.Client, pg *v1alpha1.Postgres) (map[string]string, error) {
+	defaultTags, _, err := resources.GetDefaultResourceTags(ctx, client, pg.Spec.Type, pg.Name, pg.ObjectMeta.Labels["productName"])
+	if err != nil {
+		return nil, errorUtil.Wrapf(err, "failed to get default postgres tags")
+	}
+	tags := make(map[string]string, len(defaultTags))
+	// GCP labels cannot have uppercase, dash or slash characters
+	// ref: https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+	replacer := strings.NewReplacer(".", "-", "/", "_")
+	for _, tag := range defaultTags {
+		key := strings.ToLower(replacer.Replace(tag.Key))
+		value := strings.ToLower(replacer.Replace(tag.Value))
+		tags[key] = value
+	}
+	return tags, nil
+}
