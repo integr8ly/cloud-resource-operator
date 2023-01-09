@@ -8,6 +8,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	utils "k8s.io/utils/pointer"
 	"reflect"
 	"testing"
 	"time"
@@ -1249,7 +1250,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 		ctx                  context.Context
 		p                    *v1alpha1.Postgres
 		sqladminService      gcpiface.SQLAdminService
-		cloudSQLCreateConfig *sqladmin.DatabaseInstance
+		cloudSQLCreateConfig *gcpiface.DatabaseInstance
 		strategyConfig       *StrategyConfig
 		maintenanceWindow    bool
 	}
@@ -1276,7 +1277,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return nil, errors.New("cannot retrieve sql instance from gcp")
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 				strategyConfig:       &StrategyConfig{ProjectID: gcpTestProjectId},
 				maintenanceWindow:    false,
 			},
@@ -1309,9 +1310,9 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Settings: &sqladmin.Settings{
-						BackupConfiguration: &sqladmin.BackupConfiguration{BackupRetentionSettings: &sqladmin.BackupRetentionSettings{}},
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Settings: &gcpiface.Settings{
+						BackupConfiguration: &gcpiface.BackupConfiguration{BackupRetentionSettings: &gcpiface.BackupRetentionSettings{}},
 					},
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
@@ -1346,7 +1347,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{},
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{},
 				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow:    false,
 			},
@@ -1379,7 +1380,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{Settings: &sqladmin.Settings{}},
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{Settings: &gcpiface.Settings{}},
 				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow:    false,
 			},
@@ -1417,9 +1418,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  gcpTestPostgresInstanceName,
-					State: "RUNNABLE",
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Name: gcpTestPostgresInstanceName,
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow: false,
@@ -1455,9 +1455,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  gcpTestPostgresInstanceName,
-					State: "PENDING_CREATE",
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Name: gcpTestPostgresInstanceName,
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow: false,
@@ -1489,9 +1488,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return nil, errors.New("failed to create cloudSQL instance")
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{
-					Name:  gcpTestPostgresInstanceName,
-					State: "RUNNABLE",
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Name: gcpTestPostgresInstanceName,
 				},
 				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow: false,
@@ -1500,7 +1498,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error creating cloudSQL instance",
+			name: "failure to add annotation",
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -1536,11 +1534,262 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.Operation{}, nil
 					}
 				}),
-				cloudSQLCreateConfig: &sqladmin.DatabaseInstance{},
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{},
 				strategyConfig:       &StrategyConfig{ProjectID: "sample-project-id"},
 				maintenanceWindow:    false,
 			},
 			want:    "failed to add annotation",
+			wantErr: true,
+		},
+		{
+			name: "error when modifying cloud sql instances",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								BackupConfiguration: &sqladmin.BackupConfiguration{
+									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
+										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
+										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
+									},
+								},
+							},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Settings: &gcpiface.Settings{
+						BackupConfiguration: &gcpiface.BackupConfiguration{BackupRetentionSettings: &gcpiface.BackupRetentionSettings{}},
+					},
+				},
+				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow: true,
+			},
+			want:    "failed to modify cloudsql instance: " + gcpTestPostgresInstanceName,
+			wantErr: true,
+		},
+		{
+			name: "success when modifying cloud sql instances",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							IpAddresses: []*sqladmin.IpMapping{
+								{
+									IpAddress: "",
+								},
+							},
+							Settings: &sqladmin.Settings{
+								BackupConfiguration: &sqladmin.BackupConfiguration{
+									Enabled:                    defaultDeleteProtectionEnabled,
+									PointInTimeRecoveryEnabled: defaultPointInTimeRecoveryEnabled,
+									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
+										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
+										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
+									},
+								},
+								DeletionProtectionEnabled: defaultDeleteProtectionEnabled,
+								StorageAutoResize:         utils.Bool(defaultStorageAutoResize),
+								IpConfiguration: &sqladmin.IpConfiguration{
+									Ipv4Enabled: defaultIPConfigIPV4Enabled,
+								},
+							},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, nil
+					}
+				}),
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Settings: &gcpiface.Settings{
+						DeletionProtectionEnabled: utils.Bool(false),
+						StorageAutoResize:         utils.Bool(false),
+						BackupConfiguration: &gcpiface.BackupConfiguration{
+							Enabled:                    utils.Bool(false),
+							PointInTimeRecoveryEnabled: utils.Bool(false),
+							BackupRetentionSettings: &gcpiface.BackupRetentionSettings{
+								RetentionUnit:   "RETENTION_UNIT_UNSPECIFIED",
+								RetainedBackups: 20,
+							}},
+						IpConfiguration: &gcpiface.IpConfiguration{
+							Ipv4Enabled: utils.Bool(false),
+						},
+					},
+				},
+				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow: true,
+			},
+			want:    "completed cloudSQL instance creation",
+			wantErr: false,
+		},
+		{
+			name: "error building update config for cloudsql instance when database version not present",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName + defaultCredSecSuffix,
+						Namespace: testNs,
+					},
+						Data: map[string][]byte{
+							defaultPostgresUserKey:     []byte(testUser),
+							defaultPostgresPasswordKey: []byte(testPassword),
+						},
+					}, buildTestPostgres(), buildTestGcpInfrastructure(nil))
+					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: "",
+							IpAddresses: []*sqladmin.IpMapping{
+								{
+									IpAddress: "",
+								},
+							},
+							Settings: &sqladmin.Settings{
+								BackupConfiguration: &sqladmin.BackupConfiguration{
+									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
+										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
+										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
+									},
+								},
+							},
+						}, nil
+					}
+				}),
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Settings: &gcpiface.Settings{
+						BackupConfiguration: &gcpiface.BackupConfiguration{BackupRetentionSettings: &gcpiface.BackupRetentionSettings{}},
+					},
+				},
+				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow: true,
+			},
+			want:    "error building update config for cloudsql instance",
+			wantErr: true,
+		},
+		{
+			name: "error when setting postgres maintenance window to false",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName + defaultCredSecSuffix,
+						Namespace: testNs,
+					},
+						Data: map[string][]byte{
+							defaultPostgresUserKey:     []byte(testUser),
+							defaultPostgresPasswordKey: []byte(testPassword),
+						},
+					}, &v1alpha1.Postgres{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      postgresProviderName,
+							Namespace: testNs,
+							Labels: map[string]string{
+								"productName": "test_product",
+							},
+							ResourceVersion: "1000",
+						},
+						Spec: types.ResourceTypeSpec{
+							MaintenanceWindow: true,
+						},
+					}, buildTestGcpInfrastructure(nil))
+					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				ctx: context.TODO(),
+				p:   buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							IpAddresses: []*sqladmin.IpMapping{
+								{
+									IpAddress: "",
+								},
+							},
+							Settings: &sqladmin.Settings{
+								BackupConfiguration: &sqladmin.BackupConfiguration{
+									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
+										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
+										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
+									},
+								},
+							},
+						}, nil
+					}
+				}),
+				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
+					Settings: &gcpiface.Settings{
+						BackupConfiguration: &gcpiface.BackupConfiguration{BackupRetentionSettings: &gcpiface.BackupRetentionSettings{}},
+					},
+				},
+				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
+				maintenanceWindow: true,
+			},
+			want:    "failed to set postgres maintenance window to false",
 			wantErr: true,
 		},
 	}
@@ -1704,7 +1953,7 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 		name                  string
 		fields                fields
 		args                  args
-		createInstanceRequest *sqladmin.DatabaseInstance
+		createInstanceRequest *gcpiface.DatabaseInstance
 		deleteInstanceRequest *sqladmin.DatabaseInstance
 		strategyConfig        *StrategyConfig
 		wantErr               bool
@@ -1748,7 +1997,7 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+			createInstanceRequest: &gcpiface.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
@@ -1832,7 +2081,7 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+			createInstanceRequest: &gcpiface.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
@@ -1913,7 +2162,7 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+			createInstanceRequest: &gcpiface.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
@@ -1957,10 +2206,69 @@ func TestPostgresProvider_getPostgresConfig(t *testing.T) {
 					},
 				},
 			},
-			createInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+			createInstanceRequest: &gcpiface.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
 			strategyConfig:        buildTestStrategyConfig(),
 			wantErr:               false,
+		},
+		{
+			name: "success building default postgres tags",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return nil
+					}
+					return mc
+				}(),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return &StrategyConfig{
+							Region:         gcpTestRegion,
+							ProjectID:      gcpTestProjectId,
+							CreateStrategy: json.RawMessage(`{"Settings": {"userLabels":{"integreatly-org_clusterid":"gcp-test-cluster","integreatly-org_resource-name":"testName","integreatly-org_resource-type":"","red-hat-managed":"true"}}}`),
+							DeleteStrategy: json.RawMessage(`{}`),
+						}, nil
+					},
+				},
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx: context.TODO(),
+				pg: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
+				},
+			},
+			createInstanceRequest: &gcpiface.DatabaseInstance{
+				Name: gcpTestPostgresInstanceName,
+				Settings: &gcpiface.Settings{
+					UserLabels: map[string]string{
+						"integreatly-org_clusterid":     gcpTestClusterName,
+						"integreatly-org_resource-name": testName,
+						"integreatly-org_resource-type": "",
+						"red-hat-managed":               "true",
+					},
+				},
+			},
+			deleteInstanceRequest: &sqladmin.DatabaseInstance{Name: gcpTestPostgresInstanceName},
+			strategyConfig: &StrategyConfig{
+				Region:         gcpTestRegion,
+				ProjectID:      gcpTestProjectId,
+				CreateStrategy: json.RawMessage(`{"Settings": {"userLabels":{"integreatly-org_clusterid":"gcp-test-cluster","integreatly-org_resource-name":"testName","integreatly-org_resource-type":"","red-hat-managed":"true"}}}`),
+				DeleteStrategy: json.RawMessage(`{}`),
+			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {

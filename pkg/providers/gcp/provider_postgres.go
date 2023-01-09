@@ -181,7 +181,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		if modifiedInstance != nil {
 			logger.Infof("modifying cloudSQL instance: %s", foundInstance.Name)
 			_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, modifiedInstance)
-			if err != nil && !resources.IsNotAlreadyExistsError(err) {
+			if err != nil && !resources.IsNotStatusConflictError(err) {
 				msg := fmt.Sprintf("failed to modify cloudsql instance: %s", foundInstance.Name)
 				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
@@ -610,26 +610,15 @@ func buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foun
 		modifiedInstance.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{
 			ForceSendFields: []string{},
 		}
-
-		if cloudSQLConfig.Settings.BackupConfiguration != nil && foundInstanceConfig.Settings.BackupConfiguration != nil {
-			if cloudSQLConfig.Settings.BackupConfiguration.Enabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.Enabled != foundInstanceConfig.Settings.BackupConfiguration.Enabled {
-				modifiedInstance.Settings.BackupConfiguration.Enabled = *cloudSQLConfig.Settings.BackupConfiguration.Enabled
-				modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "Enabled")
-				updateFound = true
-			}
-			if cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != foundInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled {
-				modifiedInstance.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
-				modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "PointInTimeRecoveryEnabled")
-				updateFound = true
-			}
-			if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit != foundInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit {
-				modifiedInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit
-				updateFound = true
-			}
-			if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups != foundInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups {
-				modifiedInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups
-				updateFound = true
-			}
+		if cloudSQLConfig.Settings.BackupConfiguration.Enabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.Enabled != foundInstanceConfig.Settings.BackupConfiguration.Enabled {
+			modifiedInstance.Settings.BackupConfiguration.Enabled = *cloudSQLConfig.Settings.BackupConfiguration.Enabled
+			modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "Enabled")
+			updateFound = true
+		}
+		if cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != foundInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled {
+			modifiedInstance.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
+			modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "PointInTimeRecoveryEnabled")
+			updateFound = true
 		}
 	}
 
@@ -668,8 +657,8 @@ func buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foun
 		if versionUpgradeNeeded {
 			logrus.Info(fmt.Sprintf("Version upgrade found, the current DatabaseVersion is %s and is upgrading to %s", foundInstanceConfig.DatabaseVersion, cloudSQLConfig.DatabaseVersion))
 			modifiedInstance.DatabaseVersion = cloudSQLConfig.DatabaseVersion
+			updateFound = true
 		}
-		updateFound = true
 	}
 
 	if !updateFound {
@@ -763,6 +752,7 @@ func convertDatabaseStruct(cloudSQLCreateConfig *gcpiface.DatabaseInstance) (*sq
 		gcpInstanceConfig.DiskEncryptionConfiguration = cloudSQLCreateConfig.DiskEncryptionConfiguration
 	}
 	if cloudSQLCreateConfig.FailoverReplica != nil {
+		gcpInstanceConfig.FailoverReplica = &sqladmin.DatabaseInstanceFailoverReplica{}
 		if cloudSQLCreateConfig.FailoverReplica.Available != nil {
 			gcpInstanceConfig.FailoverReplica.Available = *cloudSQLCreateConfig.FailoverReplica.Available
 		}
