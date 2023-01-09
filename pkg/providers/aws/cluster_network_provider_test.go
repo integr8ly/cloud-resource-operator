@@ -198,10 +198,10 @@ func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 				Value: aws.String("test"),
 			},
 			{
-				Key:   aws.String(tagDisplayName),
+				Key:   aws.String(resources.TagDisplayName),
 				Value: aws.String(defaultSubnetNameTagValue),
 			},
-			genericToEc2Tag(buildManagedTag()),
+			genericToEc2Tag(resources.BuildManagedTag()),
 		},
 	}
 }
@@ -319,7 +319,7 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 					Key:   aws.String(getOSDClusterTagKey(defaultInfraName)),
 					Value: aws.String(clusterOwnedTagValue),
 				},
-				genericToEc2Tag(buildManagedTag()),
+				genericToEc2Tag(resources.BuildManagedTag()),
 			},
 			State: aws.String(ec2.VpcStateAvailable),
 		},
@@ -331,9 +331,9 @@ func buildValidStandaloneVPCTags() []*ec2.Tag {
 			Key:   aws.String(defaultSubnetTag),
 			Value: aws.String(defaultInfraName),
 		},
-		genericToEc2Tag(buildManagedTag()),
+		genericToEc2Tag(resources.BuildManagedTag()),
 		{
-			Key:   aws.String(tagDisplayName),
+			Key:   aws.String(resources.TagDisplayName),
 			Value: aws.String(defaultVpcNameTagValue),
 		},
 	}
@@ -1435,7 +1435,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						return &ec2.DescribeRouteTablesOutput{
 							RouteTables: []*ec2.RouteTable{
 								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									tags, _ := getDefaultTagSpec(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), &tag{key: tagDisplayName, value: defaultRouteTableNameTagValue}, ec2.ResourceTypeRouteTable)
+									tags, _ := getDefaultTagSpec(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), &resources.Tag{Key: resources.TagDisplayName, Value: defaultRouteTableNameTagValue}, ec2.ResourceTypeRouteTable)
 									table.Tags = tags[0].Tags
 								}),
 							},
@@ -2560,7 +2560,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2658,7 +2658,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2716,7 +2716,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2803,7 +2803,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2818,7 +2818,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 									group.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(tagDisplayName)
+											e.Key = aws.String(resources.TagDisplayName)
 											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
@@ -2885,7 +2885,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					group.Tags = []*ec2.Tag{
 						buildMockEc2Tag(func(e *ec2.Tag) {}),
 						buildMockEc2Tag(func(e *ec2.Tag) {
-							e.Key = aws.String(tagDisplayName)
+							e.Key = aws.String(resources.TagDisplayName)
 							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
 					}
@@ -2906,7 +2906,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2921,7 +2921,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 									group.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(tagDisplayName)
+											e.Key = aws.String(resources.TagDisplayName)
 											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
@@ -2991,7 +2991,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					group.Tags = []*ec2.Tag{
 						buildMockEc2Tag(func(e *ec2.Tag) {}),
 						buildMockEc2Tag(func(e *ec2.Tag) {
-							e.Key = aws.String(tagDisplayName)
+							e.Key = aws.String(resources.TagDisplayName)
 							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
 					}
@@ -3082,7 +3082,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -3127,7 +3127,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 									group.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {}),
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(tagDisplayName)
+											e.Key = aws.String(resources.TagDisplayName)
 											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
@@ -3159,7 +3159,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -3224,7 +3224,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -3268,7 +3268,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
 									group.Tags = []*ec2.Tag{
 										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(tagDisplayName)
+											e.Key = aws.String(resources.TagDisplayName)
 											e.Value = aws.String(defaultVpcNameTagValue)
 										}),
 									}
@@ -3303,7 +3303,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
