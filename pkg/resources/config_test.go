@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,7 +111,7 @@ func TestGetOrganizationTag(t *testing.T) {
 
 func TestBuildInfraName(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -168,7 +168,7 @@ func TestBuildInfraName(t *testing.T) {
 
 func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -225,7 +225,7 @@ func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 
 func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}

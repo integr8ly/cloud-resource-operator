@@ -3,14 +3,15 @@ package aws
 import (
 	"context"
 	"errors"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"testing"
 	"time"
 
-	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -47,7 +48,7 @@ type mockS3Svc struct {
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croapis.AddToScheme(scheme)
-	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = configv1.Install(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {

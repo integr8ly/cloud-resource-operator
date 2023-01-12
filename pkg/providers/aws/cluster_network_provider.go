@@ -41,10 +41,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	configv1 "github.com/openshift/api/config/v1"
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1628,7 +1628,7 @@ func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*ne
 	}
 
 	//getting the network cr called from the cluster
-	networkConf := &v12.Network{}
+	networkConf := &configv1.Network{}
 	err = n.Client.Get(ctx, client.ObjectKey{Name: "cluster"}, networkConf)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get network kind")
@@ -1703,7 +1703,7 @@ func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*ne
 
 // Makes a call to the cluster to get the pod cidr from the network CR, parses it into a ip notation
 // then checks to see if the value is actually being returned in case of a scenario where the cidr is empty in the CR
-func getPodCIDR(networkConf *v12.Network) (*net.IPNet, bool, error) {
+func getPodCIDR(networkConf *configv1.Network) (*net.IPNet, bool, error) {
 	var podNet *net.IPNet
 	var err error
 
@@ -1721,7 +1721,7 @@ func getPodCIDR(networkConf *v12.Network) (*net.IPNet, bool, error) {
 
 // Makes a call to the cluster to get the service cidr from the network CR, parses it into a ip notation
 // then checks to see if the value is actually being returned in case of a scenario where the cidr is empty in the CR
-func getServiceCIDR(networkConf *v12.Network) (*net.IPNet, bool, error) {
+func getServiceCIDR(networkConf *configv1.Network) (*net.IPNet, bool, error) {
 	var err error
 	var serviceNet *net.IPNet
 

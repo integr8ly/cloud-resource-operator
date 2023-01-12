@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"google.golang.org/api/servicenetworking/v1"
@@ -14,15 +19,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"net"
-	"reflect"
-	"testing"
-	"time"
 
 	redis "cloud.google.com/go/redis/apiv1"
 	"github.com/googleapis/gax-go/v2"
-	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
+	configv1 "github.com/openshift/api/config/v1"
 	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	corev1 "k8s.io/api/core/v1"
 	utils "k8s.io/utils/pointer"
@@ -93,7 +94,7 @@ func TestRedisProvider_deleteRedisInstance(t *testing.T) {
 		isLastResource bool
 	}
 	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
 	instanceID := fmt.Sprintf("projects/%s/locations/%s/instances/%s", gcpTestProjectId, gcpTestRegion, testName)
@@ -736,7 +737,7 @@ func TestRedisProvider_getRedisStrategyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	_ = corev1.AddToScheme(scheme)
 	tests := []struct {
 		name           string
@@ -1115,7 +1116,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 
 func TestRedisProvider_createRedisInstance(t *testing.T) {
 	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
 	redisCR := &v1alpha1.Redis{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2072,7 +2073,7 @@ func TestRedisProvider_exposeRedisInstanceMetrics(t *testing.T) {
 		instance *redispb.Instance
 	}
 	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.AddToScheme(scheme)
 	tests := []struct {
 		name   string
 		fields fields
@@ -2192,7 +2193,7 @@ func TestRedisProvider_setRedisDeletionTimestampMetric(t *testing.T) {
 		r   *v1alpha1.Redis
 	}
 	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.AddToScheme(scheme)
 	tests := []struct {
 		name   string
 		fields fields

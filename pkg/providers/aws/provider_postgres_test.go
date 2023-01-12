@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	configv1 "github.com/openshift/api/config/v1"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -542,18 +542,18 @@ func buildTestPostgresApplyImmediatelyCR() *v1alpha1.Postgres {
 	}
 }
 
-func buildTestInfra() *v12.Infrastructure {
-	return &v12.Infrastructure{
+func buildTestInfra() *configv1.Infrastructure {
+	return &configv1.Infrastructure{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name: "cluster",
 		},
-		Status: v12.InfrastructureStatus{
+		Status: configv1.InfrastructureStatus{
 			InfrastructureName: defaultInfraName,
-			PlatformStatus: &v12.PlatformStatus{
-				Type: v12.AWSPlatformType,
-				AWS: &v12.AWSPlatformStatus{
+			PlatformStatus: &configv1.PlatformStatus{
+				Type: configv1.AWSPlatformType,
+				AWS: &configv1.AWSPlatformStatus{
 					Region: "eu-west-1",
-					ResourceTags: []v12.AWSResourceTag{
+					ResourceTags: []configv1.AWSResourceTag{
 						{
 							Key:   "test-key",
 							Value: "test-value",
@@ -565,14 +565,14 @@ func buildTestInfra() *v12.Infrastructure {
 	}
 }
 
-func buildTestNetwork(modifyFn func(network *v12.Network)) *v12.Network {
+func buildTestNetwork(modifyFn func(network *configv1.Network)) *configv1.Network {
 
-	mock := &v12.Network{
+	mock := &configv1.Network{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name: "cluster",
 		},
-		Spec: v12.NetworkSpec{
-			ClusterNetwork: []v12.ClusterNetworkEntry{
+		Spec: configv1.NetworkSpec{
+			ClusterNetwork: []configv1.ClusterNetworkEntry{
 				{
 					CIDR:       "10.0.0.0/14",
 					HostPrefix: 23,

@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apis "github.com/integr8ly/cloud-resource-operator/apis"
-	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	blobstorageController "github.com/integr8ly/cloud-resource-operator/controllers/blobstorage"
 	cloudmetricsController "github.com/integr8ly/cloud-resource-operator/controllers/cloudmetrics"
@@ -50,7 +49,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(integreatlyv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(v1.AddToScheme(scheme))
 
 	utilruntime.Must(apis.AddToSchemes.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme

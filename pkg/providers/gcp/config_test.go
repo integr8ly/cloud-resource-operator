@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/aws"
-	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	configv1 "github.com/openshift/api/config/v1"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"testing"
 )
 
 func buildTestGcpStrategyConfigMap(argsMap map[string]*string) *corev1.ConfigMap {
@@ -141,7 +142,7 @@ func Test_getDefaultProject(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	tests := []struct {
 		name    string
 		args    args
@@ -208,7 +209,7 @@ func TestGetProjectFromStrategyOrDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	tests := []struct {
 		name    string
 		args    args
@@ -279,7 +280,7 @@ func Test_getDefaultRegion(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	tests := []struct {
 		name    string
 		args    args
@@ -346,7 +347,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	_ = v1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	tests := []struct {
 		name    string
 		args    args
