@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	croapis "github.com/integr8ly/cloud-resource-operator/apis"
-	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	v1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,7 +20,7 @@ import (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croapis.AddToScheme(scheme)
-	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = configv1.Install(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {

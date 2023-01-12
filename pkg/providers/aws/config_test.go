@@ -11,7 +11,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/spf13/afero"
 
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	configv1 "github.com/openshift/api/config/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -198,7 +198,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
 	v1.AddToScheme(fakeScheme)
-	configv1.SchemeBuilder.AddToScheme(fakeScheme)
+	configv1.Install(fakeScheme)
 
 	fakeStrategy := &StrategyConfig{
 		Region: "strategy-region",
@@ -284,7 +284,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 
 func TestCreateSessionFromStrategy(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -401,7 +401,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 
 func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}

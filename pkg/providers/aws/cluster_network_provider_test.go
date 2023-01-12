@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"net"
 	"reflect"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"testing"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	errorUtil "github.com/pkg/errors"
@@ -20,9 +21,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	v12 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1380,15 +1381,15 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "fail while reconciling vpc tags",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+				Client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
-					Status: v12.InfrastructureStatus{
+					Status: configv1.InfrastructureStatus{
 						InfrastructureName: defaultInfraName,
-						PlatformStatus: &v12.PlatformStatus{
-							Type: v12.AWSPlatformType,
-							AWS: &v12.AWSPlatformStatus{
+						PlatformStatus: &configv1.PlatformStatus{
+							Type: configv1.AWSPlatformType,
+							AWS: &configv1.AWSPlatformStatus{
 								Region: "eu-west-1",
 							},
 						},
@@ -1474,11 +1475,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged vpc is provided with correct tags",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+				Client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
-					Status: v12.InfrastructureStatus{
+					Status: configv1.InfrastructureStatus{
 						InfrastructureName: defaultInfraName,
 					},
 				}),
@@ -1524,11 +1525,11 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		{
 			name: "verify untagged subnets are provided with correct tags",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, &v12.Infrastructure{
+				Client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
-					Status: v12.InfrastructureStatus{
+					Status: configv1.InfrastructureStatus{
 						InfrastructureName: defaultInfraName,
 					},
 				}),
@@ -1890,7 +1891,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		{
 			name: "verify default cidr block and no error on empty cidr block",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {})),
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *configv1.Network) {})),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
@@ -1929,8 +1930,8 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		{
 			name: "verify empty cidr blocks returns a error",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {
-					network.Spec.ClusterNetwork = []v12.ClusterNetworkEntry{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *configv1.Network) {
+					network.Spec.ClusterNetwork = []configv1.ClusterNetworkEntry{
 						{
 							CIDR: "",
 						},
@@ -1969,8 +1970,8 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		{
 			name: "verify no non overlapping available cidr blocks returns a error",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *v12.Network) {
-					network.Spec.ClusterNetwork = []v12.ClusterNetworkEntry{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *configv1.Network) {
+					network.Spec.ClusterNetwork = []configv1.ClusterNetworkEntry{
 						{
 							CIDR: "10.0.0.0/8",
 						},
