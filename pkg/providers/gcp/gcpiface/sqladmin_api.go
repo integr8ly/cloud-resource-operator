@@ -2,6 +2,7 @@ package gcpiface
 
 import (
 	"context"
+
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 )
@@ -48,9 +49,8 @@ func (m *MockSqlClient) CreateInstance(ctx context.Context, projectID string, in
 }
 
 func (m *MockSqlClient) ModifyInstance(ctx context.Context, projectID string, instanceName string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
-	instanceName = instance.Name
 	if m.ModifyInstanceFn != nil {
-		return m.ModifyInstanceFn(ctx, projectID, instanceName, instance)
+		return m.ModifyInstanceFn(ctx, projectID, instance.Name, instance)
 	}
 	return nil, nil
 }

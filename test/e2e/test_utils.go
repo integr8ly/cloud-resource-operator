@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	dynclient "sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,7 +38,7 @@ var (
 )
 
 type TestingContext struct {
-	Client          dynclient.Client
+	Client          k8sclient.Client
 	KubeConfig      *rest.Config
 	KubeClient      kubernetes.Interface
 	ExtensionClient *clientset.Clientset

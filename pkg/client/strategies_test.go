@@ -5,12 +5,12 @@ import (
 	"reflect"
 	"testing"
 
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	croAWS "github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const (
@@ -63,7 +63,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map redis is created successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -83,7 +83,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map redis is updated successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme, buildDefaultConfigMap()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildDefaultConfigMap()),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -103,7 +103,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map postgres is created successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -123,7 +123,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map postgres is updated successfully",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme, buildDefaultConfigMap()),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildDefaultConfigMap()),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "Mon 16:05",
@@ -143,7 +143,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map check backup start time parsing fails",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "I am the wrong format",
 					MaintenanceStartTime: "Mon 16:05",
@@ -161,7 +161,7 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			name: "aws strategy config map check maintenance start time parsing fails",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				timeConfig: &StrategyTimeConfig{
 					BackupStartTime:      "15:04",
 					MaintenanceStartTime: "I am the wrong format",

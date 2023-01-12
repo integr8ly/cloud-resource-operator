@@ -63,9 +63,11 @@ func buildMockNetworkManager() *NetworkManagerMock {
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
-	err := multierr.Append(
+	err := multierr.Combine(
 		corev1.AddToScheme(scheme),
-		apis.AddToScheme(scheme))
+		apis.AddToScheme(scheme),
+		configv1.Install(scheme),
+	)
 	if err != nil {
 		return nil, err
 	}

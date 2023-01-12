@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,8 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 )
 
 var log = logf.Log.WithName("controller_redis")
@@ -61,7 +58,7 @@ var _ reconcile.Reconciler = &RedisReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*RedisReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
@@ -92,7 +89,7 @@ func New(mgr manager.Manager) (*RedisReconciler, error) {
 
 func (r *RedisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.Redis{}).
+		For(&v1alpha1.Redis{}).
 		Watches(&source.Kind{Type: &v1alpha1.Redis{}}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 			IsController: true,

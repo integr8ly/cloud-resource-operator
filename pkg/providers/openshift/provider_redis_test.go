@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
-
 	"reflect"
 	"testing"
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/integr8ly/cloud-resource-operator/apis"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -21,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -166,7 +164,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestRedisCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -180,7 +178,7 @@ func TestOpenShiftRedisProvider_CreateRedis(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -236,7 +234,7 @@ func TestOpenShiftRedisProvider_DeleteRedis(t *testing.T) {
 		{
 			name: "test successful deletion",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestDeploymentReady(), buildTestRedisCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 			},
@@ -275,7 +273,7 @@ func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseInProgress,
+						Phase: croType.PhaseInProgress,
 					},
 				},
 			},
@@ -286,7 +284,7 @@ func TestOpenShiftRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseComplete,
+						Phase: croType.PhaseComplete,
 					},
 				},
 			},

@@ -1,12 +1,12 @@
 /*
 AWS Strategy Setup
 
-A utility to abstract the various strategy map ConfigMaps from the service using CRO
+# A utility to abstract the various strategy map ConfigMaps from the service using CRO
 
 Problem Statement:
- - We require an AWS strategy map ConfigMaps to be in place to provide configuration used to provision AWS cloud resources
+  - We require an AWS strategy map ConfigMaps to be in place to provide configuration used to provision AWS cloud resources
 
-This utility provides the abstraction necessary, provisioning an AWS strategy map
+# This utility provides the abstraction necessary, provisioning an AWS strategy map
 
 We accept start times for maintenance and backup times as a level of abstraction
 Building the correct maintenance and backup times necessary for AWS
@@ -18,8 +18,10 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -29,8 +31,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"strings"
-	"time"
 )
 
 // reconciles aws strategy map, adding maintenance and backup window fields
@@ -259,7 +259,7 @@ func buildAWSWindows(timeConfig *StrategyTimeConfig) (string, string, error) {
 	// http://baodad.blogspot.com/2014/06/date-range-overlap.html
 	// (StartA <= EndB)  and  (EndA >= StartB)
 	if timeBlockOverlaps(parsedBackupTime, parsedBackupTimePlusOneHour, parsedMaintenanceTime, parsedMaintenanceTimePlusOneHour) {
-		return "", "", errors.New(fmt.Sprintf("backup and maintenance windows can not overlap, we require a minumum of 1 hour windows, current backup window : %s, current maintenance window : %s ", awsBackupString, awsMaintenanceString))
+		return "", "", fmt.Errorf("backup and maintenance windows can not overlap, we require a minumum of 1 hour windows, current backup window : %s, current maintenance window : %s ", awsBackupString, awsMaintenanceString)
 	}
 
 	return awsBackupString, awsMaintenanceString, nil
