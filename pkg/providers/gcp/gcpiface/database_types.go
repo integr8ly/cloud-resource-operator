@@ -291,7 +291,7 @@ type Settings struct {
 	// StorageAutoResizeLimit: The maximum size to which storage capacity
 	// can be automatically increased. The default value is 0, which
 	// specifies that there is no limit.
-	StorageAutoResizeLimit int64 `json:"storageAutoResizeLimit,omitempty,string"`
+	StorageAutoResizeLimit int64 `json:"storageAutoResizeLimit,omitempty"`
 
 	// Tier: The tier (or machine type) for this instance, for example
 	// `db-custom-1-3840`. WARNING: Changing this restarts the instance.
