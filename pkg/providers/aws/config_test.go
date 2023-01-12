@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/spf13/afero"
 
@@ -15,7 +16,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -92,7 +92,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to marshal strategy config", err)
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -138,7 +138,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "doesnotexist",
 			expectErr:   true,
-			client:      fake.NewFakeClientWithScheme(scheme),
+			client:      moqClient.NewSigsClientMoqWithScheme(scheme),
 		},
 		{
 			name:        "aws strategy for resource type is not defined",
@@ -147,7 +147,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "test",
 			expectErr:   true,
-			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
@@ -164,13 +164,13 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "test",
 			expectErr:   true,
-			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
 				},
 				Data: map[string]string{
-					"blobstorage": fmt.Sprintf("{\"test\":{\"region\":666}}"),
+					"blobstorage": "{\"test\":{\"region\":666}}",
 				},
 			}),
 		},
@@ -220,7 +220,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				strategy: fakeStrategy,
 			},
 			wantErr: true,
@@ -229,7 +229,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "strategy defines region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 			},
 			want: fakeStrategy.Region,
@@ -238,7 +238,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "default used when strategy does not define region",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: &StrategyConfig{
 					Region: "",
 				},
@@ -249,7 +249,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "failed to retrieve region from cluster, region is not defined",
 			args: args{
 				ctx: context.TODO(),
-				c: fake.NewFakeClientWithScheme(fakeScheme, &configv1.Infrastructure{
+				c: moqClient.NewSigsClientMoqWithScheme(fakeScheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
@@ -309,7 +309,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(fakeScheme),
+				c:      moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				mockFs: func() {},
 			},
 			wantErr: true,
@@ -318,7 +318,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - local",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -331,7 +331,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - in pod",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -353,7 +353,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with static idp",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					AccessKeyID:     "ACCESS_KEY_ID",
@@ -417,7 +417,7 @@ func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 		{
 			name: "successfully create new default config map manager",
 			args: args{
-				c: fake.NewFakeClientWithScheme(fakeScheme),
+				c: moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 			},
 			expectedName:      DefaultConfigMapName,
 			expectedNamespace: DefaultConfigMapNamespace,

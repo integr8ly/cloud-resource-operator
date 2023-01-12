@@ -370,7 +370,7 @@ func emptyBucket(s3svc s3iface.S3API, bucketCfg *s3.CreateBucketInput) error {
 
 	// Traverse iterator deleting each object
 	if err := s3manager.NewBatchDeleteWithClient(s3svc).Delete(aws.BackgroundContext(), iter); err != nil {
-		errMsg := fmt.Sprintf("unable to delete objects from bucket")
+		errMsg := "unable to delete objects from bucket"
 		return errorUtil.Wrapf(err, errMsg)
 	}
 

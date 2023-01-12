@@ -24,13 +24,10 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	apimachinery "k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -135,7 +132,7 @@ func buildCacheClusterList(modifyFn func([]*elasticache.CacheCluster)) []*elasti
 }
 
 func buildTestSchemeRedis() (*runtime.Scheme, error) {
-	scheme := apimachinery.NewScheme()
+	scheme := runtime.NewScheme()
 	err := croApis.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = cloudCredentialApis.AddToScheme(scheme)
@@ -330,7 +327,7 @@ func Test_createRedisCluster(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	secName, err := resources.BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
+	secName, err := resources.BuildInfraName(context.TODO(), moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build security name", err)
@@ -419,7 +416,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -436,7 +433,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			},
 			wantErr: true,
 			mockFn: func() {
@@ -459,7 +456,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			},
 			wantErr: true,
 			mockFn: func() {
@@ -498,7 +495,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			},
 			wantErr: true,
 		},
@@ -537,7 +534,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -592,7 +589,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -652,7 +649,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -717,7 +714,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -784,7 +781,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -861,7 +858,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -913,7 +910,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -976,7 +973,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger: testLogger,
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 			},
 			wantErr: true,
 		},
@@ -1060,7 +1057,7 @@ func Test_createRedisCluster(t *testing.T) {
 			},
 			fields: fields{
 				Logger:    testLogger,
-				Client:    fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				TCPPinger: resources.BuildMockConnectionTester(),
 			},
 			wantErr: true,
@@ -1117,7 +1114,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1194,7 +1191,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1258,7 +1255,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
 			wantErr: false,
@@ -1335,7 +1332,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1394,7 +1391,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
 		},
@@ -1452,7 +1449,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
 		},
@@ -1508,7 +1505,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1568,7 +1565,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
 		},
@@ -1623,7 +1620,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1704,7 +1701,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1760,7 +1757,7 @@ func Test_createRedisCluster(t *testing.T) {
 				CredentialManager: nil,
 				Logger:            testLogger,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
 			wantErr: false,
@@ -1835,7 +1832,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1858,7 +1855,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1888,7 +1885,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1931,7 +1928,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1962,7 +1959,7 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2094,7 +2091,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
@@ -2134,7 +2131,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
@@ -2174,7 +2171,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
@@ -2214,7 +2211,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
@@ -2551,7 +2548,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2598,7 +2595,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2642,7 +2639,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2686,7 +2683,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2727,7 +2724,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2768,7 +2765,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2824,7 +2821,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
@@ -2872,7 +2869,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				ConfigManager:     nil,
 				CacheSvc:          nil,
 				TCPPinger:         resources.BuildMockConnectionTester(),
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {

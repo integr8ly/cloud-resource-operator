@@ -13,7 +13,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -200,7 +199,7 @@ var _ reconcile.Reconciler = &CloudMetricsReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*CloudMetricsReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
 		Scheme: mgr.GetScheme(),

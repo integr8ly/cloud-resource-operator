@@ -9,8 +9,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 
-	v1 "k8s.io/api/core/v1"
-
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -25,7 +23,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -138,7 +136,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (croType.StatusMessage, error) {
 	// delete service
 	p.Logger.Info("Deleting redis service")
-	svc := &apiv1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      r.Name,
 			Namespace: r.Namespace,
@@ -152,7 +150,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 
 	// delete pvc
 	p.Logger.Info("Deleting redis persistent volume claim")
-	pvc := &apiv1.PersistentVolumeClaim{
+	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      r.Name,
 			Namespace: r.Namespace,
@@ -166,7 +164,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 
 	// delete config map
 	p.Logger.Info("Deleting redis configmap")
-	cm := &apiv1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      redisConfigMapName,
 			Namespace: r.Namespace,
@@ -235,9 +233,9 @@ func (p *RedisProvider) CreateDeployment(ctx context.Context, d *appsv1.Deployme
 	return nil
 }
 
-func (p *RedisProvider) CreateService(ctx context.Context, s *apiv1.Service, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreateService(ctx context.Context, s *corev1.Service, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, s, func(existing runtime.Object) error {
-		e := existing.(*apiv1.Service)
+		e := existing.(*corev1.Service)
 
 		if redisCfg.RedisServiceSpec == nil {
 			clusterIP := e.Spec.ClusterIP
@@ -255,9 +253,9 @@ func (p *RedisProvider) CreateService(ctx context.Context, s *apiv1.Service, red
 	return nil
 }
 
-func (p *RedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreateConfigMap(ctx context.Context, cm *corev1.ConfigMap, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, cm, func(existing runtime.Object) error {
-		e := existing.(*apiv1.ConfigMap)
+		e := existing.(*corev1.ConfigMap)
 
 		if redisCfg.RedisConfigMapData == nil {
 			e.Data = cm.Data
@@ -273,9 +271,9 @@ func (p *RedisProvider) CreateConfigMap(ctx context.Context, cm *apiv1.ConfigMap
 	return nil
 }
 
-func (p *RedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
+func (p *RedisProvider) CreatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, redisCfg *RedisStrat) error {
 	or, err := immutableCreateOrUpdate(ctx, p.Client, pvc, func(existing runtime.Object) error {
-		e := existing.(*apiv1.PersistentVolumeClaim)
+		e := existing.(*corev1.PersistentVolumeClaim)
 		// resources.requests is only mutable on bound claims
 		if strings.ToLower(string(e.Status.Phase)) != "bound" {
 			return nil
@@ -297,10 +295,10 @@ func (p *RedisProvider) CreatePVC(ctx context.Context, pvc *apiv1.PersistentVolu
 type RedisStrat struct {
 	_ struct{} `type:"structure"`
 
-	RedisDeploymentSpec *appsv1.DeploymentSpec           `json:"deploymentSpec"`
-	RedisServiceSpec    *apiv1.ServiceSpec               `json:"serviceSpec"`
-	RedisPVCSpec        *apiv1.PersistentVolumeClaimSpec `json:"pvcSpec"`
-	RedisConfigMapData  map[string]string                `json:"configMapData"`
+	RedisDeploymentSpec *appsv1.DeploymentSpec            `json:"deploymentSpec"`
+	RedisServiceSpec    *corev1.ServiceSpec               `json:"serviceSpec"`
+	RedisPVCSpec        *corev1.PersistentVolumeClaimSpec `json:"pvcSpec"`
+	RedisConfigMapData  map[string]string                 `json:"configMapData"`
 }
 
 func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
@@ -314,8 +312,8 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 			Namespace: r.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
 					Volumes:    buildDefaultRedisPodVolumes(r),
 					Containers: buildDefaultRedisPodContainers(r),
 				},
@@ -339,7 +337,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 	// required for restricted namespace
 	if strings.HasPrefix(r.Namespace, NamespacePrefixOpenShift) {
 		userGroupId := int64(1001)
-		depl.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
+		depl.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			FSGroup:            &userGroupId,
 			SupplementalGroups: []int64{userGroupId},
 		}
@@ -347,11 +345,11 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 	return depl
 }
 
-func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
-	return []apiv1.Container{
+func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
+	return []corev1.Container{
 		{
 			Image:           "registry.redhat.io/rhscl/redis-32-rhel7",
-			ImagePullPolicy: apiv1.PullIfNotPresent,
+			ImagePullPolicy: corev1.PullIfNotPresent,
 			Name:            redisContainerName,
 			Command: []string{
 				redisContainerCommand,
@@ -361,19 +359,19 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
 				"--daemonize",
 				"no",
 			},
-			Resources: apiv1.ResourceRequirements{
-				Limits: apiv1.ResourceList{
-					apiv1.ResourceCPU:    resource.MustParse("500m"),
-					apiv1.ResourceMemory: resource.MustParse("6Gi"),
+			Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("6Gi"),
 				},
-				Requests: apiv1.ResourceList{
-					apiv1.ResourceCPU:    resource.MustParse("150m"),
-					apiv1.ResourceMemory: resource.MustParse("256Mi"),
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("150m"),
+					corev1.ResourceMemory: resource.MustParse("256Mi"),
 				},
 			},
-			ReadinessProbe: &apiv1.Probe{
-				ProbeHandler: v1.ProbeHandler{
-					Exec: &apiv1.ExecAction{
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					Exec: &corev1.ExecAction{
 						Command: []string{
 							"container-entrypoint",
 							"bash",
@@ -386,16 +384,16 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
 				PeriodSeconds:       30,
 				TimeoutSeconds:      1,
 			},
-			LivenessProbe: &apiv1.Probe{
+			LivenessProbe: &corev1.Probe{
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       10,
-				ProbeHandler: v1.ProbeHandler{
-					TCPSocket: &apiv1.TCPSocketAction{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
 						Port: intstr.FromInt(6379),
 					},
 				},
 			},
-			VolumeMounts: []apiv1.VolumeMount{
+			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      r.Name,
 					MountPath: "/var/lib/redis/data",
@@ -409,24 +407,24 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []apiv1.Container {
 	}
 }
 
-func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []apiv1.Volume {
-	return []apiv1.Volume{
+func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []corev1.Volume {
+	return []corev1.Volume{
 		{
 			Name: r.Name,
-			VolumeSource: apiv1.VolumeSource{
-				PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: r.Name,
 				},
 			},
 		},
 		{
 			Name: redisConfigVolumeName,
-			VolumeSource: apiv1.VolumeSource{
-				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: redisConfigMapName, // the name of the ConfigMap
 					},
-					Items: []apiv1.KeyToPath{
+					Items: []corev1.KeyToPath{
 						{
 							Key:  redisConfigMapKey,
 							Path: redisConfigMapKey,
@@ -438,8 +436,8 @@ func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []apiv1.Volume {
 	}
 }
 
-func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
-	return &apiv1.Service{
+func buildDefaultRedisService(r *v1alpha1.Redis) *corev1.Service {
+	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.Name,
 			Namespace: r.Namespace,
@@ -448,12 +446,12 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		Spec: apiv1.ServiceSpec{
-			Ports: []apiv1.ServicePort{
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
 				{
 					Port:       6379,
 					TargetPort: intstr.FromInt(6379),
-					Protocol:   apiv1.ProtocolTCP,
+					Protocol:   corev1.ProtocolTCP,
 				},
 			},
 			Selector: map[string]string{
@@ -463,8 +461,8 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *apiv1.Service {
 	}
 }
 
-func buildDefaultRedisConfigMap(r *v1alpha1.Redis) *apiv1.ConfigMap {
-	return &apiv1.ConfigMap{
+func buildDefaultRedisConfigMap(r *v1alpha1.Redis) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      redisConfigMapName,
 			Namespace: r.Namespace,
@@ -512,8 +510,8 @@ dir /var/lib/redis/data
 `
 }
 
-func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
-	return &apiv1.PersistentVolumeClaim{
+func buildDefaultRedisPVC(r *v1alpha1.Redis) *corev1.PersistentVolumeClaim {
+	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.Name,
 			Namespace: r.Namespace,
@@ -522,13 +520,13 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *apiv1.PersistentVolumeClaim {
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
 		},
-		Spec: apiv1.PersistentVolumeClaimSpec{
-			AccessModes: []apiv1.PersistentVolumeAccessMode{
-				apiv1.ReadWriteOnce,
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
 			},
-			Resources: apiv1.ResourceRequirements{
-				Requests: apiv1.ResourceList{
-					apiv1.ResourceStorage: resource.MustParse("1Gi"),
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			},
 		},

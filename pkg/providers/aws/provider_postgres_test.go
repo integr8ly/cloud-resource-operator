@@ -35,12 +35,9 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	apimachinery "k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const (
@@ -172,7 +169,7 @@ func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
 }
 
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
-	scheme := apimachinery.NewScheme()
+	scheme := runtime.NewScheme()
 	err := croApis.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = cloudCredentialApis.AddToScheme(scheme)
@@ -590,8 +587,8 @@ func buildTestNetwork(modifyFn func(network *configv1.Network)) *configv1.Networ
 
 }
 
-func builtTestCredSecret() *v1.Secret {
-	return &v1.Secret{
+func builtTestCredSecret() *corev1.Secret {
+	return &corev1.Secret{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test-aws-rds-credentials",
 			Namespace: "test",
@@ -844,7 +841,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build scheme", err)
 	}
-	secName, err := resources.BuildInfraName(context.TODO(), fake.NewFakeClientWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
+	secName, err := resources.BuildInfraName(context.TODO(), moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()), defaultSecurityGroupPostfix, defaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build security name", err)
@@ -914,7 +911,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -984,7 +981,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1047,7 +1044,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1115,7 +1112,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1167,7 +1164,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1222,7 +1219,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1290,7 +1287,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1358,7 +1355,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1426,7 +1423,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1477,7 +1474,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1507,7 +1504,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1534,7 +1531,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1568,7 +1565,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1617,7 +1614,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1666,7 +1663,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				maintenanceWindow:       false,
 			},
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), &v1.Secret{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra(), &corev1.Secret{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name:      "test-aws-rds-credentials",
 						Namespace: "test",
@@ -1760,7 +1757,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1786,7 +1783,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1812,7 +1809,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1838,7 +1835,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          false,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1871,7 +1868,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -1896,7 +1893,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				isLastResource:          true,
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2023,7 +2020,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -2382,7 +2379,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2433,7 +2430,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2455,7 +2452,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2482,7 +2479,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2512,7 +2509,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2573,7 +2570,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				},
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestInfra(), buildTestPostgresqlPrometheusRule()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2657,7 +2654,7 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "failed to set finalizer",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -2674,7 +2671,7 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "failed to retrieve aws rds cluster config for instance",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR()),
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager: &ConfigManagerMock{
@@ -2699,7 +2696,7 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "failed to reconcile rds credentials",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
 				Logger: testLogger,
 				CredentialManager: &CredentialManagerMock{
 					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {
@@ -2727,7 +2724,7 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "failed to check cluster vpc subnets",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra(), buildTestPostgresCR()),
 				Logger: testLogger,
 				CredentialManager: &CredentialManagerMock{
 					ReconcileProviderCredentialsFunc: func(ctx context.Context, ns string) (*Credentials, error) {

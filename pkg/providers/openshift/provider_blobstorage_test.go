@@ -7,15 +7,14 @@ import (
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/sirupsen/logrus"
 	v12 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestBlobStorageProvider_CreateStorage(t *testing.T) {
@@ -37,7 +36,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 		{
 			name: "test secret is created",
 			fields: fields{
-				Client: fake.NewFakeClient(),
+				Client: moqClient.NewSigsClientMoqWithScheme(nil),
 				Logger: &logrus.Entry{},
 			},
 			args: args{
@@ -48,7 +47,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: croType.ResourceTypeSpec{
-						SecretRef: &types.SecretRef{
+						SecretRef: &croType.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
@@ -71,7 +70,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 		{
 			name: "test existing secret is not overridden",
 			fields: fields{
-				Client: fake.NewFakeClient(&v12.Secret{
+				Client: moqClient.NewSigsClientMoqWithScheme(nil, &v12.Secret{
 					ObjectMeta: v1.ObjectMeta{
 						Namespace: "test",
 						Name:      "test",
@@ -94,14 +93,14 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: croType.ResourceTypeSpec{
-						SecretRef: &types.SecretRef{
+						SecretRef: &croType.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
 					},
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseComplete,
-						SecretRef: &types.SecretRef{
+						Phase: croType.PhaseComplete,
+						SecretRef: &croType.SecretRef{
 							Name:      "test",
 							Namespace: "test",
 						},
@@ -124,7 +123,7 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 		{
 			name: "test missing secret values are reset",
 			fields: fields{
-				Client: fake.NewFakeClient(&v12.Secret{
+				Client: moqClient.NewSigsClientMoqWithScheme(nil, &v12.Secret{
 					ObjectMeta: v1.ObjectMeta{
 						Namespace: "test",
 						Name:      "test",
@@ -144,14 +143,14 @@ func TestBlobStorageProvider_CreateStorage(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: croType.ResourceTypeSpec{
-						SecretRef: &types.SecretRef{
+						SecretRef: &croType.SecretRef{
 							Name:      "test-sec",
 							Namespace: "",
 						},
 					},
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseComplete,
-						SecretRef: &types.SecretRef{
+						Phase: croType.PhaseComplete,
+						SecretRef: &croType.SecretRef{
 							Name:      "test",
 							Namespace: "test",
 						},

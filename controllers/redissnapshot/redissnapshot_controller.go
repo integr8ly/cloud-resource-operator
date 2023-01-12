@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -57,7 +56,7 @@ type RedisSnapshotReconciler struct {
 var _ reconcile.Reconciler = &RedisSnapshotReconciler{}
 
 func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
