@@ -93,7 +93,7 @@ type DatabaseInstance struct {
 	MasterInstanceName string `json:"masterInstanceName,omitempty"`
 
 	// MaxDiskSize: The maximum disk size of the instance in bytes.
-	MaxDiskSize int64 `json:"maxDiskSize,omitempty,string"`
+	MaxDiskSize int64 `json:"maxDiskSize,omitempty"`
 
 	// Name: Name of the Cloud SQL instance. This does not include the
 	// project ID.
@@ -191,11 +191,11 @@ type Settings struct {
 	// instances. Indicates whether database flags for crash-safe
 	// replication are enabled. This property was only applicable to First
 	// Generation instances.
-	CrashSafeReplicationEnabled *bool `json:"crashSafeReplicationEnabled,omitempty,string"`
+	CrashSafeReplicationEnabled *bool `json:"crashSafeReplicationEnabled,omitempty"`
 
 	// DataDiskSizeGb: The size of data disk, in GB. The data disk size
 	// minimum is 10GB.
-	DataDiskSizeGb int64 `json:"dataDiskSizeGb,omitempty,string"`
+	DataDiskSizeGb int64 `json:"dataDiskSizeGb,omitempty"`
 
 	// DataDiskType: The type of data disk: `PD_SSD` (default) or `PD_HDD`.
 	// Not used for First Generation instances.
@@ -215,11 +215,11 @@ type Settings struct {
 	// DatabaseReplicationEnabled: Configuration specific to read replica
 	// instances. Indicates whether replication is enabled or not. WARNING:
 	// Changing this restarts the instance.
-	DatabaseReplicationEnabled *bool `json:"databaseReplicationEnabled,omitempty,string"`
+	DatabaseReplicationEnabled *bool `json:"databaseReplicationEnabled,omitempty"`
 
 	// DeletionProtectionEnabled: Configuration to protect against
 	// accidental instance deletion.
-	DeletionProtectionEnabled *bool `json:"deletionProtectionEnabled,omitempty,string"`
+	DeletionProtectionEnabled *bool `json:"deletionProtectionEnabled,omitempty"`
 
 	// DenyMaintenancePeriods: Deny maintenance periods
 	DenyMaintenancePeriods []*sqladmin.DenyMaintenancePeriod `json:"denyMaintenancePeriods,omitempty"`
@@ -282,16 +282,16 @@ type Settings struct {
 	// field for update method to make sure concurrent updates are handled
 	// properly. During update, use the most recent settingsVersion value
 	// for this instance and do not try to update this value.
-	SettingsVersion int64 `json:"settingsVersion,omitempty,string"`
+	SettingsVersion int64 `json:"settingsVersion,omitempty"`
 
 	// StorageAutoResize: Configuration to increase storage size
 	// automatically. The default value is true.
-	StorageAutoResize *bool `json:"storageAutoResize,omitempty,string"`
+	StorageAutoResize *bool `json:"storageAutoResize,omitempty"`
 
 	// StorageAutoResizeLimit: The maximum size to which storage capacity
 	// can be automatically increased. The default value is 0, which
 	// specifies that there is no limit.
-	StorageAutoResizeLimit int64 `json:"storageAutoResizeLimit,omitempty,string"`
+	StorageAutoResizeLimit int64 `json:"storageAutoResizeLimit,omitempty"`
 
 	// Tier: The tier (or machine type) for this instance, for example
 	// `db-custom-1-3840`. WARNING: Changing this restarts the instance.
@@ -307,7 +307,7 @@ type DatabaseInstanceFailoverReplica struct {
 	// status indicates that the failover replica is out of sync. The
 	// primary instance can only failover to the failover replica when the
 	// status is true.
-	Available *bool `json:"available,omitempty,string"`
+	Available *bool `json:"available,omitempty"`
 
 	// Name: The name of the failover replica. If specified at instance
 	// creation, a failover replica is created for the instance. The name
@@ -321,10 +321,10 @@ type BackupConfiguration struct {
 
 	// BinaryLogEnabled: (MySQL only) Whether binary log is enabled. If
 	// backup configuration is disabled, binarylog must be disabled as well.
-	BinaryLogEnabled *bool `json:"binaryLogEnabled,omitempty,string"`
+	BinaryLogEnabled *bool `json:"binaryLogEnabled,omitempty"`
 
 	// Enabled: Whether this configuration is enabled.
-	Enabled *bool `json:"enabled,omitempty,string"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Kind: This is always `sql#backupConfiguration`.
 	Kind string `json:"kind,omitempty"`
@@ -334,10 +334,10 @@ type BackupConfiguration struct {
 
 	// PointInTimeRecoveryEnabled: (Postgres only) Whether point in time
 	// recovery is enabled.
-	PointInTimeRecoveryEnabled *bool `json:"pointInTimeRecoveryEnabled,omitempty,string"`
+	PointInTimeRecoveryEnabled *bool `json:"pointInTimeRecoveryEnabled,omitempty"`
 
 	// ReplicationLogArchivingEnabled: Reserved for future use.
-	ReplicationLogArchivingEnabled *bool `json:"replicationLogArchivingEnabled,omitempty,string"`
+	ReplicationLogArchivingEnabled *bool `json:"replicationLogArchivingEnabled,omitempty"`
 
 	// StartTime: Start time for the daily backup configuration in UTC
 	// timezone in the 24-hour format - `HH:MM`.
@@ -365,7 +365,7 @@ type IpConfiguration struct {
 
 	// Ipv4Enabled: Whether the instance is assigned a public IP address or
 	// not.
-	Ipv4Enabled *bool `json:"ipv4Enabled,omitempty,string"`
+	Ipv4Enabled *bool `json:"ipv4Enabled,omitempty"`
 
 	// PrivateNetwork: The resource link for the VPC network from which the
 	// Cloud SQL instance is accessible for private IP. For example,
@@ -374,7 +374,7 @@ type IpConfiguration struct {
 	PrivateNetwork string `json:"privateNetwork,omitempty"`
 
 	// RequireSsl: Whether SSL connections over IP are enforced or not.
-	RequireSsl *bool `json:"requireSsl,omitempty,string"`
+	RequireSsl *bool `json:"requireSsl,omitempty"`
 }
 
 type BackupRetentionSettings struct {
@@ -384,6 +384,6 @@ type BackupRetentionSettings struct {
 	// Depending on the value of retention_unit, this is used to determine
 	// if a backup needs to be deleted.  If retention_unit is 'COUNT', we will
 	// retain this many backups.
-	RetainedBackups int64 `json:"retainedBackups,omitempty,string"`
+	RetainedBackups int64 `json:"retainedBackups,omitempty"`
 	// contains filtered or unexported fields
 }
