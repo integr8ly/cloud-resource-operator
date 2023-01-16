@@ -60,6 +60,10 @@ type PostgresProvider struct {
 	TCPPinger         resources.ConnectionTester
 }
 
+type CreateInstanceRequest struct {
+	Instance *gcpiface.DatabaseInstance `json:"instance,omitempty"`
+}
+
 func NewGCPPostgresProvider(client client.Client, logger *logrus.Entry) *PostgresProvider {
 	return &PostgresProvider{
 		Client:            client,
@@ -443,9 +447,7 @@ func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.P
 		return nil, nil, nil, errorUtil.Wrapf(err, "failed to build cloudsql instance name")
 	}
 
-	createInstanceRequest := struct {
-		Instance *gcpiface.DatabaseInstance `json:"instance,omitempty"`
-	}{}
+	createInstanceRequest := &CreateInstanceRequest{Instance: &gcpiface.DatabaseInstance{}}
 	if err := json.Unmarshal(strategyConfig.CreateStrategy, &createInstanceRequest); err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
 	}
