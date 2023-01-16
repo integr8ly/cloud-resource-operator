@@ -3,16 +3,13 @@ package gcpiface
 import (
 	redis "cloud.google.com/go/redis/apiv1"
 	"context"
-	"errors"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 )
 
 type RedisAPI interface {
-	ListInstances(context.Context, *redispb.ListInstancesRequest, ...gax.CallOption) ([]*redispb.Instance, error)
 	DeleteInstance(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
 	CreateInstance(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
 	GetInstance(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
@@ -35,24 +32,6 @@ func NewRedisAPI(ctx context.Context, opt option.ClientOption, logger *logrus.En
 		redisService: cloudRedisClient,
 		logger:       logger,
 	}, nil
-}
-
-func (c *redisClient) ListInstances(ctx context.Context, req *redispb.ListInstancesRequest, opts ...gax.CallOption) ([]*redispb.Instance, error) {
-	c.logger.Info("fetching all gcp redis instances")
-	redisIterator := c.redisService.ListInstances(ctx, req, opts...)
-	var instances []*redispb.Instance
-	for {
-		instance, err := redisIterator.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		instances = append(instances, instance)
-	}
-	c.logger.Infof("found %d gcp redis instances", len(instances))
-	return instances, nil
 }
 
 func (c *redisClient) DeleteInstance(ctx context.Context, req *redispb.DeleteInstanceRequest, opts ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
@@ -86,7 +65,6 @@ func (c *redisClient) UpgradeInstance(ctx context.Context, req *redispb.UpgradeI
 
 type MockRedisClient struct {
 	RedisAPI
-	ListInstancesFn   func(context.Context, *redispb.ListInstancesRequest, ...gax.CallOption) ([]*redispb.Instance, error)
 	DeleteInstanceFn  func(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
 	CreateInstanceFn  func(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
 	GetInstanceFn     func(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
@@ -96,9 +74,6 @@ type MockRedisClient struct {
 
 func GetMockRedisClient(modifyFn func(redisClient *MockRedisClient)) *MockRedisClient {
 	mock := &MockRedisClient{
-		ListInstancesFn: func(ctx context.Context, request *redispb.ListInstancesRequest, opts ...gax.CallOption) ([]*redispb.Instance, error) {
-			return []*redispb.Instance{}, nil
-		},
 		DeleteInstanceFn: func(ctx context.Context, request *redispb.DeleteInstanceRequest, opts ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {
 			return &redis.DeleteInstanceOperation{}, nil
 		},
@@ -119,13 +94,6 @@ func GetMockRedisClient(modifyFn func(redisClient *MockRedisClient)) *MockRedisC
 		modifyFn(mock)
 	}
 	return mock
-}
-
-func (m *MockRedisClient) ListInstances(ctx context.Context, req *redispb.ListInstancesRequest, opts ...gax.CallOption) ([]*redispb.Instance, error) {
-	if m.ListInstancesFn != nil {
-		return m.ListInstancesFn(ctx, req, opts...)
-	}
-	return []*redispb.Instance{}, nil
 }
 
 func (m *MockRedisClient) DeleteInstance(ctx context.Context, req *redispb.DeleteInstanceRequest, opts ...gax.CallOption) (*redis.DeleteInstanceOperation, error) {

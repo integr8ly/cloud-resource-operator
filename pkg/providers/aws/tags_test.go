@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 )
 
-func Test_ec2TagsToGeneric(t *testing.T) {
+func Test_ec2TagListToGenericList(t *testing.T) {
 	type args struct {
 		ec2Tags []*ec2.Tag
 	}
@@ -61,14 +61,14 @@ func Test_ec2TagsToGeneric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ec2TagsToGeneric(tt.args.ec2Tags); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ec2TagsToGeneric() = %v, want %v", got, tt.want)
+			if got := ec2TagListToGenericList(tt.args.ec2Tags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ec2TagListToGenericList() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_rdsTagsToGeneric(t *testing.T) {
+func Test_rdsTagListToGenericList(t *testing.T) {
 	type args struct {
 		rdsTags []*rds.Tag
 	}
@@ -118,14 +118,14 @@ func Test_rdsTagsToGeneric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := rdsTagstoGeneric(tt.args.rdsTags); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("rdsTagstoGeneric() = %v, want %v", got, tt.want)
+			if got := rdsTagListToGenericList(tt.args.rdsTags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("rdsTagListToGenericList() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_genericToEc2Tags(t *testing.T) {
+func Test_genericListToEc2TagList(t *testing.T) {
 	type args struct {
 		tags []*resources.Tag
 	}
@@ -177,8 +177,8 @@ func Test_genericToEc2Tags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := genericToEc2Tags(tt.args.tags); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("genericToEc2Tags() = %v, want %v", got, tt.want)
+			if got := genericListToEc2TagList(tt.args.tags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("genericListToEc2TagList() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -243,7 +243,7 @@ func Test_genericToRdsTags(t *testing.T) {
 	}
 }
 
-func Test_genericToElasticacheTags(t *testing.T) {
+func Test_genericListToElasticacheTagList(t *testing.T) {
 	type args struct {
 		tags []*resources.Tag
 	}
@@ -295,8 +295,8 @@ func Test_genericToElasticacheTags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := genericToElasticacheTags(tt.args.tags); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("genericToElasticacheTags() = %v, want %v", got, tt.want)
+			if got := genericListToElasticacheTagList(tt.args.tags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("genericListToElasticacheTagList() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -351,7 +351,7 @@ func Test_createRedisCluster(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		TCPPinger         ConnectionTester
+		TCPPinger         resources.ConnectionTester
 	}
 	tests := []struct {
 		name    string
@@ -417,7 +417,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1060,7 +1060,7 @@ func Test_createRedisCluster(t *testing.T) {
 			fields: fields{
 				Logger:    testLogger,
 				Client:    fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
-				TCPPinger: buildMockConnectionTester(),
+				TCPPinger: resources.BuildMockConnectionTester(),
 			},
 			wantErr: true,
 		},
@@ -1115,7 +1115,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
@@ -1192,7 +1192,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1256,7 +1256,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    nil,
@@ -1333,7 +1333,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1392,7 +1392,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
@@ -1450,7 +1450,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
@@ -1506,7 +1506,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1566,7 +1566,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			wantErr: true,
@@ -1621,7 +1621,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1702,7 +1702,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -1758,7 +1758,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     nil,
 				CredentialManager: nil,
 				Logger:            testLogger,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			want:    buildTestRedisCluster(),
@@ -2514,7 +2514,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
 		CacheSvc          elasticacheiface.ElastiCacheAPI
-		TCPPinger         ConnectionTester
+		TCPPinger         resources.ConnectionTester
 	}
 	type args struct {
 		cacheSvc         *mockElasticacheClient
@@ -2536,7 +2536,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2583,7 +2583,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2627,7 +2627,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2671,7 +2671,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2712,7 +2712,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2753,7 +2753,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2809,7 +2809,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{
@@ -2857,7 +2857,7 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 				CacheSvc:          nil,
-				TCPPinger:         buildMockConnectionTester(),
+				TCPPinger:         resources.BuildMockConnectionTester(),
 				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
 			},
 			args: args{

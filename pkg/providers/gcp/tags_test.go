@@ -28,6 +28,12 @@ func Test_buildDefaultRedisTags(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			name:    "failure building default gcp redis tags because the redis cr is nil",
+			args:    args{},
+			want:    nil,
+			wantErr: true,
+		},
+		{
 			name: "success building default redis tags",
 			args: args{
 				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
