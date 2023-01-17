@@ -69,7 +69,7 @@ func TestIsConflictError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "error of type google http is not found",
+			name: "error of type google http conflict",
 			args: args{
 				err: &googleHTTP.Error{
 					Code: http.StatusConflict,
@@ -78,14 +78,14 @@ func TestIsConflictError(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "error of type google grpc is not found",
+			name: "error of type google grpc conflict",
 			args: args{
 				err: NewMockAPIError(grpcCodes.AlreadyExists),
 			},
 			want: true,
 		},
 		{
-			name: "error of type kubernetes is not found",
+			name: "error of type kubernetes conflict",
 			args: args{
 				err: errors.NewAlreadyExists(schema.GroupResource{}, ""),
 			},

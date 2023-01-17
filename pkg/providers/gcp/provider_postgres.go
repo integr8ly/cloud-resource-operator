@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,7 +93,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, "failed to set finalizer", err
 	}
 
-	cloudSQLCreateConfig, _, strategyConfig, err := p.getPostgresConfig(ctx, pg)
+	strategyConfig, err := p.getPostgresStrategyConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -130,7 +128,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
+	_, err = networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
 	if err != nil {
 		msg := "failed to create network service"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -141,10 +139,10 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, cloudSQLCreateConfig, strategyConfig, maintenanceWindowEnabled, address)
+	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, strategyConfig, maintenanceWindowEnabled)
 }
 
-func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, cloudSQLCreateConfig *gcpiface.DatabaseInstance, strategyConfig *StrategyConfig, maintenanceWindowEnabled bool, address *computepb.Address) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, strategyConfig *StrategyConfig, maintenanceWindowEnabled bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
@@ -161,14 +159,13 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-
-	gcpInstanceConfig, err := p.buildCloudSQLCreateStrategy(ctx, pg, cloudSQLCreateConfig, sec, address)
+	gcpInstanceConfig, err := p.buildCloudSQLCreateStrategy(ctx, pg, strategyConfig, sec)
 	if err != nil {
 		msg := "failed to build and verify gcp cloudSQL instance configuration"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
-	foundInstance, err := sqladminService.GetInstance(ctx, strategyConfig.ProjectID, cloudSQLCreateConfig.Name)
+	foundInstance, err := sqladminService.GetInstance(ctx, strategyConfig.ProjectID, gcpInstanceConfig.Name)
 	if err != nil && !resources.IsNotFoundError(err) {
 		msg := "cannot retrieve sql instance from gcp"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -177,7 +174,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 
 	if maintenanceWindowEnabled {
 		logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
-		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(cloudSQLCreateConfig, foundInstance)
+		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(gcpInstanceConfig, foundInstance)
 		if err != nil {
 			msg := "error building update config for cloudsql instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -202,12 +199,12 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 
 	if foundInstance == nil {
 		logger.Infof("no instance found, creating one")
-		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, gcpInstanceConfig)
+		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, gcpInstanceConfig.MapToGcpDatabaseInstance())
 		if err != nil && !resources.IsNotFoundError(err) {
 			msg := "failed to create cloudSQL instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		annotations.Add(pg, ResourceIdentifierAnnotation, cloudSQLCreateConfig.Name)
+		annotations.Add(pg, ResourceIdentifierAnnotation, gcpInstanceConfig.Name)
 		if err := p.Client.Update(ctx, pg); err != nil {
 			msg := "failed to add annotation"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -217,7 +214,6 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 	}
 	if foundInstance.State == "PENDING_CREATE" {
 		msg := fmt.Sprintf("creation of %s cloudSQL instance in progress", foundInstance.Name)
-		logger.Infof(msg)
 		return nil, croType.StatusMessage(msg), nil
 	}
 
@@ -234,7 +230,9 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		Database: defaultDeploymentDatabase,
 		Port:     defaultGCPPostgresPort,
 	}
-	return &providers.PostgresInstance{DeploymentDetails: pdd}, "completed cloudSQL instance creation", nil
+	msg := fmt.Sprintf("successfully reconciled cloudsql instance %s", foundInstance.Name)
+	p.Logger.Info(msg)
+	return &providers.PostgresInstance{DeploymentDetails: pdd}, croType.StatusMessage(msg), nil
 }
 
 // DeletePostgres will set the postgres deletion timestamp, reconcile provider credentials so that the postgres instance
@@ -245,6 +243,12 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, pg *v1alpha1.Post
 	logger.Infof("reconciling postgres %s", pg.Name)
 
 	p.setPostgresDeletionTimestampMetric(ctx, pg)
+
+	strategyConfig, err := p.getPostgresStrategyConfig(ctx, pg)
+	if err != nil {
+		msg := "failed to retrieve postgres strategy config"
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
 
 	creds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, pg.Namespace)
 	if err != nil {
@@ -276,15 +280,15 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, pg *v1alpha1.Post
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	return p.deleteCloudSQLInstance(ctx, networkManager, sqlClient, pg, isLastResource)
+	return p.deleteCloudSQLInstance(ctx, networkManager, sqlClient, strategyConfig, pg, isLastResource)
 }
 
 // deleteCloudSQLInstance will retrieve the instance required using the cloudSQLDeleteConfig
 // and delete this instance if it is not already pending delete. The credentials and finalizer are then removed.
-func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, pg *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
+func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkManager NetworkManager, sqladminService gcpiface.SQLAdminService, strategyConfig *StrategyConfig, pg *v1alpha1.Postgres, isLastResource bool) (croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "deleteCloudSQLInstance")
 
-	_, cloudSQLDeleteConfig, strategyConfig, err := p.getPostgresConfig(ctx, pg)
+	cloudSQLDeleteConfig, err := p.buildCloudSQLDeleteStrategy(ctx, pg, strategyConfig)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -306,7 +310,9 @@ func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkMa
 		if foundInstance.Settings.DeletionProtectionEnabled {
 			update := &sqladmin.DatabaseInstance{
 				Settings: &sqladmin.Settings{
-					ForceSendFields: []string{"DeletionProtectionEnabled"}, DeletionProtectionEnabled: false},
+					DeletionProtectionEnabled: false,
+					ForceSendFields:           []string{"DeletionProtectionEnabled"},
+				},
 			}
 			_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
 			if err != nil && !resources.IsConflictError(err) {
@@ -317,8 +323,8 @@ func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkMa
 			return croType.StatusMessage(msg), nil
 		}
 		_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
-		if err != nil && !resources.IsNotFoundError(err) {
-			msg := fmt.Sprintf("failed to delete postgres instance: %s", foundInstance.Name)
+		if err != nil && !resources.IsConflictError(err) {
+			msg := fmt.Sprintf("failed to delete cloudsql instance: %s", foundInstance.Name)
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
@@ -378,13 +384,13 @@ func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Contex
 
 		instanceName, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
 		if instanceName == "" {
-			logrus.Errorf("unable to build instance name")
+			p.Logger.Errorf("unable to build instance name")
 		}
 
-		logrus.Info("setting postgres information metric")
+		p.Logger.Info("setting postgres information metric")
 		clusterID, err := resources.GetClusterID(ctx, p.Client)
 		if err != nil {
-			logrus.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
+			p.Logger.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
 			return
 		}
 
@@ -410,76 +416,56 @@ func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instance
 	return labels
 }
 
-func (p *PostgresProvider) getPostgresConfig(ctx context.Context, pg *v1alpha1.Postgres) (*gcpiface.DatabaseInstance, *sqladmin.DatabaseInstance, *StrategyConfig, error) {
+func (p *PostgresProvider) getPostgresStrategyConfig(ctx context.Context, pg *v1alpha1.Postgres) (*StrategyConfig, error) {
 	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, pg.Spec.Tier)
 	if err != nil {
 		errMsg := "failed to read gcp strategy config"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
-
 	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp project"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
-
 	if strategyConfig.ProjectID == "" {
 		p.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
 		strategyConfig.ProjectID = defaultProject
 	}
-
 	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, strategyConfig)
 	if err != nil {
 		errMsg := "failed to get default gcp region"
-		return nil, nil, nil, errorUtil.Wrap(err, errMsg)
+		return nil, errorUtil.Wrap(err, errMsg)
 	}
 	if strategyConfig.Region == "" {
 		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
 		strategyConfig.Region = defaultRegion
 	}
-
-	instanceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
-	if err != nil {
-		return nil, nil, nil, errorUtil.Wrapf(err, "failed to build cloudsql instance name")
-	}
-
-	createInstanceRequest := &CreateInstanceRequest{Instance: &gcpiface.DatabaseInstance{}}
-	if err := json.Unmarshal(strategyConfig.CreateStrategy, &createInstanceRequest); err != nil {
-		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
-	}
-	cloudSQLCreateConfig := createInstanceRequest.Instance
-
-	if cloudSQLCreateConfig.Name == "" {
-		cloudSQLCreateConfig.Name = instanceID
-	}
-
-	cloudSQLDeleteConfig := &sqladmin.DatabaseInstance{}
-	if err := json.Unmarshal(strategyConfig.DeleteStrategy, cloudSQLDeleteConfig); err != nil {
-		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres delete request")
-	}
-	if cloudSQLDeleteConfig.Name == "" {
-		if cloudSQLCreateConfig.Name == "" {
-			cloudSQLCreateConfig.Name = instanceID
-		}
-		cloudSQLDeleteConfig.Name = cloudSQLCreateConfig.Name
-	}
-
-	return cloudSQLCreateConfig, cloudSQLDeleteConfig, strategyConfig, nil
+	return strategyConfig, nil
 }
 
-
-func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, cloudSQLCreateConfig *gcpiface.DatabaseInstance, sec *v1.Secret, address *computepb.Address) (*sqladmin.DatabaseInstance, error) {
-
-	if cloudSQLCreateConfig.DatabaseVersion == "" {
-		cloudSQLCreateConfig.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
+func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, strategyConfig *StrategyConfig, sec *v1.Secret) (*gcpiface.DatabaseInstance, error) {
+	createStrategy := &CreateInstanceRequest{
+		Instance: &gcpiface.DatabaseInstance{},
 	}
-
-	if cloudSQLCreateConfig.Region == "" {
-		cloudSQLCreateConfig.Region = defaultGCPCloudSQLRegion
+	if err := json.Unmarshal(strategyConfig.CreateStrategy, &createStrategy); err != nil {
+		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres create request")
 	}
-
-	if cloudSQLCreateConfig.RootPassword == "" {
-		cloudSQLCreateConfig.RootPassword = string(sec.Data[defaultPostgresPasswordKey])
+	instance := createStrategy.Instance
+	if instance.Name == "" {
+		instanceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to build gcp postgres instance id from object")
+		}
+		instance.Name = instanceID
+	}
+	if instance.DatabaseVersion == "" {
+		instance.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
+	}
+	if instance.Region == "" {
+		instance.Region = defaultGCPCloudSQLRegion
+	}
+	if instance.RootPassword == "" {
+		instance.RootPassword = string(sec.Data[defaultPostgresPasswordKey])
 	}
 
 	tags, err := buildDefaultPostgresTags(ctx, p.Client, pg)
@@ -487,8 +473,8 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 		return nil, errorUtil.Wrap(err, "failed to build gcp postgres instance tags")
 	}
 
-	if cloudSQLCreateConfig.Settings == nil {
-		cloudSQLCreateConfig.Settings = &gcpiface.Settings{
+	if instance.Settings == nil {
+		instance.Settings = &gcpiface.Settings{
 			Tier:                   defaultTier,
 			AvailabilityType:       defaultAvailabilityType,
 			StorageAutoResizeLimit: defaultStorageAutoResizeLimit,
@@ -504,31 +490,29 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 			DataDiskSizeGb:            defaultDataDiskSizeGb,
 			DeletionProtectionEnabled: utils.Bool(defaultDeleteProtectionEnabled),
 			IpConfiguration: &gcpiface.IpConfiguration{
-				AllocatedIpRange: address.GetName(),
 				Ipv4Enabled: utils.Bool(defaultIPConfigIPV4Enabled),
-				PrivateNetwork:   strings.Split(address.GetNetwork(), "v1/")[1],
 			},
 			UserLabels: tags,
 		}
 	}
-	if cloudSQLCreateConfig.Settings.UserLabels == nil {
-		cloudSQLCreateConfig.Settings.UserLabels = map[string]string{}
+	if instance.Settings.UserLabels == nil {
+		instance.Settings.UserLabels = map[string]string{}
 	}
 	for key, value := range tags {
-		cloudSQLCreateConfig.Settings.UserLabels[key] = value
+		instance.Settings.UserLabels[key] = value
 	}
 
-	if cloudSQLCreateConfig.Settings.Tier == "" {
-		cloudSQLCreateConfig.Settings.Tier = defaultTier
+	if instance.Settings.Tier == "" {
+		instance.Settings.Tier = defaultTier
 	}
-	if cloudSQLCreateConfig.Settings.AvailabilityType == "" {
-		cloudSQLCreateConfig.Settings.AvailabilityType = defaultAvailabilityType
+	if instance.Settings.AvailabilityType == "" {
+		instance.Settings.AvailabilityType = defaultAvailabilityType
 	}
-	if cloudSQLCreateConfig.Settings.StorageAutoResizeLimit == 0 {
-		cloudSQLCreateConfig.Settings.StorageAutoResizeLimit = defaultStorageAutoResizeLimit
+	if instance.Settings.StorageAutoResizeLimit == 0 {
+		instance.Settings.StorageAutoResizeLimit = defaultStorageAutoResizeLimit
 	}
-	if cloudSQLCreateConfig.Settings.BackupConfiguration == nil {
-		cloudSQLCreateConfig.Settings.BackupConfiguration = &gcpiface.BackupConfiguration{
+	if instance.Settings.BackupConfiguration == nil {
+		instance.Settings.BackupConfiguration = &gcpiface.BackupConfiguration{
 			Enabled:                    utils.Bool(defaultBackupConfigEnabled),
 			PointInTimeRecoveryEnabled: utils.Bool(defaultPointInTimeRecoveryEnabled),
 			BackupRetentionSettings: &gcpiface.BackupRetentionSettings{
@@ -537,107 +521,114 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 			},
 		}
 	}
-	if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit == "" {
-		cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = defaultBackupRetentionSettingsRetentionUnit
+	if instance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit == "" {
+		instance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = defaultBackupRetentionSettingsRetentionUnit
 	}
-	if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups == 0 {
-		cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = defaultBackupRetentionSettingsRetainedBackups
+	if instance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups == 0 {
+		instance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = defaultBackupRetentionSettingsRetainedBackups
 	}
-	if cloudSQLCreateConfig.Settings.DataDiskSizeGb == 0 {
-		cloudSQLCreateConfig.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
+	if instance.Settings.DataDiskSizeGb == 0 {
+		instance.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
 	}
-	gcpInstanceConfig := cloudSQLCreateConfig.MapToGcpDatabaseInstance()
-
-	gcpInstanceConfig, err := convertDatabaseStruct(cloudSQLCreateConfig)
-	if err != nil {
-		errMsg := "failed to convert database struct"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-
-	return gcpInstanceConfig, nil
+	return instance, nil
 }
 
-func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foundInstanceConfig *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
-	p.Logger.Debugf("verifying that %s configuration is as expected", foundInstanceConfig.Name)
+func (p *PostgresProvider) buildCloudSQLDeleteStrategy(ctx context.Context, pg *v1alpha1.Postgres, strategyConfig *StrategyConfig) (*sqladmin.DatabaseInstance, error) {
+	deleteStrategy := &sqladmin.DatabaseInstance{}
+	if err := json.Unmarshal(strategyConfig.DeleteStrategy, deleteStrategy); err != nil {
+		return nil, errorUtil.Wrap(err, "failed to unmarshal gcp postgres delete request")
+	}
+	if deleteStrategy.Name == "" {
+		instanceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to build gcp postgres instance id from object")
+		}
+		deleteStrategy.Name = instanceID
+	}
+	return deleteStrategy, nil
+}
+
+func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foundInstance *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
+	p.Logger.Debugf("verifying that %s configuration is as expected", foundInstance.Name)
 
 	updateFound := false
 	modifiedInstance := &sqladmin.DatabaseInstance{}
 
-	if cloudSQLConfig.Region != foundInstanceConfig.Region {
+	if cloudSQLConfig.Region != foundInstance.Region {
 		modifiedInstance.Region = cloudSQLConfig.Region
 		updateFound = true
 	}
 
-	if cloudSQLConfig.Settings != nil && foundInstanceConfig.Settings != nil {
+	if cloudSQLConfig.Settings != nil && foundInstance.Settings != nil {
 		modifiedInstance.Settings = &sqladmin.Settings{
 			ForceSendFields: []string{},
 		}
 
-		if cloudSQLConfig.Settings.DeletionProtectionEnabled != nil && *cloudSQLConfig.Settings.DeletionProtectionEnabled != foundInstanceConfig.Settings.DeletionProtectionEnabled {
+		if cloudSQLConfig.Settings.DeletionProtectionEnabled != nil && *cloudSQLConfig.Settings.DeletionProtectionEnabled != foundInstance.Settings.DeletionProtectionEnabled {
 			modifiedInstance.Settings.DeletionProtectionEnabled = *cloudSQLConfig.Settings.DeletionProtectionEnabled
 			modifiedInstance.Settings.ForceSendFields = append(modifiedInstance.Settings.ForceSendFields, "DeletionProtectionEnabled")
 			updateFound = true
 		}
 
-		if cloudSQLConfig.Settings.StorageAutoResize != nil && *cloudSQLConfig.Settings.StorageAutoResize != *foundInstanceConfig.Settings.StorageAutoResize {
+		if cloudSQLConfig.Settings.StorageAutoResize != nil && *cloudSQLConfig.Settings.StorageAutoResize != *foundInstance.Settings.StorageAutoResize {
 			modifiedInstance.Settings.StorageAutoResize = cloudSQLConfig.Settings.StorageAutoResize
 			modifiedInstance.Settings.ForceSendFields = append(modifiedInstance.Settings.ForceSendFields, "StorageAutoResize")
 			updateFound = true
 		}
 
-		if cloudSQLConfig.Settings.Tier != foundInstanceConfig.Settings.Tier {
+		if cloudSQLConfig.Settings.Tier != foundInstance.Settings.Tier {
 			modifiedInstance.Settings.Tier = cloudSQLConfig.Settings.Tier
 			updateFound = true
 		}
-		if cloudSQLConfig.Settings.AvailabilityType != foundInstanceConfig.Settings.AvailabilityType {
+		if cloudSQLConfig.Settings.AvailabilityType != foundInstance.Settings.AvailabilityType {
 			modifiedInstance.Settings.AvailabilityType = cloudSQLConfig.Settings.AvailabilityType
 			updateFound = true
 		}
-		if cloudSQLConfig.Settings.StorageAutoResizeLimit != foundInstanceConfig.Settings.StorageAutoResizeLimit {
+		if cloudSQLConfig.Settings.StorageAutoResizeLimit != foundInstance.Settings.StorageAutoResizeLimit {
 			modifiedInstance.Settings.StorageAutoResizeLimit = cloudSQLConfig.Settings.StorageAutoResizeLimit
 			updateFound = true
 		}
-		if cloudSQLConfig.Settings.DataDiskSizeGb != foundInstanceConfig.Settings.DataDiskSizeGb {
+		if cloudSQLConfig.Settings.DataDiskSizeGb != foundInstance.Settings.DataDiskSizeGb {
 			modifiedInstance.Settings.DataDiskSizeGb = cloudSQLConfig.Settings.DataDiskSizeGb
 			updateFound = true
 		}
 	}
 
-	if cloudSQLConfig.Settings.BackupConfiguration != nil && foundInstanceConfig.Settings.BackupConfiguration != nil {
+	if cloudSQLConfig.Settings.BackupConfiguration != nil && foundInstance.Settings.BackupConfiguration != nil {
 		modifiedInstance.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{
 			ForceSendFields: []string{},
 		}
-		if cloudSQLConfig.Settings.BackupConfiguration.Enabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.Enabled != foundInstanceConfig.Settings.BackupConfiguration.Enabled {
+		if cloudSQLConfig.Settings.BackupConfiguration.Enabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.Enabled != foundInstance.Settings.BackupConfiguration.Enabled {
 			modifiedInstance.Settings.BackupConfiguration.Enabled = *cloudSQLConfig.Settings.BackupConfiguration.Enabled
 			modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "Enabled")
 			updateFound = true
 		}
-		if cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != foundInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled {
+		if cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil && *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != foundInstance.Settings.BackupConfiguration.PointInTimeRecoveryEnabled {
 			modifiedInstance.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *cloudSQLConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
 			modifiedInstance.Settings.BackupConfiguration.ForceSendFields = append(modifiedInstance.Settings.BackupConfiguration.ForceSendFields, "PointInTimeRecoveryEnabled")
 			updateFound = true
 		}
 	}
 
-	if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings != nil && foundInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings != nil {
+	if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings != nil && foundInstance.Settings.BackupConfiguration.BackupRetentionSettings != nil {
 		modifiedInstance.Settings.BackupConfiguration.BackupRetentionSettings = &sqladmin.BackupRetentionSettings{}
 
-		if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit != foundInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit {
+		if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit != foundInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit {
 			modifiedInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit
 			updateFound = true
 		}
-		if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups != foundInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups {
+		if cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups != foundInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups {
 			modifiedInstance.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = cloudSQLConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups
 			updateFound = true
 		}
 	}
 
-	if cloudSQLConfig.Settings.IpConfiguration != nil && foundInstanceConfig.Settings.IpConfiguration != nil {
+	if cloudSQLConfig.Settings.IpConfiguration != nil && foundInstance.Settings.IpConfiguration != nil {
 		modifiedInstance.Settings.IpConfiguration = &sqladmin.IpConfiguration{
 			ForceSendFields: []string{},
 		}
-		if cloudSQLConfig.Settings.IpConfiguration != nil && foundInstanceConfig.Settings.IpConfiguration != nil {
-			if cloudSQLConfig.Settings.IpConfiguration.Ipv4Enabled != nil && *cloudSQLConfig.Settings.IpConfiguration.Ipv4Enabled != foundInstanceConfig.Settings.IpConfiguration.Ipv4Enabled {
+		if cloudSQLConfig.Settings.IpConfiguration != nil && foundInstance.Settings.IpConfiguration != nil {
+			if cloudSQLConfig.Settings.IpConfiguration.Ipv4Enabled != nil && *cloudSQLConfig.Settings.IpConfiguration.Ipv4Enabled != foundInstance.Settings.IpConfiguration.Ipv4Enabled {
 				modifiedInstance.Settings.IpConfiguration.Ipv4Enabled = *cloudSQLConfig.Settings.IpConfiguration.Ipv4Enabled
 				modifiedInstance.Settings.IpConfiguration.ForceSendFields = append(modifiedInstance.Settings.IpConfiguration.ForceSendFields, "Ipv4Enabled")
 				updateFound = true
@@ -645,7 +636,7 @@ func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.
 		}
 	}
 
-	if cloudSQLConfig.DatabaseVersion != foundInstanceConfig.DatabaseVersion {
+	if cloudSQLConfig.DatabaseVersion != foundInstance.DatabaseVersion {
 		modifiedInstance.DatabaseVersion = cloudSQLConfig.DatabaseVersion
 		updateFound = true
 	}
@@ -726,12 +717,4 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 		},
 		Type: v1.SecretTypeOpaque,
 	}, nil
-}
-
-func formatGcpPostgresVersion(gcpNewVersion string, gcpExistingVersion string) (semverNewVersion string, semverExistingVersion string) {
-	cloudSQLConfigSemverDatabaseVersion := strings.Replace(gcpNewVersion, "_", ".", -1)
-	semverNewVersion = strings.TrimPrefix(cloudSQLConfigSemverDatabaseVersion, "POSTGRES.")
-	foundInstanceConfigSemverDatabaseVersion := strings.Replace(gcpExistingVersion, "_", ".", -1)
-	semverExistingVersion = strings.TrimPrefix(foundInstanceConfigSemverDatabaseVersion, "POSTGRES.")
-	return semverNewVersion, semverExistingVersion
 }
