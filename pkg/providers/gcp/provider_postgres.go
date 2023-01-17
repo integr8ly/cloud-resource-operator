@@ -518,24 +518,20 @@ func (p *PostgresProvider) exposePostgresInstanceMetrics(ctx context.Context, pg
 	if instance == nil {
 		return
 	}
-	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
-	if instanceName == "" {
-		p.Logger.Errorf("failed to find %s annotation while exposing metrics for postgres instance", ResourceIdentifierAnnotation)
-	}
 	clusterID, err := resources.GetClusterID(ctx, p.Client)
 	if err != nil {
-		p.Logger.Errorf("failed to get cluster id while exposing metrics for postgres instance %s", instanceName)
+		p.Logger.Errorf("failed to get cluster id while exposing metrics for postgres instance %s", instance.Name)
 		return
 	}
-	genericLabels := resources.BuildGenericMetricLabels(pg.ObjectMeta, clusterID, instanceName, postgresProviderName)
+	genericLabels := resources.BuildGenericMetricLabels(pg.ObjectMeta, clusterID, instance.Name, postgresProviderName)
 	instanceState := instance.State
-	infoLabels := resources.BuildInfoMetricLabels(pg.ObjectMeta, instanceState, clusterID, instanceName, postgresProviderName)
+	infoLabels := resources.BuildInfoMetricLabels(pg.ObjectMeta, instanceState, clusterID, instance.Name, postgresProviderName)
 	resources.SetMetricCurrentTime(resources.DefaultPostgresInfoMetricName, infoLabels)
 	// a single metric should be exposed for each possible status phase
 	// the value of the metric should be 1.0 when the resource is in that phase
 	// the value of the metric should be 0.0 when the resource is not in that phase
 	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
-		labelsFailed := resources.BuildStatusMetricsLabels(pg.ObjectMeta, clusterID, instanceName, postgresProviderName, phase)
+		labelsFailed := resources.BuildStatusMetricsLabels(pg.ObjectMeta, clusterID, instance.Name, postgresProviderName, phase)
 		resources.SetMetric(resources.DefaultPostgresStatusMetricName, labelsFailed, resources.Btof64(pg.Status.Phase == phase))
 	}
 	// set availability metric, based on the status flag on the cloudsql postgres instance in gcp
