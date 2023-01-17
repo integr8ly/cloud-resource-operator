@@ -33,7 +33,7 @@ func IsNotFoundError(err error) bool {
 	return false
 }
 
-func IsNotStatusConflictError(err error) bool {
+func IsConflictError(err error) bool {
 	var googleHttpErr *googleHTTP.Error
 	if errors.As(err, &googleHttpErr) {
 		if googleHttpErr.Code == http.StatusConflict {

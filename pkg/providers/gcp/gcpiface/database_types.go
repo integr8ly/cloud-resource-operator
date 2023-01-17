@@ -387,3 +387,202 @@ type BackupRetentionSettings struct {
 	RetainedBackups int64 `json:"retainedBackups,omitempty"`
 	// contains filtered or unexported fields
 }
+
+func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstance {
+	gcpInstanceConfig := &sqladmin.DatabaseInstance{}
+
+	if dbi.ConnectionName != "" {
+		gcpInstanceConfig.ConnectionName = dbi.ConnectionName
+	}
+	if dbi.DatabaseVersion != "" {
+		gcpInstanceConfig.DatabaseVersion = dbi.DatabaseVersion
+	}
+	if dbi.DiskEncryptionConfiguration != nil {
+		gcpInstanceConfig.DiskEncryptionConfiguration = dbi.DiskEncryptionConfiguration
+	}
+	if dbi.FailoverReplica != nil {
+		gcpInstanceConfig.FailoverReplica = &sqladmin.DatabaseInstanceFailoverReplica{}
+		if dbi.FailoverReplica.Available != nil {
+			gcpInstanceConfig.FailoverReplica.Available = *dbi.FailoverReplica.Available
+		}
+		if dbi.FailoverReplica.Name != "" {
+			gcpInstanceConfig.FailoverReplica.Name = dbi.FailoverReplica.Name
+		}
+	}
+	if dbi.GceZone != "" {
+		gcpInstanceConfig.GceZone = dbi.GceZone
+	}
+	if dbi.InstanceType != "" {
+		gcpInstanceConfig.InstanceType = dbi.InstanceType
+	}
+	if dbi.IpAddresses != nil {
+		gcpInstanceConfig.IpAddresses = dbi.IpAddresses
+	}
+	if dbi.Kind != "" {
+		gcpInstanceConfig.Kind = dbi.Kind
+	}
+	if dbi.MaintenanceVersion != "" {
+		gcpInstanceConfig.MaintenanceVersion = dbi.MaintenanceVersion
+	}
+	if dbi.MasterInstanceName != "" {
+		gcpInstanceConfig.MasterInstanceName = dbi.MasterInstanceName
+	}
+	if dbi.MaxDiskSize != 0 {
+		gcpInstanceConfig.MaxDiskSize = dbi.MaxDiskSize
+	}
+	if dbi.Name != "" {
+		gcpInstanceConfig.Name = dbi.Name
+	}
+	if dbi.Project != "" {
+		gcpInstanceConfig.Project = dbi.Project
+	}
+	if dbi.Region != "" {
+		gcpInstanceConfig.Region = dbi.Region
+	}
+	if dbi.ReplicaNames != nil {
+		gcpInstanceConfig.ReplicaNames = dbi.ReplicaNames
+	}
+	if dbi.RootPassword != "" {
+		gcpInstanceConfig.RootPassword = dbi.RootPassword
+	}
+	if dbi.SecondaryGceZone != "" {
+		gcpInstanceConfig.GceZone = dbi.SecondaryGceZone
+	}
+	if dbi.SelfLink != "" {
+		gcpInstanceConfig.SelfLink = dbi.SelfLink
+	}
+	if dbi.ServerCaCert != nil {
+		gcpInstanceConfig.ServerCaCert = dbi.ServerCaCert
+	}
+	if dbi.Settings != nil {
+		gcpInstanceConfig.Settings = &sqladmin.Settings{}
+		if dbi.Settings.ActivationPolicy != "" {
+			gcpInstanceConfig.Settings.ActivationPolicy = dbi.Settings.ActivationPolicy
+		}
+		if dbi.Settings.AvailabilityType != "" {
+			gcpInstanceConfig.Settings.AvailabilityType = dbi.Settings.AvailabilityType
+		}
+		if dbi.Settings.BackupConfiguration != nil {
+			gcpInstanceConfig.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{}
+			if dbi.Settings.BackupConfiguration.BackupRetentionSettings != nil {
+				gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings = &sqladmin.BackupRetentionSettings{}
+				if dbi.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit != "" {
+					gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = dbi.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit
+				}
+				if dbi.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups != 0 {
+					gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = dbi.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups
+				}
+			}
+
+			if dbi.Settings.BackupConfiguration.BinaryLogEnabled != nil {
+				gcpInstanceConfig.Settings.BackupConfiguration.BinaryLogEnabled = *dbi.Settings.BackupConfiguration.BinaryLogEnabled
+			}
+			if dbi.Settings.BackupConfiguration.Enabled != nil {
+				gcpInstanceConfig.Settings.BackupConfiguration.Enabled = *dbi.Settings.BackupConfiguration.Enabled
+			}
+			if dbi.Settings.BackupConfiguration.Kind != "" {
+				gcpInstanceConfig.Settings.BackupConfiguration.Kind = dbi.Settings.BackupConfiguration.Kind
+			}
+			if dbi.Settings.BackupConfiguration.Location != "" {
+				gcpInstanceConfig.Settings.BackupConfiguration.Location = dbi.Settings.BackupConfiguration.Location
+			}
+			if dbi.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil {
+				gcpInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *dbi.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
+			}
+			if dbi.Settings.BackupConfiguration.ReplicationLogArchivingEnabled != nil {
+				gcpInstanceConfig.Settings.BackupConfiguration.ReplicationLogArchivingEnabled = *dbi.Settings.BackupConfiguration.ReplicationLogArchivingEnabled
+			}
+			if dbi.Settings.BackupConfiguration.StartTime != "" {
+				gcpInstanceConfig.Settings.BackupConfiguration.StartTime = dbi.Settings.BackupConfiguration.StartTime
+			}
+			if dbi.Settings.BackupConfiguration.TransactionLogRetentionDays != 0 {
+				gcpInstanceConfig.Settings.BackupConfiguration.TransactionLogRetentionDays = dbi.Settings.BackupConfiguration.TransactionLogRetentionDays
+			}
+		}
+		if dbi.Settings.Collation != "" {
+			gcpInstanceConfig.Settings.Collation = dbi.Settings.Collation
+		}
+		if dbi.Settings.ConnectorEnforcement != "" {
+			gcpInstanceConfig.Settings.ConnectorEnforcement = dbi.Settings.ConnectorEnforcement
+		}
+		if dbi.Settings.CrashSafeReplicationEnabled != nil {
+			gcpInstanceConfig.Settings.CrashSafeReplicationEnabled = *dbi.Settings.CrashSafeReplicationEnabled
+		}
+		if dbi.Settings.DataDiskSizeGb != 0 {
+			gcpInstanceConfig.Settings.DataDiskSizeGb = dbi.Settings.DataDiskSizeGb
+		}
+		if dbi.Settings.DataDiskType != "" {
+			gcpInstanceConfig.Settings.DataDiskType = dbi.Settings.DataDiskType
+		}
+		if dbi.Settings.DatabaseFlags != nil {
+			gcpInstanceConfig.Settings.DatabaseFlags = dbi.Settings.DatabaseFlags
+		}
+		if dbi.Settings.DatabaseReplicationEnabled != nil {
+			gcpInstanceConfig.Settings.DatabaseReplicationEnabled = *dbi.Settings.DatabaseReplicationEnabled
+		}
+		if dbi.Settings.DeletionProtectionEnabled != nil {
+			gcpInstanceConfig.Settings.DeletionProtectionEnabled = *dbi.Settings.DeletionProtectionEnabled
+		}
+		if dbi.Settings.DenyMaintenancePeriods != nil {
+			gcpInstanceConfig.Settings.DenyMaintenancePeriods = dbi.Settings.DenyMaintenancePeriods
+		}
+		if dbi.Settings.InsightsConfig != nil {
+			gcpInstanceConfig.Settings.InsightsConfig = dbi.Settings.InsightsConfig
+		}
+		if dbi.Settings.IpConfiguration != nil {
+			gcpInstanceConfig.Settings.IpConfiguration = &sqladmin.IpConfiguration{}
+			if dbi.Settings.IpConfiguration.AllocatedIpRange != "" {
+				gcpInstanceConfig.Settings.IpConfiguration.AllocatedIpRange = dbi.Settings.IpConfiguration.AllocatedIpRange
+			}
+			if dbi.Settings.IpConfiguration.AuthorizedNetworks != nil {
+				gcpInstanceConfig.Settings.IpConfiguration.AuthorizedNetworks = dbi.Settings.IpConfiguration.AuthorizedNetworks
+			}
+			if dbi.Settings.IpConfiguration.AuthorizedNetworks != nil {
+				gcpInstanceConfig.Settings.IpConfiguration.AuthorizedNetworks = dbi.Settings.IpConfiguration.AuthorizedNetworks
+			}
+			if dbi.Settings.IpConfiguration.Ipv4Enabled != nil {
+				gcpInstanceConfig.Settings.IpConfiguration.Ipv4Enabled = *dbi.Settings.IpConfiguration.Ipv4Enabled
+			}
+			if dbi.Settings.IpConfiguration.PrivateNetwork != "" {
+				gcpInstanceConfig.Settings.IpConfiguration.PrivateNetwork = dbi.Settings.IpConfiguration.PrivateNetwork
+			}
+			if dbi.Settings.IpConfiguration.RequireSsl != nil {
+				gcpInstanceConfig.Settings.IpConfiguration.RequireSsl = *dbi.Settings.IpConfiguration.RequireSsl
+			}
+		}
+		if dbi.Settings.Kind != "" {
+			gcpInstanceConfig.Settings.Kind = dbi.Settings.Kind
+		}
+		if dbi.Settings.LocationPreference != nil {
+			gcpInstanceConfig.Settings.LocationPreference = dbi.Settings.LocationPreference
+		}
+		if dbi.Settings.MaintenanceWindow != nil {
+			gcpInstanceConfig.Settings.MaintenanceWindow = dbi.Settings.MaintenanceWindow
+		}
+		if dbi.Settings.PasswordValidationPolicy != nil {
+			gcpInstanceConfig.Settings.PasswordValidationPolicy = dbi.Settings.PasswordValidationPolicy
+		}
+		if dbi.Settings.PricingPlan != "" {
+			gcpInstanceConfig.Settings.PricingPlan = dbi.Settings.PricingPlan
+		}
+		if dbi.Settings.ReplicationType != "" {
+			gcpInstanceConfig.Settings.ReplicationType = dbi.Settings.ReplicationType
+		}
+		if dbi.Settings.SettingsVersion != 0 {
+			gcpInstanceConfig.Settings.SettingsVersion = dbi.Settings.SettingsVersion
+		}
+		if dbi.Settings.StorageAutoResize != nil {
+			gcpInstanceConfig.Settings.StorageAutoResize = dbi.Settings.StorageAutoResize
+		}
+		if dbi.Settings.StorageAutoResizeLimit != 0 {
+			gcpInstanceConfig.Settings.StorageAutoResizeLimit = dbi.Settings.StorageAutoResizeLimit
+		}
+		if dbi.Settings.Tier != "" {
+			gcpInstanceConfig.Settings.Tier = dbi.Settings.Tier
+		}
+		if dbi.Settings.UserLabels != nil {
+			gcpInstanceConfig.Settings.UserLabels = dbi.Settings.UserLabels
+		}
+	}
+	return gcpInstanceConfig
+}

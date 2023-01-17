@@ -339,7 +339,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "delete detected, Instances.Delete() started",
+			want:    "successfully deleted gcp postgres instance gcptestclustertestNsgcpcloudsql",
 			wantErr: false,
 		},
 		{
@@ -457,7 +457,7 @@ func TestPostgresProvider_DeleteCloudSQLInstance(t *testing.T) {
 				}),
 				isLastResource: false,
 			},
-			want:    "failed to modify cloudsql instance: " + gcpTestPostgresInstanceName,
+			want:    "failed to disable deletion protection for cloudsql instance: " + gcpTestPostgresInstanceName,
 			wantErr: true,
 		},
 		{
@@ -1663,64 +1663,6 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			},
 			want:    "completed cloudSQL instance creation",
 			wantErr: false,
-		},
-		{
-			name: "error building update config for cloudsql instance when database version not present",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName + defaultCredSecSuffix,
-						Namespace: testNs,
-					},
-						Data: map[string][]byte{
-							defaultPostgresUserKey:     []byte(testUser),
-							defaultPostgresPasswordKey: []byte(testPassword),
-						},
-					}, buildTestPostgres(), buildTestGcpInfrastructure(nil))
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return fmt.Errorf("generic error")
-					}
-					return mc
-				}(),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: NewCredentialMinterCredentialManager(nil),
-				ConfigManager:     nil,
-			},
-			args: args{
-				ctx: context.TODO(),
-				p:   buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
-						return &sqladmin.DatabaseInstance{
-							Name:            gcpTestPostgresInstanceName,
-							State:           "RUNNABLE",
-							DatabaseVersion: "",
-							IpAddresses: []*sqladmin.IpMapping{
-								{
-									IpAddress: "",
-								},
-							},
-							Settings: &sqladmin.Settings{
-								BackupConfiguration: &sqladmin.BackupConfiguration{
-									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
-										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
-										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
-									},
-								},
-							},
-						}, nil
-					}
-				}),
-				cloudSQLCreateConfig: &gcpiface.DatabaseInstance{
-					Settings: &gcpiface.Settings{
-						BackupConfiguration: &gcpiface.BackupConfiguration{BackupRetentionSettings: &gcpiface.BackupRetentionSettings{}},
-					},
-				},
-				strategyConfig:    &StrategyConfig{ProjectID: "sample-project-id"},
-				maintenanceWindow: true,
-			},
-			want:    "error building update config for cloudsql instance",
-			wantErr: true,
 		},
 		{
 			name: "error when setting postgres maintenance window to false",

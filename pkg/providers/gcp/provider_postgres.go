@@ -177,7 +177,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 
 	if maintenanceWindowEnabled {
 		logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
-		modifiedInstance, err := buildCloudSQLUpdateStrategy(cloudSQLCreateConfig, foundInstance)
+		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(cloudSQLCreateConfig, foundInstance)
 		if err != nil {
 			msg := "error building update config for cloudsql instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -185,7 +185,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		if modifiedInstance != nil {
 			logger.Infof("modifying cloudSQL instance: %s", foundInstance.Name)
 			_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, modifiedInstance)
-			if err != nil && !resources.IsNotStatusConflictError(err) {
+			if err != nil && !resources.IsConflictError(err) {
 				msg := fmt.Sprintf("failed to modify cloudsql instance: %s", foundInstance.Name)
 				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
@@ -303,28 +303,24 @@ func (p *PostgresProvider) deleteCloudSQLInstance(ctx context.Context, networkMa
 			p.Logger.Info(statusMessage)
 			return croType.StatusMessage(statusMessage), nil
 		}
-		if !foundInstance.Settings.DeletionProtectionEnabled {
-			_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
-			if err != nil && !resources.IsNotStatusConflictError(err) {
-				msg := fmt.Sprintf("failed to delete postgres instance: %s", cloudSQLDeleteConfig.Name)
+		if foundInstance.Settings.DeletionProtectionEnabled {
+			update := &sqladmin.DatabaseInstance{
+				Settings: &sqladmin.Settings{
+					ForceSendFields: []string{"DeletionProtectionEnabled"}, DeletionProtectionEnabled: false},
+			}
+			_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
+			if err != nil && !resources.IsConflictError(err) {
+				msg := fmt.Sprintf("failed to disable deletion protection for cloudsql instance: %s", foundInstance.Name)
 				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
-			logrus.Info("triggered Instances.Delete()")
-			return "delete detected, Instances.Delete() started", nil
+			msg := fmt.Sprintf("disabling deletion protection for cloudsql instance %s", foundInstance.Name)
+			return croType.StatusMessage(msg), nil
 		}
-
-		update := &sqladmin.DatabaseInstance{
-			Settings: &sqladmin.Settings{
-				ForceSendFields: []string{"DeletionProtectionEnabled"}, DeletionProtectionEnabled: false},
-		}
-
-		logrus.Info("modifying instance")
-		_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, update)
-		if err != nil {
-			msg := fmt.Sprintf("failed to modify cloudsql instance: %s", cloudSQLDeleteConfig.Name)
+		_, err = sqladminService.DeleteInstance(ctx, strategyConfig.ProjectID, foundInstance.Name)
+		if err != nil && !resources.IsNotFoundError(err) {
+			msg := fmt.Sprintf("failed to delete postgres instance: %s", foundInstance.Name)
 			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-		return "modifying instance", nil
 	}
 
 	logger.Info("deleting cloudSQL secret")
@@ -482,21 +478,13 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 		cloudSQLCreateConfig.Region = defaultGCPCloudSQLRegion
 	}
 
-	instanceName, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
-	if err != nil {
-		return nil, errorUtil.Wrapf(err, "failed to build instance name")
-	}
-	if cloudSQLCreateConfig.Name == "" {
-		cloudSQLCreateConfig.Name = instanceName
-	}
-
 	if cloudSQLCreateConfig.RootPassword == "" {
 		cloudSQLCreateConfig.RootPassword = string(sec.Data[defaultPostgresPasswordKey])
 	}
 
 	tags, err := buildDefaultPostgresTags(ctx, p.Client, pg)
 	if err != nil {
-		return nil, nil, errorUtil.Wrap(err, "failed to build gcp postgres instance tags")
+		return nil, errorUtil.Wrap(err, "failed to build gcp postgres instance tags")
 	}
 
 	if cloudSQLCreateConfig.Settings == nil {
@@ -558,6 +546,7 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 	if cloudSQLCreateConfig.Settings.DataDiskSizeGb == 0 {
 		cloudSQLCreateConfig.Settings.DataDiskSizeGb = defaultDataDiskSizeGb
 	}
+	gcpInstanceConfig := cloudSQLCreateConfig.MapToGcpDatabaseInstance()
 
 	gcpInstanceConfig, err := convertDatabaseStruct(cloudSQLCreateConfig)
 	if err != nil {
@@ -568,8 +557,9 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 	return gcpInstanceConfig, nil
 }
 
-func buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foundInstanceConfig *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
-	logrus.Infof("verifying that %s configuration is as expected", foundInstanceConfig.Name)
+func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foundInstanceConfig *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
+	p.Logger.Debugf("verifying that %s configuration is as expected", foundInstanceConfig.Name)
+
 	updateFound := false
 	modifiedInstance := &sqladmin.DatabaseInstance{}
 
@@ -655,17 +645,9 @@ func buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.DatabaseInstance, foun
 		}
 	}
 
-	if cloudSQLConfig.DatabaseVersion != "" {
-		newVersion, existingVersion := formatGcpPostgresVersion(cloudSQLConfig.DatabaseVersion, foundInstanceConfig.DatabaseVersion)
-		versionUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(existingVersion, newVersion)
-		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to parse database version")
-		}
-		if versionUpgradeNeeded {
-			logrus.Info(fmt.Sprintf("Version upgrade found, the current DatabaseVersion is %s and is upgrading to %s", foundInstanceConfig.DatabaseVersion, cloudSQLConfig.DatabaseVersion))
-			modifiedInstance.DatabaseVersion = cloudSQLConfig.DatabaseVersion
-			updateFound = true
-		}
+	if cloudSQLConfig.DatabaseVersion != foundInstanceConfig.DatabaseVersion {
+		modifiedInstance.DatabaseVersion = cloudSQLConfig.DatabaseVersion
+		updateFound = true
 	}
 
 	if !updateFound {
@@ -744,205 +726,6 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 		},
 		Type: v1.SecretTypeOpaque,
 	}, nil
-}
-
-func convertDatabaseStruct(cloudSQLCreateConfig *gcpiface.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
-	gcpInstanceConfig := &sqladmin.DatabaseInstance{}
-
-	if cloudSQLCreateConfig.ConnectionName != "" {
-		gcpInstanceConfig.ConnectionName = cloudSQLCreateConfig.ConnectionName
-	}
-	if cloudSQLCreateConfig.DatabaseVersion != "" {
-		gcpInstanceConfig.DatabaseVersion = cloudSQLCreateConfig.DatabaseVersion
-	}
-	if cloudSQLCreateConfig.DiskEncryptionConfiguration != nil {
-		gcpInstanceConfig.DiskEncryptionConfiguration = cloudSQLCreateConfig.DiskEncryptionConfiguration
-	}
-	if cloudSQLCreateConfig.FailoverReplica != nil {
-		gcpInstanceConfig.FailoverReplica = &sqladmin.DatabaseInstanceFailoverReplica{}
-		if cloudSQLCreateConfig.FailoverReplica.Available != nil {
-			gcpInstanceConfig.FailoverReplica.Available = *cloudSQLCreateConfig.FailoverReplica.Available
-		}
-		if cloudSQLCreateConfig.FailoverReplica.Name != "" {
-			gcpInstanceConfig.FailoverReplica.Name = cloudSQLCreateConfig.FailoverReplica.Name
-		}
-	}
-	if cloudSQLCreateConfig.GceZone != "" {
-		gcpInstanceConfig.GceZone = cloudSQLCreateConfig.GceZone
-	}
-	if cloudSQLCreateConfig.InstanceType != "" {
-		gcpInstanceConfig.InstanceType = cloudSQLCreateConfig.InstanceType
-	}
-	if cloudSQLCreateConfig.IpAddresses != nil {
-		gcpInstanceConfig.IpAddresses = cloudSQLCreateConfig.IpAddresses
-	}
-	if cloudSQLCreateConfig.Kind != "" {
-		gcpInstanceConfig.Kind = cloudSQLCreateConfig.Kind
-	}
-	if cloudSQLCreateConfig.MaintenanceVersion != "" {
-		gcpInstanceConfig.MaintenanceVersion = cloudSQLCreateConfig.MaintenanceVersion
-	}
-	if cloudSQLCreateConfig.MasterInstanceName != "" {
-		gcpInstanceConfig.MasterInstanceName = cloudSQLCreateConfig.MasterInstanceName
-	}
-	if cloudSQLCreateConfig.MaxDiskSize != 0 {
-		gcpInstanceConfig.MaxDiskSize = cloudSQLCreateConfig.MaxDiskSize
-	}
-	if cloudSQLCreateConfig.Name != "" {
-		gcpInstanceConfig.Name = cloudSQLCreateConfig.Name
-	}
-	if cloudSQLCreateConfig.Project != "" {
-		gcpInstanceConfig.Project = cloudSQLCreateConfig.Project
-	}
-	if cloudSQLCreateConfig.Region != "" {
-		gcpInstanceConfig.Region = cloudSQLCreateConfig.Region
-	}
-	if cloudSQLCreateConfig.ReplicaNames != nil {
-		gcpInstanceConfig.ReplicaNames = cloudSQLCreateConfig.ReplicaNames
-	}
-	if cloudSQLCreateConfig.RootPassword != "" {
-		gcpInstanceConfig.RootPassword = cloudSQLCreateConfig.RootPassword
-	}
-	if cloudSQLCreateConfig.SecondaryGceZone != "" {
-		gcpInstanceConfig.GceZone = cloudSQLCreateConfig.SecondaryGceZone
-	}
-	if cloudSQLCreateConfig.SelfLink != "" {
-		gcpInstanceConfig.SelfLink = cloudSQLCreateConfig.SelfLink
-	}
-	if cloudSQLCreateConfig.ServerCaCert != nil {
-		gcpInstanceConfig.ServerCaCert = cloudSQLCreateConfig.ServerCaCert
-	}
-	if cloudSQLCreateConfig.Settings != nil {
-		gcpInstanceConfig.Settings = &sqladmin.Settings{}
-		if cloudSQLCreateConfig.Settings.ActivationPolicy != "" {
-			gcpInstanceConfig.Settings.ActivationPolicy = cloudSQLCreateConfig.Settings.ActivationPolicy
-		}
-		if cloudSQLCreateConfig.Settings.AvailabilityType != "" {
-			gcpInstanceConfig.Settings.AvailabilityType = cloudSQLCreateConfig.Settings.AvailabilityType
-		}
-		if cloudSQLCreateConfig.Settings.BackupConfiguration != nil {
-			gcpInstanceConfig.Settings.BackupConfiguration = &sqladmin.BackupConfiguration{}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings != nil {
-				gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings = &sqladmin.BackupRetentionSettings{}
-				if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit != "" {
-					gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit = cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetentionUnit
-				}
-				if cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups != 0 {
-					gcpInstanceConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups = cloudSQLCreateConfig.Settings.BackupConfiguration.BackupRetentionSettings.RetainedBackups
-				}
-			}
-
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.BinaryLogEnabled != nil {
-				gcpInstanceConfig.Settings.BackupConfiguration.BinaryLogEnabled = *cloudSQLCreateConfig.Settings.BackupConfiguration.BinaryLogEnabled
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.Enabled != nil {
-				gcpInstanceConfig.Settings.BackupConfiguration.Enabled = *cloudSQLCreateConfig.Settings.BackupConfiguration.Enabled
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.Kind != "" {
-				gcpInstanceConfig.Settings.BackupConfiguration.Kind = cloudSQLCreateConfig.Settings.BackupConfiguration.Kind
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.Location != "" {
-				gcpInstanceConfig.Settings.BackupConfiguration.Location = cloudSQLCreateConfig.Settings.BackupConfiguration.Location
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil {
-				gcpInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *cloudSQLCreateConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.ReplicationLogArchivingEnabled != nil {
-				gcpInstanceConfig.Settings.BackupConfiguration.ReplicationLogArchivingEnabled = *cloudSQLCreateConfig.Settings.BackupConfiguration.ReplicationLogArchivingEnabled
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.StartTime != "" {
-				gcpInstanceConfig.Settings.BackupConfiguration.StartTime = cloudSQLCreateConfig.Settings.BackupConfiguration.StartTime
-			}
-			if cloudSQLCreateConfig.Settings.BackupConfiguration.TransactionLogRetentionDays != 0 {
-				gcpInstanceConfig.Settings.BackupConfiguration.TransactionLogRetentionDays = cloudSQLCreateConfig.Settings.BackupConfiguration.TransactionLogRetentionDays
-			}
-		}
-		if cloudSQLCreateConfig.Settings.Collation != "" {
-			gcpInstanceConfig.Settings.Collation = cloudSQLCreateConfig.Settings.Collation
-		}
-		if cloudSQLCreateConfig.Settings.ConnectorEnforcement != "" {
-			gcpInstanceConfig.Settings.ConnectorEnforcement = cloudSQLCreateConfig.Settings.ConnectorEnforcement
-		}
-		if cloudSQLCreateConfig.Settings.CrashSafeReplicationEnabled != nil {
-			gcpInstanceConfig.Settings.CrashSafeReplicationEnabled = *cloudSQLCreateConfig.Settings.CrashSafeReplicationEnabled
-		}
-		if cloudSQLCreateConfig.Settings.DataDiskSizeGb != 0 {
-			gcpInstanceConfig.Settings.DataDiskSizeGb = cloudSQLCreateConfig.Settings.DataDiskSizeGb
-		}
-		if cloudSQLCreateConfig.Settings.DataDiskType != "" {
-			gcpInstanceConfig.Settings.DataDiskType = cloudSQLCreateConfig.Settings.DataDiskType
-		}
-		if cloudSQLCreateConfig.Settings.DatabaseFlags != nil {
-			gcpInstanceConfig.Settings.DatabaseFlags = cloudSQLCreateConfig.Settings.DatabaseFlags
-		}
-		if cloudSQLCreateConfig.Settings.DatabaseReplicationEnabled != nil {
-			gcpInstanceConfig.Settings.DatabaseReplicationEnabled = *cloudSQLCreateConfig.Settings.DatabaseReplicationEnabled
-		}
-		if cloudSQLCreateConfig.Settings.DeletionProtectionEnabled != nil {
-			gcpInstanceConfig.Settings.DeletionProtectionEnabled = *cloudSQLCreateConfig.Settings.DeletionProtectionEnabled
-		}
-		if cloudSQLCreateConfig.Settings.DenyMaintenancePeriods != nil {
-			gcpInstanceConfig.Settings.DenyMaintenancePeriods = cloudSQLCreateConfig.Settings.DenyMaintenancePeriods
-		}
-		if cloudSQLCreateConfig.Settings.InsightsConfig != nil {
-			gcpInstanceConfig.Settings.InsightsConfig = cloudSQLCreateConfig.Settings.InsightsConfig
-		}
-		if cloudSQLCreateConfig.Settings.IpConfiguration != nil {
-			gcpInstanceConfig.Settings.IpConfiguration = &sqladmin.IpConfiguration{}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.AllocatedIpRange != "" {
-				gcpInstanceConfig.Settings.IpConfiguration.AllocatedIpRange = cloudSQLCreateConfig.Settings.IpConfiguration.AllocatedIpRange
-			}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.AuthorizedNetworks != nil {
-				gcpInstanceConfig.Settings.IpConfiguration.AuthorizedNetworks = cloudSQLCreateConfig.Settings.IpConfiguration.AuthorizedNetworks
-			}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.AuthorizedNetworks != nil {
-				gcpInstanceConfig.Settings.IpConfiguration.AuthorizedNetworks = cloudSQLCreateConfig.Settings.IpConfiguration.AuthorizedNetworks
-			}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.Ipv4Enabled != nil {
-				gcpInstanceConfig.Settings.IpConfiguration.Ipv4Enabled = *cloudSQLCreateConfig.Settings.IpConfiguration.Ipv4Enabled
-			}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.PrivateNetwork != "" {
-				gcpInstanceConfig.Settings.IpConfiguration.PrivateNetwork = cloudSQLCreateConfig.Settings.IpConfiguration.PrivateNetwork
-			}
-			if cloudSQLCreateConfig.Settings.IpConfiguration.RequireSsl != nil {
-				gcpInstanceConfig.Settings.IpConfiguration.RequireSsl = *cloudSQLCreateConfig.Settings.IpConfiguration.RequireSsl
-			}
-		}
-		if cloudSQLCreateConfig.Settings.Kind != "" {
-			gcpInstanceConfig.Settings.Kind = cloudSQLCreateConfig.Settings.Kind
-		}
-		if cloudSQLCreateConfig.Settings.LocationPreference != nil {
-			gcpInstanceConfig.Settings.LocationPreference = cloudSQLCreateConfig.Settings.LocationPreference
-		}
-		if cloudSQLCreateConfig.Settings.MaintenanceWindow != nil {
-			gcpInstanceConfig.Settings.MaintenanceWindow = cloudSQLCreateConfig.Settings.MaintenanceWindow
-		}
-		if cloudSQLCreateConfig.Settings.PasswordValidationPolicy != nil {
-			gcpInstanceConfig.Settings.PasswordValidationPolicy = cloudSQLCreateConfig.Settings.PasswordValidationPolicy
-		}
-		if cloudSQLCreateConfig.Settings.PricingPlan != "" {
-			gcpInstanceConfig.Settings.PricingPlan = cloudSQLCreateConfig.Settings.PricingPlan
-		}
-		if cloudSQLCreateConfig.Settings.ReplicationType != "" {
-			gcpInstanceConfig.Settings.ReplicationType = cloudSQLCreateConfig.Settings.ReplicationType
-		}
-		if cloudSQLCreateConfig.Settings.SettingsVersion != 0 {
-			gcpInstanceConfig.Settings.SettingsVersion = cloudSQLCreateConfig.Settings.SettingsVersion
-		}
-		if cloudSQLCreateConfig.Settings.StorageAutoResize != nil {
-			gcpInstanceConfig.Settings.StorageAutoResize = cloudSQLCreateConfig.Settings.StorageAutoResize
-		}
-		if cloudSQLCreateConfig.Settings.StorageAutoResizeLimit != 0 {
-			gcpInstanceConfig.Settings.StorageAutoResizeLimit = cloudSQLCreateConfig.Settings.StorageAutoResizeLimit
-		}
-		if cloudSQLCreateConfig.Settings.Tier != "" {
-			gcpInstanceConfig.Settings.Tier = cloudSQLCreateConfig.Settings.Tier
-		}
-		if cloudSQLCreateConfig.Settings.UserLabels != nil {
-			gcpInstanceConfig.Settings.UserLabels = cloudSQLCreateConfig.Settings.UserLabels
-		}
-	}
-	return gcpInstanceConfig, nil
 }
 
 func formatGcpPostgresVersion(gcpNewVersion string, gcpExistingVersion string) (semverNewVersion string, semverExistingVersion string) {
