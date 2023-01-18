@@ -8,8 +8,10 @@ import (
 	"reflect"
 	"time"
 
+	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -18,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	croApis "github.com/integr8ly/cloud-resource-operator/apis"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -2004,7 +2005,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseInProgress,
+						Phase: croType.PhaseInProgress,
 					},
 				},
 			},
@@ -2015,7 +2016,7 @@ func TestAWSRedisProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				r: &v1alpha1.Redis{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseComplete,
+						Phase: croType.PhaseComplete,
 					},
 				},
 			},
@@ -2057,7 +2058,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    types.StatusMessage
+		want    croType.StatusMessage
 		wantErr bool
 	}{
 		{
@@ -2097,7 +2098,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
-			want:    types.StatusMessage("successfully created and tagged"),
+			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 		{
@@ -2137,7 +2138,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
-			want:    types.StatusMessage("successfully created and tagged"),
+			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 		{
@@ -2177,7 +2178,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
-			want:    types.StatusMessage("failed to add tags to aws elasticache snapshot"),
+			want:    croType.StatusMessage("failed to add tags to aws elasticache snapshot"),
 			wantErr: true,
 		},
 		{
@@ -2217,7 +2218,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
-			want:    types.StatusMessage("failed to add tags to aws elasticache snapshot"),
+			want:    croType.StatusMessage("failed to add tags to aws elasticache snapshot"),
 			wantErr: true,
 		},
 	}
@@ -2974,6 +2975,163 @@ func TestNewAWSRedisProvider(t *testing.T) {
 			}
 			if got == nil {
 				t.Errorf("NewAWSRedisProvider() got = %v, want non-nil result", got)
+			}
+		})
+	}
+}
+
+func TestRedisProvider_getElasticacheConfig(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type fields struct {
+		Client client.Client
+		Logger *logrus.Entry
+	}
+	type args struct {
+		ctx context.Context
+		r   *v1alpha1.Redis
+	}
+
+	infra := &configv1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+		Spec: configv1.InfrastructureSpec{},
+		Status: configv1.InfrastructureStatus{
+			PlatformStatus: &configv1.PlatformStatus{
+				Type: configv1.AWSPlatformType,
+				AWS: &configv1.AWSPlatformStatus{
+					Region: "testRegion",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *elasticache.CreateReplicationGroupInput
+		want1   *elasticache.DeleteReplicationGroupInput
+		want2   *ServiceUpdate
+		wantErr bool
+	}{
+		{
+			name: "test node size from create strategy is returned if size is not set in spec",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      DefaultConfigMapName,
+							Namespace: "test",
+						},
+						Data: map[string]string{
+							"redis": "{\"development\": { \"region\": \"\", \"createStrategy\": {\"cacheNodeType\": \"cache.t3.small\"}, \"deleteStrategy\": {}, \"serviceUpdates\": [\"elasticache-20210615-002\"]  }}",
+						},
+					},
+					infra,
+				).Build(),
+				Logger: testLogger,
+			},
+			args: args{
+				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
+					Tier: "development",
+				}},
+			},
+			want: &elasticache.CreateReplicationGroupInput{
+				CacheNodeType: aws.String("cache.t3.small"),
+			},
+			want1: &elasticache.DeleteReplicationGroupInput{},
+			want2: &ServiceUpdate{
+				updates: []string{"elasticache-20210615-002"},
+			},
+		},
+		{
+			name: "test node size from spec is returned when set in spec",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      DefaultConfigMapName,
+							Namespace: "test",
+						},
+						Data: map[string]string{
+							"redis": "{\"development\": { \"region\": \"\", \"createStrategy\": {}, \"deleteStrategy\": {}, \"serviceUpdates\": [\"elasticache-20210615-002\"]  }}",
+						},
+					},
+					infra,
+				).Build(),
+				Logger: testLogger,
+			},
+			args: args{
+				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
+					Tier: "development",
+					Size: "cache.m5.large",
+				}},
+			},
+			want: &elasticache.CreateReplicationGroupInput{
+				CacheNodeType: aws.String("cache.m5.large"),
+			},
+			want1: &elasticache.DeleteReplicationGroupInput{},
+			want2: &ServiceUpdate{
+				updates: []string{"elasticache-20210615-002"},
+			},
+		},
+		{
+			name: "test node size from spec takes precedence even if node type is specified in strategy config map",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      DefaultConfigMapName,
+							Namespace: "test",
+						},
+						Data: map[string]string{
+							"redis": "{\"development\": { \"region\": \"\", \"createStrategy\": {\"cacheNodeType\": \"cache.t3.small\"}, \"deleteStrategy\": {}, \"serviceUpdates\": [\"elasticache-20210615-002\"]  }}",
+						},
+					},
+					infra,
+				).Build(),
+				Logger: testLogger,
+			},
+			args: args{
+				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
+					Tier: "development",
+					Size: "cache.m5.large",
+				}},
+			},
+			want: &elasticache.CreateReplicationGroupInput{
+				CacheNodeType: aws.String("cache.m5.large"),
+			},
+			want1: &elasticache.DeleteReplicationGroupInput{},
+			want2: &ServiceUpdate{
+				updates: []string{"elasticache-20210615-002"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{
+				Client:        tt.fields.Client,
+				Logger:        tt.fields.Logger,
+				ConfigManager: NewConfigMapConfigManager(DefaultConfigMapName, "test", tt.fields.Client),
+			}
+			got, got1, got2, _, err := p.getElasticacheConfig(tt.args.ctx, tt.args.r)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getElasticacheConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getElasticacheConfig() got = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("getElasticacheConfig() got1 = %v, want %v", got1, tt.want1)
+			}
+			if !reflect.DeepEqual(got2, tt.want2) {
+				t.Errorf("getElasticacheConfig() got2 = %v, want %v", got2, tt.want2)
 			}
 		})
 	}
