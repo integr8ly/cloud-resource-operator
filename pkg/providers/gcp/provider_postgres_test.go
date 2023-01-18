@@ -677,6 +677,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 				Client:            tt.fields.Client,
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
 			got, err := pp.deleteCloudSQLInstance(context.TODO(), tt.args.networkManager, tt.args.sqladminService, tt.args.strategyConfig, tt.args.p, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
