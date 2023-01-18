@@ -161,7 +161,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "failed to delete postgres instance: " + gcpTestPostgresInstanceName,
+			want:    "failed to delete cloudsql instance: " + gcpTestPostgresInstanceName,
 			wantErr: true,
 		},
 		{
@@ -336,7 +336,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 				isLastResource: false,
 				projectID:      gcpTestProjectId,
 			},
-			want:    "failed to delete postgres instance: " + gcpTestPostgresInstanceName,
+			want:    "failed to delete cloudsql instance: " + gcpTestPostgresInstanceName,
 			wantErr: true,
 		},
 		{
