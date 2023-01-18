@@ -48,7 +48,7 @@ func TestBuildRedisGenericMetricLabels(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := BuildRedisGenericMetricLabels(tt.args.r, tt.args.clusterID, tt.args.cacheName, tt.args.providerName); !reflect.DeepEqual(got, tt.want) {
+			if got := BuildGenericMetricLabels(tt.args.r.ObjectMeta, tt.args.clusterID, tt.args.cacheName, tt.args.providerName); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("BuildRedisGenericMetricLabels() = %v, want %v", got, tt.want)
 			}
 		})
@@ -125,7 +125,7 @@ func TestBuildRedisInfoMetricLabels(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := BuildRedisInfoMetricLabels(tt.args.r, tt.args.status, tt.args.clusterID, tt.args.cacheName, tt.args.providerName); !reflect.DeepEqual(got, tt.want) {
+			if got := BuildInfoMetricLabels(tt.args.r.ObjectMeta, tt.args.status, tt.args.clusterID, tt.args.cacheName, tt.args.providerName); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("BuildRedisInfoMetricLabels() = %v, want %v", got, tt.want)
 			}
 		})
@@ -175,7 +175,7 @@ func TestBuildRedisStatusMetricsLabels(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := BuildRedisStatusMetricsLabels(tt.args.r, tt.args.clusterID, tt.args.cacheName, tt.args.providerName, tt.args.phase); !reflect.DeepEqual(got, tt.want) {
+			if got := BuildStatusMetricsLabels(tt.args.r.ObjectMeta, tt.args.clusterID, tt.args.cacheName, tt.args.providerName, tt.args.phase); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("BuildRedisStatusMetricsLabels() = %v, want %v", got, tt.want)
 			}
 		})

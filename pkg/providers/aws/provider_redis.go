@@ -971,10 +971,10 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	if instance != nil {
 		status = resources.SafeStringDereference(instance.Status)
 	}
-	infoLabels := resources.BuildRedisInfoMetricLabels(cr, status, clusterID, cacheName, redisProviderName)
+	infoLabels := resources.BuildInfoMetricLabels(cr.ObjectMeta, status, clusterID, cacheName, redisProviderName)
 
 	// build generic metrics
-	genericLabels := resources.BuildRedisGenericMetricLabels(cr, clusterID, cacheName, redisProviderName)
+	genericLabels := resources.BuildGenericMetricLabels(cr.ObjectMeta, clusterID, cacheName, redisProviderName)
 
 	// set status gauge
 	resources.SetMetricCurrentTime(resources.DefaultRedisInfoMetricName, infoLabels)
@@ -985,7 +985,7 @@ func (p *RedisProvider) exposeRedisMetrics(ctx context.Context, cr *v1alpha1.Red
 	// the value of the metric should be 0.0 when the resource is not in that phase
 	// this follows the approach that pod status
 	for _, phase := range []croType.StatusPhase{croType.PhaseFailed, croType.PhaseDeleteInProgress, croType.PhasePaused, croType.PhaseComplete, croType.PhaseInProgress} {
-		labelsFailed := resources.BuildRedisStatusMetricsLabels(cr, clusterID, cacheName, redisProviderName, phase)
+		labelsFailed := resources.BuildStatusMetricsLabels(cr.ObjectMeta, clusterID, cacheName, redisProviderName, phase)
 		resources.SetMetric(resources.DefaultRedisStatusMetricName, labelsFailed, resources.Btof64(cr.Status.Phase == phase))
 	}
 
@@ -1019,7 +1019,7 @@ func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, cr 
 			return
 		}
 
-		labels := resources.BuildRedisStatusMetricsLabels(cr, clusterID, cacheName, redisProviderName, cr.Status.Phase)
+		labels := resources.BuildStatusMetricsLabels(cr.ObjectMeta, clusterID, cacheName, redisProviderName, cr.Status.Phase)
 		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(cr.DeletionTimestamp.Unix()))
 	}
 }
@@ -1095,7 +1095,7 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	}
 
 	// build generic labels to be added to metric
-	genericLabels := resources.BuildRedisGenericMetricLabels(cr, clusterID, cacheName, redisProviderName)
+	genericLabels := resources.BuildGenericMetricLabels(cr.ObjectMeta, clusterID, cacheName, redisProviderName)
 
 	// check if the node group is available
 	if cache == nil || cache.NodeGroups == nil {
