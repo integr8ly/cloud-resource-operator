@@ -1121,14 +1121,14 @@ func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Contex
 		// build instance name
 		instanceName, err := p.buildInstanceName(ctx, cr)
 		if err != nil {
-			logrus.Errorf("error occurred while building instance name during postgres metrics: %v", err)
+			p.Logger.Errorf("error occurred while building instance name during postgres metrics: %v", err)
 		}
 
 		// get Cluster Id
-		logrus.Info("setting postgres information metric")
+		p.Logger.Info("setting postgres information metric")
 		clusterID, err := resources.GetClusterID(ctx, p.Client)
 		if err != nil {
-			logrus.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
+			p.Logger.Errorf("failed to get cluster id while exposing information metric for %v", instanceName)
 			return
 		}
 		labels := resources.BuildStatusMetricsLabels(cr.ObjectMeta, clusterID, instanceName, postgresProviderName, cr.Status.Phase)
