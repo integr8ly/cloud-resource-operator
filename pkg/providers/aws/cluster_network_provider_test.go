@@ -2723,7 +2723,11 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 						}, nil
 					}
 					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return nil, awserr.New("RouteNotSupported", "Route table contains routes that do not target a network interface", nil)
+						calls := ec2Client.CreateRouteCalls()
+						if len(calls) == 1 {
+							return nil, awserr.New("RouteNotSupported", "Route table contains routes that do not target a network interface", nil)
+						}
+						return &ec2.CreateRouteOutput{}, nil
 					}
 					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 						return &ec2.DescribeSubnetsOutput{
