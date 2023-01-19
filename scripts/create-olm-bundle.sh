@@ -8,6 +8,7 @@ LATEST_VERSION=$(grep cloud-resource-operator bundles/cloud-resource-operator.pa
 ORG="${IMAGE_ORG:-integreatly}"
 REG="${IMAGE_REG:-quay.io}"
 BUILD_TOOL="${BUILD_TOOL:-docker}"
+CONTAINER_PLATFORM="${CONTAINER_PLATFORM:-linux/amd64}"
 UPGRADE_CRO="${UPGRADE:-true}"
 VERSIONS="${BUNDLE_VERSIONS:-$LATEST_VERSION}"
 ROOT=$(pwd)
@@ -63,6 +64,7 @@ generate_bundles() {
   do
     image="$REG/$ORG/cloud-resource-operator:bundle-v$VERSION"
     $BUILD_TOOL build -f ./bundles/bundle.Dockerfile -t $image \
+      --platform="$CONTAINER_PLATFORM" \
       --build-arg manifest_path=./bundles/temp/$VERSION/manifests \
       --build-arg metadata_path=./bundles/temp/$VERSION/metadata \
       --build-arg version=$VERSION .
@@ -88,7 +90,7 @@ generate_index() {
   INDEX_IMAGE=$REG/$ORG/cloud-resource-operator:index-v$LATEST_VERSION
 
   printf "Building index image:$INDEX_IMAGE\n"
-  ${BUILD_TOOL} build . -f index.Dockerfile -t $INDEX_IMAGE
+  ${BUILD_TOOL} build . -f index.Dockerfile -t $INDEX_IMAGE --platform="$CONTAINER_PLATFORM"
 
   printf "Pushing index image:'$INDEX_IMAGE\n"
   ${BUILD_TOOL} push $INDEX_IMAGE
