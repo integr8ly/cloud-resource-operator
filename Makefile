@@ -2,10 +2,11 @@ IMAGE_REG ?= quay.io
 IMAGE_ORG ?= integreatly
 IMAGE_NAME ?= cloud-resource-operator
 OPERATOR_IMG = $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):v$(VERSION)
+CONTAINER_PLATFORM ?= linux/amd64
 MANIFEST_NAME ?= cloud-resources
 NAMESPACE=cloud-resource-operator
-PREV_VERSION=0.41.0
-VERSION=0.42.0
+PREV_VERSION=0.42.0
+VERSION=0.43.0
 COMPILE_TARGET=./tmp/_output/bin/$(IMAGE_NAME)
 UPGRADE ?= true
 CHANNEL ?= rhmi
@@ -141,7 +142,7 @@ test/unit:
 .PHONY: image/build
 image/build: build
 	echo "build image ${OPERATOR_IMG}"
-	docker build -t ${OPERATOR_IMG} .
+	docker build --platform=$(CONTAINER_PLATFORM) -t ${OPERATOR_IMG} .
 
 .PHONY: image/push
 image/push: image/build
@@ -238,7 +239,7 @@ release/prepare: gen/csv image/push create/olm/bundle
 .PHONY: image/build/pipelines
 image/build/pipelines: build
 	echo "build image ${OPERATOR_IMG}"
-	sudo podman build --ulimit nofile=65535:65535 . -t ${OPERATOR_IMG}
+	sudo podman build --platform=$(CONTAINER_PLATFORM) --ulimit nofile=65535:65535 . -t ${OPERATOR_IMG}
 	sudo podman save ${OPERATOR_IMG} | sudo -u jenkins podman load
 
 .PHONY: image/push/pipelines
