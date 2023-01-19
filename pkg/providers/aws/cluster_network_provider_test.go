@@ -2646,6 +2646,205 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test successful security group creation with Firewall and Private Link Route Tables",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						calls := ec2Client.DescribeSecurityGroupsCalls()
+						if len(calls) == 1 {
+							return &ec2.DescribeSecurityGroupsOutput{
+								SecurityGroups: []*ec2.SecurityGroup{
+									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+										group.GroupName = aws.String("not test security group id")
+									}),
+								},
+							}, nil
+						}
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
+							},
+						}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return &ec2.CreateSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						calls := ec2Client.DescribeRouteTablesCalls()
+						if len(calls) == 1 {
+							return &ec2.DescribeRouteTablesOutput{
+								RouteTables: []*ec2.RouteTable{
+									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+										table.Tags = []*ec2.Tag{
+											buildMockEc2Tag(func(e *ec2.Tag) {
+												e.Key = aws.String("kubernetes.io/cluster/test")
+												e.Value = aws.String("owned")
+											}),
+										}
+									}),
+								},
+							}, nil
+						}
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String(defaultSubnetTag)
+											e.Value = aws.String("test")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return &ec2.DescribeVpcPeeringConnectionsOutput{
+							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
+								buildMockVpcPeeringConnection(nil),
+							},
+						}, nil
+					}
+					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
+						calls := ec2Client.CreateRouteCalls()
+						if len(calls) == 1 {
+							return nil, awserr.New("RouteNotSupported", "Route table contains routes that do not target a network interface", nil)
+						}
+						return &ec2.CreateRouteOutput{}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:     context.TODO(),
+				network: buildMockNetwork(nil),
+			},
+			want:    buildMockNetworkConnection(nil),
+			wantErr: false,
+		},
+		{
+			name: "test error on route table route creation error",
+			fields: fields{
+				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				RdsApi: &mockRdsClient{},
+				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
+							buildMockVpc(func(vpc *ec2.Vpc) {
+								vpc.VpcId = aws.String(defaultStandaloneVpcId)
+								vpc.CidrBlock = aws.String(validCIDRTwentySix)
+								vpc.Tags = []*ec2.Tag{
+									buildMockEc2Tag(func(e *ec2.Tag) {
+										e.Key = aws.String(tagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
+									}),
+									buildMockEc2Tag(func(e *ec2.Tag) {}),
+								}
+							}),
+						}}, nil
+					}
+					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+						calls := ec2Client.DescribeSecurityGroupsCalls()
+						if len(calls) == 1 {
+							return &ec2.DescribeSecurityGroupsOutput{
+								SecurityGroups: []*ec2.SecurityGroup{
+									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
+										group.GroupName = aws.String("not test security group id")
+									}),
+								},
+							}, nil
+						}
+						return &ec2.DescribeSecurityGroupsOutput{
+							SecurityGroups: []*ec2.SecurityGroup{
+								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
+							},
+						}, nil
+					}
+					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+						return &ec2.CreateSecurityGroupOutput{}, nil
+					}
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						calls := ec2Client.DescribeRouteTablesCalls()
+						if len(calls) == 1 {
+							return &ec2.DescribeRouteTablesOutput{
+								RouteTables: []*ec2.RouteTable{
+									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+										table.Tags = []*ec2.Tag{
+											buildMockEc2Tag(func(e *ec2.Tag) {
+												e.Key = aws.String("kubernetes.io/cluster/test")
+												e.Value = aws.String("owned")
+											}),
+										}
+									}),
+								},
+							}, nil
+						}
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
+									table.Tags = []*ec2.Tag{
+										buildMockEc2Tag(func(e *ec2.Tag) {
+											e.Key = aws.String(defaultSubnetTag)
+											e.Value = aws.String("test")
+										}),
+									}
+								}),
+							},
+						}, nil
+					}
+					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+						return &ec2.DescribeVpcPeeringConnectionsOutput{
+							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
+								buildMockVpcPeeringConnection(nil),
+							},
+						}, nil
+					}
+					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
+						return &ec2.CreateRouteOutput{}, awserr.New("OtherError", "Route table contains routes that do not target a network interface", nil)
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: []*ec2.Subnet{
+								buildValidClusterSubnet(nil),
+							},
+						}, nil
+					}
+				}),
+				ElasticacheApi: &mockElasticacheClient{},
+				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				ctx:     context.TODO(),
+				network: buildMockNetwork(nil),
+			},
+			wantErr: true,
+		},
+		{
 			name: "error creating security group",
 			fields: fields{
 				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),

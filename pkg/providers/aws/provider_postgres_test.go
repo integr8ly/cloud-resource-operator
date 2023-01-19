@@ -56,6 +56,7 @@ var (
 	lockMockEc2ClientDescribeSubnets           sync.RWMutex
 	lockMockEc2ClientDescribeAvailabilityZones sync.RWMutex
 	lockMockEc2ClientDescribeVpcs              sync.RWMutex
+	lockMockEc2ClientCreateRoute               sync.RWMutex
 	snapshotARN                                = "test:arn"
 	snapshotIdentifier                         = "testIdentifier"
 )
@@ -122,6 +123,9 @@ type mockEc2Client struct {
 		}
 		DescribeVpcs []struct {
 			Vpcs *ec2.DescribeVpcsInput
+		}
+		CreateRoute []struct {
+			Route *ec2.CreateRouteInput
 		}
 	}
 }
@@ -333,7 +337,33 @@ func (m *mockEc2Client) DeleteSubnet(*ec2.DeleteSubnetInput) (*ec2.DeleteSubnetO
 	return &ec2.DeleteSubnetOutput{}, nil
 }
 
+func (m *mockEc2Client) CreateRouteCalls() []struct {
+	Route *ec2.CreateRouteInput
+} {
+	var calls []struct {
+		Route *ec2.CreateRouteInput
+	}
+	lockMockEc2ClientCreateRoute.RLock()
+	calls = m.calls.CreateRoute
+	lockMockEc2ClientCreateRoute.RUnlock()
+
+	return calls
+}
+
 func (m *mockEc2Client) CreateRoute(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
+	if m.createRouteFn == nil {
+		panic("mockEc2Client.DescribeRouteTables: method is nil")
+	}
+	callInfo := struct {
+		Route *ec2.CreateRouteInput
+	}{
+		Route: input,
+	}
+
+	lockMockEc2ClientCreateRoute.Lock()
+	m.calls.CreateRoute = append(m.calls.CreateRoute, callInfo)
+	lockMockEc2ClientCreateRoute.Unlock()
+
 	return m.createRouteFn(input)
 }
 
