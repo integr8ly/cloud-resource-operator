@@ -84,3 +84,71 @@ func Test_buildDefaultRedisTags(t *testing.T) {
 		})
 	}
 }
+
+func Test_buildDefaultPostgresTags(t *testing.T) {
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type args struct {
+		ctx    context.Context
+		client client.Client
+		pg     *v1alpha1.Postgres
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name: "success building default postgres tags",
+			args: args{
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				pg: &v1alpha1.Postgres{
+					ObjectMeta: v1.ObjectMeta{
+						Name: testName,
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "testType",
+					},
+				},
+			},
+			want: map[string]string{
+				"integreatly-org_clusterid":     gcpTestClusterName,
+				"integreatly-org_resource-name": "testname",
+				"integreatly-org_resource-type": "testtype",
+				resources.TagManagedKey:         "true",
+			},
+			wantErr: false,
+		},
+		{
+			name: "failure building default postgres tags",
+			args: args{
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
+				pg: &v1alpha1.Postgres{
+					ObjectMeta: v1.ObjectMeta{
+						Name: testName,
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "testType",
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := buildDefaultPostgresTags(tt.args.ctx, tt.args.client, tt.args.pg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("buildDefaultPostgresTags() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildDefaultPostgresTags() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
