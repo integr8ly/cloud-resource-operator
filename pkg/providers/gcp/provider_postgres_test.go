@@ -5,24 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
-	utils "k8s.io/utils/pointer"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
-
-	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+	utils "k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -818,7 +817,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 					Namespace: testNs,
 				},
 				},
-					&v1.Infrastructure{
+					&configv1.Infrastructure{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: testInfrastructureName,
 						},
@@ -850,11 +849,11 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 					Namespace: testNs,
 				},
 				},
-					&v1.Infrastructure{
+					&configv1.Infrastructure{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: testInfrastructureName,
 						},
-						Status: v1.InfrastructureStatus{
+						Status: configv1.InfrastructureStatus{
 							InfrastructureName: testInfrastructureName,
 						},
 					},
@@ -882,11 +881,11 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 					Namespace: testNs,
 				},
 				},
-					&v1.Infrastructure{
+					&configv1.Infrastructure{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: testInfrastructureName,
 						},
-						Status: v1.InfrastructureStatus{
+						Status: configv1.InfrastructureStatus{
 							InfrastructureName: testInfrastructureName,
 						},
 					},
@@ -926,11 +925,11 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 							},
 						},
 					},
-					&v1.Infrastructure{
+					&configv1.Infrastructure{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: testInfrastructureName,
 						},
-						Status: v1.InfrastructureStatus{
+						Status: configv1.InfrastructureStatus{
 							InfrastructureName: testInfrastructureName,
 						},
 					},
@@ -1012,11 +1011,11 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 							Phase: types.PhaseComplete,
 						},
 					},
-					&v1.Infrastructure{
+					&configv1.Infrastructure{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: testInfrastructureName,
 						},
-						Status: v1.InfrastructureStatus{
+						Status: configv1.InfrastructureStatus{
 							InfrastructureName: testInfrastructureName,
 						},
 					},

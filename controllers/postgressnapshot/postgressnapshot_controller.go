@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -62,7 +61,7 @@ var _ reconcile.Reconciler = &PostgresSnapshotReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 
 	client, err := k8sclient.New(restConfig, k8sclient.Options{

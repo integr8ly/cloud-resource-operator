@@ -15,12 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestNewConfigManager(t *testing.T) {
-	fakeClient := fake.NewFakeClientWithScheme(runtime.NewScheme())
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(runtime.NewScheme())
 	cases := []struct {
 		name              string
 		cmName            string
@@ -72,7 +70,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",

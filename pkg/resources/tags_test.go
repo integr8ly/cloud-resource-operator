@@ -2,13 +2,14 @@ package resources
 
 import (
 	"context"
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"reflect"
+	"testing"
+
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	configv1 "github.com/openshift/api/config/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 func Test_tagsContains(t *testing.T) {
@@ -277,7 +278,7 @@ func Test_tagsContainsAll(t *testing.T) {
 
 func Test_getDefaultResourceTags(t *testing.T) {
 	scheme := runtime.NewScheme()
-	err := configv1.AddToScheme(scheme)
+	err := configv1.Install(scheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -298,7 +299,7 @@ func Test_getDefaultResourceTags(t *testing.T) {
 			name: "failed to get cluster id",
 			args: args{
 				ctx:      context.TODO(),
-				client:   fake.NewFakeClientWithScheme(scheme),
+				client:   moqClient.NewSigsClientMoqWithScheme(scheme),
 				specType: "",
 				name:     "",
 				prodName: "",
@@ -310,7 +311,7 @@ func Test_getDefaultResourceTags(t *testing.T) {
 			name: "successfully retrieved default resource tags",
 			args: args{
 				ctx: context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
@@ -378,7 +379,7 @@ func Test_getDefaultResourceTags(t *testing.T) {
 
 func Test_getUserInfraTags(t *testing.T) {
 	scheme := runtime.NewScheme()
-	err := configv1.AddToScheme(scheme)
+	err := configv1.Install(scheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -396,7 +397,7 @@ func Test_getUserInfraTags(t *testing.T) {
 			name: "failed to get cluster infrastructure",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			},
 			want:    nil,
 			wantErr: true,
@@ -405,7 +406,7 @@ func Test_getUserInfraTags(t *testing.T) {
 			name: "successfully retrieved user infra tags",
 			args: args{
 				ctx: context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},

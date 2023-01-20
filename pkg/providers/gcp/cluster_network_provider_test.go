@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis"
-	v1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/multierr"
 	"google.golang.org/api/googleapi"
@@ -63,9 +63,11 @@ func buildMockNetworkManager() *NetworkManagerMock {
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
-	err := multierr.Append(
+	err := multierr.Combine(
 		corev1.AddToScheme(scheme),
-		apis.AddToScheme(scheme))
+		apis.AddToScheme(scheme),
+		configv1.Install(scheme),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -83,17 +85,17 @@ func buildTestStrategyConfig() *StrategyConfig {
 
 // buildTestGcpInfrastructure Builds a default Infrastructure CR if nil map parameter is passed in
 // If the map parameter is not nil, it will assign custom values to the relevant Infrastructure property
-func buildTestGcpInfrastructure(argsMap map[string]*string) *v1.Infrastructure {
-	infra := v1.Infrastructure{
+func buildTestGcpInfrastructure(argsMap map[string]*string) *configv1.Infrastructure {
+	infra := configv1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
 		},
-		Status: v1.InfrastructureStatus{
+		Status: configv1.InfrastructureStatus{
 			InfrastructureName: gcpTestClusterName,
-			Platform:           v1.GCPPlatformType,
-			PlatformStatus: &v1.PlatformStatus{
-				Type: v1.GCPPlatformType,
-				GCP: &v1.GCPPlatformStatus{
+			Platform:           configv1.GCPPlatformType,
+			PlatformStatus: &configv1.PlatformStatus{
+				Type: configv1.GCPPlatformType,
+				GCP: &configv1.GCPPlatformStatus{
 					ProjectID: gcpTestProjectId,
 					Region:    gcpTestRegion,
 				},

@@ -3,13 +3,14 @@ package aws
 import (
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	v12 "k8s.io/api/core/v1"
 	"os"
+	"testing"
+
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	v12 "k8s.io/api/core/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
@@ -35,7 +36,7 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 	}{
 		{
 			name: "sts credentials are reconciled successfully",
-			client: fake.NewFakeClientWithScheme(scheme, &v12.Secret{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v12.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultSTSCredentialSecretName,
 					Namespace: ns,
@@ -50,7 +51,7 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 		},
 		{
 			name: "undefined role arn key in sts credentials secret",
-			client: fake.NewFakeClientWithScheme(scheme, &v12.Secret{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v12.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultSTSCredentialSecretName,
 					Namespace: ns,
@@ -66,6 +67,9 @@ func TestSTSCredentialManager_ReconcileProviderCredentials(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cm, err := NewCredentialManager(tc.client)
+			if err != nil {
+				t.Fatalf("unexpected error creating credential manager")
+			}
 			awsCreds, err := cm.(*STSCredentialManager).ReconcileProviderCredentials(context.TODO(), ns)
 			if tc.wantErr {
 				if !errorContains(err, tc.expectedErrMsg) {
@@ -110,7 +114,7 @@ func TestSTSCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 	}{
 		{
 			name: "successfully reconciled bucket owner credentials",
-			client: fake.NewFakeClientWithScheme(scheme, &v12.Secret{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v12.Secret{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      defaultSTSCredentialSecretName,
 					Namespace: ns,

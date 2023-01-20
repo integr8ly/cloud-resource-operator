@@ -3,20 +3,17 @@ package aws
 import (
 	"context"
 	"errors"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"testing"
 	"time"
 
-	crov1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
-
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	croapis "github.com/integr8ly/cloud-resource-operator/apis"
 	"github.com/openshift/cloud-credential-operator/pkg/apis"
@@ -27,7 +24,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -37,17 +33,16 @@ import (
 
 type mockS3Svc struct {
 	s3iface.S3API
-	wantErrList       bool
-	wantErrCreate     bool
-	wantErrDelete     bool
-	wantErrWaitDelete bool
-	bucketNames       []string
+	wantErrList   bool
+	wantErrCreate bool
+	wantErrDelete bool
+	bucketNames   []string
 }
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croapis.AddToScheme(scheme)
-	err = crov1.SchemeBuilder.AddToScheme(scheme)
+	err = configv1.Install(scheme)
 	err = corev1.AddToScheme(scheme)
 	err = apis.AddToScheme(scheme)
 	if err != nil {
@@ -125,7 +120,7 @@ func (s *mockS3Svc) PutBucketEncryption(*s3.PutBucketEncryptionInput) (*s3.PutBu
 
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test",
 			Namespace:       "test",
 			ResourceVersion: fakeResourceVersion,
@@ -158,7 +153,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket already exists",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -177,7 +172,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 		{
 			name: "test aws s3 bucket is created if doesn't exist",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -238,7 +233,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		{
 			name: "test successful delete",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -259,7 +254,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 		{
 			name: "test error on failed bucket delete",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -310,7 +305,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				b: &v1alpha1.BlobStorage{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseInProgress,
+						Phase: croType.PhaseInProgress,
 					},
 				},
 			},
@@ -321,7 +316,7 @@ func TestBlobStorageProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				b: &v1alpha1.BlobStorage{
 					Status: croType.ResourceTypeStatus{
-						Phase: types.PhaseComplete,
+						Phase: croType.PhaseComplete,
 					},
 				},
 			},
@@ -360,13 +355,13 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    types.StatusMessage
+		want    croType.StatusMessage
 		wantErr bool
 	}{
 		{
 			name: "test tagging completes",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestBlobStorageCR(), buildTestCredentialsRequest(), buildTestInfra()),
 				Logger:            logrus.WithFields(logrus.Fields{}),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
@@ -380,7 +375,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 					bucketNames: []string{"test"},
 				},
 			},
-			want:    types.StatusMessage("successfully created and tagged"),
+			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
 		},
 	}

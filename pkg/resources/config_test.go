@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const (
@@ -111,7 +111,7 @@ func TestGetOrganizationTag(t *testing.T) {
 
 func TestBuildInfraName(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -131,7 +131,7 @@ func TestBuildInfraName(t *testing.T) {
 			name: "successfully return an id used for infra resources",
 			args: args{
 				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme, newFakeAwsInfrastructure()),
+				c:       moqClient.NewSigsClientMoqWithScheme(fakeScheme, newFakeAwsInfrastructure()),
 				postfix: defaultSecurityGroupPostfix,
 				n:       defaultIdentifierLength,
 			},
@@ -142,7 +142,7 @@ func TestBuildInfraName(t *testing.T) {
 			name: "error getting cluster id",
 			args: args{
 				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme),
+				c:       moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				postfix: defaultSecurityGroupPostfix,
 				n:       defaultIdentifierLength,
 			},
@@ -168,7 +168,7 @@ func TestBuildInfraName(t *testing.T) {
 
 func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -188,7 +188,7 @@ func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 			name: "successfully return a timestamped infra name from object creation",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeAwsInfrastructure()),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme, newFakeAwsInfrastructure()),
 				om:  buildTestRedisSnapshotCR().ObjectMeta,
 				n:   defaultIdentifierLength,
 			},
@@ -199,7 +199,7 @@ func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 			name: "error getting cluster id",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				om:  buildTestRedisSnapshotCR().ObjectMeta,
 				n:   defaultIdentifierLength,
 			},
@@ -225,7 +225,7 @@ func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
 
 func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -245,7 +245,7 @@ func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
 			name: "successfully return a timestamped infra name from object",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeAwsInfrastructure()),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme, newFakeAwsInfrastructure()),
 				om:  buildTestRedisSnapshotCR().ObjectMeta,
 				n:   defaultIdentifierLength,
 			},
@@ -256,7 +256,7 @@ func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
 			name: "error getting cluster id",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				om:  buildTestRedisSnapshotCR().ObjectMeta,
 				n:   defaultIdentifierLength,
 			},
