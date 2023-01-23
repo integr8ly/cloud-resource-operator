@@ -2250,6 +2250,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 		foundConfig              *elasticache.ReplicationGroup
 		replicationGroupClusters []elasticache.CacheCluster
 		logger                   *logrus.Entry
+		redis                    *v1alpha1.Redis
 	}
 	tests := []struct {
 		name    string
@@ -2402,6 +2403,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 					},
 				},
 				logger: testLogger,
+				redis:  &v1alpha1.Redis{},
 			},
 			want: &elasticache.ModifyReplicationGroupInput{
 				CacheNodeType:              aws.String("cache.newValue"),
@@ -2484,7 +2486,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildElasticacheUpdateStrategy(tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger)
+			got, err := buildElasticacheUpdateStrategy(tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger, tt.args.redis)
 			if tt.wantErr != "" && err.Error() != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

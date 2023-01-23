@@ -3,7 +3,7 @@ schema: olm.channel
 package: rhmi-cloud-resources
 name: rhmi
 entries:
-  - name: cloud-resources.v0.43.0
+  - name: cloud-resources.v0.44.0
 ---
 defaultChannel: rhmi
 icon:
