@@ -3,9 +3,10 @@ package client
 import (
 	"context"
 	"errors"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"reflect"
 	"testing"
+
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -416,17 +417,19 @@ func TestReconcileRedis(t *testing.T) {
 	}
 
 	type args struct {
-		ctx              context.Context
-		client           client.Client
-		deploymentType   string
-		tier             string
-		productName      string
-		name             string
-		ns               string
-		secretName       string
-		secretNs         string
-		applyImmediately bool
-		modifyFunc       modifyResourceFunc
+		ctx               context.Context
+		client            client.Client
+		deploymentType    string
+		tier              string
+		productName       string
+		name              string
+		ns                string
+		secretName        string
+		secretNs          string
+		size              string
+		applyImmediately  bool
+		maintenanceWindow bool
+		modifyFunc        modifyResourceFunc
 	}
 	tests := []struct {
 		name    string
@@ -471,15 +474,18 @@ func TestReconcileRedis(t *testing.T) {
 		{
 			name: "test modification function",
 			args: args{
-				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
-				tier:           "production",
-				productName:    "test",
-				name:           "test",
-				ns:             "test",
-				secretName:     "test",
-				secretNs:       "test",
+				ctx:               context.TODO(),
+				client:            fake.NewFakeClientWithScheme(scheme),
+				deploymentType:    "managed",
+				tier:              "production",
+				productName:       "test",
+				name:              "test",
+				ns:                "test",
+				secretName:        "test",
+				secretNs:          "test",
+				size:              "test",
+				applyImmediately:  true,
+				maintenanceWindow: true,
 				modifyFunc: func(cr v1.Object) error {
 					cr.SetLabels(map[string]string{
 						"cro": "test",
@@ -503,6 +509,9 @@ func TestReconcileRedis(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
+					Size:              "test",
+					ApplyImmediately:  true,
+					MaintenanceWindow: true,
 				},
 			},
 			wantErr: false,
@@ -529,7 +538,7 @@ func TestReconcileRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.applyImmediately, tt.args.modifyFunc)
+			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.size, tt.args.applyImmediately, tt.args.maintenanceWindow, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileRedis() error = %v, wantErr %v", err, tt.wantErr)
 				return
