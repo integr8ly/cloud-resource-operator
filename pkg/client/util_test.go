@@ -8,7 +8,7 @@ import (
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-
+	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/integr8ly/cloud-resource-operator/apis"
@@ -23,6 +23,7 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
+	err = configv1.Install(scheme)
 	if err != nil {
 		return nil, err
 	}

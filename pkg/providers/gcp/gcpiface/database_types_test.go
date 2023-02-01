@@ -1,10 +1,11 @@
 package gcpiface
 
 import (
-	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	utils "k8s.io/utils/pointer"
 	"reflect"
 	"testing"
+
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
+	utils "k8s.io/utils/pointer"
 )
 
 func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
@@ -123,8 +124,9 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 				DatabaseVersion:             "POSTGRES_13",
 				DiskEncryptionConfiguration: &sqladmin.DiskEncryptionConfiguration{},
 				FailoverReplica: &sqladmin.DatabaseInstanceFailoverReplica{
-					Available: false,
-					Name:      "testName",
+					Available:       false,
+					Name:            "testName",
+					ForceSendFields: []string{"Available"},
 				},
 				GceZone:      "test",
 				InstanceType: "test",
@@ -162,6 +164,11 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 						ReplicationLogArchivingEnabled: false,
 						StartTime:                      "test",
 						TransactionLogRetentionDays:    1,
+						ForceSendFields: []string{
+							"BinaryLogEnabled",
+							"Enabled",
+							"ReplicationLogArchivingEnabled",
+						},
 					},
 					Collation:                   "test",
 					ConnectorEnforcement:        "test",
@@ -195,6 +202,10 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 						"integreatly-org_resource-name": "testName",
 						"integreatly-org_resource-type": "",
 						"red-hat-managed":               "true",
+					},
+					ForceSendFields: []string{
+						"CrashSafeReplicationEnabled",
+						"DatabaseReplicationEnabled",
 					},
 				},
 			},

@@ -69,6 +69,14 @@ func GetClusterInfrastructure(ctx context.Context, c client.Client) (*configv1.I
 	return infra, nil
 }
 
+func GetPlatformType(ctx context.Context, c client.Client) (configv1.PlatformType, error) {
+	infra, err := GetClusterInfrastructure(ctx, c)
+	if err != nil {
+		return "", errorUtil.Wrap(err, "failed to retrieve cluster platform type")
+	}
+	return infra.Status.PlatformStatus.Type, nil
+}
+
 //go:generate moq -out cluster_moq.go . PodCommander
 type PodCommander interface {
 	ExecIntoPod(dpl *appsv1.Deployment, cmd string) error
