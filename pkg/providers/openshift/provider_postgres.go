@@ -446,7 +446,7 @@ func buildDefaultPostgresPodContainers(ps *v1alpha1.Postgres) []v1.Container {
 	return []v1.Container{
 		{
 			Name:  ps.Name,
-			Image: "registry.redhat.io/rhscl/postgresql-10-rhel7",
+			Image: "registry.redhat.io/rhscl/postgresql-13-rhel7",
 			Ports: []v1.ContainerPort{
 				{
 					ContainerPort: int32(defaultPostgresPort),
