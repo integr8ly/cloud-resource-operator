@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"net"
 	"reflect"
 	"testing"
@@ -1840,6 +1841,122 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			redisCluster:  nil,
 			statusMessage: types.StatusMessage("failed to set redis maintenance window to false"),
 			wantErr:       true,
+		},
+		{
+			name: "success creating a gcp redis instance + MaintenancePolicy = nil (not set)",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisCR),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State:             redispb.Instance_READY,
+							MaintenancePolicy: nil,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster: &providers.RedisCluster{
+				DeploymentDetails: &providers.RedisDeploymentDetails{},
+			},
+			statusMessage: types.StatusMessage("successfully reconciled gcp redis instance " + instanceID),
+			wantErr:       false,
+		},
+		{
+			name: "success creating a gcp redis instance + MaintenancePolicy and MaintenanceSchedule are set",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisCR),
+				ConfigManager: &ConfigManagerMock{
+					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
+						return nil, nil
+					},
+				},
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State: redispb.Instance_READY,
+							MaintenancePolicy: &redispb.MaintenancePolicy{
+								WeeklyMaintenanceWindow: []*redispb.WeeklyMaintenanceWindow{
+									{
+										Day:       dayofweek.DayOfWeek_SATURDAY,
+										StartTime: &timeofday.TimeOfDay{Hours: 10},
+									},
+								},
+							},
+							MaintenanceSchedule: &redispb.MaintenanceSchedule{
+								StartTime: timestamppb.Now(),
+							},
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Tier: "development",
+					},
+				},
+			},
+			redisCluster: &providers.RedisCluster{
+				DeploymentDetails: &providers.RedisDeploymentDetails{},
+			},
+			statusMessage: types.StatusMessage("successfully reconciled gcp redis instance " + instanceID),
+			wantErr:       false,
 		},
 	}
 	for _, tt := range tests {

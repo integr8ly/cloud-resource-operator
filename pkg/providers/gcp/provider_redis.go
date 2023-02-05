@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strings"
@@ -154,6 +155,10 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	if maintenanceWindowEnabled {
+		//rescudule maintenance to start immediately
+		foundInstance.MaintenanceSchedule = &redispb.MaintenanceSchedule{
+			StartTime: timestamppb.New(time.Now()),
+		}
 		if updateInstanceRequest := p.buildUpdateInstanceRequest(createInstanceRequest.Instance, foundInstance); updateInstanceRequest != nil {
 			_, err = redisClient.UpdateInstance(ctx, updateInstanceRequest)
 			if err != nil {
@@ -175,8 +180,16 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		if err != nil {
 			statusMessage := "failed to set redis maintenance window to false"
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+
+		}
+	} else {
+		err = p.rescheduleMaintenance(ctx, redisClient, foundInstance)
+		if err != nil {
+			msg := "error check or reschedule/defer redis instance maintenance"
+			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
+
 	rdd := &providers.RedisDeploymentDetails{
 		URI:  foundInstance.Host,
 		Port: int64(foundInstance.Port),
@@ -509,5 +522,46 @@ func (p *RedisProvider) buildUpgradeInstanceRequest(instanceConfig *redispb.Inst
 			RedisVersion: instanceConfig.RedisVersion,
 		}
 	}
+	return nil
+}
+
+func (p *RedisProvider) rescheduleMaintenance(ctx context.Context, redisClient gcpiface.RedisAPI, instance *redispb.Instance) error {
+	// Redis maintenance can be deferred up to 7 days - to next week
+	// If No maintenance has been scheduled yet - do nothing (see next note):
+	// RescheduleMaintenance could be done only for instances with valid upcoming maintenance event, othewise - error "FAILED_PRECONDITION"
+	// If MaintenancePolicy is not set (set to Any day), - Updates may occur any day of the week, need set Policy manually (only once)
+	// or MaintenancePolicy need to be set in Instance creation time (for example - Sunday, 01:00)
+	if instance == nil {
+		return errorUtil.Errorf("redis Instance is null, can't reschedule redis maintenance")
+	}
+	if instance.MaintenancePolicy == nil {
+		p.Logger.Info("no maintenance policy set, unable to defer maintenance")
+		return nil
+	}
+	if instance.MaintenanceSchedule == nil {
+		p.Logger.Info("no maintenance has been scheduled yet. No maintenance event.")
+		return nil
+	}
+	scheduledStartTime := instance.MaintenanceSchedule.StartTime.AsTime()
+	hoursBeforeMaintenance := scheduledStartTime.Sub(time.Now()).Hours()
+	msg := fmt.Sprintf("time remaining until maintenance: %s hours", fmt.Sprintf("%f", hoursBeforeMaintenance))
+	p.Logger.Info(msg)
+	if hoursBeforeMaintenance > 10 {
+		p.Logger.Info("no need reschedule maintenance")
+		return nil
+	}
+
+	p.Logger.Info("Starting Reschedule Maintenance ...")
+	redisInstanceResourceName := "https://redis.googleapis.com/v1/" + instance.GetName()
+	req := &redispb.RescheduleMaintenanceRequest{
+		Name:           redisInstanceResourceName,
+		RescheduleType: redispb.RescheduleMaintenanceRequest_SPECIFIC_TIME,
+		ScheduleTime:   timestamppb.New(scheduledStartTime.Add(time.Hour * 168)),
+	}
+	_, err := redisClient.RescheduleMaintenance(ctx, req)
+	if err != nil {
+		return errorUtil.Errorf("error in RescheduleMaintenance")
+	}
+
 	return nil
 }

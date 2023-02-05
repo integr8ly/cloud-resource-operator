@@ -190,6 +190,7 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 	}
 
 	if maintenanceWindowEnabled {
+
 		logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
 		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(gcpInstanceConfig, foundInstance)
 		if err != nil {
@@ -203,6 +204,19 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 				msg := fmt.Sprintf("failed to modify cloudsql instance: %s", foundInstance.Name)
 				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
+
+			// Disable Maintenance - set Deny
+			logger.Infof("disable Maintenance - set Deny maintenance period 90 days (max allowed by GCP)")
+			timeNow := time.Now()
+			modifiedInstance.Settings.DenyMaintenancePeriods = []*sqladmin.DenyMaintenancePeriod{{
+				EndDate:   timeNow.Add(time.Hour * 2160).Format("2006-01-02"),
+				StartDate: timeNow.Format("2006-01-02"),
+			}}
+			_, err = sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, modifiedInstance)
+			if err != nil && !resources.IsConflictError(err) {
+				msg := fmt.Sprintf("failed to disable Maintenance - failed to modify cloudsql instance")
+				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
 		}
 		_, err = controllerutil.CreateOrUpdate(ctx, p.Client, pg, func() error {
 			pg.Spec.MaintenanceWindow = false
@@ -210,6 +224,12 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		})
 		if err != nil {
 			msg := "failed to set postgres maintenance window to false"
+			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+	} else {
+		err = p.checkUpdateDenyPeriod(ctx, sqladminService, strategyConfig.ProjectID, foundInstance)
+		if err != nil {
+			msg := "error check and update Maintenance deny period for cloudsql instance"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
@@ -636,6 +656,12 @@ func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.
 		return nil, nil
 	}
 
+	modifiedInstance.Settings = &sqladmin.Settings{
+		DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{
+			{NullFields: []string{"EndDate", "StartDate"}},
+		},
+	}
+
 	return modifiedInstance, nil
 }
 
@@ -708,4 +734,58 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 		},
 		Type: v1.SecretTypeOpaque,
 	}, nil
+}
+
+func (p *PostgresProvider) checkUpdateDenyPeriod(ctx context.Context, sqladminService gcpiface.SQLAdminService,
+	projectID string, instance *sqladmin.DatabaseInstance) error {
+	// if current Time minus EndDateOnInstace < 90 days (2160 hours without few hours = 2150), do nothing,
+	// otherwise - update Maintenance Deny period. 90 days - max allowed period.
+	if instance != nil && instance.Settings != nil {
+		timeNow := time.Now()
+		if instance.Settings.DenyMaintenancePeriods != nil {
+			// get EndDate on current Instance if DenyMaintenancePeriods already set
+			// if DenyMaintenancePeriods is nil (not set) - it will be defined in modifiedInstance (see below)
+			dateString := instance.Settings.DenyMaintenancePeriods[0].EndDate
+			denyMaintenanceEndDate, err := parseMaintenanceDateString(dateString)
+			if err != nil {
+				// do nothing here, as it could be case when maintenance period changed manually.
+				// It will be replaced in modifiedInstance
+				p.Logger.Info("can't parse dateString: ")
+			} else {
+				if denyMaintenanceEndDate.Sub(timeNow).Hours() > 10 {
+					p.Logger.Info("no need update Deny maintenance period")
+					return nil
+				}
+			}
+		}
+		p.Logger.Info("updating Deny maintenance period ...")
+		modifiedInstance := instance
+		modifiedInstance.Settings = &sqladmin.Settings{
+			DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{{
+				EndDate:   timeNow.Add(time.Hour * 2160).Format("2006-01-02"),
+				StartDate: timeNow.Format("2006-01-02"),
+			}},
+		}
+		_, err := sqladminService.ModifyInstance(ctx, projectID, instance.Name, modifiedInstance)
+		if err != nil && !resources.IsConflictError(err) {
+			msg := fmt.Sprintf("failed to disable Maintenance - failed to modify cloudsql instance")
+			return errorUtil.Wrap(err, msg)
+		}
+	}
+	return nil
+}
+
+func parseMaintenanceDateString(dateString string) (time.Time, error) {
+	var allowedTimestampFormats = []string{
+		"2006-1-2",
+		"2006-1-02",
+		"2006-01-2",
+		"2006-01-02",
+	}
+	for _, format := range allowedTimestampFormats {
+		if t, err := time.Parse(format, dateString); err == nil {
+			return t, nil
+		}
+	}
+	return time.Now(), fmt.Errorf("can't parse maintenance date string, not supported format")
 }

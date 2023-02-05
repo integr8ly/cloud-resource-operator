@@ -1540,6 +1540,186 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			want:    "failed to set postgres maintenance window to false",
 			wantErr: true,
 		},
+		{
+			name: "success and check Deny period - no need update",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{{
+									EndDate:   "2023-05-22",
+									StartDate: "2023-02-22",
+								}}},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					ProjectID:      "sample-project-id",
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+				},
+				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
+				maintenanceWindow: false,
+			},
+			want:    "successfully reconciled cloudsql instance gcptestclustertestNsgcpcloudsql",
+			wantErr: false,
+		},
+		{
+			name: "success and check Deny period - change Deny period",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{{
+									EndDate:   "2023-02-22",
+									StartDate: "2023-02-22",
+								}}},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					ProjectID:      "sample-project-id",
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+				},
+				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
+				maintenanceWindow: false,
+			},
+			want:    "successfully reconciled cloudsql instance gcptestclustertestNsgcpcloudsql",
+			wantErr: false,
+		},
+		{
+			name: "success and check Deny period - wrong date format, update deny peiod",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{{
+									EndDate:   "2023-02-22-00",
+									StartDate: "2023-02-22",
+								}}},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					ProjectID:      "sample-project-id",
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+				},
+				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
+				maintenanceWindow: false,
+			},
+			want:    "successfully reconciled cloudsql instance gcptestclustertestNsgcpcloudsql",
+			wantErr: false,
+		},
+		{
+			name: "error check and update Maintenance - failed to disable Maintenance",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+					Name:      postgresProviderName + defaultCredSecSuffix,
+					Namespace: testNs,
+				},
+					Data: map[string][]byte{
+						defaultPostgresUserKey:     []byte(testUser),
+						defaultPostgresPasswordKey: []byte(testPassword),
+					},
+				}, buildTestPostgres(), buildTestGcpInfrastructure(nil)),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								DenyMaintenancePeriods: []*sqladmin.DenyMaintenancePeriod{{
+									EndDate:   "2023-02-22",
+									StartDate: "2023-02-22",
+								}}},
+						}, nil
+					}
+					sqlClient.ModifyInstanceFn = func(ctx context.Context, s string, s2 string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
+						return nil, fmt.Errorf("failed to modify cloudsql instance")
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					ProjectID:      "sample-project-id",
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+				},
+				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
+				maintenanceWindow: false,
+			},
+			want:    "error check and update Maintenance deny period for cloudsql instance",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

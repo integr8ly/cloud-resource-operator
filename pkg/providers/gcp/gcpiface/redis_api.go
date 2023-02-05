@@ -15,6 +15,7 @@ type RedisAPI interface {
 	GetInstance(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
 	UpdateInstance(context.Context, *redispb.UpdateInstanceRequest, ...gax.CallOption) (*redis.UpdateInstanceOperation, error)
 	UpgradeInstance(context.Context, *redispb.UpgradeInstanceRequest, ...gax.CallOption) (*redis.UpgradeInstanceOperation, error)
+	RescheduleMaintenance(context.Context, *redispb.RescheduleMaintenanceRequest, ...gax.CallOption) (*redis.RescheduleMaintenanceOperation, error)
 }
 
 type redisClient struct {
@@ -63,13 +64,19 @@ func (c *redisClient) UpgradeInstance(ctx context.Context, req *redispb.UpgradeI
 	return c.redisService.UpgradeInstance(ctx, req, opts...)
 }
 
+func (c *redisClient) RescheduleMaintenance(ctx context.Context, req *redispb.RescheduleMaintenanceRequest, opts ...gax.CallOption) (*redis.RescheduleMaintenanceOperation, error) {
+	c.logger.Infof("upgrading gcp redis instance %s", req.Name)
+	return c.redisService.RescheduleMaintenance(ctx, req, opts...)
+}
+
 type MockRedisClient struct {
 	RedisAPI
-	DeleteInstanceFn  func(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
-	CreateInstanceFn  func(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
-	GetInstanceFn     func(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
-	UpdateInstanceFn  func(context.Context, *redispb.UpdateInstanceRequest, ...gax.CallOption) (*redis.UpdateInstanceOperation, error)
-	UpgradeInstanceFn func(context.Context, *redispb.UpgradeInstanceRequest, ...gax.CallOption) (*redis.UpgradeInstanceOperation, error)
+	DeleteInstanceFn        func(context.Context, *redispb.DeleteInstanceRequest, ...gax.CallOption) (*redis.DeleteInstanceOperation, error)
+	CreateInstanceFn        func(context.Context, *redispb.CreateInstanceRequest, ...gax.CallOption) (*redis.CreateInstanceOperation, error)
+	GetInstanceFn           func(context.Context, *redispb.GetInstanceRequest, ...gax.CallOption) (*redispb.Instance, error)
+	UpdateInstanceFn        func(context.Context, *redispb.UpdateInstanceRequest, ...gax.CallOption) (*redis.UpdateInstanceOperation, error)
+	UpgradeInstanceFn       func(context.Context, *redispb.UpgradeInstanceRequest, ...gax.CallOption) (*redis.UpgradeInstanceOperation, error)
+	RescheduleMaintenanceFn func(context.Context, *redispb.RescheduleMaintenanceRequest, ...gax.CallOption) (*redis.RescheduleMaintenanceOperation, error)
 }
 
 func GetMockRedisClient(modifyFn func(redisClient *MockRedisClient)) *MockRedisClient {
@@ -88,6 +95,9 @@ func GetMockRedisClient(modifyFn func(redisClient *MockRedisClient)) *MockRedisC
 		},
 		UpgradeInstanceFn: func(ctx context.Context, request *redispb.UpgradeInstanceRequest, opts ...gax.CallOption) (*redis.UpgradeInstanceOperation, error) {
 			return &redis.UpgradeInstanceOperation{}, nil
+		},
+		RescheduleMaintenanceFn: func(ctx context.Context, request *redispb.RescheduleMaintenanceRequest, opts ...gax.CallOption) (*redis.RescheduleMaintenanceOperation, error) {
+			return &redis.RescheduleMaintenanceOperation{}, nil
 		},
 	}
 	if modifyFn != nil {
@@ -129,4 +139,11 @@ func (m *MockRedisClient) UpgradeInstance(ctx context.Context, req *redispb.Upgr
 		return m.UpgradeInstanceFn(ctx, req, opts...)
 	}
 	return &redis.UpgradeInstanceOperation{}, nil
+}
+
+func (m *MockRedisClient) RescheduleMaintenance(ctx context.Context, req *redispb.RescheduleMaintenanceRequest, opts ...gax.CallOption) (*redis.RescheduleMaintenanceOperation, error) {
+	if m.RescheduleMaintenanceFn != nil {
+		return m.RescheduleMaintenanceFn(ctx, req, opts...)
+	}
+	return &redis.RescheduleMaintenanceOperation{}, nil
 }
