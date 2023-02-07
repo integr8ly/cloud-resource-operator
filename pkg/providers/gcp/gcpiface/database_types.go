@@ -404,6 +404,9 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 		gcpInstanceConfig.FailoverReplica = &sqladmin.DatabaseInstanceFailoverReplica{}
 		if dbi.FailoverReplica.Available != nil {
 			gcpInstanceConfig.FailoverReplica.Available = *dbi.FailoverReplica.Available
+			if !*dbi.FailoverReplica.Available {
+				gcpInstanceConfig.FailoverReplica.ForceSendFields = []string{"Available"}
+			}
 		}
 		if dbi.FailoverReplica.Name != "" {
 			gcpInstanceConfig.FailoverReplica.Name = dbi.FailoverReplica.Name
@@ -476,9 +479,15 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 
 			if dbi.Settings.BackupConfiguration.BinaryLogEnabled != nil {
 				gcpInstanceConfig.Settings.BackupConfiguration.BinaryLogEnabled = *dbi.Settings.BackupConfiguration.BinaryLogEnabled
+				if !*dbi.Settings.BackupConfiguration.BinaryLogEnabled {
+					gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields = []string{"BinaryLogEnabled"}
+				}
 			}
 			if dbi.Settings.BackupConfiguration.Enabled != nil {
 				gcpInstanceConfig.Settings.BackupConfiguration.Enabled = *dbi.Settings.BackupConfiguration.Enabled
+				if !*dbi.Settings.BackupConfiguration.Enabled {
+					gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields = append(gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields, "Enabled")
+				}
 			}
 			if dbi.Settings.BackupConfiguration.Kind != "" {
 				gcpInstanceConfig.Settings.BackupConfiguration.Kind = dbi.Settings.BackupConfiguration.Kind
@@ -488,9 +497,15 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 			}
 			if dbi.Settings.BackupConfiguration.PointInTimeRecoveryEnabled != nil {
 				gcpInstanceConfig.Settings.BackupConfiguration.PointInTimeRecoveryEnabled = *dbi.Settings.BackupConfiguration.PointInTimeRecoveryEnabled
+				if !*dbi.Settings.BackupConfiguration.PointInTimeRecoveryEnabled {
+					gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields = append(gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields, "PointInTimeRecoveryEnabled")
+				}
 			}
 			if dbi.Settings.BackupConfiguration.ReplicationLogArchivingEnabled != nil {
 				gcpInstanceConfig.Settings.BackupConfiguration.ReplicationLogArchivingEnabled = *dbi.Settings.BackupConfiguration.ReplicationLogArchivingEnabled
+				if !*dbi.Settings.BackupConfiguration.ReplicationLogArchivingEnabled {
+					gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields = append(gcpInstanceConfig.Settings.BackupConfiguration.ForceSendFields, "ReplicationLogArchivingEnabled")
+				}
 			}
 			if dbi.Settings.BackupConfiguration.StartTime != "" {
 				gcpInstanceConfig.Settings.BackupConfiguration.StartTime = dbi.Settings.BackupConfiguration.StartTime
@@ -507,6 +522,9 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 		}
 		if dbi.Settings.CrashSafeReplicationEnabled != nil {
 			gcpInstanceConfig.Settings.CrashSafeReplicationEnabled = *dbi.Settings.CrashSafeReplicationEnabled
+			if !*dbi.Settings.CrashSafeReplicationEnabled {
+				gcpInstanceConfig.Settings.ForceSendFields = []string{"CrashSafeReplicationEnabled"}
+			}
 		}
 		if dbi.Settings.DataDiskSizeGb != 0 {
 			gcpInstanceConfig.Settings.DataDiskSizeGb = dbi.Settings.DataDiskSizeGb
@@ -519,9 +537,15 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 		}
 		if dbi.Settings.DatabaseReplicationEnabled != nil {
 			gcpInstanceConfig.Settings.DatabaseReplicationEnabled = *dbi.Settings.DatabaseReplicationEnabled
+			if !*dbi.Settings.DatabaseReplicationEnabled {
+				gcpInstanceConfig.Settings.ForceSendFields = append(gcpInstanceConfig.Settings.ForceSendFields, "DatabaseReplicationEnabled")
+			}
 		}
 		if dbi.Settings.DeletionProtectionEnabled != nil {
 			gcpInstanceConfig.Settings.DeletionProtectionEnabled = *dbi.Settings.DeletionProtectionEnabled
+			if !*dbi.Settings.DeletionProtectionEnabled {
+				gcpInstanceConfig.Settings.ForceSendFields = append(gcpInstanceConfig.Settings.ForceSendFields, "DeletionProtectionEnabled")
+			}
 		}
 		if dbi.Settings.DenyMaintenancePeriods != nil {
 			gcpInstanceConfig.Settings.DenyMaintenancePeriods = dbi.Settings.DenyMaintenancePeriods
@@ -542,12 +566,18 @@ func (dbi *DatabaseInstance) MapToGcpDatabaseInstance() *sqladmin.DatabaseInstan
 			}
 			if dbi.Settings.IpConfiguration.Ipv4Enabled != nil {
 				gcpInstanceConfig.Settings.IpConfiguration.Ipv4Enabled = *dbi.Settings.IpConfiguration.Ipv4Enabled
+				if !*dbi.Settings.IpConfiguration.Ipv4Enabled {
+					gcpInstanceConfig.Settings.IpConfiguration.ForceSendFields = []string{"Ipv4Enabled"}
+				}
 			}
 			if dbi.Settings.IpConfiguration.PrivateNetwork != "" {
 				gcpInstanceConfig.Settings.IpConfiguration.PrivateNetwork = dbi.Settings.IpConfiguration.PrivateNetwork
 			}
 			if dbi.Settings.IpConfiguration.RequireSsl != nil {
 				gcpInstanceConfig.Settings.IpConfiguration.RequireSsl = *dbi.Settings.IpConfiguration.RequireSsl
+				if !*dbi.Settings.IpConfiguration.RequireSsl {
+					gcpInstanceConfig.Settings.IpConfiguration.ForceSendFields = append(gcpInstanceConfig.Settings.IpConfiguration.ForceSendFields, "RequireSsl")
+				}
 			}
 		}
 		if dbi.Settings.Kind != "" {
