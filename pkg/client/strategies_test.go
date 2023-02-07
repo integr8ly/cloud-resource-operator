@@ -266,6 +266,23 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			getConfigSpec: nil,
 			want:          nil,
 		},
+		{
+			name: "error reconciling aws strategy map, overlapping windows",
+			args: args{
+				ctx:        context.TODO(),
+				client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildInfrastructureType(configv1.AWSPlatformType)),
+				timeConfig: stratType.NewStrategyTimeConfig(15, 04, time.Monday, 15, 05),
+				tier:       testTierName,
+				namespace:  testNamespace,
+			},
+			wantErr: true,
+			getConfigSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
+				config := &v1.ConfigMap{}
+				err := c.Get(ctx, types.NamespacedName{Name: croAWS.DefaultConfigMapName, Namespace: testNamespace}, config)
+				return config.Data[stratType.PostgresStratKey], err
+			},
+			want: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

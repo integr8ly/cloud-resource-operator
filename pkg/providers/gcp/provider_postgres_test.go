@@ -1464,7 +1464,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				}),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":false},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
 				},
 				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
 				maintenanceWindow: true,
