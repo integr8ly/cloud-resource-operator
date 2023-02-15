@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"testing"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/sirupsen/logrus"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

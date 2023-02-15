@@ -4,9 +4,9 @@
 package gcp
 
 import (
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"context"
 	servicenetworking "google.golang.org/api/servicenetworking/v1"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	"net"
 	"sync"
 )
