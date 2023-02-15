@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strings"
 	"time"
+
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
+	"cloud.google.com/go/redis/apiv1/redispb"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -20,8 +23,6 @@ import (
 	errorUtil "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
-	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

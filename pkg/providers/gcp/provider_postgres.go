@@ -12,6 +12,7 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
@@ -21,7 +22,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	utils "k8s.io/utils/pointer"

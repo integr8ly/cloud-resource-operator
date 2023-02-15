@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"google.golang.org/api/servicenetworking/v1"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	"google.golang.org/genproto/googleapis/type/dayofweek"
 	"google.golang.org/genproto/googleapis/type/timeofday"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -21,10 +21,10 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	redis "cloud.google.com/go/redis/apiv1"
+	"cloud.google.com/go/redis/apiv1/redispb"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	configv1 "github.com/openshift/api/config/v1"
-	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	corev1 "k8s.io/api/core/v1"
 	utils "k8s.io/utils/pointer"
 
