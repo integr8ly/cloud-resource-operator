@@ -13,19 +13,19 @@ var _ ConnectionTester = &ConnectionTesterMock{}
 
 // ConnectionTesterMock is a mock implementation of ConnectionTester.
 //
-// 	func TestSomethingThatUsesConnectionTester(t *testing.T) {
+//	func TestSomethingThatUsesConnectionTester(t *testing.T) {
 //
-// 		// make and configure a mocked ConnectionTester
-// 		mockedConnectionTester := &ConnectionTesterMock{
-// 			TCPConnectionFunc: func(host string, port int) bool {
-// 				panic("mock out the TCPConnection method")
-// 			},
-// 		}
+//		// make and configure a mocked ConnectionTester
+//		mockedConnectionTester := &ConnectionTesterMock{
+//			TCPConnectionFunc: func(host string, port int) bool {
+//				panic("mock out the TCPConnection method")
+//			},
+//		}
 //
-// 		// use mockedConnectionTester in code that requires ConnectionTester
-// 		// and then make assertions.
+//		// use mockedConnectionTester in code that requires ConnectionTester
+//		// and then make assertions.
 //
-// 	}
+//	}
 type ConnectionTesterMock struct {
 	// TCPConnectionFunc mocks the TCPConnection method.
 	TCPConnectionFunc func(host string, port int) bool
@@ -63,7 +63,8 @@ func (mock *ConnectionTesterMock) TCPConnection(host string, port int) bool {
 
 // TCPConnectionCalls gets all the calls that were made to TCPConnection.
 // Check the length with:
-//     len(mockedConnectionTester.TCPConnectionCalls())
+//
+//	len(mockedConnectionTester.TCPConnectionCalls())
 func (mock *ConnectionTesterMock) TCPConnectionCalls() []struct {
 	Host string
 	Port int
