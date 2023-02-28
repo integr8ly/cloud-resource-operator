@@ -6,7 +6,7 @@ package gcp
 import (
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"context"
-	servicenetworking "google.golang.org/api/servicenetworking/v1"
+	"google.golang.org/api/servicenetworking/v1"
 	"net"
 	"sync"
 )
@@ -17,37 +17,37 @@ var _ NetworkManager = &NetworkManagerMock{}
 
 // NetworkManagerMock is a mock implementation of NetworkManager.
 //
-// 	func TestSomethingThatUsesNetworkManager(t *testing.T) {
+//	func TestSomethingThatUsesNetworkManager(t *testing.T) {
 //
-// 		// make and configure a mocked NetworkManager
-// 		mockedNetworkManager := &NetworkManagerMock{
-// 			ComponentsExistFunc: func(contextMoqParam context.Context) (bool, error) {
-// 				panic("mock out the ComponentsExist method")
-// 			},
-// 			CreateNetworkIpRangeFunc: func(contextMoqParam context.Context, iPNet *net.IPNet) (*computepb.Address, error) {
-// 				panic("mock out the CreateNetworkIpRange method")
-// 			},
-// 			CreateNetworkServiceFunc: func(contextMoqParam context.Context) (*servicenetworking.Connection, error) {
-// 				panic("mock out the CreateNetworkService method")
-// 			},
-// 			DeleteNetworkIpRangeFunc: func(contextMoqParam context.Context) error {
-// 				panic("mock out the DeleteNetworkIpRange method")
-// 			},
-// 			DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
-// 				panic("mock out the DeleteNetworkPeering method")
-// 			},
-// 			DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
-// 				panic("mock out the DeleteNetworkService method")
-// 			},
-// 			ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
-// 				panic("mock out the ReconcileNetworkProviderConfig method")
-// 			},
-// 		}
+//		// make and configure a mocked NetworkManager
+//		mockedNetworkManager := &NetworkManagerMock{
+//			ComponentsExistFunc: func(contextMoqParam context.Context) (bool, error) {
+//				panic("mock out the ComponentsExist method")
+//			},
+//			CreateNetworkIpRangeFunc: func(contextMoqParam context.Context, iPNet *net.IPNet) (*computepb.Address, error) {
+//				panic("mock out the CreateNetworkIpRange method")
+//			},
+//			CreateNetworkServiceFunc: func(contextMoqParam context.Context) (*servicenetworking.Connection, error) {
+//				panic("mock out the CreateNetworkService method")
+//			},
+//			DeleteNetworkIpRangeFunc: func(contextMoqParam context.Context) error {
+//				panic("mock out the DeleteNetworkIpRange method")
+//			},
+//			DeleteNetworkPeeringFunc: func(contextMoqParam context.Context) error {
+//				panic("mock out the DeleteNetworkPeering method")
+//			},
+//			DeleteNetworkServiceFunc: func(contextMoqParam context.Context) error {
+//				panic("mock out the DeleteNetworkService method")
+//			},
+//			ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+//				panic("mock out the ReconcileNetworkProviderConfig method")
+//			},
+//		}
 //
-// 		// use mockedNetworkManager in code that requires NetworkManager
-// 		// and then make assertions.
+//		// use mockedNetworkManager in code that requires NetworkManager
+//		// and then make assertions.
 //
-// 	}
+//	}
 type NetworkManagerMock struct {
 	// ComponentsExistFunc mocks the ComponentsExist method.
 	ComponentsExistFunc func(contextMoqParam context.Context) (bool, error)
@@ -141,7 +141,8 @@ func (mock *NetworkManagerMock) ComponentsExist(contextMoqParam context.Context)
 
 // ComponentsExistCalls gets all the calls that were made to ComponentsExist.
 // Check the length with:
-//     len(mockedNetworkManager.ComponentsExistCalls())
+//
+//	len(mockedNetworkManager.ComponentsExistCalls())
 func (mock *NetworkManagerMock) ComponentsExistCalls() []struct {
 	ContextMoqParam context.Context
 } {
@@ -174,7 +175,8 @@ func (mock *NetworkManagerMock) CreateNetworkIpRange(contextMoqParam context.Con
 
 // CreateNetworkIpRangeCalls gets all the calls that were made to CreateNetworkIpRange.
 // Check the length with:
-//     len(mockedNetworkManager.CreateNetworkIpRangeCalls())
+//
+//	len(mockedNetworkManager.CreateNetworkIpRangeCalls())
 func (mock *NetworkManagerMock) CreateNetworkIpRangeCalls() []struct {
 	ContextMoqParam context.Context
 	IPNet           *net.IPNet
@@ -207,7 +209,8 @@ func (mock *NetworkManagerMock) CreateNetworkService(contextMoqParam context.Con
 
 // CreateNetworkServiceCalls gets all the calls that were made to CreateNetworkService.
 // Check the length with:
-//     len(mockedNetworkManager.CreateNetworkServiceCalls())
+//
+//	len(mockedNetworkManager.CreateNetworkServiceCalls())
 func (mock *NetworkManagerMock) CreateNetworkServiceCalls() []struct {
 	ContextMoqParam context.Context
 } {
@@ -238,7 +241,8 @@ func (mock *NetworkManagerMock) DeleteNetworkIpRange(contextMoqParam context.Con
 
 // DeleteNetworkIpRangeCalls gets all the calls that were made to DeleteNetworkIpRange.
 // Check the length with:
-//     len(mockedNetworkManager.DeleteNetworkIpRangeCalls())
+//
+//	len(mockedNetworkManager.DeleteNetworkIpRangeCalls())
 func (mock *NetworkManagerMock) DeleteNetworkIpRangeCalls() []struct {
 	ContextMoqParam context.Context
 } {
@@ -269,7 +273,8 @@ func (mock *NetworkManagerMock) DeleteNetworkPeering(contextMoqParam context.Con
 
 // DeleteNetworkPeeringCalls gets all the calls that were made to DeleteNetworkPeering.
 // Check the length with:
-//     len(mockedNetworkManager.DeleteNetworkPeeringCalls())
+//
+//	len(mockedNetworkManager.DeleteNetworkPeeringCalls())
 func (mock *NetworkManagerMock) DeleteNetworkPeeringCalls() []struct {
 	ContextMoqParam context.Context
 } {
@@ -300,7 +305,8 @@ func (mock *NetworkManagerMock) DeleteNetworkService(contextMoqParam context.Con
 
 // DeleteNetworkServiceCalls gets all the calls that were made to DeleteNetworkService.
 // Check the length with:
-//     len(mockedNetworkManager.DeleteNetworkServiceCalls())
+//
+//	len(mockedNetworkManager.DeleteNetworkServiceCalls())
 func (mock *NetworkManagerMock) DeleteNetworkServiceCalls() []struct {
 	ContextMoqParam context.Context
 } {
@@ -335,7 +341,8 @@ func (mock *NetworkManagerMock) ReconcileNetworkProviderConfig(ctx context.Conte
 
 // ReconcileNetworkProviderConfigCalls gets all the calls that were made to ReconcileNetworkProviderConfig.
 // Check the length with:
-//     len(mockedNetworkManager.ReconcileNetworkProviderConfigCalls())
+//
+//	len(mockedNetworkManager.ReconcileNetworkProviderConfigCalls())
 func (mock *NetworkManagerMock) ReconcileNetworkProviderConfigCalls() []struct {
 	Ctx           context.Context
 	ConfigManager ConfigManager

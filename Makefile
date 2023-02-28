@@ -215,7 +215,7 @@ code/gen: setup/moq vendor/fix apis/integreatly/v1alpha1/zz_generated.deepcopy.g
 
 .PHONY: setup/moq
 setup/moq:
-	go install github.com/matryer/moq@v0.2.7
+	go install github.com/matryer/moq@v0.3.0
 
 .PHONY: create/olm/bundle
 create/olm/bundle:

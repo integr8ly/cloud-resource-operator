@@ -72,8 +72,7 @@ var _ providers.RedisProvider = (*RedisProvider)(nil)
 func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*providers.RedisCluster, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "CreateRedis")
 	logger.Infof("reconciling redis %s", r.Name)
-
-	strategyConfig, err := p.getRedisStrategyConfig(ctx, r.Spec.Tier)
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
 	if err != nil {
 		statusMessage := "failed to retrieve redis strategy config"
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
@@ -202,7 +201,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	logger := p.Logger.WithField("action", "DeleteRedis")
 	logger.Infof("reconciling delete redis %s", r.Name)
 	p.setRedisDeletionTimestampMetric(ctx, r)
-	strategyConfig, err := p.getRedisStrategyConfig(ctx, r.Spec.Tier)
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, r.Spec.Tier)
 	if err != nil {
 		statusMessage := "failed to retrieve redis strategy config"
 		return croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
@@ -359,33 +358,6 @@ func (p *RedisProvider) setRedisDeletionTimestampMetric(ctx context.Context, r *
 		labels := resources.BuildStatusMetricsLabels(r.ObjectMeta, clusterID, instanceName, redisProviderName, r.Status.Phase)
 		resources.SetMetric(resources.DefaultRedisDeletionMetricName, labels, float64(r.DeletionTimestamp.Unix()))
 	}
-}
-
-func (p *RedisProvider) getRedisStrategyConfig(ctx context.Context, tier string) (*StrategyConfig, error) {
-	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.RedisResourceType, tier)
-	if err != nil {
-		errMsg := "failed to read gcp strategy config"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, p.Client, strategyConfig)
-	if err != nil {
-		errMsg := "failed to get default gcp project"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	if strategyConfig.ProjectID == "" {
-		p.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
-		strategyConfig.ProjectID = defaultProject
-	}
-	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, strategyConfig)
-	if err != nil {
-		errMsg := "failed to get default gcp region"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	if strategyConfig.Region == "" {
-		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
-		strategyConfig.Region = defaultRegion
-	}
-	return strategyConfig, nil
 }
 
 func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alpha1.Redis, strategyConfig *StrategyConfig, address *computepb.Address) (*redispb.CreateInstanceRequest, error) {

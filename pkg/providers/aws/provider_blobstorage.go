@@ -557,13 +557,13 @@ func buildEndUserCredentialsNameFromBucket(b string) string {
 
 func buildBlobStorageStatusMetricLabels(cr *v1alpha1.BlobStorage, clusterID, bucketName string, phase croType.StatusPhase) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = cr.Name
-	labels["namespace"] = cr.Namespace
-	labels["instanceID"] = bucketName
-	labels["productName"] = cr.Labels["productName"]
-	labels["strategy"] = blobstorageProviderName
-	labels["statusPhase"] = string(phase)
+	labels[resources.LabelClusterIDKey] = clusterID
+	labels[resources.LabelResourceIDKey] = cr.Name
+	labels[resources.LabelNamespaceKey] = cr.Namespace
+	labels[resources.LabelInstanceIDKey] = bucketName
+	labels[resources.LabelProductNameKey] = cr.Labels["productName"]
+	labels[resources.LabelStrategyKey] = blobstorageProviderName
+	labels[resources.LabelStatusPhaseKey] = string(phase)
 	return labels
 }
 

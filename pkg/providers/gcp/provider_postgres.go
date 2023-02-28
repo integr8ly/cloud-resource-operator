@@ -93,8 +93,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	if err := resources.CreateFinalizer(ctx, p.Client, pg, DefaultFinalizer); err != nil {
 		return nil, "failed to set finalizer", err
 	}
-
-	strategyConfig, err := p.getPostgresStrategyConfig(ctx, pg)
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, pg.Spec.Tier)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -256,7 +255,7 @@ func (p *PostgresProvider) DeletePostgres(ctx context.Context, pg *v1alpha1.Post
 
 	p.setPostgresDeletionTimestampMetric(ctx, pg)
 
-	strategyConfig, err := p.getPostgresStrategyConfig(ctx, pg)
+	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, pg.Spec.Tier)
 	if err != nil {
 		msg := "failed to retrieve postgres strategy config"
 		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
@@ -409,46 +408,19 @@ func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Contex
 
 func buildPostgresGenericMetricLabels(pg *v1alpha1.Postgres, clusterID, instanceName string) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = pg.Name
-	labels["namespace"] = pg.Namespace
-	labels["instanceID"] = instanceName
-	labels["productName"] = pg.Labels["productName"]
-	labels["strategy"] = postgresProviderName
+	labels[resources.LabelClusterIDKey] = clusterID
+	labels[resources.LabelResourceIDKey] = pg.Name
+	labels[resources.LabelNamespaceKey] = pg.Namespace
+	labels[resources.LabelInstanceIDKey] = instanceName
+	labels[resources.LabelProductNameKey] = pg.Labels["productName"]
+	labels[resources.LabelStrategyKey] = postgresProviderName
 	return labels
 }
 
 func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instanceName string, phase croType.StatusPhase) map[string]string {
 	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
-	labels["statusPhase"] = string(phase)
+	labels[resources.LabelStatusPhaseKey] = string(phase)
 	return labels
-}
-
-func (p *PostgresProvider) getPostgresStrategyConfig(ctx context.Context, pg *v1alpha1.Postgres) (*StrategyConfig, error) {
-	strategyConfig, err := p.ConfigManager.ReadStorageStrategy(ctx, providers.PostgresResourceType, pg.Spec.Tier)
-	if err != nil {
-		errMsg := "failed to read gcp strategy config"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	defaultProject, err := GetProjectFromStrategyOrDefault(ctx, p.Client, strategyConfig)
-	if err != nil {
-		errMsg := "failed to get default gcp project"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	if strategyConfig.ProjectID == "" {
-		p.Logger.Debugf("project not set in deployment strategy configuration, using default project %s", defaultProject)
-		strategyConfig.ProjectID = defaultProject
-	}
-	defaultRegion, err := GetRegionFromStrategyOrDefault(ctx, p.Client, strategyConfig)
-	if err != nil {
-		errMsg := "failed to get default gcp region"
-		return nil, errorUtil.Wrap(err, errMsg)
-	}
-	if strategyConfig.Region == "" {
-		p.Logger.Debugf("region not set in deployment strategy configuration, using default region %s", defaultRegion)
-		strategyConfig.Region = defaultRegion
-	}
-	return strategyConfig, nil
 }
 
 func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *v1alpha1.Postgres, strategyConfig *StrategyConfig, sec *v1.Secret, address *computepb.Address) (*gcpiface.DatabaseInstance, error) {

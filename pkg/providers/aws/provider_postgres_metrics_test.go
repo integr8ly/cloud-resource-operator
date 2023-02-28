@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"os"
 	"reflect"
 	"testing"
@@ -27,17 +28,17 @@ const (
 )
 
 var testMetricLabels = map[string]string{
-	"clusterID":   "test",
-	"instanceID":  "testtesttest",
-	"namespace":   "test",
-	"productName": "test_product",
-	"resourceID":  "test",
-	"strategy":    "aws-rds",
+	resources.LabelClusterIDKey:   "test",
+	resources.LabelInstanceIDKey:  "testtesttest",
+	resources.LabelNamespaceKey:   "test",
+	resources.LabelProductNameKey: "test_product",
+	resources.LabelResourceIDKey:  "test",
+	resources.LabelStrategyKey:    "aws-rds",
 }
 
 func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) providers.CloudProviderMetricType {
 	mock := &providers.CloudProviderMetricType{
-		PromethuesMetricName: testMetricName,
+		PrometheusMetricName: testMetricName,
 		ProviderMetricName:   "test",
 		Statistic:            "test",
 	}

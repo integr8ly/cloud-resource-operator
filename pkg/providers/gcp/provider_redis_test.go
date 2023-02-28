@@ -11,7 +11,6 @@ import (
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	cloudcredentialv1 "github.com/openshift/cloud-credential-operator/pkg/apis/cloudcredential/v1"
 	"google.golang.org/api/servicenetworking/v1"
 	"google.golang.org/genproto/googleapis/type/dayofweek"
 	"google.golang.org/genproto/googleapis/type/timeofday"
@@ -717,129 +716,6 @@ func TestRedisProvider_GetReconcileTime(t *testing.T) {
 			rp := RedisProvider{}
 			if got := rp.GetReconcileTime(tt.args.r); got != tt.want {
 				t.Errorf("GetReconcileTime() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRedisProvider_getRedisStrategyConfig(t *testing.T) {
-	type fields struct {
-		Client            client.Client
-		Logger            *logrus.Entry
-		CredentialManager CredentialManager
-		ConfigManager     ConfigManager
-	}
-	type args struct {
-		tier string
-	}
-	scheme := runtime.NewScheme()
-	err := cloudcredentialv1.Install(scheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	_ = configv1.Install(scheme)
-	_ = corev1.AddToScheme(scheme)
-	tests := []struct {
-		name           string
-		fields         fields
-		args           args
-		strategyConfig *StrategyConfig
-		wantErr        bool
-	}{
-		{
-			name: "successfully retrieve gcp redis config",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestGcpInfrastructure(nil),
-					buildTestGcpStrategyConfigMap(nil),
-				),
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{
-							CreateStrategy: json.RawMessage(`{}`),
-							DeleteStrategy: json.RawMessage(`{}`),
-						}, nil
-					},
-				},
-			},
-			args: args{
-				tier: "development",
-			},
-			strategyConfig: &StrategyConfig{
-				Region:         gcpTestRegion,
-				ProjectID:      gcpTestProjectId,
-				CreateStrategy: json.RawMessage(`{}`),
-				DeleteStrategy: json.RawMessage(`{}`),
-			},
-			wantErr: false,
-		},
-		{
-			name: "fail to read gcp strategy config",
-			fields: fields{
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return nil, fmt.Errorf("generic error")
-					},
-				},
-			},
-			args: args{
-				tier: "development",
-			},
-			strategyConfig: nil,
-			wantErr:        true,
-		},
-		{
-			name: "fail to retrieve default gcp project",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestGcpInfrastructure(map[string]*string{"projectID": utils.String("")}),
-				),
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{}, nil
-					},
-				},
-			},
-			args: args{
-				tier: "development",
-			},
-			strategyConfig: nil,
-			wantErr:        true,
-		},
-		{
-			name: "fail to retrieve default gcp region",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestGcpInfrastructure(map[string]*string{"region": utils.String("")}),
-				),
-				ConfigManager: &ConfigManagerMock{
-					ReadStorageStrategyFunc: func(ctx context.Context, rt providers.ResourceType, tier string) (*StrategyConfig, error) {
-						return &StrategyConfig{}, nil
-					},
-				},
-			},
-			args: args{
-				tier: "development",
-			},
-			strategyConfig: nil,
-			wantErr:        true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rp := &RedisProvider{
-				Client:            tt.fields.Client,
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: tt.fields.CredentialManager,
-				ConfigManager:     tt.fields.ConfigManager,
-			}
-			strategyConfig, err := rp.getRedisStrategyConfig(context.TODO(), tt.args.tier)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getRedisStrategyConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(strategyConfig, tt.strategyConfig) {
-				t.Errorf("getRedisConfig() strategyConfig = %v, strategyConfig expected %v", strategyConfig, tt.strategyConfig)
 			}
 		})
 	}
