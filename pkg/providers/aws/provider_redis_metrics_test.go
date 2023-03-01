@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"os"
 	"reflect"
 	"testing"
@@ -59,12 +60,12 @@ func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup 
 
 func moqRedisMetricLabels(instanceID string) (labels map[string]string) {
 	return map[string]string{
-		"clusterID":   "test",
-		"instanceID":  instanceID,
-		"namespace":   "test",
-		"productName": "",
-		"resourceID":  "test",
-		"strategy":    "aws-elasticache",
+		resources.LabelClusterIDKey:   "test",
+		resources.LabelInstanceIDKey:  instanceID,
+		resources.LabelNamespaceKey:   "test",
+		resources.LabelProductNameKey: "",
+		resources.LabelResourceIDKey:  "test",
+		resources.LabelStrategyKey:    "aws-elasticache",
 	}
 }
 func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {

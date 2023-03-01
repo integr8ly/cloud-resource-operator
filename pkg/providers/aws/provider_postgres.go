@@ -1161,7 +1161,7 @@ func (p *PostgresProvider) setPostgresServiceMaintenanceMetric(ctx context.Conte
 	for _, su := range output.PendingMaintenanceActions {
 		metricLabels := map[string]string{}
 
-		metricLabels["clusterID"] = clusterID
+		metricLabels[resources.LabelClusterIDKey] = clusterID
 		metricLabels["ResourceIdentifier"] = *su.ResourceIdentifier
 
 		for _, pma := range su.PendingMaintenanceActionDetails {

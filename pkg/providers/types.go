@@ -129,8 +129,8 @@ type GenericCloudMetric struct {
 // CloudProviderMetricType is used to declare a generic type of metric
 // it maps provider specific metrics to metrics we expose in prometheus
 type CloudProviderMetricType struct {
-	//PromethuesMetricName the name of the metric exposed via cro
-	PromethuesMetricName string
+	//PrometheusMetricName the name of the metric exposed via cro
+	PrometheusMetricName string
 	//ProviderMetricName the metric we scrape from the cloud provider
 	ProviderMetricName string
 	//Statistic the type of metric value we return e.g. Average, Sum, Max, Min etc.

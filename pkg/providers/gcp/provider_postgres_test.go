@@ -1005,7 +1005,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 								ResourceIdentifierAnnotation: testName,
 							},
 							Labels: map[string]string{
-								"clusterID": "cluster",
+								resources.LabelClusterIDKey: "cluster",
 							},
 						},
 						Status: types.ResourceTypeStatus{

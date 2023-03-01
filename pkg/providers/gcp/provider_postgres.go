@@ -399,18 +399,18 @@ func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Contex
 
 func buildPostgresGenericMetricLabels(pg *v1alpha1.Postgres, clusterID, instanceName string) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = pg.Name
-	labels["namespace"] = pg.Namespace
-	labels["instanceID"] = instanceName
-	labels["productName"] = pg.Labels["productName"]
-	labels["strategy"] = postgresProviderName
+	labels[resources.LabelClusterIDKey] = clusterID
+	labels[resources.LabelResourceIDKey] = pg.Name
+	labels[resources.LabelNamespaceKey] = pg.Namespace
+	labels[resources.LabelInstanceIDKey] = instanceName
+	labels[resources.LabelProductNameKey] = pg.Labels["productName"]
+	labels[resources.LabelStrategyKey] = postgresProviderName
 	return labels
 }
 
 func buildPostgresStatusMetricsLabels(cr *v1alpha1.Postgres, clusterID, instanceName string, phase croType.StatusPhase) map[string]string {
 	labels := buildPostgresGenericMetricLabels(cr, clusterID, instanceName)
-	labels["statusPhase"] = string(phase)
+	labels[resources.LabelStatusPhaseKey] = string(phase)
 	return labels
 }
 

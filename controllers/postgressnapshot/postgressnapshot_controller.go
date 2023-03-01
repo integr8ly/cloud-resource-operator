@@ -185,13 +185,13 @@ func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = cr.Name
-	labels["namespace"] = cr.Namespace
-	labels["instanceID"] = snapshotName
-	labels["productName"] = cr.Labels["productName"]
-	labels["strategy"] = postgresProviderName
-	labels["statusPhase"] = string(phase)
+	labels[resources.LabelClusterIDKey] = clusterID
+	labels[resources.LabelResourceIDKey] = cr.Name
+	labels[resources.LabelNamespaceKey] = cr.Namespace
+	labels[resources.LabelInstanceIDKey] = snapshotName
+	labels[resources.LabelProductNameKey] = cr.Labels["productName"]
+	labels[resources.LabelStrategyKey] = postgresProviderName
+	labels[resources.LabelStatusPhaseKey] = string(phase)
 	return labels
 }
 

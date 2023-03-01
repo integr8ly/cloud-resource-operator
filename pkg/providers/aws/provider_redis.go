@@ -491,7 +491,7 @@ func getMetricName(redisName string) string {
 
 func buildCacheSnapshotNotFoundLabels(clusterID string, arn string, snapshotName *string, cacheClusterID *string, cacheArn string) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
+	labels[resources.LabelClusterIDKey] = clusterID
 	labels["arn"] = arn
 	labels["cacheClusterId"] = resources.SafeStringDereference(cacheClusterID)
 	labels["snapshotName"] = resources.SafeStringDereference(snapshotName)
@@ -1056,7 +1056,7 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, ca
 	logrus.Infof("there are elasticache service update actions %d available : %s", len(output.UpdateActions), output.UpdateActions)
 	for _, updateAction := range output.UpdateActions {
 		metricLabels := map[string]string{}
-		metricLabels["clusterID"] = clusterID
+		metricLabels[resources.LabelClusterIDKey] = clusterID
 
 		metricLabels["ReplicationGroupId"] = resources.SafeStringDereference(updateAction.ReplicationGroupId)
 		metricLabels["CacheClusterId"] = resources.SafeStringDereference(updateAction.CacheClusterId)
