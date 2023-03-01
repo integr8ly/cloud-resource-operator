@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/utils/pointer"
 	"reflect"
 	"testing"
 
@@ -425,6 +426,7 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	_ = corev1.AddToScheme(scheme)
+	_ = configv1.Install(scheme)
 	tests := []struct {
 		name    string
 		fields  fields
@@ -454,6 +456,68 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 				DeleteStrategy: json.RawMessage(`{}`),
 			},
 			wantErr: false,
+		},
+		{
+			name: "successfully retrieve strategy for provider tier with default values for project and region",
+			fields: fields{
+				configMapName:      DefaultConfigMapName,
+				configMapNamespace: testNs,
+				client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpStrategyConfigMap(map[string]*string{
+						"redis": aws.String(`{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}}}`),
+					}),
+					buildTestGcpInfrastructure(nil),
+				),
+			},
+			args: args{
+				rt:   "redis",
+				tier: "development",
+			},
+			want: &StrategyConfig{
+				Region:         gcpTestRegion,
+				ProjectID:      gcpTestProjectId,
+				CreateStrategy: json.RawMessage(`{}`),
+				DeleteStrategy: json.RawMessage(`{}`),
+			},
+			wantErr: false,
+		},
+		{
+			name: "fail to retrieve default gcp project",
+			fields: fields{
+				configMapName:      DefaultConfigMapName,
+				configMapNamespace: testNs,
+				client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpStrategyConfigMap(map[string]*string{
+						"redis": aws.String(`{"development":{"region":"region","projectID":"","createStrategy":{},"deleteStrategy":{}}}`),
+					}),
+					buildTestGcpInfrastructure(map[string]*string{"projectID": pointer.String("")}),
+				),
+			},
+			args: args{
+				rt:   "redis",
+				tier: "development",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "fail to retrieve default gcp region",
+			fields: fields{
+				configMapName:      DefaultConfigMapName,
+				configMapNamespace: testNs,
+				client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestGcpStrategyConfigMap(map[string]*string{
+						"redis": aws.String(`{"development":{"region":"","projectID":"projectID","createStrategy":{},"deleteStrategy":{}}}`),
+					}),
+					buildTestGcpInfrastructure(map[string]*string{"region": pointer.String("")}),
+				),
+			},
+			args: args{
+				rt:   "redis",
+				tier: "development",
+			},
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name: "fail to retrieve strategy for provider tier when the config map is not found",
