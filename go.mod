@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/compute v1.18.0
+	cloud.google.com/go/monitoring v1.12.0
 	cloud.google.com/go/redis v1.11.0
 	github.com/aws/aws-sdk-go v1.44.45
 	github.com/google/uuid v1.3.0

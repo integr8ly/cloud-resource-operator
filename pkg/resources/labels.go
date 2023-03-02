@@ -28,13 +28,13 @@ func GetGenericMetricLabelNames() []string {
 }
 
 // BuildGenericMetricLabels returns generic labels to be added to every metric
-func BuildGenericMetricLabels(r v1.ObjectMeta, clusterID, cacheName, providerName string) map[string]string {
+func BuildGenericMetricLabels(objectMeta v1.ObjectMeta, clusterID, instanceID, providerName string) map[string]string {
 	return map[string]string{
 		LabelClusterIDKey:   clusterID,
-		LabelResourceIDKey:  r.Name,
-		LabelNamespaceKey:   r.Namespace,
-		LabelInstanceIDKey:  cacheName,
-		LabelProductNameKey: r.Labels["productName"],
+		LabelResourceIDKey:  objectMeta.Name,
+		LabelNamespaceKey:   objectMeta.Namespace,
+		LabelInstanceIDKey:  instanceID,
+		LabelProductNameKey: objectMeta.Labels["productName"],
 		LabelStrategyKey:    providerName,
 	}
 }

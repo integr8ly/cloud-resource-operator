@@ -4,7 +4,9 @@
 package cloudmetrics
 
 import (
+	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"context"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
@@ -27,17 +29,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const (
-	postgresFreeStorageAverage    = "cro_postgres_free_storage_average"
-	postgresCPUUtilizationAverage = "cro_postgres_cpu_utilization_average"
-	postgresFreeableMemoryAverage = "cro_postgres_freeable_memory_average"
-
-	redisMemoryUsagePercentageAverage = "cro_redis_memory_usage_percentage_average"
-	redisFreeableMemoryAverage        = "cro_redis_freeable_memory_average"
-	redisCPUUtilizationAverage        = "cro_redis_cpu_utilization_average"
-	redisEngineCPUUtilizationAverage  = "cro_redis_engine_cpu_utilization_average"
-)
-
 // CroGaugeMetric allows for a mapping between an exposed prometheus metric and multiple cloud provider specific metric
 type CroGaugeMetric struct {
 	Name         string
@@ -49,50 +40,65 @@ type CroGaugeMetric struct {
 // to add any addition metrics simply add to this mapping and it will be scraped and exposed
 var postgresGaugeMetrics = []CroGaugeMetric{
 	{
-		Name: postgresFreeStorageAverage,
+		Name: resources.PostgresFreeStorageAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: postgresFreeStorageAverage,
+				Name: resources.PostgresFreeStorageAverage,
 				Help: "The amount of available storage space. Units: Bytes",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: postgresFreeStorageAverage,
+				PrometheusMetricName: resources.PostgresFreeStorageAverage,
 				ProviderMetricName:   "FreeStorageSpace",
 				Statistic:            cloudwatch.StatisticAverage,
+			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresFreeStorageAverage,
+				ProviderMetricName:   "cloudsql.googleapis.com/database/disk/quota-cloudsql.googleapis.com/database/disk/bytes_used",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: postgresCPUUtilizationAverage,
+		Name: resources.PostgresCPUUtilizationAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: postgresCPUUtilizationAverage,
+				Name: resources.PostgresCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: postgresCPUUtilizationAverage,
+				PrometheusMetricName: resources.PostgresCPUUtilizationAverage,
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
+			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresCPUUtilizationAverage,
+				ProviderMetricName:   "cloudsql.googleapis.com/database/cpu/utilization",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: postgresFreeableMemoryAverage,
+		Name: resources.PostgresFreeableMemoryAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: postgresFreeableMemoryAverage,
+				Name: resources.PostgresFreeableMemoryAverage,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: postgresFreeableMemoryAverage,
+				PrometheusMetricName: resources.PostgresFreeableMemoryAverage,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            cloudwatch.StatisticAverage,
+			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresFreeableMemoryAverage,
+				ProviderMetricName:   "cloudsql.googleapis.com/database/memory/quota-cloudsql.googleapis.com/database/memory/total_usage",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
@@ -102,67 +108,87 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 // to add any addition metrics simply add to this mapping and it will be scraped and exposed
 var redisGaugeMetrics = []CroGaugeMetric{
 	{
-		Name: redisMemoryUsagePercentageAverage,
+		Name: resources.RedisMemoryUsagePercentageAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: redisMemoryUsagePercentageAverage,
+				Name: resources.RedisMemoryUsagePercentageAverage,
 				Help: "The percentage of redis used memory. Units: Percent",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: redisMemoryUsagePercentageAverage,
+				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
 				//calculated on used_memory/maxmemory from Redis INFO http://redis.io/commands/info
 				ProviderMetricName: "DatabaseMemoryUsagePercentage",
 				Statistic:          cloudwatch.StatisticAverage,
 			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
+				ProviderMetricName:   "redis.googleapis.com/stats/memory/usage_ratio",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
+			},
 		},
 	},
 	{
-		Name: redisFreeableMemoryAverage,
+		Name: resources.RedisFreeableMemoryAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: redisFreeableMemoryAverage,
+				Name: resources.RedisFreeableMemoryAverage,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: redisFreeableMemoryAverage,
+				PrometheusMetricName: resources.RedisFreeableMemoryAverage,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.RedisFreeableMemoryAverage,
+				ProviderMetricName:   "redis.googleapis.com/stats/memory/maxmemory-redis.googleapis.com/stats/memory/usage",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
+			},
 		},
 	},
 	{
-		Name: redisCPUUtilizationAverage,
+		Name: resources.RedisCPUUtilizationAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: redisCPUUtilizationAverage,
+				Name: resources.RedisCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: redisCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
+				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
+			},
 		},
 	},
 	{
-		Name: redisEngineCPUUtilizationAverage,
+		Name: resources.RedisEngineCPUUtilizationAverage,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: redisEngineCPUUtilizationAverage,
+				Name: resources.RedisEngineCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			resources.GetGenericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: redisEngineCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverage,
 				ProviderMetricName:   "EngineCPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
+			},
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverage,
+				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization_main_thread",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
@@ -191,16 +217,30 @@ func New(mgr manager.Manager) (*CloudMetricsReconciler, error) {
 		return nil, err
 	}
 	logger := logrus.WithFields(logrus.Fields{"controller": "controller_cloudmetrics"})
-	postgresMetricsProvider, err := aws.NewAWSPostgresMetricsProvider(client, logger)
+	awsPostgresMetricsProvider, err := aws.NewAWSPostgresMetricsProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
-	postgresProviderList := []providers.PostgresMetricsProvider{postgresMetricsProvider}
-	redisMetricsProvider, err := aws.NewAWSRedisMetricsProvider(client, logger)
+	gcpPostgresMetricsProvider, err := gcp.NewGCPPostgresMetricsProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
-	redisProviderList := []providers.RedisMetricsProvider{redisMetricsProvider}
+	postgresProviderList := []providers.PostgresMetricsProvider{
+		awsPostgresMetricsProvider,
+		gcpPostgresMetricsProvider,
+	}
+	awsRedisMetricsProvider, err := aws.NewAWSRedisMetricsProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
+	gcpRedisMetricsProvider, err := gcp.NewGCPRedisMetricsProvider(client, logger)
+	if err != nil {
+		return nil, err
+	}
+	redisProviderList := []providers.RedisMetricsProvider{
+		awsRedisMetricsProvider,
+		gcpRedisMetricsProvider,
+	}
 
 	// we only wish to register metrics once when the new reconciler is created
 	// as the metrics we want to expose are known in advance we can register them all
@@ -270,7 +310,7 @@ func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			// scrapeMetrics returns scraped metrics output which contains a list of GenericCloudMetrics
 			scrapedMetricsOutput, err := p.ScrapeRedisMetrics(ctx, &redis, redisMetricTypes)
 			if err != nil {
-				r.logger.Errorf("failed to scrape metrics for redis %v", err)
+				r.logger.Errorf("failed to scrape metrics for redis: %v", err)
 				continue
 			}
 

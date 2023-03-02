@@ -169,7 +169,7 @@ func TestBuildRedisStatusMetricsLabels(t *testing.T) {
 				LabelInstanceIDKey:  "testCacheName",
 				LabelProductNameKey: "testProductName",
 				LabelStrategyKey:    "gcp-memorystore",
-				LabelStatusKey:      string(types.PhaseComplete),
+				LabelStatusPhaseKey: string(types.PhaseComplete),
 			},
 		},
 	}
