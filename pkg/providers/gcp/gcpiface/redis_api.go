@@ -1,12 +1,13 @@
 package gcpiface
 
 import (
-	redis "cloud.google.com/go/redis/apiv1"
 	"context"
+
+	redis "cloud.google.com/go/redis/apiv1"
+	"cloud.google.com/go/redis/apiv1/redispb"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
-	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 )
 
 type RedisAPI interface {

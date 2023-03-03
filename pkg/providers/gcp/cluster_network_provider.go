@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -12,13 +18,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	"google.golang.org/api/servicenetworking/v1"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	utils "k8s.io/utils/pointer"
-	"net"
-	"net/url"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"time"
 )
 
 const (

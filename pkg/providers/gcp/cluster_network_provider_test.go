@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/apis"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -22,7 +23,6 @@ import (
 	"go.uber.org/multierr"
 	"google.golang.org/api/googleapi"
 	servicenetworking "google.golang.org/api/servicenetworking/v1"
-	computepb "google.golang.org/genproto/googleapis/cloud/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

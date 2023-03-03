@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"cloud.google.com/go/redis/apiv1/redispb"
 	stratType "github.com/integr8ly/cloud-resource-operator/pkg/client/types"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	croGCP "github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	errorUtil "github.com/pkg/errors"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	redispb "google.golang.org/genproto/googleapis/cloud/redis/v1"
 	"google.golang.org/genproto/googleapis/type/dayofweek"
 	"google.golang.org/genproto/googleapis/type/timeofday"
 	corev1 "k8s.io/api/core/v1"
@@ -87,7 +86,7 @@ func (p *StrategyProvider) reconcilePostgresStrategy(config string, timeConfig *
 	if err := json.Unmarshal([]byte(config), &rawStrategy); err != nil {
 		return "", errorUtil.Wrapf(err, "failed to unmarshal strategy mapping for postgres resource")
 	}
-	postgresCreateConfig := &gcp.CreateInstanceRequest{}
+	postgresCreateConfig := &croGCP.CreateInstanceRequest{}
 	if err := json.Unmarshal(rawStrategy[p.Tier].CreateStrategy, postgresCreateConfig); err != nil {
 		return "", errorUtil.Wrapf(err, "failed to unmarshal gcp postgres cluster config")
 	}

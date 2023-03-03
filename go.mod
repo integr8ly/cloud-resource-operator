@@ -3,11 +3,11 @@ module github.com/integr8ly/cloud-resource-operator
 go 1.18
 
 require (
-	cloud.google.com/go/compute v1.12.0
-	cloud.google.com/go/redis v1.9.0
+	cloud.google.com/go/compute v1.18.0
+	cloud.google.com/go/redis v1.11.0
 	github.com/aws/aws-sdk-go v1.44.45
 	github.com/google/uuid v1.3.0
-	github.com/googleapis/gax-go/v2 v2.6.0
+	github.com/googleapis/gax-go/v2 v2.7.0
 	github.com/hashicorp/go-version v1.5.0
 	github.com/lib/pq v1.10.6
 	github.com/onsi/ginkgo/v2 v2.1.4
@@ -20,10 +20,10 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/afero v1.8.2
 	go.uber.org/multierr v1.6.0
-	golang.org/x/net v0.0.0-20221014081412-f15817d10f9b
-	google.golang.org/api v0.100.0
-	google.golang.org/genproto v0.0.0-20221024183307-1bc688fe9f3e
-	google.golang.org/grpc v1.50.1
+	golang.org/x/net v0.6.0
+	google.golang.org/api v0.110.0
+	google.golang.org/genproto v0.0.0-20230209215440-0dfe4f8abfcc
+	google.golang.org/grpc v1.53.0
 	google.golang.org/protobuf v1.28.1
 	k8s.io/api v0.24.3
 	k8s.io/apiextensions-apiserver v0.24.3
@@ -34,10 +34,11 @@ require (
 )
 
 require (
-	cloud.google.com/go v0.104.0 // indirect
-	cloud.google.com/go/compute/metadata v0.1.0 // indirect
+	cloud.google.com/go v0.107.0 // indirect
+	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	cloud.google.com/go/longrunning v0.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
@@ -53,7 +54,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -68,14 +69,13 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.8.0 // indirect
-	go.opencensus.io v0.23.0 // indirect
+	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/zap v1.19.1 // indirect
-	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
-	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
-	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/oauth2 v0.5.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
