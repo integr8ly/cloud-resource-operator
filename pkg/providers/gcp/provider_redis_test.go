@@ -1196,6 +1196,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1410,6 +1413,49 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			wantErr:       true,
 		},
 		{
+			name: "fail to add annotation to redis cr when instance already exists",
+			fields: fields{
+				Client: func() client.Client {
+					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
+					mockClient.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mockClient
+				}(),
+			},
+			args: args{
+				networkManager: &NetworkManagerMock{
+					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
+						return &net.IPNet{
+							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
+						}, nil
+					},
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					},
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
+						return &servicenetworking.Connection{}, nil
+					},
+				},
+				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
+					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
+						return &redispb.Instance{
+							State: redispb.Instance_CREATING,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestProjectId,
+					ProjectID:      gcpTestRegion,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				r: &v1alpha1.Redis{},
+			},
+			redisCluster:  nil,
+			statusMessage: "failed to add annotation to redis cr",
+			wantErr:       true,
+		},
+		{
 			name: "start creation of gcp redis instance",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil), redisCR),
@@ -1487,6 +1533,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1537,6 +1586,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1591,6 +1643,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1654,6 +1709,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1710,6 +1768,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1771,6 +1832,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1831,6 +1895,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
