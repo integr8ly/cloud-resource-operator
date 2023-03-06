@@ -173,6 +173,16 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 	}
 	defer p.exposePostgresInstanceMetrics(ctx, pg, foundInstance)
 
+	if foundInstance != nil {
+		if !annotations.Has(pg, ResourceIdentifierAnnotation) {
+			annotations.Add(pg, ResourceIdentifierAnnotation, foundInstance.Name)
+			if err := p.Client.Update(ctx, pg); err != nil {
+				msg := "failed to add annotation to postgres cr"
+				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+			}
+		}
+	}
+
 	if foundInstance == nil {
 		logger.Infof("no instance found, creating one")
 		_, err := sqladminService.CreateInstance(ctx, strategyConfig.ProjectID, gcpInstanceConfig.MapToGcpDatabaseInstance())

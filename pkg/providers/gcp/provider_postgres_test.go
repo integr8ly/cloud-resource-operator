@@ -1319,7 +1319,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "failure to add annotation",
+			name: "failure to add annotation when creating instance",
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -1362,6 +1362,77 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				maintenanceWindow: false,
 			},
 			want:    "failed to add annotation",
+			wantErr: true,
+		},
+		{
+			name: "failure to add annotation when instance already exists",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName + defaultCredSecSuffix,
+						Namespace: testNs,
+					},
+						Data: map[string][]byte{
+							defaultPostgresUserKey:     []byte(testUser),
+							defaultPostgresPasswordKey: []byte(testPassword),
+						},
+					}, buildTestPostgres(), buildTestGcpInfrastructure(nil))
+					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+						return errors.New("failed to add annotation")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: NewCredentialMinterCredentialManager(nil),
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: &v1alpha1.Postgres{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      postgresProviderName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Type: "postgres",
+						Tier: "development",
+					},
+				},
+				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
+						return &sqladmin.InstancesListResponse{
+							Items: []*sqladmin.DatabaseInstance{
+								{
+									Name:  gcpTestPostgresInstanceName,
+									State: "RUNNABLE",
+								},
+							},
+						}, nil
+					}
+					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							Name:            gcpTestPostgresInstanceName,
+							State:           "RUNNABLE",
+							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							Settings: &sqladmin.Settings{
+								BackupConfiguration: &sqladmin.BackupConfiguration{
+									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
+										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
+										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
+									},
+								},
+							},
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					ProjectID:      "sample-project-id",
+					CreateStrategy: json.RawMessage(`{"instance":{}}`),
+				},
+				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
+				maintenanceWindow: false,
+			},
+			want:    "failed to add annotation to postgres cr",
 			wantErr: true,
 		},
 		{

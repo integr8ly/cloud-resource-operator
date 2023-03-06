@@ -128,6 +128,17 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 	}
 	defer p.exposeRedisInstanceMetrics(ctx, r, foundInstance)
+
+	if foundInstance != nil {
+		if !annotations.Has(r, ResourceIdentifierAnnotation) {
+			annotations.Add(r, ResourceIdentifierAnnotation, createInstanceRequest.InstanceId)
+			if err := p.Client.Update(ctx, r); err != nil {
+				statusMessage := "failed to add annotation to redis cr"
+				return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+			}
+		}
+	}
+
 	if foundInstance == nil {
 		_, err = redisClient.CreateInstance(ctx, createInstanceRequest)
 		if err != nil {
