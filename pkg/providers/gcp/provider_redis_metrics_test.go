@@ -36,7 +36,7 @@ func Test_getMetricData(t *testing.T) {
 	}
 	opts := getMetricDataOpts{
 		metric: providers.CloudProviderMetricType{
-			PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
+			PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
 			ProviderMetricName:   "redis.googleapis.com/stats/memory/usage_ratio",
 			Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 		},
@@ -67,7 +67,7 @@ func Test_getMetricData(t *testing.T) {
 				opts: opts,
 			},
 			want: &providers.GenericCloudMetric{
-				Name:  resources.RedisMemoryUsagePercentageAverage,
+				Name:  resources.RedisMemoryUsagePercentageAverageMetricName,
 				Value: 0.5,
 			},
 			wantErr: false,
@@ -108,12 +108,12 @@ func Test_getMetrics(t *testing.T) {
 	opts := getMetricsOpts{
 		metricsToQuery: []providers.CloudProviderMetricType{
 			{
-				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
+				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/memory/usage_ratio",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 			{
-				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
@@ -156,11 +156,11 @@ func Test_getMetrics(t *testing.T) {
 			},
 			want: []*providers.GenericCloudMetric{
 				{
-					Name:  resources.RedisMemoryUsagePercentageAverage,
+					Name:  resources.RedisMemoryUsagePercentageAverageMetricName,
 					Value: 0.5,
 				},
 				{
-					Name:  resources.RedisCPUUtilizationAverage,
+					Name:  resources.RedisCPUUtilizationAverageMetricName,
 					Value: 0.5,
 				},
 			},
@@ -212,7 +212,7 @@ func Test_calculateCpuUtilization(t *testing.T) {
 		opts         getMetricsOpts
 	}
 	metric := providers.CloudProviderMetricType{
-		PrometheusMetricName: resources.RedisCPUUtilizationAverage,
+		PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
 		ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization",
 		Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 	}
@@ -262,7 +262,7 @@ func Test_calculateCpuUtilization(t *testing.T) {
 				opts:   opts,
 			},
 			want: &providers.GenericCloudMetric{
-				Name:  resources.RedisCPUUtilizationAverage,
+				Name:  resources.RedisCPUUtilizationAverageMetricName,
 				Value: 1,
 			},
 			wantErr: false,
@@ -301,7 +301,7 @@ func Test_calculateCpuUtilization(t *testing.T) {
 				opts:   opts,
 			},
 			want: &providers.GenericCloudMetric{
-				Name:  resources.RedisCPUUtilizationAverage,
+				Name:  resources.RedisCPUUtilizationAverageMetricName,
 				Value: 0,
 			},
 			wantErr: false,
@@ -365,7 +365,7 @@ func Test_calculateAvailableMemory(t *testing.T) {
 		opts           getMetricsOpts
 	}
 	metric := providers.CloudProviderMetricType{
-		PrometheusMetricName: resources.RedisFreeableMemoryAverage,
+		PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
 		ProviderMetricName:   "redis.googleapis.com/stats/memory/maxmemory-redis.googleapis.com/stats/memory/usage",
 		Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 	}
@@ -422,7 +422,7 @@ func Test_calculateAvailableMemory(t *testing.T) {
 				opts:           opts,
 			},
 			want: &providers.GenericCloudMetric{
-				Name:  resources.RedisFreeableMemoryAverage,
+				Name:  resources.RedisFreeableMemoryAverageMetricName,
 				Value: 1073741824, // 1GB in bytes
 			},
 			wantErr: false,

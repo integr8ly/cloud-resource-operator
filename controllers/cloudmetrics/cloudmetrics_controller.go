@@ -40,64 +40,96 @@ type CroGaugeMetric struct {
 // to add any addition metrics simply add to this mapping and it will be scraped and exposed
 var postgresGaugeMetrics = []CroGaugeMetric{
 	{
-		Name: resources.PostgresFreeStorageAverage,
+		Name: resources.PostgresFreeStorageAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.PostgresFreeStorageAverage,
+				Name: resources.PostgresFreeStorageAverageMetricName,
 				Help: "The amount of available storage space. Units: Bytes",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeStorageAverage,
+				PrometheusMetricName: resources.PostgresFreeStorageAverageMetricName,
 				ProviderMetricName:   "FreeStorageSpace",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeStorageAverage,
+				PrometheusMetricName: resources.PostgresFreeStorageAverageMetricName,
 				ProviderMetricName:   "cloudsql.googleapis.com/database/disk/quota-cloudsql.googleapis.com/database/disk/bytes_used",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: resources.PostgresCPUUtilizationAverage,
+		Name: resources.PostgresCPUUtilizationAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.PostgresCPUUtilizationAverage,
+				Name: resources.PostgresCPUUtilizationAverageMetricName,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresCPUUtilizationAverage,
+				PrometheusMetricName: resources.PostgresCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresCPUUtilizationAverage,
+				PrometheusMetricName: resources.PostgresCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "cloudsql.googleapis.com/database/cpu/utilization",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: resources.PostgresFreeableMemoryAverage,
+		Name: resources.PostgresFreeableMemoryAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.PostgresFreeableMemoryAverage,
+				Name: resources.PostgresFreeableMemoryAverageMetricName,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeableMemoryAverage,
+				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeableMemoryAverage,
+				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "cloudsql.googleapis.com/database/memory/quota-cloudsql.googleapis.com/database/memory/total_usage",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
+			},
+		},
+	},
+	{
+		Name: resources.PostgresMaxMemoryMetricName,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: resources.PostgresMaxMemoryMetricName,
+				Help: "The amount of max random access memory. Units: Bytes",
+			},
+			genericMetricLabelNames()),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresMaxMemoryMetricName,
+				ProviderMetricName:   "cloudsql.googleapis.com/database/memory/quota",
+				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
+			},
+		},
+	},
+	{
+		Name: resources.PostgresAllocatedStorageMetricName,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: resources.PostgresAllocatedStorageMetricName,
+				Help: "The amount of currently used storage space. Units: Bytes",
+			},
+			genericMetricLabelNames()),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.GCPDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresAllocatedStorageMetricName,
+				ProviderMetricName:   "cloudsql.googleapis.com/database/disk/bytes_used",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
@@ -108,85 +140,85 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 // to add any addition metrics simply add to this mapping and it will be scraped and exposed
 var redisGaugeMetrics = []CroGaugeMetric{
 	{
-		Name: resources.RedisMemoryUsagePercentageAverage,
+		Name: resources.RedisMemoryUsagePercentageAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.RedisMemoryUsagePercentageAverage,
+				Name: resources.RedisMemoryUsagePercentageAverageMetricName,
 				Help: "The percentage of redis used memory. Units: Percent",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
+				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
 				//calculated on used_memory/maxmemory from Redis INFO http://redis.io/commands/info
 				ProviderMetricName: "DatabaseMemoryUsagePercentage",
 				Statistic:          cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
+				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/memory/usage_ratio",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: resources.RedisFreeableMemoryAverage,
+		Name: resources.RedisFreeableMemoryAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.RedisFreeableMemoryAverage,
+				Name: resources.RedisFreeableMemoryAverageMetricName,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisFreeableMemoryAverage,
+				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisFreeableMemoryAverage,
+				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/memory/maxmemory-redis.googleapis.com/stats/memory/usage",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: resources.RedisCPUUtilizationAverage,
+		Name: resources.RedisCPUUtilizationAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.RedisCPUUtilizationAverage,
+				Name: resources.RedisCPUUtilizationAverageMetricName,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
 	{
-		Name: resources.RedisEngineCPUUtilizationAverage,
+		Name: resources.RedisEngineCPUUtilizationAverageMetricName,
 		GaugeVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: resources.RedisEngineCPUUtilizationAverage,
+				Name: resources.RedisEngineCPUUtilizationAverageMetricName,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
 			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "EngineCPUUtilization",
 				Statistic:            cloudwatch.StatisticAverage,
 			},
 			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverage,
+				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization_main_thread",
 				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},

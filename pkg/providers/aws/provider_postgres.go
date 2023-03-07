@@ -1089,7 +1089,7 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 	// we should follow the approach AWS take to auto scaling, and alert when free storage space is less than 10%
 	if instance != nil && instance.AllocatedStorage != nil {
 		// convert allocated storage to bytes and expose as a metric
-		resources.SetMetric(resources.DefaultPostgresAllocatedStorageMetricName, genericLabels, float64(*instance.AllocatedStorage*resources.BytesInGibiBytes))
+		resources.SetMetric(resources.PostgresAllocatedStorageMetricName, genericLabels, float64(*instance.AllocatedStorage*resources.BytesInGibiBytes))
 	}
 
 	if instance != nil {
@@ -1108,7 +1108,7 @@ func (p *PostgresProvider) exposePostgresMetrics(ctx context.Context, cr *v1alph
 		instanceTypes := result.InstanceTypes
 		if len(instanceTypes) > 0 {
 			MemorySize := instanceTypes[0].MemoryInfo.SizeInMiB
-			resources.SetMetric(resources.DefaultPostgresMaxMemoryMetricName, genericLabels, float64(*MemorySize))
+			resources.SetMetric(resources.PostgresMaxMemoryMetricName, genericLabels, float64(*MemorySize))
 		}
 	}
 }

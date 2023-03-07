@@ -14,14 +14,14 @@ func TestIsCompoundMetric(t *testing.T) {
 		{
 			name: "metric is compound",
 			args: args{
-				metric: RedisFreeableMemoryAverage,
+				metric: RedisFreeableMemoryAverageMetricName,
 			},
 			want: true,
 		},
 		{
 			name: "metric is not compound",
 			args: args{
-				metric: RedisCPUUtilizationAverage,
+				metric: RedisCPUUtilizationAverageMetricName,
 			},
 			want: false,
 		},
@@ -47,14 +47,14 @@ func TestIsComputedCpuMetric(t *testing.T) {
 		{
 			name: "metric is computed cpu",
 			args: args{
-				metric: RedisCPUUtilizationAverage,
+				metric: RedisCPUUtilizationAverageMetricName,
 			},
 			want: true,
 		},
 		{
 			name: "metric is not computed cpu",
 			args: args{
-				metric: RedisFreeableMemoryAverage,
+				metric: RedisFreeableMemoryAverageMetricName,
 			},
 			want: false,
 		},
