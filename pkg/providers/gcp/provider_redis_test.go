@@ -1196,6 +1196,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1530,6 +1533,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1580,6 +1586,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1634,6 +1643,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1697,6 +1709,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1753,6 +1768,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1814,6 +1832,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
@@ -1874,6 +1895,9 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      testName,
 						Namespace: testNs,
+						Annotations: map[string]string{
+							ResourceIdentifierAnnotation: testName,
+						},
 					},
 					Spec: types.ResourceTypeSpec{
 						Tier: "development",
