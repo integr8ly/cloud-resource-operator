@@ -152,3 +152,12 @@ type PostgresMetricsProvider interface {
 	SupportsStrategy(s string) bool
 	ScrapePostgresMetrics(ctx context.Context, postgres *v1alpha1.Postgres, metricTypes []CloudProviderMetricType) (*ScrapeMetricsData, error)
 }
+
+func (gcm *GenericCloudMetric) IsIncludedInSlice(metrics []*GenericCloudMetric) bool {
+	for _, metric := range metrics {
+		if gcm.Name == metric.Name && gcm.Value == metric.Value {
+			return true
+		}
+	}
+	return false
+}

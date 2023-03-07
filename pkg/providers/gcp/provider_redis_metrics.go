@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"math"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"sync"
@@ -102,50 +103,6 @@ func (p *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, r *v1alph
 	allMetrics = append(allMetrics, remainingMetrics...)
 	return &providers.ScrapeMetricsData{
 		Metrics: allMetrics,
-	}, nil
-}
-
-func calculateCpuUtilization(ctx context.Context, metricClient gcpiface.MetricApi, metric providers.CloudProviderMetricType, opts getMetricsOpts) (*providers.GenericCloudMetric, error) {
-	now := time.Now()
-	minutesAgo := now.Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration))
-	minutesAgoDoubled := now.Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration * 2))
-	currentSampleCpuSecs, err := getMetricData(ctx, metricClient, getMetricDataOpts{
-		metric:    metric,
-		projectID: opts.projectID,
-		filter:    fmt.Sprintf(opts.filterTemplate, opts.monitoringResourceType, opts.instanceID, metric.ProviderMetricName),
-		interval: &monitoringpb.TimeInterval{
-			StartTime: timestamppb.New(minutesAgo),
-			EndTime:   timestamppb.New(now),
-		},
-		reducer: monitoringpb.Aggregation_REDUCE_SUM,
-		labels:  opts.defaultLabels,
-	})
-	if err != nil {
-		return nil, err
-	}
-	previousSampleCpuSecs, err := getMetricData(ctx, metricClient, getMetricDataOpts{
-		metric:    metric,
-		projectID: opts.projectID,
-		filter:    fmt.Sprintf(opts.filterTemplate, opts.monitoringResourceType, opts.instanceID, metric.ProviderMetricName),
-		interval: &monitoringpb.TimeInterval{
-			StartTime: timestamppb.New(minutesAgoDoubled),
-			EndTime:   timestamppb.New(minutesAgo),
-		},
-		reducer: monitoringpb.Aggregation_REDUCE_SUM,
-		labels:  opts.defaultLabels,
-	})
-	if err != nil {
-		return nil, err
-	}
-	sampleDuration := resources.MetricsWatchDuration / time.Second
-	cpuUsagePercentage := (currentSampleCpuSecs.Value - previousSampleCpuSecs.Value) / float64(sampleDuration)
-	if cpuUsagePercentage < 0 {
-		cpuUsagePercentage = 0
-	}
-	return &providers.GenericCloudMetric{
-		Name:   metric.PrometheusMetricName,
-		Labels: opts.defaultLabels,
-		Value:  cpuUsagePercentage,
 	}, nil
 }
 
@@ -241,6 +198,11 @@ func calculatePointsAverage(points []*monitoringpb.Point) float64 {
 	return total / float64(len(points))
 }
 
+func roundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
+}
+
 func calculateAvailableMemory(ctx context.Context, metricClient gcpiface.MetricApi, compoundMetric providers.CloudProviderMetricType, opts getMetricsOpts) (*providers.GenericCloudMetric, error) {
 	metricPair := strings.Split(compoundMetric.ProviderMetricName, "-")
 	maxMemoryMetricType := providers.CloudProviderMetricType{
@@ -278,6 +240,50 @@ func calculateAvailableMemory(ctx context.Context, metricClient gcpiface.MetricA
 	return &providers.GenericCloudMetric{
 		Name:   compoundMetric.PrometheusMetricName,
 		Labels: opts.defaultLabels,
-		Value:  maxMemoryMetric.Value - usedMemoryMetric.Value,
+		Value:  roundFloat(maxMemoryMetric.Value-usedMemoryMetric.Value, 2),
+	}, nil
+}
+
+func calculateCpuUtilization(ctx context.Context, metricClient gcpiface.MetricApi, metric providers.CloudProviderMetricType, opts getMetricsOpts) (*providers.GenericCloudMetric, error) {
+	now := time.Now()
+	minutesAgo := now.Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration))
+	minutesAgoDoubled := now.Add(-resources.GetMetricReconcileTimeOrDefault(resources.MetricsWatchDuration * 2))
+	currentSampleCpuSecs, err := getMetricData(ctx, metricClient, getMetricDataOpts{
+		metric:    metric,
+		projectID: opts.projectID,
+		filter:    fmt.Sprintf(opts.filterTemplate, opts.monitoringResourceType, opts.instanceID, metric.ProviderMetricName),
+		interval: &monitoringpb.TimeInterval{
+			StartTime: timestamppb.New(minutesAgo),
+			EndTime:   timestamppb.New(now),
+		},
+		reducer: monitoringpb.Aggregation_REDUCE_SUM,
+		labels:  opts.defaultLabels,
+	})
+	if err != nil {
+		return nil, err
+	}
+	previousSampleCpuSecs, err := getMetricData(ctx, metricClient, getMetricDataOpts{
+		metric:    metric,
+		projectID: opts.projectID,
+		filter:    fmt.Sprintf(opts.filterTemplate, opts.monitoringResourceType, opts.instanceID, metric.ProviderMetricName),
+		interval: &monitoringpb.TimeInterval{
+			StartTime: timestamppb.New(minutesAgoDoubled),
+			EndTime:   timestamppb.New(minutesAgo),
+		},
+		reducer: monitoringpb.Aggregation_REDUCE_SUM,
+		labels:  opts.defaultLabels,
+	})
+	if err != nil {
+		return nil, err
+	}
+	sampleDuration := resources.MetricsWatchDuration / time.Second
+	cpuUsagePercentage := (currentSampleCpuSecs.Value - previousSampleCpuSecs.Value) / float64(sampleDuration)
+	if cpuUsagePercentage < 0 {
+		cpuUsagePercentage = 0
+	}
+	return &providers.GenericCloudMetric{
+		Name:   metric.PrometheusMetricName,
+		Labels: opts.defaultLabels,
+		Value:  roundFloat(cpuUsagePercentage, 2),
 	}, nil
 }

@@ -46,7 +46,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				Name: resources.PostgresFreeStorageAverage,
 				Help: "The amount of available storage space. Units: Bytes",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeStorageAverage,
@@ -67,7 +67,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				Name: resources.PostgresCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresCPUUtilizationAverage,
@@ -88,7 +88,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				Name: resources.PostgresFreeableMemoryAverage,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeableMemoryAverage,
@@ -114,7 +114,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				Name: resources.RedisMemoryUsagePercentageAverage,
 				Help: "The percentage of redis used memory. Units: Percent",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverage,
@@ -136,7 +136,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				Name: resources.RedisFreeableMemoryAverage,
 				Help: "The amount of available random access memory. Units: Bytes",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisFreeableMemoryAverage,
@@ -157,7 +157,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				Name: resources.RedisCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisCPUUtilizationAverage,
@@ -178,7 +178,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				Name: resources.RedisEngineCPUUtilizationAverage,
 				Help: "The percentage of CPU utilization. Units: Percent",
 			},
-			resources.GetGenericMetricLabelNames()),
+			genericMetricLabelNames()),
 		ProviderType: map[string]providers.CloudProviderMetricType{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverage,
@@ -397,5 +397,16 @@ func (r *CloudMetricsReconciler) setGaugeMetrics(gaugeMetrics []CroGaugeMetric, 
 				continue
 			}
 		}
+	}
+}
+
+func genericMetricLabelNames() []string {
+	return []string{
+		resources.LabelClusterIDKey,
+		resources.LabelResourceIDKey,
+		resources.LabelNamespaceKey,
+		resources.LabelInstanceIDKey,
+		resources.LabelProductNameKey,
+		resources.LabelStrategyKey,
 	}
 }

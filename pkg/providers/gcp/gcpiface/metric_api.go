@@ -57,3 +57,33 @@ func (c *metricClient) ListTimeSeries(ctx context.Context, req *monitoringpb.Lis
 	}
 	return timeSeries, nil
 }
+
+type MockMetricClient struct {
+	MetricApi
+	ListTimeSeriesFn    func(context.Context, *monitoringpb.ListTimeSeriesRequest, ...gax.CallOption) ([]*monitoringpb.TimeSeries, error)
+	ListTimeSeriesFnTwo func(context.Context, *monitoringpb.ListTimeSeriesRequest, ...gax.CallOption) ([]*monitoringpb.TimeSeries, error)
+	call                int
+}
+
+func GetMockMetricClient(modifyFn func(metricClient *MockMetricClient)) *MockMetricClient {
+	mock := &MockMetricClient{
+		ListTimeSeriesFn: func(ctx context.Context, request *monitoringpb.ListTimeSeriesRequest, callOption ...gax.CallOption) ([]*monitoringpb.TimeSeries, error) {
+			return []*monitoringpb.TimeSeries{}, nil
+		},
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
+func (m *MockMetricClient) ListTimeSeries(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest, opts ...gax.CallOption) ([]*monitoringpb.TimeSeries, error) {
+	m.call++
+	if m.ListTimeSeriesFn != nil && m.call == 1 {
+		return m.ListTimeSeriesFn(ctx, req, opts...)
+	}
+	if m.ListTimeSeriesFnTwo != nil && m.call > 1 {
+		return m.ListTimeSeriesFnTwo(ctx, req, opts...)
+	}
+	return []*monitoringpb.TimeSeries{}, nil
+}

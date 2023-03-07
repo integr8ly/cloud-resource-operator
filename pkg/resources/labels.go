@@ -16,17 +16,6 @@ const (
 	LabelStatusPhaseKey = "statusPhase"
 )
 
-func GetGenericMetricLabelNames() []string {
-	return []string{
-		LabelClusterIDKey,
-		LabelResourceIDKey,
-		LabelNamespaceKey,
-		LabelInstanceIDKey,
-		LabelProductNameKey,
-		LabelStrategyKey,
-	}
-}
-
 // BuildGenericMetricLabels returns generic labels to be added to every metric
 func BuildGenericMetricLabels(objectMeta v1.ObjectMeta, clusterID, instanceID, providerName string) map[string]string {
 	return map[string]string{
