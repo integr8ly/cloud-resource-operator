@@ -1387,7 +1387,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.DatabaseInstance{
 							Name:            gcpTestPostgresInstanceName,
 							State:           "RUNNABLE",
-							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							DatabaseVersion: DefaultGCPCLoudSQLDatabaseVersion,
 							Settings: &sqladmin.Settings{
 								BackupConfiguration: &sqladmin.BackupConfiguration{
 									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
@@ -1435,7 +1435,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.DatabaseInstance{
 							Name:            gcpTestPostgresInstanceName,
 							State:           "RUNNABLE",
-							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							DatabaseVersion: DefaultGCPCLoudSQLDatabaseVersion,
 							IpAddresses: []*sqladmin.IpMapping{
 								{
 									IpAddress: "",
@@ -1513,7 +1513,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 						return &sqladmin.DatabaseInstance{
 							Name:            gcpTestPostgresInstanceName,
 							State:           "RUNNABLE",
-							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
+							DatabaseVersion: DefaultGCPCLoudSQLDatabaseVersion,
 							IpAddresses: []*sqladmin.IpMapping{
 								{
 									IpAddress: "",

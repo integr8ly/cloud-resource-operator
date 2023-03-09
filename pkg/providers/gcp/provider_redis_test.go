@@ -969,7 +969,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 		AuthorizedNetwork: fmt.Sprintf("projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName),
 		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
 		ReservedIpRange:   gcpTestIpRangeName,
-		RedisVersion:      redisVersion,
+		RedisVersion:      RedisVersion,
 		Labels: map[string]string{
 			"integreatly-org_clusterid":     gcpTestClusterName,
 			"integreatly-org_resource-name": "testname",
@@ -1575,7 +1575,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
 							State:        redispb.Instance_READY,
-							RedisVersion: redisVersion,
+							RedisVersion: RedisVersion,
 						}, nil
 					}
 					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
@@ -1694,7 +1694,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
 							State:        redispb.Instance_READY,
-							RedisVersion: redisVersion,
+							RedisVersion: RedisVersion,
 						}, nil
 					}
 					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
@@ -1815,7 +1815,7 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 					redisClient.GetInstanceFn = func(ctx context.Context, request *redispb.GetInstanceRequest, option ...gax.CallOption) (*redispb.Instance, error) {
 						return &redispb.Instance{
 							State:        redispb.Instance_READY,
-							RedisVersion: redisVersion,
+							RedisVersion: RedisVersion,
 						}, nil
 					}
 					redisClient.UpdateInstanceFn = func(ctx context.Context, request *redispb.UpdateInstanceRequest, option ...gax.CallOption) (*redis.UpdateInstanceOperation, error) {
@@ -1962,7 +1962,7 @@ func TestRedisProvider_buildUpgradeInstanceRequest(t *testing.T) {
 			args: args{
 				instanceConfig: &redispb.Instance{
 					Name:         testName,
-					RedisVersion: redisVersion,
+					RedisVersion: RedisVersion,
 				},
 				instance: &redispb.Instance{
 					Name:         testName,
@@ -1971,7 +1971,7 @@ func TestRedisProvider_buildUpgradeInstanceRequest(t *testing.T) {
 			},
 			want: &redispb.UpgradeInstanceRequest{
 				Name:         testName,
-				RedisVersion: redisVersion,
+				RedisVersion: RedisVersion,
 			},
 		},
 		{
@@ -1979,11 +1979,11 @@ func TestRedisProvider_buildUpgradeInstanceRequest(t *testing.T) {
 			args: args{
 				instanceConfig: &redispb.Instance{
 					Name:         testName,
-					RedisVersion: redisVersion,
+					RedisVersion: RedisVersion,
 				},
 				instance: &redispb.Instance{
 					Name:         testName,
-					RedisVersion: redisVersion,
+					RedisVersion: RedisVersion,
 				},
 			},
 			want: nil,

@@ -31,7 +31,7 @@ const (
 	redisMemorySizeGB       = 1
 	redisParentFormat       = "projects/%s/locations/%s"
 	redisProviderName       = "gcp-memorystore"
-	redisVersion            = "REDIS_6_X"
+	RedisVersion            = "REDIS_6_X"
 )
 
 type RedisProvider struct {
@@ -404,7 +404,7 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		AuthorizedNetwork: strings.Split(address.GetNetwork(), "v1/")[1],
 		ConnectMode:       redispb.Instance_PRIVATE_SERVICE_ACCESS,
 		ReservedIpRange:   address.GetName(),
-		RedisVersion:      redisVersion,
+		RedisVersion:      RedisVersion,
 		Labels:            tags,
 	}
 	if createInstanceRequest.Instance == nil {

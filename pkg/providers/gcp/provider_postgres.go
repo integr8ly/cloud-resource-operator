@@ -31,7 +31,7 @@ const (
 	postgresProviderName                          = "gcp-cloudsql"
 	ResourceIdentifierAnnotation                  = "resourceIdentifier"
 	defaultCredSecSuffix                          = "-gcp-sql-credentials"
-	defaultGCPCLoudSQLDatabaseVersion             = "POSTGRES_13"
+	DefaultGCPCLoudSQLDatabaseVersion             = "POSTGRES_13"
 	defaultGCPCloudSQLRegion                      = "us-central1"
 	defaultGCPPostgresUser                        = "postgres"
 	defaultPostgresPasswordKey                    = "password"
@@ -457,7 +457,7 @@ func (p *PostgresProvider) buildCloudSQLCreateStrategy(ctx context.Context, pg *
 		instance.Name = instanceID
 	}
 	if instance.DatabaseVersion == "" {
-		instance.DatabaseVersion = defaultGCPCLoudSQLDatabaseVersion
+		instance.DatabaseVersion = DefaultGCPCLoudSQLDatabaseVersion
 	}
 	if instance.Region == "" {
 		instance.Region = strategyConfig.Region
