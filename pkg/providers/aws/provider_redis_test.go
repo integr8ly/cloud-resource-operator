@@ -2483,6 +2483,17 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 				ApplyImmediately:           aws.Bool(true),
 			},
 		},
+		{
+			name: "test nil parameters returned in aws objects",
+			args: args{
+				ec2Client:                buildMockEc2Client(nil),
+				elasticacheConfig:        &elasticache.CreateReplicationGroupInput{},
+				foundConfig:              &elasticache.ReplicationGroup{},
+				replicationGroupClusters: []elasticache.CacheCluster{},
+				logger:                   testLogger,
+			},
+			want: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
