@@ -736,7 +736,7 @@ func (p *RedisProvider) isLastResource(ctx context.Context) (bool, error) {
 func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig *elasticache.CreateReplicationGroupInput, foundConfig *elasticache.ReplicationGroup, replicationGroupClusters []elasticache.CacheCluster, logger *logrus.Entry, r *v1alpha1.Redis) (*elasticache.ModifyReplicationGroupInput, error) {
 	// setup logger.
 	actionLogger := resources.NewActionLogger(logger, "buildElasticacheUpdateStrategy")
-	actionLogger.Infof("verifying that %s configuration is as expected", *foundConfig.ReplicationGroupId)
+	actionLogger.Infof("verifying that %s configuration is as expected", resources.SafeStringDereference(foundConfig.ReplicationGroupId))
 
 	// indicates whether an update should be attempted or not.
 	updateFound := false
@@ -746,60 +746,64 @@ func buildElasticacheUpdateStrategy(ec2Client ec2iface.EC2API, elasticacheConfig
 	modifyInput.ReplicationGroupId = foundConfig.ReplicationGroupId
 
 	// check to see if the cache node type requires a modification.
-	if elasticacheConfig.CacheNodeType != nil && *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
-		// we need to determine if the proposed cache node type is supported in the availability zones that the instance is
-		// deployed into.
-		//
-		// get the availability zones that support the proposed instance type.
-		describeInstanceTypeOfferingOutput, err := ec2Client.DescribeInstanceTypeOfferings(&ec2.DescribeInstanceTypeOfferingsInput{
-			Filters: []*ec2.Filter{
-				{
-					Name:   aws.String("instance-type"),
-					Values: aws.StringSlice([]string{strings.Replace(*elasticacheConfig.CacheNodeType, "cache.", "", 1)}),
+	if foundConfig.CacheNodeType != nil {
+		if elasticacheConfig.CacheNodeType != nil && *elasticacheConfig.CacheNodeType != *foundConfig.CacheNodeType {
+			// we need to determine if the proposed cache node type is supported in the availability zones that the instance is
+			// deployed into.
+			//
+			// get the availability zones that support the proposed instance type.
+			describeInstanceTypeOfferingOutput, err := ec2Client.DescribeInstanceTypeOfferings(&ec2.DescribeInstanceTypeOfferingsInput{
+				Filters: []*ec2.Filter{
+					{
+						Name:   aws.String("instance-type"),
+						Values: aws.StringSlice([]string{strings.Replace(*elasticacheConfig.CacheNodeType, "cache.", "", 1)}),
+					},
 				},
-			},
-			LocationType: aws.String(ec2.LocationTypeAvailabilityZone),
-		})
-		if err != nil {
-			return nil, errorUtil.Wrapf(err, "failed to get instance type offerings for type %s", aws.StringValue(foundConfig.CacheNodeType))
-		}
-
-		// normalise returned instance type offerings to a list of availability zones, to make comparison easier.
-		var supportedAvailabilityZones []string
-		for _, instanceTypeOffering := range describeInstanceTypeOfferingOutput.InstanceTypeOfferings {
-			supportedAvailabilityZones = append(supportedAvailabilityZones, aws.StringValue(instanceTypeOffering.Location))
-		}
-
-		// get the availability zones of the instance.
-		var usedAvailabilityZones []string
-		for _, replicationGroupCluster := range replicationGroupClusters {
-			usedAvailabilityZones = append(usedAvailabilityZones, aws.StringValue(replicationGroupCluster.PreferredAvailabilityZone))
-		}
-
-		// ensure the availability zones of the instance support the instance type.
-		instanceTypeSupported := true
-		for _, usedAvailabilityZone := range usedAvailabilityZones {
-			if !resources.Contains(supportedAvailabilityZones, usedAvailabilityZone) {
-				instanceTypeSupported = false
-				break
+				LocationType: aws.String(ec2.LocationTypeAvailabilityZone),
+			})
+			if err != nil {
+				return nil, errorUtil.Wrapf(err, "failed to get instance type offerings for type %s", aws.StringValue(foundConfig.CacheNodeType))
 			}
-		}
 
-		// the instance type is supported, go ahead with the modification.
-		if instanceTypeSupported {
-			modifyInput.CacheNodeType = elasticacheConfig.CacheNodeType
-			modifyInput.ApplyImmediately = aws.Bool(r.Spec.ApplyImmediately)
-			updateFound = true
-		} else {
-			// the instance type isn't supported, log and skip.
-			actionLogger.Infof("cache node type %s is not supported, skipping cache node type modification", *elasticacheConfig.CacheNodeType)
+			// normalise returned instance type offerings to a list of availability zones, to make comparison easier.
+			var supportedAvailabilityZones []string
+			for _, instanceTypeOffering := range describeInstanceTypeOfferingOutput.InstanceTypeOfferings {
+				supportedAvailabilityZones = append(supportedAvailabilityZones, aws.StringValue(instanceTypeOffering.Location))
+			}
+
+			// get the availability zones of the instance.
+			var usedAvailabilityZones []string
+			for _, replicationGroupCluster := range replicationGroupClusters {
+				usedAvailabilityZones = append(usedAvailabilityZones, aws.StringValue(replicationGroupCluster.PreferredAvailabilityZone))
+			}
+
+			// ensure the availability zones of the instance support the instance type.
+			instanceTypeSupported := true
+			for _, usedAvailabilityZone := range usedAvailabilityZones {
+				if !resources.Contains(supportedAvailabilityZones, usedAvailabilityZone) {
+					instanceTypeSupported = false
+					break
+				}
+			}
+
+			// the instance type is supported, go ahead with the modification.
+			if instanceTypeSupported {
+				modifyInput.CacheNodeType = elasticacheConfig.CacheNodeType
+				modifyInput.ApplyImmediately = aws.Bool(r.Spec.ApplyImmediately)
+				updateFound = true
+			} else {
+				// the instance type isn't supported, log and skip.
+				actionLogger.Infof("cache node type %s is not supported, skipping cache node type modification", *elasticacheConfig.CacheNodeType)
+			}
 		}
 	}
 
 	// check if the amount of time snapshots should be kept for requires an update.
-	if *elasticacheConfig.SnapshotRetentionLimit != *foundConfig.SnapshotRetentionLimit {
-		modifyInput.SnapshotRetentionLimit = elasticacheConfig.SnapshotRetentionLimit
-		updateFound = true
+	if foundConfig.SnapshotRetentionLimit != nil {
+		if *elasticacheConfig.SnapshotRetentionLimit != *foundConfig.SnapshotRetentionLimit {
+			modifyInput.SnapshotRetentionLimit = elasticacheConfig.SnapshotRetentionLimit
+			updateFound = true
+		}
 	}
 
 	// elasticache replication groups consist of a group of cache clusters. some information can only be retrieved from
