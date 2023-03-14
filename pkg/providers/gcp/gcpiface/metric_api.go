@@ -1,11 +1,12 @@
 package gcpiface
 
 import (
-	"cloud.google.com/go/monitoring/apiv3"
-	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"context"
 	"errors"
 	"fmt"
+
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/googleapis/gax-go/v2/apierror"
 	"github.com/sirupsen/logrus"

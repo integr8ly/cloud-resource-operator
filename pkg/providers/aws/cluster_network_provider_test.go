@@ -2648,7 +2648,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 		{
 			name: "test successful security group creation with Firewall and Private Link Route Tables",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
@@ -2658,7 +2658,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),
@@ -2750,7 +2750,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 		{
 			name: "test error on route table route creation error",
 			fields: fields{
-				Client: fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				RdsApi: &mockRdsClient{},
 				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
@@ -2760,7 +2760,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
 								vpc.Tags = []*ec2.Tag{
 									buildMockEc2Tag(func(e *ec2.Tag) {
-										e.Key = aws.String(tagDisplayName)
+										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
 									buildMockEc2Tag(func(e *ec2.Tag) {}),

@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"time"
 
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	configv1 "github.com/openshift/api/config/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
@@ -3032,7 +3032,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 		{
 			name: "test node size from create strategy is returned if size is not set in spec",
 			fields: fields{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					&corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      DefaultConfigMapName,
@@ -3043,7 +3043,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 						},
 					},
 					infra,
-				).Build(),
+				),
 				Logger: testLogger,
 			},
 			args: args{
@@ -3062,7 +3062,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 		{
 			name: "test node size from spec is returned when set in spec",
 			fields: fields{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					&corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      DefaultConfigMapName,
@@ -3073,7 +3073,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 						},
 					},
 					infra,
-				).Build(),
+				),
 				Logger: testLogger,
 			},
 			args: args{
@@ -3093,7 +3093,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 		{
 			name: "test node size from spec takes precedence even if node type is specified in strategy config map",
 			fields: fields{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
 					&corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      DefaultConfigMapName,
@@ -3104,7 +3104,7 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 						},
 					},
 					infra,
-				).Build(),
+				),
 				Logger: testLogger,
 			},
 			args: args{
