@@ -16,8 +16,9 @@ cloud.google.com/go/longrunning/autogen
 cloud.google.com/go/longrunning/autogen/longrunningpb
 # cloud.google.com/go/monitoring v1.12.0
 ## explicit; go 1.19
-cloud.google.com/go/monitoring/apiv3
+cloud.google.com/go/monitoring/apiv3/v2
 cloud.google.com/go/monitoring/apiv3/v2/monitoringpb
+cloud.google.com/go/monitoring/internal
 # cloud.google.com/go/redis v1.11.0
 ## explicit; go 1.19
 cloud.google.com/go/redis/apiv1
@@ -412,7 +413,6 @@ google.golang.org/genproto/googleapis/api/metric
 google.golang.org/genproto/googleapis/api/monitoredres
 google.golang.org/genproto/googleapis/cloud/extendedops
 google.golang.org/genproto/googleapis/longrunning
-google.golang.org/genproto/googleapis/monitoring/v3
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
