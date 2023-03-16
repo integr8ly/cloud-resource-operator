@@ -30,7 +30,7 @@ import (
 const (
 	postgresProviderName                          = "gcp-cloudsql"
 	ResourceIdentifierAnnotation                  = "resourceIdentifier"
-	defaultCredSecSuffix                          = "-gcp-sql-credentials"
+	defaultCredSecSuffix                          = "-gcp-sql-credentials" // #nosec G101 -- false positive (ref: https://securego.io/docs/rules/g101.html)
 	defaultGCPCLoudSQLDatabaseVersion             = "POSTGRES_13"
 	defaultGCPCloudSQLRegion                      = "us-central1"
 	defaultGCPPostgresUser                        = "postgres"
