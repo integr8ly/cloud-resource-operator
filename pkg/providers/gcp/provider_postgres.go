@@ -180,6 +180,9 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 		}
+		if foundInstance.DatabaseVersion != "" && pg.Status.Version != foundInstance.DatabaseVersion {
+			pg.Status.Version = foundInstance.DatabaseVersion
+		}
 	}
 
 	if foundInstance == nil {

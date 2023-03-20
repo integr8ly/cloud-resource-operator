@@ -136,6 +136,9 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 				return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 			}
 		}
+		if foundInstance.RedisVersion != "" && r.Status.Version != foundInstance.RedisVersion {
+			r.Status.Version = foundInstance.RedisVersion
+		}
 	}
 
 	if foundInstance == nil {
