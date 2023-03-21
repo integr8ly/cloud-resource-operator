@@ -32,7 +32,6 @@ const (
 	ResourceIdentifierAnnotation                  = "resourceIdentifier"
 	defaultCredSecSuffix                          = "-gcp-sql-credentials" // #nosec G101 -- false positive (ref: https://securego.io/docs/rules/g101.html)
 	defaultGCPCLoudSQLDatabaseVersion             = "POSTGRES_13"
-	defaultGCPCloudSQLRegion                      = "us-central1"
 	defaultGCPPostgresUser                        = "postgres"
 	defaultPostgresPasswordKey                    = "password"
 	defaultPostgresUserKey                        = "user"
@@ -201,6 +200,11 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(msg), nil
 	}
 
+	if foundInstance.State == "PENDING_CREATE" {
+		msg := fmt.Sprintf("creation of %s cloudSQL instance in progress", foundInstance.Name)
+		return nil, croType.StatusMessage(msg), nil
+	}
+
 	if maintenanceWindowEnabled {
 		logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
 		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(gcpInstanceConfig, foundInstance)
@@ -224,11 +228,6 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 			msg := "failed to set postgres maintenance window to false"
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
-	}
-
-	if foundInstance.State == "PENDING_CREATE" {
-		msg := fmt.Sprintf("creation of %s cloudSQL instance in progress", foundInstance.Name)
-		return nil, croType.StatusMessage(msg), nil
 	}
 
 	var host string
