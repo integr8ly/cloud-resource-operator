@@ -25,6 +25,11 @@ type SecretRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// Duration is a custom time duration that can support any combination of the following units, in descending order: d, h, m.
+// Examples: `1d`, `12h`, `12h30m`, `7d12h15m`
+// +kubebuilder:validation:Pattern:="^(0|(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?)$"
+type Duration string
+
 // +kubebuilder:object:generate=true
 type ResourceTypeSpec struct {
 	Type       string `json:"type"`
@@ -36,6 +41,12 @@ type ResourceTypeSpec struct {
 	SecretRef         *SecretRef `json:"secretRef"`
 	// Size allows defining the node size. It is only available to Redis CR. Blobstorage and Postgres CR's currently does nothing
 	Size string `json:"size,omitempty"`
+	// SnapshotFrequency is how frequent a new snapshot is to be taken.
+	// Does not apply to BlobStorage
+	SnapshotFrequency Duration `json:"snapshotFrequency,omitempty"`
+	// SnapshotRetention is the number of days each snapshot is to be retained.
+	// Does not apply to BlobStorage
+	SnapshotRetention Duration `json:"snapshotRetention,omitempty"`
 }
 
 type StatusPhase string
@@ -63,4 +74,5 @@ type ResourceTypeSnapshotStatus struct {
 	SnapshotID string        `json:"snapshotID,omitempty"`
 	Phase      StatusPhase   `json:"phase,omitempty"`
 	Message    StatusMessage `json:"message,omitempty"`
+	Strategy   string        `json:"strategy,omitempty"`
 }
