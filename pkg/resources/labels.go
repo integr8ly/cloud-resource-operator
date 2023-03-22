@@ -44,3 +44,39 @@ func BuildStatusMetricsLabels(r v1.ObjectMeta, clusterID, cacheName, providerNam
 	labels[LabelStatusPhaseKey] = string(phase)
 	return labels
 }
+
+// HasLabel returns true if the label is already set
+func HasLabel(object v1.Object, key string) bool {
+	labels := object.GetLabels()
+	_, ok := labels[key]
+	return ok
+}
+
+// HasLabelWithValue returns true if the label with corresponding value matches
+func HasLabelWithValue(object v1.Object, key, value string) bool {
+	labels := object.GetLabels()
+	return labels[key] == value
+}
+
+// GetLabel retrieves a label value
+func GetLabel(object v1.Object, key string) string {
+	labels := object.GetLabels()
+	return labels[key]
+}
+
+// AddLabel makes sure that the provided key/value are set as a label
+func AddLabel(object v1.Object, key, value string) {
+	labels := object.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[key] = value
+	object.SetLabels(labels)
+}
+
+// RemoveLabel makes sure that the provided label is removed
+func RemoveLabel(object v1.Object, key string) {
+	labels := object.GetLabels()
+	delete(labels, key)
+	object.SetLabels(labels)
+}

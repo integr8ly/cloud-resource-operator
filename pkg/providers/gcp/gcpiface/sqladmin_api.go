@@ -2,7 +2,6 @@ package gcpiface
 
 import (
 	"context"
-
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
@@ -14,6 +13,7 @@ type SQLAdminService interface {
 	CreateInstance(context.Context, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 	ModifyInstance(context.Context, string, string, *sqladmin.DatabaseInstance) (*sqladmin.Operation, error)
 	GetInstance(context.Context, string, string) (*sqladmin.DatabaseInstance, error)
+	ExportDatabase(ctx context.Context, project, instanceName string, req *sqladmin.InstancesExportRequest) (*sqladmin.Operation, error)
 }
 
 // MockSqlClient mock client
@@ -113,4 +113,9 @@ func (r *sqlClient) ModifyInstance(ctx context.Context, projectID string, instan
 func (r *sqlClient) GetInstance(ctx context.Context, projectID string, instanceName string) (*sqladmin.DatabaseInstance, error) {
 	r.logger.Infof("fetching gcp postgres instance %s", instanceName)
 	return r.sqlAdminService.Instances.Get(projectID, instanceName).Context(ctx).Do()
+}
+
+func (r *sqlClient) ExportDatabase(ctx context.Context, project, instanceName string, req *sqladmin.InstancesExportRequest) (*sqladmin.Operation, error) {
+	r.logger.Infof("exporting gcp postgres database from instance %s", instanceName)
+	return r.sqlAdminService.Instances.Export(project, instanceName, req).Context(ctx).Do()
 }
