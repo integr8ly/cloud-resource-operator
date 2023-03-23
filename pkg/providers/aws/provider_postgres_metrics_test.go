@@ -3,12 +3,14 @@ package aws
 import (
 	"context"
 	"errors"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
@@ -18,7 +20,6 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const (
@@ -27,17 +28,17 @@ const (
 )
 
 var testMetricLabels = map[string]string{
-	"clusterID":   "test",
-	"instanceID":  "testtesttest",
-	"namespace":   "test",
-	"productName": "test_product",
-	"resourceID":  "test",
-	"strategy":    "aws-rds",
+	resources.LabelClusterIDKey:   "test",
+	resources.LabelInstanceIDKey:  "testtesttest",
+	resources.LabelNamespaceKey:   "test",
+	resources.LabelProductNameKey: "test_product",
+	resources.LabelResourceIDKey:  "test",
+	resources.LabelStrategyKey:    "aws-rds",
 }
 
 func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) providers.CloudProviderMetricType {
 	mock := &providers.CloudProviderMetricType{
-		PromethuesMetricName: testMetricName,
+		PrometheusMetricName: testMetricName,
 		ProviderMetricName:   "test",
 		Statistic:            "test",
 	}
@@ -74,7 +75,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -112,7 +113,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test successful scrape of cloud watch metrics, with 1 not complete metric",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
@@ -153,7 +154,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		{
 			name: "test no metrics have been returned from cloudwatch scrape",
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),

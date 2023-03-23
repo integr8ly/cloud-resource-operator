@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
-	"github.com/spf13/afero"
 	"strings"
 	"testing"
 
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
+	"github.com/spf13/afero"
+
+	configv1 "github.com/openshift/api/config/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -91,7 +92,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to marshal strategy config", err)
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -137,7 +138,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "doesnotexist",
 			expectErr:   true,
-			client:      fake.NewFakeClientWithScheme(scheme),
+			client:      moqClient.NewSigsClientMoqWithScheme(scheme),
 		},
 		{
 			name:        "aws strategy for resource type is not defined",
@@ -146,7 +147,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "test",
 			expectErr:   true,
-			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
@@ -163,13 +164,13 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 			rt:          providers.BlobStorageResourceType,
 			tier:        "test",
 			expectErr:   true,
-			client: fake.NewFakeClientWithScheme(scheme, &v1.ConfigMap{
+			client: moqClient.NewSigsClientMoqWithScheme(scheme, &v1.ConfigMap{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      "test",
 					Namespace: "test",
 				},
 				Data: map[string]string{
-					"blobstorage": fmt.Sprintf("{\"test\":{\"region\":666}}"),
+					"blobstorage": "{\"test\":{\"region\":666}}",
 				},
 			}),
 		},
@@ -197,7 +198,7 @@ func TestConfigManager_ReadBlobStorageStrategy(t *testing.T) {
 func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
 	v1.AddToScheme(fakeScheme)
-	configv1.SchemeBuilder.AddToScheme(fakeScheme)
+	configv1.Install(fakeScheme)
 
 	fakeStrategy := &StrategyConfig{
 		Region: "strategy-region",
@@ -219,7 +220,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				strategy: fakeStrategy,
 			},
 			wantErr: true,
@@ -228,7 +229,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "strategy defines region",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 			},
 			want: fakeStrategy.Region,
@@ -237,7 +238,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "default used when strategy does not define region",
 			args: args{
 				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:   moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: &StrategyConfig{
 					Region: "",
 				},
@@ -248,7 +249,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			name: "failed to retrieve region from cluster, region is not defined",
 			args: args{
 				ctx: context.TODO(),
-				c: fake.NewFakeClientWithScheme(fakeScheme, &configv1.Infrastructure{
+				c: moqClient.NewSigsClientMoqWithScheme(fakeScheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
@@ -283,7 +284,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 
 func TestCreateSessionFromStrategy(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -308,7 +309,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "fail to get default region",
 			args: args{
 				ctx:    context.TODO(),
-				c:      fake.NewFakeClientWithScheme(fakeScheme),
+				c:      moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 				mockFs: func() {},
 			},
 			wantErr: true,
@@ -317,7 +318,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - local",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -330,7 +331,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with sts idp - in pod",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					RoleArn:       "ROLE_ARN",
@@ -352,7 +353,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			name: "create aws session with static idp",
 			args: args{
 				ctx:      context.TODO(),
-				c:        fake.NewFakeClientWithScheme(fakeScheme, fakeInfra),
+				c:        moqClient.NewSigsClientMoqWithScheme(fakeScheme, fakeInfra),
 				strategy: fakeStrategy,
 				cred: &Credentials{
 					AccessKeyID:     "ACCESS_KEY_ID",
@@ -400,7 +401,7 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 
 func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
+	err := configv1.Install(fakeScheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -416,7 +417,7 @@ func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 		{
 			name: "successfully create new default config map manager",
 			args: args{
-				c: fake.NewFakeClientWithScheme(fakeScheme),
+				c: moqClient.NewSigsClientMoqWithScheme(fakeScheme),
 			},
 			expectedName:      DefaultConfigMapName,
 			expectedNamespace: DefaultConfigMapNamespace,
@@ -431,177 +432,6 @@ func TestNewDefaultConfigMapConfigManager(t *testing.T) {
 			}
 			if cm.configMapNamespace != tt.expectedNamespace {
 				t.Fatalf("unexpected namespace, expected %s but got %s", tt.expectedNamespace, cm.configMapNamespace)
-			}
-		})
-	}
-}
-
-func TestBuildInfraName(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx     context.Context
-		c       client.Client
-		postfix string
-		n       int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return an id used for infra resources",
-			args: args{
-				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				postfix: defaultSecurityGroupPostfix,
-				n:       defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testsecuritygroup",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx:     context.TODO(),
-				c:       fake.NewFakeClientWithScheme(fakeScheme),
-				postfix: defaultSecurityGroupPostfix,
-				n:       defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildInfraName(tt.args.ctx, tt.args.c, tt.args.postfix, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.expected {
-				t.Fatalf("expected %s to equal %s", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildTimestampedInfraNameFromObjectCreation(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx context.Context
-		c   client.Client
-		om  controllerruntime.ObjectMeta
-		n   int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return a timestamped infra name from object creation",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testtesttest000101010000000000UTC",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildTimestampedInfraNameFromObjectCreation(tt.args.ctx, tt.args.c, tt.args.om, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.expected {
-				t.Fatalf("expected %s to equal %s", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestBuildTimestampedInfraNameFromObject(t *testing.T) {
-	fakeScheme := runtime.NewScheme()
-	err := configv1.AddToScheme(fakeScheme)
-	if err != nil {
-		t.Fatal("failed to build scheme", err)
-	}
-	type args struct {
-		ctx context.Context
-		c   client.Client
-		om  controllerruntime.ObjectMeta
-		n   int
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantErr  bool
-		expected string
-	}{
-		{
-			name: "successfully return a timestamped infra name from object",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme, newFakeInfrastructure()),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr:  false,
-			expected: "testtesttest1652356208",
-		},
-		{
-			name: "error getting cluster id",
-			args: args{
-				ctx: context.TODO(),
-				c:   fake.NewFakeClientWithScheme(fakeScheme),
-				om:  buildTestRedisSnapshotCR().ObjectMeta,
-				n:   defaultAwsIdentifierLength,
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildTimestampedInfraNameFromObject(tt.args.ctx, tt.args.c, tt.args.om, tt.args.n)
-			if tt.wantErr {
-				if err != nil {
-					return
-				}
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !strings.Contains(got, "testtesttest") {
-				t.Fatalf("expected %s to contain testtesttest", got)
 			}
 		})
 	}

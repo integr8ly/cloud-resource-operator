@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -57,7 +56,7 @@ type RedisSnapshotReconciler struct {
 var _ reconcile.Reconciler = &RedisSnapshotReconciler{}
 
 func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
@@ -181,13 +180,13 @@ func (r *RedisSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func buildRedisSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.RedisSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {
 	labels := map[string]string{}
-	labels["clusterID"] = clusterID
-	labels["resourceID"] = cr.Name
-	labels["namespace"] = cr.Namespace
-	labels["instanceID"] = snapshotName
-	labels["productName"] = cr.Labels["productName"]
-	labels["strategy"] = redisProviderName
-	labels["statusPhase"] = string(phase)
+	labels[resources.LabelClusterIDKey] = clusterID
+	labels[resources.LabelResourceIDKey] = cr.Name
+	labels[resources.LabelNamespaceKey] = cr.Namespace
+	labels[resources.LabelInstanceIDKey] = snapshotName
+	labels[resources.LabelProductNameKey] = cr.Labels["productName"]
+	labels[resources.LabelStrategyKey] = redisProviderName
+	labels[resources.LabelStatusPhaseKey] = string(phase)
 	return labels
 }
 

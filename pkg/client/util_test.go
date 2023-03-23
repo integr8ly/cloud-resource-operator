@@ -7,14 +7,12 @@ import (
 	"testing"
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
-
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/integr8ly/cloud-resource-operator/apis"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +23,7 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis.AddToScheme(scheme)
 	err = corev1.AddToScheme(scheme)
+	err = configv1.Install(scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +55,11 @@ func TestReconcileBlobStorage(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful creation",
+			name: "test successful creation (aws)",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "aws",
 				tier:           "production",
 				productName:    "test",
 				name:           "test",
@@ -70,7 +69,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				modifyFunc:     nil,
 			},
 			want: &v1alpha1.BlobStorage{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -79,7 +78,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -90,18 +89,52 @@ func TestReconcileBlobStorage(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function",
+			name: "test successful creation (gcp)",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc:     nil,
+			},
+			want: &v1alpha1.BlobStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (aws)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "aws",
 				tier:           "production",
 				name:           "test",
 				productName:    "test",
 				ns:             "test",
 				secretName:     "test",
 				secretNs:       "test",
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					cr.SetLabels(map[string]string{
 						"cro": "test",
 					})
@@ -109,7 +142,7 @@ func TestReconcileBlobStorage(t *testing.T) {
 				},
 			},
 			want: &v1alpha1.BlobStorage{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -118,7 +151,46 @@ func TestReconcileBlobStorage(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				name:           "test",
+				productName:    "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc: func(cr metav1.Object) error {
+					cr.SetLabels(map[string]string{
+						"cro": "test",
+					})
+					return nil
+				},
+			},
+			want: &v1alpha1.BlobStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"cro": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -132,15 +204,15 @@ func TestReconcileBlobStorage(t *testing.T) {
 			name: "test modification function error",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "openshift",
 				tier:           "development",
 				name:           "test",
 				productName:    "test",
 				ns:             "test",
 				secretName:     "test",
 				secretNs:       "test",
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					return errors.New("error executing function")
 				},
 			},
@@ -199,8 +271,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test successful creation on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "managed",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType:   "aws",
 				tier:             "production",
 				productName:      "test",
 				name:             "test",
@@ -211,7 +283,7 @@ func TestReconcilePostgres(t *testing.T) {
 				modifyFunc:       nil,
 			},
 			want: &v1alpha1.Postgres{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -220,7 +292,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -234,8 +306,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "managed",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType:   "aws",
 				productName:      "test",
 				tier:             "production",
 				name:             "test",
@@ -243,7 +315,7 @@ func TestReconcilePostgres(t *testing.T) {
 				secretName:       "test",
 				secretNs:         "test",
 				applyImmediately: true,
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					cr.SetLabels(map[string]string{
 						"productName": "test",
 					})
@@ -251,7 +323,7 @@ func TestReconcilePostgres(t *testing.T) {
 				},
 			},
 			want: &v1alpha1.Postgres{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -260,7 +332,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -275,8 +347,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function error on create",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme),
-				deploymentType:   "workshop",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType:   "openshift",
 				tier:             "development",
 				productName:      "test",
 				name:             "test",
@@ -284,7 +356,7 @@ func TestReconcilePostgres(t *testing.T) {
 				secretName:       "test",
 				secretNs:         "test",
 				applyImmediately: false,
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					return errors.New("error executing function")
 				},
 			},
@@ -295,8 +367,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test successful creation on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "managed",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme, upgradePostgres),
+				deploymentType:   "aws",
 				tier:             "production",
 				productName:      "test",
 				name:             "test",
@@ -307,11 +379,11 @@ func TestReconcilePostgres(t *testing.T) {
 				modifyFunc:       nil,
 			},
 			want: &v1alpha1.Postgres{
-				TypeMeta: v1.TypeMeta{
+				TypeMeta: metav1.TypeMeta{
 					Kind:       "Postgres",
 					APIVersion: "integreatly.org/v1alpha1",
 				},
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -320,7 +392,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -334,8 +406,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "managed",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme, upgradePostgres),
+				deploymentType:   "aws",
 				productName:      "test",
 				tier:             "production",
 				name:             "test",
@@ -343,7 +415,7 @@ func TestReconcilePostgres(t *testing.T) {
 				secretName:       "test",
 				secretNs:         "test",
 				applyImmediately: true,
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					cr.SetLabels(map[string]string{
 						"productName": "test",
 					})
@@ -351,11 +423,11 @@ func TestReconcilePostgres(t *testing.T) {
 				},
 			},
 			want: &v1alpha1.Postgres{
-				TypeMeta: v1.TypeMeta{
+				TypeMeta: metav1.TypeMeta{
 					Kind:       "Postgres",
 					APIVersion: "integreatly.org/v1alpha1",
 				},
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -364,7 +436,7 @@ func TestReconcilePostgres(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -379,8 +451,8 @@ func TestReconcilePostgres(t *testing.T) {
 			name: "test modification function error on upgrade",
 			args: args{
 				ctx:              context.TODO(),
-				client:           fake.NewFakeClientWithScheme(scheme, upgradePostgres),
-				deploymentType:   "workshop",
+				client:           moqClient.NewSigsClientMoqWithScheme(scheme, upgradePostgres),
+				deploymentType:   "openshift",
 				tier:             "development",
 				productName:      "test",
 				name:             "test",
@@ -388,7 +460,7 @@ func TestReconcilePostgres(t *testing.T) {
 				secretName:       "test",
 				secretNs:         "test",
 				applyImmediately: false,
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					return errors.New("error executing function")
 				},
 			},
@@ -438,11 +510,11 @@ func TestReconcileRedis(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test successful creation",
+			name: "test successful creation (aws)",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "managed",
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "aws",
 				tier:           "production",
 				productName:    "test",
 				name:           "test",
@@ -452,7 +524,7 @@ func TestReconcileRedis(t *testing.T) {
 				modifyFunc:     nil,
 			},
 			want: &v1alpha1.Redis{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -461,7 +533,7 @@ func TestReconcileRedis(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -472,11 +544,45 @@ func TestReconcileRedis(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test modification function",
+			name: "test successful creation (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc:     nil,
+			},
+			want: &v1alpha1.Redis{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"productName": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test modification function (aws)",
 			args: args{
 				ctx:               context.TODO(),
-				client:            fake.NewFakeClientWithScheme(scheme),
-				deploymentType:    "managed",
+				client:            moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType:    "aws",
 				tier:              "production",
 				productName:       "test",
 				name:              "test",
@@ -486,7 +592,7 @@ func TestReconcileRedis(t *testing.T) {
 				size:              "test",
 				applyImmediately:  true,
 				maintenanceWindow: true,
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					cr.SetLabels(map[string]string{
 						"cro": "test",
 					})
@@ -494,7 +600,7 @@ func TestReconcileRedis(t *testing.T) {
 				},
 			},
 			want: &v1alpha1.Redis{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
 					ResourceVersion: "1",
@@ -503,7 +609,7 @@ func TestReconcileRedis(t *testing.T) {
 					},
 				},
 				Spec: croType.ResourceTypeSpec{
-					Type: "managed",
+					Type: "aws",
 					Tier: "production",
 					SecretRef: &croType.SecretRef{
 						Name:      "test",
@@ -517,18 +623,57 @@ func TestReconcileRedis(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test modification function (gcp)",
+			args: args{
+				ctx:            context.TODO(),
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "gcp",
+				tier:           "production",
+				productName:    "test",
+				name:           "test",
+				ns:             "test",
+				secretName:     "test",
+				secretNs:       "test",
+				modifyFunc: func(cr metav1.Object) error {
+					cr.SetLabels(map[string]string{
+						"cro": "test",
+					})
+					return nil
+				},
+			},
+			want: &v1alpha1.Redis{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "test",
+					ResourceVersion: "1",
+					Labels: map[string]string{
+						"cro": "test",
+					},
+				},
+				Spec: croType.ResourceTypeSpec{
+					Type: "gcp",
+					Tier: "production",
+					SecretRef: &croType.SecretRef{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "test modification function error",
 			args: args{
 				ctx:            context.TODO(),
-				client:         fake.NewFakeClientWithScheme(scheme),
-				deploymentType: "workshop",
+				client:         moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType: "openshift",
 				tier:           "development",
 				productName:    "test",
 				name:           "test",
 				ns:             "test",
 				secretName:     "test",
 				secretNs:       "test",
-				modifyFunc: func(cr v1.Object) error {
+				modifyFunc: func(cr metav1.Object) error {
 					return errors.New("error executing function")
 				},
 			},

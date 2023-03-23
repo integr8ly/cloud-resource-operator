@@ -367,7 +367,7 @@ func getBasicTestRedis(ctx *TestingContext, namespace string) (*v1alpha1.Redis, 
 				Namespace: namespace,
 			},
 			Tier: "development",
-			Type: "workshop",
+			Type: "openshift",
 		},
 	}, namespace, nil
 }

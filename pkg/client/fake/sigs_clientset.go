@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
-	fakesigs "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	fake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 //go:generate moq -out sigs_client_moq.go . SigsClientInterface
@@ -20,7 +20,7 @@ type SigsClientInterface interface {
 }
 
 func NewSigsClientMoqWithScheme(clientScheme *runtime.Scheme, initObjs ...runtime.Object) *SigsClientInterfaceMock {
-	sigsClient := fakesigs.NewFakeClientWithScheme(clientScheme, initObjs...)
+	sigsClient := fake.NewClientBuilder().WithScheme(clientScheme).WithRuntimeObjects(initObjs...).Build()
 	return &SigsClientInterfaceMock{
 		GetSigsClientFunc: func() k8sclient.Client {
 			return sigsClient

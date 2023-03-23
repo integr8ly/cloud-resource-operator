@@ -19,7 +19,9 @@ package postgres
 import (
 	"context"
 	"fmt"
+
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 
@@ -38,7 +40,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -46,8 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 )
 
 var log = logf.Log.WithName("controller_postgres")
@@ -65,7 +64,7 @@ var _ reconcile.Reconciler = &PostgresReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*PostgresReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
@@ -85,7 +84,11 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.PostgresProvider{openshift.NewOpenShiftPostgresProvider(client, clientSet, logger), awsPostgresProvider}
+	providerList := []providers.PostgresProvider{
+		openshift.NewOpenShiftPostgresProvider(client, clientSet, logger),
+		awsPostgresProvider,
+		gcp.NewGCPPostgresProvider(client, logger),
+	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &PostgresReconciler{
 		Client:           client,
@@ -98,7 +101,7 @@ func New(mgr manager.Manager) (*PostgresReconciler, error) {
 
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.Postgres{}).
+		For(&v1alpha1.Postgres{}).
 		Watches(&source.Kind{Type: &v1alpha1.Postgres{}}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 			IsController: true,

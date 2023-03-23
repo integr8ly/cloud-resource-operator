@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"reflect"
+	"testing"
+
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"os"
-	"reflect"
-	"testing"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/sirupsen/logrus"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -74,9 +74,9 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
@@ -153,7 +153,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 						Value: aws.String("testtesttest000101010000000000UTC"),
 					},
 					{
-						Key:   aws.String(tagManagedKey),
+						Key:   aws.String(resources.TagManagedKey),
 						Value: aws.String("true"),
 					},
 				}
@@ -164,7 +164,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}
 				gotSnapshotInput := mock.calls.CreateSnapshot[0].In1
 				if !reflect.DeepEqual(gotSnapshotInput, wantSnapshotInput) {
-					return errors.New(fmt.Sprintf("wrong CreateSnapshotInput got = %+v, want = %+v", gotSnapshotInput, wantSnapshotInput))
+					return fmt.Errorf("wrong CreateSnapshotInput got = %+v, want = %+v", gotSnapshotInput, wantSnapshotInput)
 				}
 				return nil
 			},
@@ -195,7 +195,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -231,7 +231,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -251,7 +251,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -278,7 +278,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -313,7 +313,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				}),
 			},
 			fields: fields{
-				Client:            fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
 				Logger:            testLogger,
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -358,9 +358,9 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 
-	testTimestampedIdentifier, err := BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
+	testTimestampedIdentifier, err := resources.BuildTimestampedInfraNameFromObjectCreation(context.TODO(), fakeClient, buildTestRedisSnapshotCR().ObjectMeta, defaultAwsIdentifierLength)
 
 	if err != nil {
 		logrus.Fatal(err)
@@ -433,7 +433,7 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 				}
 				gotDeleteSnapshotInput := mock.calls.DeleteSnapshot[0].In1
 				if !reflect.DeepEqual(gotDeleteSnapshotInput, wantDeleteSnapshotInput) {
-					return errors.New(fmt.Sprintf("wrong DeleteSnapshotInput got = %+v, want = %+v", gotDeleteSnapshotInput, wantDeleteSnapshotInput))
+					return fmt.Errorf("wrong DeleteSnapshotInput got = %+v, want = %+v", gotDeleteSnapshotInput, wantDeleteSnapshotInput)
 				}
 				return nil
 			},
@@ -559,7 +559,7 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
+	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra())
 	testIdentifier := "test-identifier"
 	if err != nil {
 		logrus.Fatal(err)

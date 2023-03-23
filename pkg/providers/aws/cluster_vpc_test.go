@@ -2,16 +2,18 @@ package aws
 
 import (
 	"context"
+	"reflect"
+	"testing"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
-	"reflect"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 func Test_buildSubnetAddress(t *testing.T) {
@@ -110,7 +112,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 
 func Test_getDefaultSubnetTags(t *testing.T) {
 	scheme := runtime.NewScheme()
-	err := configv1.AddToScheme(scheme)
+	err := configv1.Install(scheme)
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
@@ -128,7 +130,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 			name: "failed to get cluster infrastructure",
 			args: args{
 				ctx:    context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme),
+				client: moqClient.NewSigsClientMoqWithScheme(scheme),
 			},
 			want:    nil,
 			wantErr: true,
@@ -137,7 +139,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 			name: "successfully retrieved user infra tags",
 			args: args{
 				ctx: context.TODO(),
-				client: fake.NewFakeClientWithScheme(scheme, &configv1.Infrastructure{
+				client: moqClient.NewSigsClientMoqWithScheme(scheme, &configv1.Infrastructure{
 					ObjectMeta: controllerruntime.ObjectMeta{
 						Name: "cluster",
 					},
@@ -168,12 +170,12 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 					Value: aws.String("test"),
 				},
 				{
-					Key:   aws.String(tagDisplayName),
+					Key:   aws.String(resources.TagDisplayName),
 					Value: aws.String(defaultSubnetNameTagValue),
 				},
 				{
-					Key:   aws.String(tagManagedKey),
-					Value: aws.String(tagManagedVal),
+					Key:   aws.String(resources.TagManagedKey),
+					Value: aws.String(resources.TagManagedVal),
 				},
 				{
 					Key:   aws.String("test-key"),

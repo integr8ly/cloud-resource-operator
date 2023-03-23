@@ -1,13 +1,28 @@
 # Cloud Resource Operator - Blob Storage
 
 ## Usage
-To seed a Kubernetes/Openshift cluster with an example Blob Storage resource:
+
+### OpenShift
 ```
 $ make cluster/prepare 
-$ make cluster/seed/blobstorage
+$ make cluster/seed/blobstorage PROVIDER=openshift
 ```
 
-### AWS Strategy
+### AWS
+```
+$ make cluster/prepare 
+$ make cluster/seed/blobstorage PROVIDER=aws
+```
+
+### GCP
+```
+$ make cluster/prepare 
+$ make cluster/seed/blobstorage PROVIDER=gcp
+```
+
+## Strategy
+
+### AWS
 A JSON object containing three keys:
  - `region`, which is the [AWS region code](https://docs.aws.amazon.com/general/latest/gr/rande.html#ses_region)
  - `createStrategy`, which is a JSON representation of the [`CreateBucketInput` struct](https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#CreateBucketInput)

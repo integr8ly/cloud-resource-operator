@@ -6,9 +6,13 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	configv1 "github.com/integr8ly/cloud-resource-operator/apis/config/v1"
+	"net/http"
+	"net/http/cookiejar"
+	"time"
+
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	_ "github.com/lib/pq"
+	configv1 "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"golang.org/x/net/publicsuffix"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,11 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"net/http"
-	"net/http/cookiejar"
-	dynclient "sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 )
 
 type TestingContext struct {
-	Client          dynclient.Client
+	Client          k8sclient.Client
 	KubeConfig      *rest.Config
 	KubeClient      kubernetes.Interface
 	ExtensionClient *clientset.Clientset
@@ -137,7 +137,7 @@ func NewTestingContext(kubeConfig *rest.Config) (*TestingContext, error) {
 		return nil, fmt.Errorf("failed to add integreatly scheme to runtime scheme: (%v)", err)
 	}
 
-	if err := configv1.AddToScheme(scheme.Scheme); err != nil {
+	if err := configv1.Install(scheme.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to add integreatly scheme to runtime scheme: (%v)", err)
 	}
 

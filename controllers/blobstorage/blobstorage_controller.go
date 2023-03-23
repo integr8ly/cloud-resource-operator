@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
+
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -34,7 +36,6 @@ import (
 	errorUtil "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,8 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 )
 
 var log = logf.Log.WithName("controller_blobstorage")
@@ -61,7 +60,7 @@ var _ reconcile.Reconciler = &BlobStorageReconciler{}
 
 // New returns a new reconcile.Reconciler
 func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
-	restConfig := controllerruntime.GetConfigOrDie()
+	restConfig := ctrl.GetConfigOrDie()
 	restConfig.Timeout = time.Second * 10
 	client, err := k8sclient.New(restConfig, k8sclient.Options{
 		Scheme: mgr.GetScheme(),
@@ -75,7 +74,11 @@ func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-	providerList := []providers.BlobStorageProvider{awsBlobStorageProvider, openshift.NewBlobStorageProvider(client, logger)}
+	providerList := []providers.BlobStorageProvider{
+		openshift.NewBlobStorageProvider(client, logger),
+		awsBlobStorageProvider,
+		gcp.NewGCPBlobStorageProvider(client),
+	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &BlobStorageReconciler{
 		Client:           client,
@@ -88,7 +91,7 @@ func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
 
 func (r *BlobStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.BlobStorage{}).
+		For(&v1alpha1.BlobStorage{}).
 		Watches(&source.Kind{Type: &v1alpha1.BlobStorage{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }

@@ -7,8 +7,7 @@ import (
 	"testing"
 	"time"
 
-	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
-
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -22,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -175,7 +173,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		{
 			name: "test successful creation",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 				PodCommander:  buildTestPodCommander(),
@@ -190,7 +188,7 @@ func TestOpenShiftPostgresProvider_CreatePostgres(t *testing.T) {
 		{
 			name: "test successful creation with deployment ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR(), buildTestCredsSecret()),
 				Logger:        testLogger,
 				ConfigManager: buildDefaultConfigManager(),
 				PodCommander:  buildTestPodCommander(),
@@ -247,7 +245,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "test successful delete",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresDeploymentReady(), buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: nil,
 			},
@@ -259,7 +257,7 @@ func TestOpenShiftPostgresProvider_DeletePostgres(t *testing.T) {
 		{
 			name: "test delete when deployment not ready",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresDeployment(), buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresDeployment(), buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: nil,
 			},
@@ -317,7 +315,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override pvc defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresPVC()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresPVC()),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(pvcSpec),
 			},
@@ -343,7 +341,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override secret defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(secretSpec),
 			},
@@ -365,7 +363,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override deployment defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(depSpec),
 			},
@@ -390,7 +388,7 @@ func TestOpenShiftPostgresProvider_overrideDefaults(t *testing.T) {
 		{
 			name: "test override service defaults",
 			fields: fields{
-				Client:        fake.NewFakeClientWithScheme(scheme, buildTestPostgresCR()),
+				Client:        moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR()),
 				Logger:        testLogger,
 				ConfigManager: buildTestConfigManager(serviceSpec),
 			},
@@ -447,7 +445,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: croType.ResourceTypeStatus{
-						Phase: types2.PhaseInProgress,
+						Phase: croType.PhaseInProgress,
 					},
 				},
 			},
@@ -458,7 +456,7 @@ func TestOpenShiftPostgresProvider_GetReconcileTime(t *testing.T) {
 			args: args{
 				p: &v1alpha1.Postgres{
 					Status: croType.ResourceTypeStatus{
-						Phase: types2.PhaseComplete,
+						Phase: croType.PhaseComplete,
 					},
 				},
 			},
