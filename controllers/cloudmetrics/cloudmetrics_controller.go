@@ -4,10 +4,11 @@
 package cloudmetrics
 
 import (
-	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"time"
+
+	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -408,10 +409,12 @@ func registerGaugeVectorMetrics(logger *logrus.Entry) {
 	for _, metric := range postgresGaugeMetrics {
 		logger.Infof("registering metric: %s ", metric.Name)
 		customMetrics.Registry.MustRegister(metric.GaugeVec)
+		resources.MetricVecs[metric.Name] = *metric.GaugeVec
 	}
 	for _, metric := range redisGaugeMetrics {
 		logger.Infof("registering metric: %s ", metric.Name)
 		customMetrics.Registry.MustRegister(metric.GaugeVec)
+		resources.MetricVecs[metric.Name] = *metric.GaugeVec
 	}
 }
 
