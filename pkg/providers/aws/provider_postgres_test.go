@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"reflect"
 	"strconv"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -2955,6 +2956,87 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			}
 			p.setPostgresDeletionTimestampMetric(context.TODO(), tt.args.cr)
+		})
+	}
+}
+
+func TestPostgresProvider_setPostgresMaxMemoryMetric(t *testing.T) {
+	testSizeInMiB := int64(1)
+
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+		TCPPinger         resources.ConnectionTester
+	}
+	type args struct {
+		response      *ec2.DescribeInstanceTypesOutput
+		genericLabels map[string]string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "test no nil pointer if response is nil",
+			args: args{
+				response: nil,
+			},
+		},
+		{
+			name: "test metric is not set if instance type less than 1",
+			args: args{
+				response: &ec2.DescribeInstanceTypesOutput{},
+			},
+		},
+		{
+			name: "test no nil pointer if MemoryInfo is nil",
+			args: args{
+				response: &ec2.DescribeInstanceTypesOutput{
+					InstanceTypes: []*ec2.InstanceTypeInfo{
+						{},
+					},
+				},
+			},
+		},
+		{
+			name: "test no nil pointer if SizeInMiB is nil",
+			args: args{
+				response: &ec2.DescribeInstanceTypesOutput{
+					InstanceTypes: []*ec2.InstanceTypeInfo{
+						{
+							MemoryInfo: &ec2.MemoryInfo{SizeInMiB: nil},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test metric is set",
+			args: args{
+				response: &ec2.DescribeInstanceTypesOutput{
+					InstanceTypes: []*ec2.InstanceTypeInfo{
+						{
+							MemoryInfo: &ec2.MemoryInfo{SizeInMiB: &testSizeInMiB},
+						},
+					},
+				},
+				genericLabels: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         tt.fields.TCPPinger,
+			}
+			p.setPostgresMaxMemoryMetric(tt.args.response, tt.args.genericLabels)
 		})
 	}
 }
