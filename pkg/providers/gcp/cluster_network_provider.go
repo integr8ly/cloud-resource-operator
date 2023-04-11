@@ -124,42 +124,11 @@ func (n *NetworkProvider) CreateNetworkIpRange(ctx context.Context, cidrRange *n
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to create ip address range")
 		}
-		if address, err = n.waitForAddress(ctx, ipRangeName); err != nil {
-			return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
-		}
+
+		return nil, errorUtil.New("ip address range is pending creation")
 	}
+	n.Logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
 	return address, nil
-}
-
-func (n *NetworkProvider) waitForAddress(ctx context.Context, ipRangeName string) (*computepb.Address, error) {
-	addressChan := make(chan *computepb.Address, 1)
-	errorChan := make(chan error, 1)
-	defer close(addressChan)
-	defer close(errorChan)
-	go func() {
-		for {
-			address, err := n.getAddressRange(ctx, ipRangeName)
-			if err != nil {
-				errorChan <- err
-				break
-			}
-			if address != nil {
-				addressChan <- address
-				break
-			}
-			time.Sleep(time.Second * 3)
-		}
-
-	}()
-	select {
-	case address := <-addressChan:
-		n.Logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
-		return address, nil
-	case err := <-errorChan:
-		return nil, err
-	case <-time.After(defaultTimeout):
-		return nil, fmt.Errorf("waitForAddress() timed out")
-	}
 }
 
 // CreateNetworkService Creates the network service connection and will return the service if it has been created successfully
@@ -194,43 +163,11 @@ func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenet
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to create service connection")
 			}
-			if service, err = n.waitForConnection(clusterVpc); err != nil {
-				return nil, errorUtil.Wrap(err, "failed to retrieve service connection")
-			}
+			return nil, errorUtil.New("service connection is pending creation")
 		}
 	}
+	n.Logger.Infof("created network service connection %s", service)
 	return service, nil
-}
-
-func (n *NetworkProvider) waitForConnection(clusterVpc *computepb.Network) (*servicenetworking.Connection, error) {
-	connectionChan := make(chan *servicenetworking.Connection, 1)
-	errorChan := make(chan error, 1)
-	defer close(connectionChan)
-	defer close(errorChan)
-	go func() {
-		for {
-			connection, err := n.getServiceConnection(clusterVpc)
-			if err != nil {
-				errorChan <- err
-				break
-			}
-			if connection != nil {
-				connectionChan <- connection
-				break
-			}
-			time.Sleep(time.Second * 3)
-		}
-
-	}()
-	select {
-	case connection := <-connectionChan:
-		n.Logger.Infof("created network service connection %s", connection.Service)
-		return connection, nil
-	case err := <-errorChan:
-		return nil, err
-	case <-time.After(defaultTimeout):
-		return nil, fmt.Errorf("waitForConnection() timed out")
-	}
 }
 
 // DeleteNetworkPeering Removes the peering connection from the cluster vpc
