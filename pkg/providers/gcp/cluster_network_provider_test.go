@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/integr8ly/cloud-resource-operator/apis"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
@@ -248,6 +249,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 		args    args
 		want    *computepb.Address
 		wantErr bool
+		wantMsg croType.StatusMessage
 	}{
 		{
 			name: "create ip range created",
@@ -333,7 +335,16 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				},
 			},
 			want:    nil,
+			wantMsg: croType.StatusNetworkIPRangePendingCreation,
+		},
+		{
+			name: "error building ipRangeName",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+			},
+			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "googleapi error retrieving ip address range",
@@ -349,6 +360,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "unknown error retrieving ip address range",
@@ -362,6 +374,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error no cluster vpc present",
@@ -375,6 +388,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error retrieving cluster subnets",
@@ -399,6 +413,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error overlapping cidr range",
@@ -422,6 +437,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error invalid cidr range /23",
@@ -445,6 +461,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error creating ip address range",
@@ -472,6 +489,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error waiting for ip address range creation",
@@ -489,7 +507,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 					}
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFnTwo = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+					addressClient.GetFn = func(request *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return nil, fmt.Errorf("generic error")
 					}
 				}),
@@ -499,6 +517,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "googleapi error retrieving ip address range - post creation",
@@ -516,7 +535,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 					}
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return nil, &googleapi.Error{
 							Code: http.StatusBadGateway,
 						}
@@ -528,6 +547,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "unknown error retrieving ip address range - post creation",
@@ -545,7 +565,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 					}
 				}),
 				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
-					addressClient.GetFnTwo = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+					addressClient.GetFn = func(*computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
 						return nil, errors.New("failed to get address")
 					}
 				}),
@@ -555,6 +575,7 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 	}
 	for _, tt := range tests {
@@ -567,10 +588,13 @@ func TestNetworkProvider_CreateNetworkIpRange(t *testing.T) {
 				AddressApi: tt.fields.AddressApi,
 				ProjectID:  tt.fields.ProjectID,
 			}
-			got, err := n.CreateNetworkIpRange(tt.args.ctx, tt.args.ipRangeCidr)
+			got, msg, err := n.CreateNetworkIpRange(tt.args.ctx, tt.args.ipRangeCidr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateNetworkIpRange() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if !reflect.DeepEqual(msg, tt.wantMsg) {
+				t.Errorf("CreateNetworkIpRange() msg = %v, want %v", msg, tt.wantMsg)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CreateNetworkIpRange() got = %v, want %v", got, tt.want)
@@ -600,9 +624,27 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 		args    args
 		want    *servicenetworking.Connection
 		wantErr bool
+		wantMsg croType.StatusMessage
 	}{
 		{
 			name: "create service network created",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsListFn = func(clusterVpc *computepb.Network, projectID, parent string) (*servicenetworking.ListConnectionsResponse, error) {
+						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
+					}
+				}),
+				ProjectID: gcpTestProjectId,
+			},
+			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI)),
+			wantErr: false,
+		},
+		{
+			name: "create service network creation pending",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
@@ -613,17 +655,11 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
 					}
 				}),
-				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
-					servicesClient.ConnectionsListFn = func(clusterVpc *computepb.Network, projectID, parent string) (*servicenetworking.ListConnectionsResponse, error) {
-						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
-					}
-					servicesClient.ConnectionsListFnTwo = func(clusterVpc *computepb.Network, projectID, parent string) (*servicenetworking.ListConnectionsResponse, error) {
-						return buildValidListConnectionsResponse(resources.SafeStringDereference(clusterVpc.Name), projectID, parent), nil
-					}
-				}),
-				ProjectID: gcpTestProjectId,
+				ServicesApi: gcpiface.GetMockServicesClient(nil),
+				ProjectID:   gcpTestProjectId,
 			},
-			want:    buildValidConnection(gcpTestNetworkName, gcpTestProjectId, fmt.Sprintf(defaultServicesFormat, defaultServiceConnectionURI)),
+			want:    nil,
+			wantMsg: croType.StatusNetworkServiceConnectionPendingCreation,
 			wantErr: false,
 		},
 		{
@@ -652,6 +688,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "error retrieving service connections",
@@ -668,6 +705,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "googleapi error retrieving ip address range",
@@ -687,6 +725,7 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
 			name: "unknown error retrieving ip address range",
@@ -704,9 +743,10 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 		{
-			name: "error ip address range does not exist",
+			name: "ip address range does not exist in progress",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
@@ -716,10 +756,11 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
 			},
 			want:    nil,
-			wantErr: true,
+			wantErr: false,
+			wantMsg: croType.StatusNetworkIPRangeNotExistOrPendingCreation,
 		},
 		{
-			name: "error ip address range creation in progress",
+			name: "ip address range creation in progress",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
@@ -733,10 +774,11 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				ServicesApi: gcpiface.GetMockServicesClient(nil),
 			},
 			want:    nil,
-			wantErr: true,
+			wantErr: false,
+			wantMsg: croType.StatusNetworkIPRangeNotExistOrPendingCreation,
 		},
 		{
-			name: "error retrieving service connections - post creation",
+			name: "error retrieving service connections",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
 				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
@@ -748,13 +790,36 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 					}
 				}),
 				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
-					servicesClient.ConnectionsListFnTwo = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
+					servicesClient.ConnectionsListFn = func(*computepb.Network, string, string) (*servicenetworking.ListConnectionsResponse, error) {
 						return nil, errors.New("failed to list services")
 					}
 				}),
 			},
 			want:    nil,
 			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
+		},
+		{
+			name: "error creating service connections",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+				NetworkApi: gcpiface.GetMockNetworksClient(func(networksClient *gcpiface.MockNetworksClient) {
+					networksClient.ListFn = buildValidGcpListNetworks
+				}),
+				AddressApi: gcpiface.GetMockAddressClient(func(addressClient *gcpiface.MockAddressClient) {
+					addressClient.GetFn = func(req *computepb.GetGlobalAddressRequest) (*computepb.Address, error) {
+						return buildValidGcpAddressRange(gcpTestIpRangeName), nil
+					}
+				}),
+				ServicesApi: gcpiface.GetMockServicesClient(func(servicesClient *gcpiface.MockServicesClient) {
+					servicesClient.ConnectionsCreateFn = func(s string, connection *servicenetworking.Connection) (*servicenetworking.Operation, error) {
+						return nil, errors.New("failed to list services")
+					}
+				}),
+			},
+			want:    nil,
+			wantErr: true,
+			wantMsg: croType.StatusNetworkCreateError,
 		},
 	}
 	for _, tt := range tests {
@@ -767,10 +832,13 @@ func TestNetworkProvider_CreateNetworkService(t *testing.T) {
 				ServicesApi: tt.fields.ServicesApi,
 				ProjectID:   tt.fields.ProjectID,
 			}
-			got, err := n.CreateNetworkService(tt.args.ctx)
+			got, msg, err := n.CreateNetworkService(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateNetworkService() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if !reflect.DeepEqual(msg, tt.wantMsg) {
+				t.Errorf("CreateNetworkService() msg = %v, want %v", msg, tt.wantMsg)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CreateNetworkService() got = %v, want %v", got, tt.want)

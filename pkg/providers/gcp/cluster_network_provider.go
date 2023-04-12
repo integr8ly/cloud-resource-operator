@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
+	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -36,8 +37,8 @@ const (
 
 //go:generate moq -out cluster_network_provider_moq.go . NetworkManager
 type NetworkManager interface {
-	CreateNetworkIpRange(context.Context, *net.IPNet) (*computepb.Address, error)
-	CreateNetworkService(context.Context) (*servicenetworking.Connection, error)
+	CreateNetworkIpRange(context.Context, *net.IPNet) (*computepb.Address, croType.StatusMessage, error)
+	CreateNetworkService(context.Context) (*servicenetworking.Connection, croType.StatusMessage, error)
 	DeleteNetworkPeering(context.Context) error
 	DeleteNetworkService(context.Context) error
 	DeleteNetworkIpRange(context.Context) error
@@ -96,78 +97,78 @@ func NewNetworkManager(ctx context.Context, projectID string, opt option.ClientO
 	}, nil
 }
 
-func (n *NetworkProvider) CreateNetworkIpRange(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
+func (n *NetworkProvider) CreateNetworkIpRange(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, croType.StatusMessage, error) {
 	// build ip address range name
 	ipRangeName, err := resources.BuildInfraName(ctx, n.Client, defaultIpRangePostfix, defaultGcpIdentifierLength)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to build ip address range infra name")
+		return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to build ip address range infra name")
 	}
 	address, err := n.getAddressRange(ctx, ipRangeName)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
+		return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to retrieve ip address range")
 	}
 	// if it does not exist, create it
 	if address == nil {
 		clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to get cluster vpc")
 		}
 		subnets, err := n.getClusterSubnets(ctx, clusterVpc)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to get cluster subnetworks")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to get cluster subnetworks")
 		}
 		err = validateCidrBlock(cidrRange, subnets)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "ip range validation failure")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "ip range validation failure")
 		}
 		err = n.createAddressRange(ctx, clusterVpc, ipRangeName, cidrRange)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to create ip address range")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to create ip address range")
 		}
 
-		return nil, errorUtil.New("ip address range is pending creation")
+		return nil, croType.StatusNetworkIPRangePendingCreation, nil
 	}
 	n.Logger.Infof("created ip address range %s: %s/%d", address.GetName(), address.GetAddress(), address.GetPrefixLength())
-	return address, nil
+	return address, "", nil
 }
 
 // CreateNetworkService Creates the network service connection and will return the service if it has been created successfully
 // This automatically creates a peering connection to the clusterVpc named after the service connection
-func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenetworking.Connection, error) {
+func (n *NetworkProvider) CreateNetworkService(ctx context.Context) (*servicenetworking.Connection, croType.StatusMessage, error) {
 	clusterVpc, err := getClusterVpc(ctx, n.Client, n.NetworkApi, n.ProjectID, n.Logger)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
+		return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
 	service, err := n.getServiceConnection(clusterVpc)
 	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to retrieve service connection")
+		return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to retrieve service connection")
 	}
 	// if it does not exist, create it
 	if service == nil {
 		// build ip address range name
 		ipRange, err := resources.BuildInfraName(ctx, n.Client, defaultIpRangePostfix, defaultGcpIdentifierLength)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to build ip address range infra name")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to build ip address range infra name")
 		}
 		address, err := n.getAddressRange(ctx, ipRange)
 		if err != nil {
-			return nil, errorUtil.Wrap(err, "failed to retrieve ip address range")
+			return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to retrieve ip address range")
 		}
 		// if the ip range is present, and is ready for use
 		// possible states for address are RESERVING, RESERVED, IN_USE
 		if address == nil || address.GetStatus() == computepb.Address_RESERVING.String() {
-			return nil, errors.New("ip address range does not exist or is pending creation")
+			return nil, croType.StatusNetworkIPRangeNotExistOrPendingCreation, nil
 		}
 		if address != nil && address.GetStatus() == computepb.Address_RESERVED.String() {
 			err = n.createServiceConnection(clusterVpc, ipRange)
 			if err != nil {
-				return nil, errorUtil.Wrap(err, "failed to create service connection")
+				return nil, croType.StatusNetworkCreateError, errorUtil.Wrap(err, "failed to create service connection")
 			}
-			return nil, errorUtil.New("service connection is pending creation")
+			return nil, croType.StatusNetworkServiceConnectionPendingCreation, nil
 		}
 	}
 	n.Logger.Infof("created network service connection %s", service)
-	return service, nil
+	return service, "", nil
 }
 
 // DeleteNetworkPeering Removes the peering connection from the cluster vpc

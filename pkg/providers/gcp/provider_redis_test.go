@@ -1044,11 +1044,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1112,14 +1112,14 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return nil, fmt.Errorf("generic error")
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return nil, types.StatusNetworkCreateError, fmt.Errorf("generic error")
 					},
 				},
 				r: &v1alpha1.Redis{},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to create network service",
+			statusMessage: types.StatusNetworkCreateError,
 			wantErr:       true,
 		},
 		{
@@ -1132,17 +1132,17 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return nil, fmt.Errorf("generic error")
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return nil, types.StatusNetworkCreateError, fmt.Errorf("generic error")
 					},
 				},
 				r: &v1alpha1.Redis{},
 			},
 			redisCluster:  nil,
-			statusMessage: "failed to create network service",
+			statusMessage: types.StatusNetworkCreateError,
 			wantErr:       true,
 		},
 		{
@@ -1155,11 +1155,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				strategyConfig: &StrategyConfig{
@@ -1183,11 +1183,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
@@ -1218,11 +1218,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
@@ -1262,11 +1262,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
@@ -1306,11 +1306,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
@@ -1343,11 +1343,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 							Mask: net.CIDRMask(defaultIpRangeCIDRMask, defaultIpv4Length),
 						}, nil
 					},
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 				},
 				redisClient: gcpiface.GetMockRedisClient(func(redisClient *gcpiface.MockRedisClient) {
@@ -1381,11 +1381,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1434,11 +1434,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1487,11 +1487,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1546,11 +1546,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1612,11 +1612,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1669,11 +1669,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{
@@ -1739,11 +1739,11 @@ func TestRedisProvider_createRedisInstance(t *testing.T) {
 			},
 			args: args{
 				networkManager: &NetworkManagerMock{
-					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, error) {
-						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), nil
+					CreateNetworkIpRangeFunc: func(ctx context.Context, cidrRange *net.IPNet) (*computepb.Address, types.StatusMessage, error) {
+						return buildTestComputeAddress(map[string]string{"status": computepb.Address_RESERVED.String()}), "", nil
 					},
-					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, error) {
-						return &servicenetworking.Connection{}, nil
+					CreateNetworkServiceFunc: func(ctx context.Context) (*servicenetworking.Connection, types.StatusMessage, error) {
+						return &servicenetworking.Connection{}, "", nil
 					},
 					ReconcileNetworkProviderConfigFunc: func(ctx context.Context, configManager ConfigManager, tier string) (*net.IPNet, error) {
 						return &net.IPNet{

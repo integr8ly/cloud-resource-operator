@@ -106,15 +106,13 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
-	if err != nil {
-		statusMessage := "failed to create network service"
-		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+	address, msg, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
+	if err != nil || msg != "" {
+		return nil, msg, err
 	}
-	_, err = networkManager.CreateNetworkService(ctx)
-	if err != nil {
-		statusMessage := "failed to create network service"
-		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+	_, msg, err = networkManager.CreateNetworkService(ctx)
+	if err != nil || msg != "" {
+		return nil, msg, err
 	}
 	createInstanceRequest, err := p.buildCreateInstanceRequest(ctx, r, strategyConfig, address)
 	if err != nil {
