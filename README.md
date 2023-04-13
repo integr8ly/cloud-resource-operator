@@ -9,8 +9,6 @@ This operator depends on the [Cloud Credential Operator](https://github.com/open
 creating certain resources such as Amazon AWS Credentials. If using the AWS provider, ensure the Cloud Credential
 Operator is running.
 
-***Note: This operator is in the very early stages of development. There will be bugs and regular breaking changes***
-
 ## Supported Cloud Resources
 | Cloud Resource 	| Openshift 	| AWS 	|
 |:--------------:	|:---------:	|:---------:	|
