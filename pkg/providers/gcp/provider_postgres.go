@@ -127,15 +127,13 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		errMsg := "failed to reconcile network provider config"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	address, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
-	if err != nil {
-		msg := "failed to create network service"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	address, msg, err := networkManager.CreateNetworkIpRange(ctx, ipRangeCidr)
+	if err != nil || msg != "" {
+		return nil, msg, err
 	}
-	_, err = networkManager.CreateNetworkService(ctx)
-	if err != nil {
-		msg := "failed to create network service"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	_, msg, err = networkManager.CreateNetworkService(ctx)
+	if err != nil || msg != "" {
+		return nil, msg, err
 	}
 
 	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, strategyConfig, address, maintenanceWindowEnabled)

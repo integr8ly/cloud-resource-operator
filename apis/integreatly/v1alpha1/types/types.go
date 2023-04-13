@@ -5,15 +5,19 @@ import (
 )
 
 var (
-	PhaseInProgress                StatusPhase   = "in progress"
-	PhaseDeleteInProgress          StatusPhase   = "deletion in progress"
-	PhaseComplete                  StatusPhase   = "complete"
-	PhasePaused                    StatusPhase   = "paused"
-	PhaseFailed                    StatusPhase   = "failed"
-	StatusEmpty                    StatusMessage = ""
-	StatusUnsupportedType          StatusMessage = "unsupported deployment type"
-	StatusDeploymentConfigNotFound StatusMessage = "deployment configuration not found"
-	StatusSkipCreate               StatusMessage = "skipping create or update for maintenance"
+	PhaseInProgress                               StatusPhase   = "in progress"
+	PhaseDeleteInProgress                         StatusPhase   = "deletion in progress"
+	PhaseComplete                                 StatusPhase   = "complete"
+	PhasePaused                                   StatusPhase   = "paused"
+	PhaseFailed                                   StatusPhase   = "failed"
+	StatusEmpty                                   StatusMessage = ""
+	StatusUnsupportedType                         StatusMessage = "unsupported deployment type"
+	StatusDeploymentConfigNotFound                StatusMessage = "deployment configuration not found"
+	StatusSkipCreate                              StatusMessage = "skipping create or update for maintenance"
+	StatusNetworkCreateError                      StatusMessage = "failed to create network service"
+	StatusNetworkIPRangePendingCreation           StatusMessage = "ip address range is pending creation"
+	StatusNetworkIPRangeNotExistOrPendingCreation StatusMessage = "ip address range does not exist or is pending creation"
+	StatusNetworkServiceConnectionPendingCreation StatusMessage = "service connection is pending creation"
 )
 
 type SecretRef struct {
