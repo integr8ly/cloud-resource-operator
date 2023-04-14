@@ -160,35 +160,22 @@ func (p *RedisProvider) createRedisInstance(ctx context.Context, networkManager 
 		statusMessage := fmt.Sprintf("gcp redis instance %s is not ready yet, current state is %s", createInstanceRequest.Instance.Name, foundInstance.State.String())
 		return nil, croType.StatusMessage(statusMessage), nil
 	}
-	maintenanceWindowEnabled, err := resources.VerifyRedisMaintenanceWindow(ctx, p.Client, r.Namespace, r.Name)
-	if err != nil {
-		statusMessage := "failed to verify if redis updates are allowed"
-		return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
-	}
-	if maintenanceWindowEnabled {
-		if updateInstanceRequest := p.buildUpdateInstanceRequest(createInstanceRequest.Instance, foundInstance); updateInstanceRequest != nil {
-			_, err = redisClient.UpdateInstance(ctx, updateInstanceRequest)
-			if err != nil {
-				statusMessage := fmt.Sprintf("failed to update gcp redis instance %s", createInstanceRequest.Instance.Name)
-				return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
-			}
-		}
-		if upgradeInstanceRequest := p.buildUpgradeInstanceRequest(createInstanceRequest.Instance, foundInstance); upgradeInstanceRequest != nil {
-			_, err = redisClient.UpgradeInstance(ctx, upgradeInstanceRequest)
-			if err != nil {
-				statusMessage := fmt.Sprintf("failed to upgrade gcp redis instance %s", createInstanceRequest.Instance.Name)
-				return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
-			}
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, p.Client, r, func() error {
-			r.Spec.MaintenanceWindow = false
-			return nil
-		})
+
+	if updateInstanceRequest := p.buildUpdateInstanceRequest(createInstanceRequest.Instance, foundInstance); updateInstanceRequest != nil {
+		_, err = redisClient.UpdateInstance(ctx, updateInstanceRequest)
 		if err != nil {
-			statusMessage := "failed to set redis maintenance window to false"
+			statusMessage := fmt.Sprintf("failed to update gcp redis instance %s", createInstanceRequest.Instance.Name)
 			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
 		}
 	}
+	if upgradeInstanceRequest := p.buildUpgradeInstanceRequest(createInstanceRequest.Instance, foundInstance); upgradeInstanceRequest != nil {
+		_, err = redisClient.UpgradeInstance(ctx, upgradeInstanceRequest)
+		if err != nil {
+			statusMessage := fmt.Sprintf("failed to upgrade gcp redis instance %s", createInstanceRequest.Instance.Name)
+			return nil, croType.StatusMessage(statusMessage), errorUtil.Wrap(err, statusMessage)
+		}
+	}
+
 	rdd := &providers.RedisDeploymentDetails{
 		URI:  foundInstance.Host,
 		Port: int64(foundInstance.Port),
