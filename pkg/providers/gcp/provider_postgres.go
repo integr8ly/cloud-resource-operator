@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,12 +105,6 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, croType.StatusMessage(errMsg), fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	maintenanceWindowEnabled, err := resources.VerifyPostgresMaintenanceWindow(ctx, p.Client, pg.Namespace, pg.Name)
-	if err != nil {
-		errMsg := "failed to verify if postgres updates are allowed"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-
 	sqlClient, err := gcpiface.NewSQLAdminService(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), p.Logger)
 	if err != nil {
 		errMsg := "could not initialise new SQL Admin Service"
@@ -136,10 +131,10 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, msg, err
 	}
 
-	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, strategyConfig, address, maintenanceWindowEnabled)
+	return p.reconcileCloudSQLInstance(ctx, pg, sqlClient, strategyConfig, address)
 }
 
-func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, strategyConfig *StrategyConfig, address *computepb.Address, maintenanceWindowEnabled bool) (*providers.PostgresInstance, croType.StatusMessage, error) {
+func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1alpha1.Postgres, sqladminService gcpiface.SQLAdminService, strategyConfig *StrategyConfig, address *computepb.Address) (*providers.PostgresInstance, croType.StatusMessage, error) {
 	logger := p.Logger.WithField("action", "reconcileCloudSQLInstance")
 	logger.Infof("reconciling cloudSQL instance")
 
@@ -203,27 +198,18 @@ func (p *PostgresProvider) reconcileCloudSQLInstance(ctx context.Context, pg *v1
 		return nil, croType.StatusMessage(msg), nil
 	}
 
-	if maintenanceWindowEnabled {
-		logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
-		modifiedInstance, err := p.buildCloudSQLUpdateStrategy(gcpInstanceConfig, foundInstance)
-		if err != nil {
-			msg := "error building update config for cloudsql instance"
-			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
-		if modifiedInstance != nil {
-			logger.Infof("modifying cloudSQL instance: %s", foundInstance.Name)
-			_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, modifiedInstance)
-			if err != nil && !resources.IsConflictError(err) {
-				msg := fmt.Sprintf("failed to modify cloudsql instance: %s", foundInstance.Name)
-				return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-			}
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, p.Client, pg, func() error {
-			pg.Spec.MaintenanceWindow = false
-			return nil
-		})
-		if err != nil {
-			msg := "failed to set postgres maintenance window to false"
+	logger.Infof("building cloudSQL update config for: %s", foundInstance.Name)
+	modifiedInstance, err := p.buildCloudSQLUpdateStrategy(gcpInstanceConfig, foundInstance)
+	if err != nil {
+		msg := "error building update config for cloudsql instance"
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+	}
+
+	if modifiedInstance != nil {
+		logger.Infof("modifying cloudSQL instance: %s", foundInstance.Name)
+		_, err := sqladminService.ModifyInstance(ctx, strategyConfig.ProjectID, foundInstance.Name, modifiedInstance)
+		if err != nil && !resources.IsConflictError(err) {
+			msg := fmt.Sprintf("failed to modify cloudsql instance: %s", foundInstance.Name)
 			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
@@ -563,6 +549,12 @@ func (p *PostgresProvider) buildCloudSQLUpdateStrategy(cloudSQLConfig *gcpiface.
 		}
 		if cloudSQLConfig.Settings.DataDiskSizeGb != foundInstance.Settings.DataDiskSizeGb {
 			modifiedInstance.Settings.DataDiskSizeGb = cloudSQLConfig.Settings.DataDiskSizeGb
+			updateFound = true
+		}
+
+		userLabelsMatch := reflect.DeepEqual(cloudSQLConfig.Settings.UserLabels, foundInstance.Settings.UserLabels)
+		if !userLabelsMatch {
+			modifiedInstance.Settings.UserLabels = cloudSQLConfig.Settings.UserLabels
 			updateFound = true
 		}
 	}

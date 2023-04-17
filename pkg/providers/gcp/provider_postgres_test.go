@@ -1065,11 +1065,10 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		p                 *v1alpha1.Postgres
-		sqladminService   gcpiface.SQLAdminService
-		strategyConfig    *StrategyConfig
-		address           *computepb.Address
-		maintenanceWindow bool
+		p               *v1alpha1.Postgres
+		sqladminService gcpiface.SQLAdminService
+		strategyConfig  *StrategyConfig
+		address         *computepb.Address
 	}
 	tests := []struct {
 		name    string
@@ -1097,8 +1096,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      gcpTestProjectId,
 					CreateStrategy: json.RawMessage(`{"instance":{"name":"gcptestclustertestNsgcpcloudsql","settings":{"backupConfiguration":{"backupRetentionSettings":{}}}}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "cannot retrieve sql instance from gcp",
 			wantErr: true,
@@ -1132,8 +1130,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"backupConfiguration":{"backupRetentionSettings":{}}}}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "started cloudSQL provision",
 			wantErr: false,
@@ -1167,8 +1164,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "started cloudSQL provision",
 			wantErr: false,
@@ -1202,8 +1198,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"settings":{}}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "started cloudSQL provision",
 			wantErr: false,
@@ -1242,8 +1237,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"name":"gcptestclustertestNsgcpcloudsql"}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "started cloudSQL provision",
 			wantErr: false,
@@ -1279,8 +1273,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"name":"gcptestclustertestNsgcpcloudsql"}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "creation of " + gcpTestPostgresInstanceName + " cloudSQL instance in progress",
 			wantErr: false,
@@ -1312,8 +1305,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"name":"gcptestclustertestNsgcpcloudsql"}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "failed to create cloudSQL instance",
 			wantErr: true,
@@ -1358,8 +1350,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "failed to add annotation",
 			wantErr: true,
@@ -1429,8 +1420,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: false,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "failed to add annotation to postgres cr",
 			wantErr: true,
@@ -1477,8 +1467,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"backupConfiguration":{"backupRetentionSettings":{}}}}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: true,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "failed to modify cloudsql instance: " + gcpTestPostgresInstanceName,
 			wantErr: true,
@@ -1530,6 +1519,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 									Day:  1,
 									Hour: 10,
 								},
+								UserLabels: map[string]string{},
 							},
 						}, nil
 					}
@@ -1539,81 +1529,12 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				}),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"maintenanceWindow":{"day": 7, "hour": 0},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"userLabels":{"same-label":"same-value"},"ipConfiguration":{"ipv4Enabled":true},"maintenanceWindow":{"day": 7, "hour": 0},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
 				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: true,
+				address: buildValidGcpAddressRange(gcpTestIpRangeName),
 			},
 			want:    "successfully reconciled cloudsql instance gcptestclustertestNsgcpcloudsql",
 			wantErr: false,
-		},
-		{
-			name: "error when setting postgres maintenance window to false",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-						Name:      postgresProviderName + defaultCredSecSuffix,
-						Namespace: testNs,
-					},
-						Data: map[string][]byte{
-							defaultPostgresUserKey:     []byte(testUser),
-							defaultPostgresPasswordKey: []byte(testPassword),
-						},
-					}, &v1alpha1.Postgres{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      postgresProviderName,
-							Namespace: testNs,
-							Labels: map[string]string{
-								"productName": "test_product",
-							},
-							ResourceVersion: "1000",
-						},
-						Spec: types.ResourceTypeSpec{
-							MaintenanceWindow: true,
-						},
-					}, buildTestGcpInfrastructure(nil))
-					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-						return fmt.Errorf("generic error")
-					}
-					return mc
-				}(),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: NewCredentialMinterCredentialManager(nil),
-				ConfigManager:     nil,
-			},
-			args: args{
-				p: buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.GetInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.DatabaseInstance, error) {
-						return &sqladmin.DatabaseInstance{
-							Name:            gcpTestPostgresInstanceName,
-							State:           "RUNNABLE",
-							DatabaseVersion: defaultGCPCLoudSQLDatabaseVersion,
-							IpAddresses: []*sqladmin.IpMapping{
-								{
-									IpAddress: "",
-								},
-							},
-							Settings: &sqladmin.Settings{
-								BackupConfiguration: &sqladmin.BackupConfiguration{
-									BackupRetentionSettings: &sqladmin.BackupRetentionSettings{
-										RetentionUnit:   defaultBackupRetentionSettingsRetentionUnit,
-										RetainedBackups: defaultBackupRetentionSettingsRetainedBackups,
-									},
-								},
-							},
-						}, nil
-					}
-				}),
-				strategyConfig: &StrategyConfig{
-					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"backupConfiguration":{"backupRetentionSettings":{}}}}}`),
-				},
-				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
-				maintenanceWindow: true,
-			},
-			want:    "failed to set postgres maintenance window to false",
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -1625,7 +1546,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
-			_, got1, err := pp.reconcileCloudSQLInstance(context.TODO(), tt.args.p, tt.args.sqladminService, tt.args.strategyConfig, tt.args.address, tt.args.maintenanceWindow)
+			_, got1, err := pp.reconcileCloudSQLInstance(context.TODO(), tt.args.p, tt.args.sqladminService, tt.args.strategyConfig, tt.args.address)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileCloudSQLInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
