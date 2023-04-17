@@ -1526,6 +1526,10 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 								IpConfiguration: &sqladmin.IpConfiguration{
 									Ipv4Enabled: defaultIPConfigIPV4Enabled,
 								},
+								MaintenanceWindow: &sqladmin.MaintenanceWindow{
+									Day:  1,
+									Hour: 10,
+								},
 							},
 						}, nil
 					}
@@ -1535,7 +1539,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				}),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
-					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
+					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"deletionProtectionEnabled":false,"storageAutoResize":false,"ipConfiguration":{"ipv4Enabled":true},"maintenanceWindow":{"day": 7, "hour": 0},"backupConfiguration":{"enabled":false,"pointInTimeRecoveryEnabled":false,"backupRetentionSettings":{"retentionUnit":"RETENTION_UNIT_UNSPECIFIED","retainedBackups":20}}}}}`),
 				},
 				address:           buildValidGcpAddressRange(gcpTestIpRangeName),
 				maintenanceWindow: true,
