@@ -471,6 +471,13 @@ func isMaintenancePolicyOutdated(a *redispb.MaintenancePolicy, b *redispb.Mainte
 	if (a == nil && b != nil) || (a != nil && b == nil) {
 		return true
 	}
+	// remove output-only duration field from comparison
+	for i := range a.WeeklyMaintenanceWindow {
+		a.WeeklyMaintenanceWindow[i].Duration = nil
+	}
+	for i := range b.WeeklyMaintenanceWindow {
+		b.WeeklyMaintenanceWindow[i].Duration = nil
+	}
 	return !reflect.DeepEqual(a.WeeklyMaintenanceWindow, b.WeeklyMaintenanceWindow)
 }
 
