@@ -1,10 +1,11 @@
 package gcpiface
 
 import (
-	"cloud.google.com/go/iam"
-	"cloud.google.com/go/storage"
 	"context"
 	"errors"
+
+	"cloud.google.com/go/iam"
+	"cloud.google.com/go/storage"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -105,4 +106,65 @@ func (c *storageClient) DeleteObject(ctx context.Context, bucket, object string)
 		return err
 	}
 	return nil
+}
+
+type MockStorageClient struct {
+	StorageAPI
+	CreateBucketFn      func(context.Context, string, string, *storage.BucketAttrs) error
+	DeleteBucketFn      func(context.Context, string) error
+	SetBucketPolicyFn   func(context.Context, string, string, string) error
+	ListObjectsFn       func(context.Context, string, *storage.Query) ([]*storage.ObjectAttrs, error)
+	GetObjectMetadataFn func(context.Context, string, string) (*storage.ObjectAttrs, error)
+	DeleteObjectFn      func(context.Context, string, string) error
+}
+
+func GetMockStorageClient(modifyFn func(storageClient *MockStorageClient)) *MockStorageClient {
+	mock := &MockStorageClient{
+		CreateBucketFn: func(ctx context.Context, bucket, projectID string, attrs *storage.BucketAttrs) error {
+			return nil
+		},
+		DeleteBucketFn: func(ctx context.Context, bucket string) error {
+			return nil
+		},
+		SetBucketPolicyFn: func(ctx context.Context, bucket, identity, role string) error {
+			return nil
+		},
+		ListObjectsFn: func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+			return []*storage.ObjectAttrs{}, nil
+		},
+		GetObjectMetadataFn: func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
+			return &storage.ObjectAttrs{}, nil
+		},
+		DeleteObjectFn: func(ctx context.Context, bucket, object string) error {
+			return nil
+		},
+	}
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
+func (m *MockStorageClient) CreateBucket(ctx context.Context, bucket, projectID string, attrs *storage.BucketAttrs) error {
+	return m.CreateBucketFn(ctx, bucket, projectID, attrs)
+}
+
+func (m *MockStorageClient) DeleteBucket(ctx context.Context, bucket string) error {
+	return m.DeleteBucketFn(ctx, bucket)
+}
+
+func (m *MockStorageClient) SetBucketPolicy(ctx context.Context, bucket, identity, role string) error {
+	return m.SetBucketPolicyFn(ctx, bucket, identity, role)
+}
+
+func (m *MockStorageClient) ListObjects(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+	return m.ListObjectsFn(ctx, bucket, query)
+}
+
+func (m *MockStorageClient) GetObjectMetadata(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
+	return m.GetObjectMetadataFn(ctx, bucket, object)
+}
+
+func (m *MockStorageClient) DeleteObject(ctx context.Context, bucket, object string) error {
+	return m.DeleteObjectFn(ctx, bucket, object)
 }

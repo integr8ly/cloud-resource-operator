@@ -185,9 +185,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 					}
 					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
 						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{},
-							},
+							Items: []*sqladmin.DatabaseInstance{},
 						}, fmt.Errorf("cannot retrieve sql instances from gcp")
 					}
 				}),
@@ -440,17 +438,8 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 						return fmt.Errorf("generic error")
 					},
 				},
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
-				isLastResource: true,
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+				isLastResource:  true,
 			},
 			want:    "failed to delete cluster network peering",
 			wantErr: true,
@@ -490,17 +479,8 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 						return fmt.Errorf("generic error")
 					},
 				},
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
-				isLastResource: true,
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+				isLastResource:  true,
 			},
 			want:    "failed to delete cluster network service",
 			wantErr: true,
@@ -543,17 +523,8 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 						return fmt.Errorf("generic error")
 					},
 				},
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
-				isLastResource: true,
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+				isLastResource:  true,
 			},
 			want:    "failed to delete network IP range",
 			wantErr: true,
@@ -599,17 +570,8 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 						return true, nil
 					},
 				},
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
-				isLastResource: true,
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+				isLastResource:  true,
 			},
 			want:    "network component deletion in progress",
 			wantErr: false,
@@ -655,17 +617,8 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 						return false, fmt.Errorf("generic error")
 					},
 				},
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-					sqlClient.DeleteInstanceFn = func(ctx context.Context, s string, s2 string) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
-				isLastResource: true,
+				sqladminService: gcpiface.GetMockSQLClient(nil),
+				isLastResource:  true,
 			},
 			want:    "failed to check if components exist",
 			wantErr: true,
@@ -1118,14 +1071,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-				}),
+				p:               buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"settings":{"backupConfiguration":{"backupRetentionSettings":{}}}}}`),
@@ -1152,14 +1099,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-				}),
+				p:               buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{}}`),
@@ -1186,14 +1127,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{},
-						}, nil
-					}
-				}),
+				p:               buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{"settings":{}}}`),
@@ -1333,19 +1268,8 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: buildTestPostgres(),
-				sqladminService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
-					sqlClient.InstancesListFn = func(s string) (*sqladmin.InstancesListResponse, error) {
-						return &sqladmin.InstancesListResponse{
-							Items: []*sqladmin.DatabaseInstance{
-								{},
-							},
-						}, nil
-					}
-					sqlClient.CreateInstanceFn = func(ctx context.Context, s string, instance *sqladmin.DatabaseInstance) (*sqladmin.Operation, error) {
-						return &sqladmin.Operation{}, nil
-					}
-				}),
+				p:               buildTestPostgres(),
+				sqladminService: gcpiface.GetMockSQLClient(nil),
 				strategyConfig: &StrategyConfig{
 					ProjectID:      "sample-project-id",
 					CreateStrategy: json.RawMessage(`{"instance":{}}`),
