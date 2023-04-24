@@ -133,17 +133,21 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	}
 
 	instance, statusMessage, err := p.reconcileCloudSQLInstance(ctx, pg, sqlClient, strategyConfig, address)
-	if err != nil {
+	if err != nil || instance == nil {
 		return nil, statusMessage, err
 	}
-	storageClient, err := gcpiface.NewStorageAPI(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), logger)
-	if err != nil {
-		msg := "could not initialise storage client"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-	}
-	statusMessage, err = p.reconcileCloudSqlInstanceSnapshots(ctx, pg, storageClient)
-	if err != nil {
-		return nil, statusMessage, err
+	if pg.Spec.SnapshotFrequency != "" && pg.Spec.SnapshotRetention != "" {
+		storageClient, err := gcpiface.NewStorageAPI(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), logger)
+		if err != nil {
+			msg := "could not initialise storage client"
+			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
+		}
+		statusMessage, err = p.reconcileCloudSqlInstanceSnapshots(ctx, pg, storageClient)
+		if err != nil {
+			return nil, statusMessage, err
+		}
+	} else if pg.Spec.SnapshotFrequency != "" || pg.Spec.SnapshotRetention != "" {
+		p.Logger.Warn("postgres instance has only one snapshot field present, skipping snapshotting")
 	}
 	return instance, statusMessage, err
 }
@@ -712,18 +716,39 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 }
 
 func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Context, pg *v1alpha1.Postgres, storageClient gcpiface.StorageAPI) (croType.StatusMessage, error) {
-	instanceName := pg.Annotations[ResourceIdentifierAnnotation]
+	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
 	snapshotRetention, err := str2duration.ParseDuration(string(pg.Spec.SnapshotRetention))
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to parse %q into go duration", pg.Spec.SnapshotRetention)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	snapshots, err := getAllSnapshotsForInstance(ctx, p.Client, instanceName)
+	snapshots, err := getAllSnapshotsForInstance(ctx, p.Client, pg)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to fetch all snapshots associated with postgres instance %s", instanceName)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
+	if len(snapshots) == 0 {
+		err := p.createSnapshot(ctx, pg)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", instanceName)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+		}
+		msg := fmt.Sprintf("created postgres snapshot CR for instance %s", instanceName)
+		return croType.StatusMessage(msg), nil
+	}
+	latestSnapshotCR, snapshotsRetained, err := getLatestPostgresSnapshotCR(ctx, instanceName, pg.Namespace, p.Client, storageClient)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to determine latest snapshot id for instance %s", instanceName)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if latestSnapshotCR == nil {
+		msg := fmt.Sprintf("latest snapshot in progress for instance %s", instanceName)
+		return croType.StatusMessage(msg), nil
+	}
 	for i := range snapshots {
+		if snapshots[i].Name == latestSnapshotCR.Name {
+			continue
+		}
 		retainUntil := snapshots[i].CreationTimestamp.Add(snapshotRetention)
 		if time.Now().After(retainUntil) {
 			p.Logger.Infof("deleting snapshot %s because its retention has expired", snapshots[i].Name)
@@ -734,15 +759,6 @@ func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Contex
 			}
 		}
 	}
-	if len(snapshots) == 0 {
-		msg := fmt.Sprintf("successfully reconciled postgres snapshots for instance %s", instanceName)
-		return croType.StatusMessage(msg), nil
-	}
-	latestSnapshotCR, snapshotsRetained, err := getLatestPostgresSnapshotCR(ctx, instanceName, p.Client, storageClient)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to determine latest snapshot id for instance %s", instanceName)
-		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
 	snapshotFrequency, err := str2duration.ParseDuration(string(pg.Spec.SnapshotFrequency))
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to parse %q into go duration", pg.Spec.SnapshotFrequency)
@@ -750,19 +766,9 @@ func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Contex
 	}
 	nextSnapshotTime := latestSnapshotCR.CreationTimestamp.Add(snapshotFrequency)
 	if time.Now().After(nextSnapshotTime) {
-		p.Logger.Infof("creating new snapshot for postgres instance %s as its been %s since the latest snapshot", instanceName, pg.Spec.SnapshotFrequency)
-		snapshot := &v1alpha1.PostgresSnapshot{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: pg.Name,
-				Namespace:    pg.Namespace,
-			},
-			Spec: v1alpha1.PostgresSnapshotSpec{
-				ResourceName: instanceName,
-			},
-		}
-		err = p.Client.Create(ctx, snapshot)
+		err = p.createSnapshot(ctx, pg)
 		if err != nil {
-			errMsg := fmt.Sprintf("failed to create postgres snapshot %s", snapshot.Name)
+			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", instanceName)
 			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
@@ -770,4 +776,19 @@ func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Contex
 	msg := fmt.Sprintf("postgres instance %s currently has %d retained snapshots; next snapshot in %s", instanceName, snapshotsRetained, timeUntilNextSnapshot)
 	p.Logger.Info(msg)
 	return croType.StatusMessage(msg), nil
+}
+
+func (p *PostgresProvider) createSnapshot(ctx context.Context, pg *v1alpha1.Postgres) error {
+	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
+	p.Logger.Infof("creating new snapshot for postgres instance %s", instanceName)
+	snapshot := &v1alpha1.PostgresSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: pg.Name,
+			Namespace:    pg.Namespace,
+		},
+		Spec: v1alpha1.PostgresSnapshotSpec{
+			ResourceName: pg.Name,
+		},
+	}
+	return p.Client.Create(ctx, snapshot)
 }

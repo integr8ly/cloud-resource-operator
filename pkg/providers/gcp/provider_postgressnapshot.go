@@ -1,10 +1,13 @@
 package gcp
 
 import (
-	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	"sort"
+	"strconv"
+	"time"
+
+	"cloud.google.com/go/storage"
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	errorUtil "github.com/pkg/errors"
@@ -13,9 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"sort"
-	"strconv"
-	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -138,7 +138,7 @@ func (p *PostgresSnapshotProvider) reconcilePostgresSnapshot(ctx context.Context
 }
 
 func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, snap *v1alpha1.PostgresSnapshot, pg *v1alpha1.Postgres, config *StrategyConfig, storageClient gcpiface.StorageAPI, sqlClient gcpiface.SQLAdminService) (croType.StatusMessage, error) {
-	instanceName := pg.Annotations[ResourceIdentifierAnnotation]
+	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
 	if pg.Status.Phase == croType.PhaseInProgress {
 		errMsg := fmt.Sprintf("waiting for postgres instance %s to be available before creating a snapshot", instanceName)
 		return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
@@ -191,7 +191,7 @@ func (p *PostgresSnapshotProvider) reconcilePostgresSnapshotLabels(ctx context.C
 		errMsg := fmt.Sprintf("failed to update postgres snapshot cr %s", snap.Name)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	latestSnapshotCR, _, err := getLatestPostgresSnapshotCR(ctx, objectMeta.Bucket, p.client, storageClient)
+	latestSnapshotCR, _, err := getLatestPostgresSnapshotCR(ctx, objectMeta.Bucket, snap.Namespace, p.client, storageClient)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to determine latest snapshot id for instance %s", objectMeta.Bucket)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -247,32 +247,34 @@ func (p *PostgresSnapshotProvider) reconcilePostgresSnapshotLabels(ctx context.C
 }
 
 func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, snap *v1alpha1.PostgresSnapshot, storageClient gcpiface.StorageAPI) (croType.StatusMessage, error) {
-	bucketName := resources.GetLabel(snap, labelBucketName)
-	if bucketName == "" {
-		errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", labelBucketName, snap.Name)
-		return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
-	}
-	objectName := resources.GetLabel(snap, labelObjectName)
-	if bucketName == "" {
-		errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", objectName, snap.Name)
-		return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
-	}
-	if !snap.Spec.SkipDelete && !resources.HasLabelWithValue(snap, labelLatest, bucketName) {
-		err := storageClient.DeleteObject(ctx, bucketName, objectName)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to delete snapshot %s from bucket %s", objectName, bucketName)
-			return croType.StatusMessage(errMsg), err
+	if !snap.Spec.SkipDelete {
+		bucketName := resources.GetLabel(snap, labelBucketName)
+		if bucketName == "" {
+			errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", labelBucketName, snap.Name)
+			return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
-		objects, err := storageClient.ListObjects(ctx, bucketName, nil)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to list objects from bucket %s", bucketName)
-			return croType.StatusMessage(errMsg), err
+		objectName := resources.GetLabel(snap, labelObjectName)
+		if bucketName == "" {
+			errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", objectName, snap.Name)
+			return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
-		if len(objects) == 0 {
-			err = storageClient.DeleteBucket(ctx, bucketName)
+		if !resources.HasLabelWithValue(snap, labelLatest, bucketName) {
+			err := storageClient.DeleteObject(ctx, bucketName, objectName)
 			if err != nil {
-				errMsg := fmt.Sprintf("failed to delete bucket %s", bucketName)
+				errMsg := fmt.Sprintf("failed to delete snapshot %s from bucket %s", objectName, bucketName)
 				return croType.StatusMessage(errMsg), err
+			}
+			objects, err := storageClient.ListObjects(ctx, bucketName, nil)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to list objects from bucket %s", bucketName)
+				return croType.StatusMessage(errMsg), err
+			}
+			if len(objects) == 0 {
+				err = storageClient.DeleteBucket(ctx, bucketName)
+				if err != nil {
+					errMsg := fmt.Sprintf("failed to delete bucket %s", bucketName)
+					return croType.StatusMessage(errMsg), err
+				}
 			}
 		}
 	}
@@ -285,12 +287,30 @@ func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, s
 	return croType.StatusMessage(msg), nil
 }
 
-func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, k8sClient client.Client, storageClient gcpiface.StorageAPI) (*v1alpha1.PostgresSnapshot, int, error) {
+func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, namespace string, k8sClient client.Client, storageClient gcpiface.StorageAPI) (*v1alpha1.PostgresSnapshot, int, error) {
+	snapshots := &v1alpha1.PostgresSnapshotList{}
+	err := k8sClient.List(ctx, snapshots, &client.ListOptions{
+		Namespace: namespace,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(snapshots.Items) == 0 {
+		return nil, 0, fmt.Errorf("failed to find matching postgres snapshot cr for bucket %s", instanceName)
+	}
 	objects, err := storageClient.ListObjects(ctx, instanceName, nil)
 	if err != nil {
 		return nil, 0, err
 	}
-	if len(objects) == 0 {
+	inProgress := 0
+	for i := range snapshots.Items {
+		if snapshots.Items[i].Status.Phase == croType.PhaseInProgress {
+			inProgress++
+		}
+	}
+	if len(objects) == 0 && (inProgress == len(snapshots.Items)) {
+		return nil, 0, nil
+	} else if len(objects) == 0 {
 		return nil, 0, fmt.Errorf("could not find any objects in bucket %q", instanceName)
 	}
 	var errs []error
@@ -308,10 +328,6 @@ func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, k8sCl
 	if len(errs) > 0 {
 		return nil, 0, fmt.Errorf("failure while sorting objects: %v", errs)
 	}
-	namespace, err := k8sutil.GetOperatorNamespace()
-	if err != nil {
-		return nil, 0, err
-	}
 	labelSelector := labels.NewSelector()
 	matchBucketLabel, err := labels.NewRequirement(labelBucketName, selection.Equals, []string{instanceName})
 	if err != nil {
@@ -324,7 +340,7 @@ func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, k8sCl
 		return nil, 0, errorUtil.Wrap(err, errMsg)
 	}
 	labelSelector = labelSelector.Add(*matchBucketLabel, *matchObjectLabel)
-	snapshots := &v1alpha1.PostgresSnapshotList{}
+	snapshots = &v1alpha1.PostgresSnapshotList{}
 	err = k8sClient.List(ctx, snapshots, &client.ListOptions{
 		Namespace:     namespace,
 		LabelSelector: labelSelector,
@@ -334,7 +350,6 @@ func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, k8sCl
 	}
 	if len(snapshots.Items) == 0 {
 		return nil, 0, fmt.Errorf("failed to find matching postgres snapshot cr for object %s from bucket %s", objects[0].Name, instanceName)
-
 	}
 	if len(snapshots.Items) > 1 {
 		return nil, 0, fmt.Errorf("expected to find exactly one postgres snapshot with label selector %q, but found %d", labelSelector.String(), len(snapshots.Items))
@@ -342,13 +357,9 @@ func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, k8sCl
 	return &snapshots.Items[0], len(objects), nil
 }
 
-func getAllSnapshotsForInstance(ctx context.Context, k8sClient client.Client, instanceName string) ([]v1alpha1.PostgresSnapshot, error) {
-	namespace, err := k8sutil.GetOperatorNamespace()
-	if err != nil {
-		return nil, err
-	}
+func getAllSnapshotsForInstance(ctx context.Context, k8sClient client.Client, pg *v1alpha1.Postgres) ([]v1alpha1.PostgresSnapshot, error) {
 	labelSelector := labels.NewSelector()
-	matchBucketLabel, err := labels.NewRequirement(labelBucketName, selection.Equals, []string{instanceName})
+	matchBucketLabel, err := labels.NewRequirement(labelBucketName, selection.Equals, []string{annotations.Get(pg, ResourceIdentifierAnnotation)})
 	if err != nil {
 		errMsg := "failed to build label requirement"
 		return nil, errorUtil.Wrap(err, errMsg)
@@ -356,7 +367,7 @@ func getAllSnapshotsForInstance(ctx context.Context, k8sClient client.Client, in
 	labelSelector.Add(*matchBucketLabel)
 	snapshotsList := &v1alpha1.PostgresSnapshotList{}
 	err = k8sClient.List(ctx, snapshotsList, &client.ListOptions{
-		Namespace:     namespace,
+		Namespace:     pg.Namespace,
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
