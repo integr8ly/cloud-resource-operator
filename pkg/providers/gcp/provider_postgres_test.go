@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
+	"cloud.google.com/go/storage"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -18,6 +21,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
+	str2duration "github.com/xhit/go-str2duration/v2"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +35,9 @@ const (
 	testInfrastructureName      = "cluster"
 	testUser                    = "user"
 	testPassword                = "password"
+	gcpTestSnapshotFrequency    = "1h"
+	gcpTestSnapshotRetention    = "30d"
+	gcpTestInvalidSnapshotTime  = "invalid"
 )
 
 func buildTestPostgres() *v1alpha1.Postgres {
@@ -38,6 +45,12 @@ func buildTestPostgres() *v1alpha1.Postgres {
 	postgres.Annotations = map[string]string{
 		ResourceIdentifierAnnotation: testName,
 	}
+	return postgres
+}
+
+func buildTestPostgresPhase(phase types.StatusPhase) *v1alpha1.Postgres {
+	postgres := buildTestPostgres()
+	postgres.Status.Phase = phase
 	return postgres
 }
 
@@ -68,7 +81,6 @@ func buildTestPostgresSecret() *corev1.Secret {
 }
 
 func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
-
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -1477,6 +1489,519 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 			}
 			if got1 != tt.want {
 				t.Errorf("reconcileCloudSQLInstance() got1 = %v, want %v", got1, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
+	now := time.Now()
+	retentionDuration, err := str2duration.ParseDuration(gcpTestSnapshotRetention)
+	if err != nil {
+		t.Fatalf("failed to convert test retention time %s", gcpTestSnapshotRetention)
+	}
+	frequencyDuration, err := str2duration.ParseDuration(gcpTestSnapshotFrequency)
+	if err != nil {
+		t.Fatalf("failed to convert test frequency time %s", gcpTestSnapshotRetention)
+	}
+	// retention elapsed
+	expiredTime := now.Add(-retentionDuration)
+	// frequency elapsed
+	elapsedTime := now.Add(-frequencyDuration)
+	scheme, err := buildTestScheme()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+	type fields struct {
+		Client            client.Client
+		Logger            *logrus.Entry
+		CredentialManager CredentialManager
+		ConfigManager     ConfigManager
+	}
+	type args struct {
+		p             *v1alpha1.Postgres
+		storageClient gcpiface.StorageAPI
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    types.StatusMessage
+		wantErr bool
+	}{
+		{
+			name: "error parsing retention time",
+			fields: fields{
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestInvalidSnapshotTime
+					return postgres
+				}(),
+				storageClient: nil,
+			},
+			want:    types.StatusMessage(fmt.Sprintf("failed to parse \"%s\" into go duration", gcpTestInvalidSnapshotTime)),
+			wantErr: true,
+		},
+		{
+			name: "success creating initial snapshot",
+			fields: fields{
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: nil,
+			},
+			want:    "created postgres snapshot CR for instance " + testName,
+			wantErr: false,
+		},
+		{
+			name: "error creating initial snapshot",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: nil,
+			},
+			want:    "failed to create postgres snapshot for " + testName,
+			wantErr: true,
+		},
+		{
+			name: "error retrieving snapshot CRs",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						buildTestPostgresSnapshot())
+					mc.ListFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(nil),
+			},
+			want:    "failed to fetch all snapshots associated with postgres instance " + testName,
+			wantErr: true,
+		},
+		{
+			name: "error no objects found in GCP",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestPostgresSnapshot()),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(nil),
+			},
+			want:    "failed to determine latest snapshot id for instance " + testName,
+			wantErr: true,
+		},
+		{
+			name: "latest snapshot creation in progress",
+			fields: fields{
+				Client: func() client.Client {
+					snap := buildTestPostgresSnapshot()
+					snap.Status.Phase = types.PhaseInProgress
+					return moqClient.NewSigsClientMoqWithScheme(scheme, snap)
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(nil),
+			},
+			want:    "latest snapshot creation in progress for instance " + testName,
+			wantErr: false,
+		},
+		{
+			name: "error no matching snapshot CR for GCP object",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestPostgresSnapshot()),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   testName,
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "failed to determine latest snapshot id for instance " + testName,
+			wantErr: true,
+		},
+		{
+			name: "found matching snapshot CR for GCP object",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestPostgresSnapshotWithLabels(map[string]string{
+						labelBucketName: testName,
+						labelObjectName: strconv.FormatInt(now.Unix(), 10),
+					})),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(now.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "postgres instance " + testName + " currently has 1 retained snapshots; next snapshot in",
+			wantErr: false,
+		},
+		{
+			name: "remove expired snapshot CR for GCP object",
+			fields: fields{
+				Client: func() client.Client {
+					snap1 := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName,
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(now),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(now.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					snap2 := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName + "2",
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(expiredTime),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(expiredTime.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						snap1,
+						snap2,
+					)
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(now.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "postgres instance " + testName + " currently has 1 retained snapshots; next snapshot in",
+			wantErr: false,
+		},
+		{
+			name: "error removing expired snapshot CR for GCP object",
+			fields: fields{
+				Client: func() client.Client {
+					snap1 := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName,
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(now),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(now.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					snap2 := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName + "2",
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(expiredTime),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(expiredTime.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
+						snap1,
+						snap2,
+					)
+					mc.DeleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(now.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "failed to delete postgres snapshot " + gcpTestPostgresSnapshotName + "2",
+			wantErr: true,
+		},
+		{
+			name: "error parsing snapshot frequency",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					buildTestPostgresSnapshotWithLabels(map[string]string{
+						labelBucketName: testName,
+						labelObjectName: strconv.FormatInt(now.Unix(), 10),
+					})),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestInvalidSnapshotTime
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(now.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    types.StatusMessage(fmt.Sprintf("failed to parse \"%s\" into go duration", gcpTestInvalidSnapshotTime)),
+			wantErr: true,
+		},
+		{
+			name: "create new snapshot as frequency elapsed",
+			fields: fields{
+				Client: func() client.Client {
+					snap := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName,
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(elapsedTime),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(elapsedTime.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					return moqClient.NewSigsClientMoqWithScheme(scheme, snap)
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(elapsedTime.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "postgres instance testName currently has 1 retained snapshots; next snapshot in",
+			wantErr: false,
+		},
+		{
+			name: "error creating new snapshot after frequency elapsed",
+			fields: fields{
+				Client: func() client.Client {
+					snap := &v1alpha1.PostgresSnapshot{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              gcpTestPostgresSnapshotName,
+							Namespace:         testNs,
+							CreationTimestamp: metav1.NewTime(elapsedTime),
+							Labels: map[string]string{
+								labelBucketName: testName,
+								labelObjectName: strconv.FormatInt(elapsedTime.Unix(), 10),
+							},
+						},
+						Spec: v1alpha1.PostgresSnapshotSpec{
+							ResourceName: testName,
+						},
+					}
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, snap)
+					mc.CreateFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   strconv.FormatInt(elapsedTime.Unix(), 10),
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+			},
+			want:    "failed to create postgres snapshot for testName",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pp := &PostgresProvider{
+				Client:            tt.fields.Client,
+				Logger:            tt.fields.Logger,
+				CredentialManager: tt.fields.CredentialManager,
+				ConfigManager:     tt.fields.ConfigManager,
+				TCPPinger:         resources.BuildMockConnectionTester(),
+			}
+			got, err := pp.reconcileCloudSqlInstanceSnapshots(context.TODO(), tt.args.p, tt.args.storageClient)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("reconcileCloudSqlInstanceSnapshots() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !strings.HasPrefix(string(got), string(tt.want)) {
+				t.Errorf("reconcileCloudSqlInstanceSnapshots() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

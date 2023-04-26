@@ -742,7 +742,7 @@ func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Contex
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	if latestSnapshotCR == nil {
-		msg := fmt.Sprintf("latest snapshot in progress for instance %s", instanceName)
+		msg := fmt.Sprintf("latest snapshot creation in progress for instance %s", instanceName)
 		return croType.StatusMessage(msg), nil
 	}
 	for i := range snapshots {

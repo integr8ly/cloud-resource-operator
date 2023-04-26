@@ -124,7 +124,11 @@ func (p *PostgresSnapshotProvider) reconcilePostgresSnapshot(ctx context.Context
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	objectMeta, err := storageClient.GetObjectMetadata(ctx, instanceName, snapshotID)
-	if err != nil {
+	if err != nil && err != storage.ErrObjectNotExist {
+		errMsg := fmt.Sprintf("failed to retrieve object metadata for bucket %s and object %s", instanceName, snapshotID)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	}
+	if objectMeta == nil {
 		statusMessage, err := p.createPostgresSnapshot(ctx, snap, pg, config, storageClient, sqlClient)
 		return nil, statusMessage, err
 	}
@@ -254,8 +258,8 @@ func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, s
 			return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
 		objectName := resources.GetLabel(snap, labelObjectName)
-		if bucketName == "" {
-			errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", objectName, snap.Name)
+		if objectName == "" {
+			errMsg := fmt.Sprintf("failed to find %q label for postgres snapshot cr %s", labelObjectName, snap.Name)
 			return croType.StatusMessage(errMsg), errorUtil.New(errMsg)
 		}
 		if !resources.HasLabelWithValue(snap, labelLatest, bucketName) {
@@ -300,6 +304,9 @@ func getLatestPostgresSnapshotCR(ctx context.Context, instanceName string, names
 	}
 	objects, err := storageClient.ListObjects(ctx, instanceName, nil)
 	if err != nil {
+		if err == storage.ErrBucketNotExist {
+			return nil, 0, nil
+		}
 		return nil, 0, err
 	}
 	inProgress := 0
