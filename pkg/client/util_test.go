@@ -249,17 +249,19 @@ func TestReconcilePostgres(t *testing.T) {
 	}
 
 	type args struct {
-		ctx              context.Context
-		client           client.Client
-		deploymentType   string
-		productName      string
-		tier             string
-		name             string
-		ns               string
-		secretName       string
-		secretNs         string
-		applyImmediately bool
-		modifyFunc       modifyResourceFunc
+		ctx               context.Context
+		client            client.Client
+		deploymentType    string
+		productName       string
+		tier              string
+		name              string
+		ns                string
+		secretName        string
+		secretNs          string
+		applyImmediately  bool
+		snapshotFrequency croType.Duration
+		snapshotRetention croType.Duration
+		modifyFunc        modifyResourceFunc
 	}
 	tests := []struct {
 		name    string
@@ -270,17 +272,19 @@ func TestReconcilePostgres(t *testing.T) {
 		{
 			name: "test successful creation on create",
 			args: args{
-				ctx:              context.TODO(),
-				client:           moqClient.NewSigsClientMoqWithScheme(scheme),
-				deploymentType:   "aws",
-				tier:             "production",
-				productName:      "test",
-				name:             "test",
-				ns:               "test",
-				secretName:       "test",
-				secretNs:         "test",
-				applyImmediately: false,
-				modifyFunc:       nil,
+				ctx:               context.TODO(),
+				client:            moqClient.NewSigsClientMoqWithScheme(scheme),
+				deploymentType:    "aws",
+				tier:              "production",
+				productName:       "test",
+				name:              "test",
+				ns:                "test",
+				secretName:        "test",
+				secretNs:          "test",
+				applyImmediately:  false,
+				snapshotFrequency: "1h",
+				snapshotRetention: "30d",
+				modifyFunc:        nil,
 			},
 			want: &v1alpha1.Postgres{
 				ObjectMeta: metav1.ObjectMeta{
@@ -298,6 +302,8 @@ func TestReconcilePostgres(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 					},
+					SnapshotFrequency: "1h",
+					SnapshotRetention: "30d",
 				},
 			},
 			wantErr: false,
@@ -470,7 +476,7 @@ func TestReconcilePostgres(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.applyImmediately, tt.args.modifyFunc)
+			got, err := ReconcilePostgres(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.applyImmediately, tt.args.snapshotFrequency, tt.args.snapshotRetention, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcilePostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return

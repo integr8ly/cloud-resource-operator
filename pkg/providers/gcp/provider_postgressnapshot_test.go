@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 	"testing"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -33,16 +31,16 @@ func buildTestPostgresSnapshot() *v1alpha1.PostgresSnapshot {
 			ResourceVersion: "1000",
 		},
 		Spec: v1alpha1.PostgresSnapshotSpec{
-			ResourceName: testName,
+			ResourceName: postgresProviderName,
+		},
+		Status: croType.ResourceTypeSnapshotStatus{
+			Phase: croType.PhaseComplete,
 		},
 	}
 }
 
 func buildTestLatestPostgresSnapshot(name string) *v1alpha1.PostgresSnapshot {
-	snap := buildTestPostgresSnapshotWithLabels(map[string]string{
-		labelLatest:     "testName",
-		labelBucketName: "testName",
-	})
+	snap := buildTestPostgresSnapshot()
 	snap.Spec.SkipDelete = true
 	if name != "" {
 		snap.ObjectMeta.Name = name
@@ -50,14 +48,7 @@ func buildTestLatestPostgresSnapshot(name string) *v1alpha1.PostgresSnapshot {
 	return snap
 }
 
-func buildTestPostgresSnapshotWithLabels(labels map[string]string) *v1alpha1.PostgresSnapshot {
-	snap := buildTestPostgresSnapshot()
-	snap.ObjectMeta.Labels = labels
-	return snap
-}
-
 func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
-	now := time.Now()
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -118,12 +109,8 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				snap: func() *v1alpha1.PostgresSnapshot {
-					snap := buildTestPostgresSnapshot()
-					snap.SetCreationTimestamp(metav1.NewTime(now))
-					return snap
-				}(),
-				p: buildTestPostgres(),
+				snap: buildTestPostgresSnapshot(),
+				p:    buildTestPostgres(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
 						return nil, fmt.Errorf("generic error")
@@ -131,7 +118,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 				}),
 			},
 			want:    nil,
-			status:  croType.StatusMessage(fmt.Sprintf("failed to retrieve object metadata for bucket %s and object %s", testName, strconv.FormatInt(now.Unix(), 10))),
+			status:  croType.StatusMessage(fmt.Sprintf("failed to retrieve object metadata for bucket %s and object %s", testName, gcpTestPostgresSnapshotName)),
 			wantErr: true,
 		},
 		{
@@ -142,7 +129,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				p:    buildTestPostgres(),
+				p:    buildTestPostgresPhase(croType.PhaseComplete),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
 						return nil, storage.ErrObjectNotExist
@@ -265,20 +252,29 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				snap: buildTestPostgresSnapshot(),
 				p:    buildTestPostgresPhase(croType.PhaseInProgress),
 			},
-			want:    "waiting for postgres instance " + testName + " to be available before creating a snapshot",
+			want:    croType.StatusMessage("waiting for postgres instance " + testName + " to be complete, status " + croType.PhaseInProgress),
 			wantErr: true,
 		},
 		{
-			name: "error postgres instance deletion in progress",
+			name: "error getting bucket for snapshots",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				p:    buildTestPostgresPhase(croType.PhaseDeleteInProgress),
+				p:    buildTestPostgresPhase(croType.PhaseComplete),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.GetBucketFn = func(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
+						return nil, fmt.Errorf("generic error")
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+				},
 			},
-			want:    "cannot create snapshot of postgres instance when deletion is in progress",
+			want:    "failed to retrieve bucket metadata for bucket " + testName,
 			wantErr: true,
 		},
 		{
@@ -324,6 +320,35 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				},
 			},
 			want:    "failed to find postgres instance with name " + testName,
+			wantErr: true,
+		},
+		{
+			name: "error retrieving bucket policy",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+				p:    buildTestPostgresPhase(croType.PhaseComplete),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.HasBucketPolicyFn = func(ctx context.Context, bucket, identity, role string) (bool, error) {
+						return false, fmt.Errorf("generic error")
+					}
+				}),
+				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, projectID, instanceName string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							ServiceAccountEmailAddress: gcpTestServiceAccountEmail,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+				},
+			},
+			want:    "failed to check bucket policy for " + testName,
 			wantErr: true,
 		},
 		{
@@ -427,7 +452,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 	}
 }
 
-func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
+func TestPostgresProvider_reconcileSkipDelete(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
@@ -438,9 +463,7 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 		Logger            *logrus.Entry
 	}
 	type args struct {
-		snap           *v1alpha1.PostgresSnapshot
-		objectMeta     *storage.ObjectAttrs
-		storageService *gcpiface.MockStorageClient
+		snap *v1alpha1.PostgresSnapshot
 	}
 
 	tests := []struct {
@@ -451,46 +474,37 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "error updating labels on postgres snapshot",
-			fields: fields{
-				Client: func() k8sclient.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot())
-					mc.UpdateFunc = func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error {
-						return fmt.Errorf("generic error")
-					}
-					return mc
-				}(),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				snap: buildTestPostgresSnapshot(),
-				objectMeta: &storage.ObjectAttrs{
-					Name:   testName,
-					Bucket: testName,
-				},
-			},
-			want:    "failed to update postgres snapshot cr " + gcpTestPostgresSnapshotName,
-			wantErr: true,
-		},
-		{
 			name: "error determining latest snapshot",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: func() k8sclient.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot())
+					mc.ListFunc = func(ctx context.Context, list k8sclient.ObjectList, opts ...k8sclient.ListOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				objectMeta: &storage.ObjectAttrs{
-					Name:   testName,
-					Bucket: testName,
-				},
-				storageService: gcpiface.GetMockStorageClient(nil),
 			},
-			want:    "failed to determine latest snapshot id for instance " + testName,
+			want:    "failed to determine latest snapshot for " + postgresProviderName,
 			wantErr: true,
 		},
 		{
-			name: "error updating labels on latest snapshot",
+			name: "success no complete snapshots found",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+			},
+			want:    "no complete snapshots found for " + postgresProviderName,
+			wantErr: false,
+		},
+		{
+			name: "error updating skipDelete on latest snapshot",
 			fields: fields{
 				Client: func() k8sclient.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot())
@@ -503,22 +517,8 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				objectMeta: &storage.ObjectAttrs{
-					Name:   testName,
-					Bucket: testName,
-				},
-				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   testName,
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
 			},
-			want:    "failed to update postgres snapshot cr " + gcpTestPostgresSnapshotName,
+			want:    "failed to update postgres snapshot " + gcpTestPostgresSnapshotName,
 			wantErr: true,
 		},
 		{
@@ -529,20 +529,6 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				objectMeta: &storage.ObjectAttrs{
-					Name:   testName,
-					Bucket: testName,
-				},
-				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   testName,
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
 			},
 			want:    "snapshot " + gcpTestPostgresSnapshotName + " successfully reconciled",
 			wantErr: false,
@@ -555,20 +541,6 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				objectMeta: &storage.ObjectAttrs{
-					Name:   testName,
-					Bucket: testName,
-				},
-				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   testName,
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
 			},
 			want:    "snapshot " + gcpTestPostgresSnapshotName + " successfully reconciled",
 			wantErr: false,
@@ -580,7 +552,7 @@ func TestPostgresProvider_reconcilePostgresSnapshotLabels(t *testing.T) {
 				client: tt.fields.Client,
 				logger: tt.fields.Logger,
 			}
-			got, err := p.reconcilePostgresSnapshotLabels(context.TODO(), tt.args.snap, tt.args.objectMeta, tt.args.storageService)
+			got, err := p.reconcileSkipDelete(context.TODO(), tt.args.snap)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcilePostgresSnapshotLabels() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -604,6 +576,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 	}
 	type args struct {
 		snap           *v1alpha1.PostgresSnapshot
+		pg             *v1alpha1.Postgres
 		storageService *gcpiface.MockStorageClient
 	}
 
@@ -633,49 +606,21 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error removing snapshot bucket name missing",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				snap: buildTestPostgresSnapshot(),
-			},
-			want:    "failed to find \"" + labelBucketName + "\" label for postgres snapshot cr " + gcpTestPostgresSnapshotName,
-			wantErr: true,
-		},
-		{
-			name: "error removing snapshot object name missing",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				snap: buildTestPostgresSnapshotWithLabels(map[string]string{
-					labelBucketName: testName,
-				}),
-			},
-			want:    "failed to find \"" + labelObjectName + "\" label for postgres snapshot cr " + gcpTestPostgresSnapshotName,
-			wantErr: true,
-		},
-		{
 			name: "error deleting gcp snapshot object",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				snap: buildTestPostgresSnapshotWithLabels(map[string]string{
-					labelBucketName: testName,
-					labelObjectName: testName,
-				}),
+				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.DeleteObjectFn = func(ctx context.Context, bucket, object string) error {
 						return fmt.Errorf("generic error")
 					}
 				}),
+				pg: buildTestPostgres(),
 			},
-			want:    "failed to delete snapshot " + testName + " from bucket " + testName,
+			want:    "failed to delete snapshot " + gcpTestPostgresSnapshotName + " from bucket " + testName,
 			wantErr: true,
 		},
 		{
@@ -685,18 +630,38 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				snap: buildTestPostgresSnapshotWithLabels(map[string]string{
-					labelBucketName: testName,
-					labelObjectName: testName,
-				}),
+				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
 						return nil, fmt.Errorf("generic error")
 					}
 				}),
+				pg: buildTestPostgres(),
 			},
 			want:    "failed to list objects from bucket " + testName,
 			wantErr: true,
+		},
+		{
+			name: "success deletion in progress",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name: gcpTestPostgresSnapshotName,
+							},
+						}, nil
+					}
+				}),
+				pg: buildTestPostgres(),
+			},
+			want:    "object " + gcpTestPostgresSnapshotName + " deletion in progress",
+			wantErr: false,
 		},
 		{
 			name: "error deleting snapshot bucket",
@@ -705,15 +670,13 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				snap: buildTestPostgresSnapshotWithLabels(map[string]string{
-					labelBucketName: testName,
-					labelObjectName: testName,
-				}),
+				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.DeleteBucketFn = func(ctx context.Context, bucket string) error {
 						return fmt.Errorf("generic error")
 					}
 				}),
+				pg: buildTestPostgres(),
 			},
 			want:    "failed to delete bucket " + testName,
 			wantErr: true,
@@ -722,18 +685,13 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 			name: "success removing snapshot resources",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestPostgresSnapshotWithLabels(map[string]string{
-						labelBucketName: testName,
-						labelObjectName: testName,
-					})),
+					buildTestPostgresSnapshot()),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
-				snap: buildTestPostgresSnapshotWithLabels(map[string]string{
-					labelBucketName: testName,
-					labelObjectName: testName,
-				}),
+				snap:           buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(nil),
+				pg:             buildTestPostgres(),
 			},
 			want:    "snapshot " + gcpTestPostgresSnapshotName + " deleted",
 			wantErr: false,
@@ -745,7 +703,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				client: tt.fields.Client,
 				logger: tt.fields.Logger,
 			}
-			got, err := p.deletePostgresSnapshot(context.TODO(), tt.args.snap, tt.args.storageService)
+			got, err := p.deletePostgresSnapshot(context.TODO(), tt.args.snap, tt.args.pg, tt.args.storageService)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deletePostgresSnapshot() error = %v, wantErr %v", err, tt.wantErr)
 				return

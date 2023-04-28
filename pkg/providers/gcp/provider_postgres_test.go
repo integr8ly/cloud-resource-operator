@@ -6,13 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
-	"cloud.google.com/go/storage"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -78,6 +75,13 @@ func buildTestPostgresSecret() *corev1.Secret {
 			defaultPostgresPasswordKey: []byte(testPassword),
 		},
 	}
+}
+
+func buildTestPostgresWithSnapshot() *v1alpha1.Postgres {
+	postgres := buildTestPostgres()
+	postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+	postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+	return postgres
 }
 
 func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
@@ -1519,8 +1523,7 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		p             *v1alpha1.Postgres
-		storageClient gcpiface.StorageAPI
+		p *v1alpha1.Postgres
 	}
 	tests := []struct {
 		name    string
@@ -1543,9 +1546,28 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 					postgres.Spec.SnapshotRetention = gcpTestInvalidSnapshotTime
 					return postgres
 				}(),
-				storageClient: nil,
 			},
 			want:    types.StatusMessage(fmt.Sprintf("failed to parse \"%s\" into go duration", gcpTestInvalidSnapshotTime)),
+			wantErr: true,
+		},
+		{
+			name: "error retrieving snapshots",
+			fields: fields{
+				Client: func() client.Client {
+					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
+					mc.ListFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						return fmt.Errorf("generic error")
+					}
+					return mc
+				}(),
+				Logger:            logrus.NewEntry(logrus.StandardLogger()),
+				CredentialManager: nil,
+				ConfigManager:     nil,
+			},
+			args: args{
+				p: buildTestPostgresWithSnapshot(),
+			},
+			want:    "failed to fetch all snapshots associated with postgres instance " + postgresProviderName,
 			wantErr: true,
 		},
 		{
@@ -1557,15 +1579,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: nil,
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "created postgres snapshot CR for instance " + testName,
+			want:    "created postgres snapshot CR for instance " + postgresProviderName,
 			wantErr: false,
 		},
 		{
@@ -1583,63 +1599,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: nil,
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "failed to create postgres snapshot for " + testName,
-			wantErr: true,
-		},
-		{
-			name: "error retrieving snapshot CRs",
-			fields: fields{
-				Client: func() client.Client {
-					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
-						buildTestPostgresSnapshot())
-					mc.ListFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						return fmt.Errorf("generic error")
-					}
-					return mc
-				}(),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(nil),
-			},
-			want:    "failed to fetch all snapshots associated with postgres instance " + testName,
-			wantErr: true,
-		},
-		{
-			name: "error no objects found in GCP",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestPostgresSnapshot()),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(nil),
-			},
-			want:    "failed to determine latest snapshot id for instance " + testName,
+			want:    "failed to create postgres snapshot for " + postgresProviderName,
 			wantErr: true,
 		},
 		{
@@ -1655,78 +1617,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(nil),
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "latest snapshot creation in progress for instance " + testName,
-			wantErr: false,
-		},
-		{
-			name: "error no matching snapshot CR for GCP object",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestPostgresSnapshot()),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   testName,
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
-			},
-			want:    "failed to determine latest snapshot id for instance " + testName,
-			wantErr: true,
-		},
-		{
-			name: "found matching snapshot CR for GCP object",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestPostgresSnapshotWithLabels(map[string]string{
-						labelBucketName: testName,
-						labelObjectName: strconv.FormatInt(now.Unix(), 10),
-					})),
-				Logger:            logrus.NewEntry(logrus.StandardLogger()),
-				CredentialManager: nil,
-				ConfigManager:     nil,
-			},
-			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(now.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
-			},
-			want:    "postgres instance " + testName + " currently has 1 retained snapshots; next snapshot in",
+			want:    "latest snapshot creation in progress for instance " + postgresProviderName,
 			wantErr: false,
 		},
 		{
@@ -1738,13 +1631,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName,
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(now),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(now.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					snap2 := &v1alpha1.PostgresSnapshot{
@@ -1752,13 +1644,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName + "2",
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(expiredTime),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(expiredTime.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
@@ -1772,24 +1663,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(now.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "postgres instance " + testName + " currently has 1 retained snapshots; next snapshot in",
+			want:    "successfully reconciled postgres instance " + postgresProviderName + " snapshots",
 			wantErr: false,
 		},
 		{
@@ -1801,13 +1677,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName,
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(now),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(now.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					snap2 := &v1alpha1.PostgresSnapshot{
@@ -1815,13 +1690,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName + "2",
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(expiredTime),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(expiredTime.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme,
@@ -1838,22 +1712,7 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(now.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
+				p: buildTestPostgresWithSnapshot(),
 			},
 			want:    "failed to delete postgres snapshot " + gcpTestPostgresSnapshotName + "2",
 			wantErr: true,
@@ -1862,10 +1721,7 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 			name: "error parsing snapshot frequency",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
-					buildTestPostgresSnapshotWithLabels(map[string]string{
-						labelBucketName: testName,
-						labelObjectName: strconv.FormatInt(now.Unix(), 10),
-					})),
+					buildTestPostgresSnapshot()),
 				Logger:            logrus.NewEntry(logrus.StandardLogger()),
 				CredentialManager: nil,
 				ConfigManager:     nil,
@@ -1877,16 +1733,6 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 					postgres.Spec.SnapshotFrequency = gcpTestInvalidSnapshotTime
 					return postgres
 				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(now.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
 			},
 			want:    types.StatusMessage(fmt.Sprintf("failed to parse \"%s\" into go duration", gcpTestInvalidSnapshotTime)),
 			wantErr: true,
@@ -1900,13 +1746,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName,
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(elapsedTime),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(elapsedTime.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					return moqClient.NewSigsClientMoqWithScheme(scheme, snap)
@@ -1916,24 +1761,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(elapsedTime.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "postgres instance testName currently has 1 retained snapshots; next snapshot in",
+			want:    "successfully reconciled postgres instance " + postgresProviderName + " snapshots",
 			wantErr: false,
 		},
 		{
@@ -1945,13 +1775,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 							Name:              gcpTestPostgresSnapshotName,
 							Namespace:         testNs,
 							CreationTimestamp: metav1.NewTime(elapsedTime),
-							Labels: map[string]string{
-								labelBucketName: testName,
-								labelObjectName: strconv.FormatInt(elapsedTime.Unix(), 10),
-							},
 						},
 						Spec: v1alpha1.PostgresSnapshotSpec{
-							ResourceName: testName,
+							ResourceName: postgresProviderName,
+						},
+						Status: types.ResourceTypeSnapshotStatus{
+							Phase: types.PhaseComplete,
 						},
 					}
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, snap)
@@ -1965,24 +1794,9 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			args: args{
-				p: func() *v1alpha1.Postgres {
-					postgres := buildTestPostgres()
-					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
-					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
-					return postgres
-				}(),
-				storageClient: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
-					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return []*storage.ObjectAttrs{
-							{
-								Name:   strconv.FormatInt(elapsedTime.Unix(), 10),
-								Bucket: testName,
-							},
-						}, nil
-					}
-				}),
+				p: buildTestPostgresWithSnapshot(),
 			},
-			want:    "failed to create postgres snapshot for testName",
+			want:    "failed to create postgres snapshot for " + postgresProviderName,
 			wantErr: true,
 		},
 	}
@@ -1995,12 +1809,12 @@ func TestPostgresProvider_reconcileCloudSqlInstanceSnapshots(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         resources.BuildMockConnectionTester(),
 			}
-			got, err := pp.reconcileCloudSqlInstanceSnapshots(context.TODO(), tt.args.p, tt.args.storageClient)
+			got, err := pp.reconcileCloudSqlInstanceSnapshots(context.TODO(), tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileCloudSqlInstanceSnapshots() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !strings.HasPrefix(string(got), string(tt.want)) {
+			if got != tt.want {
 				t.Errorf("reconcileCloudSqlInstanceSnapshots() got = %v, want %v", got, tt.want)
 			}
 		})

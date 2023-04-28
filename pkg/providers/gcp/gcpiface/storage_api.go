@@ -13,8 +13,10 @@ import (
 
 type StorageAPI interface {
 	CreateBucket(ctx context.Context, bucket, projectID string, attrs *storage.BucketAttrs) error
+	GetBucket(ctx context.Context, bucket string) (*storage.BucketAttrs, error)
 	DeleteBucket(ctx context.Context, bucket string) error
 	SetBucketPolicy(ctx context.Context, bucket, identity, role string) error
+	HasBucketPolicy(ctx context.Context, bucket, identity, role string) (bool, error)
 	ListObjects(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error)
 	GetObjectMetadata(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error)
 	DeleteObject(ctx context.Context, bucket, object string) error
@@ -47,6 +49,12 @@ func (c *storageClient) CreateBucket(ctx context.Context, bucket, projectID stri
 	return nil
 }
 
+func (c *storageClient) GetBucket(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
+	c.logger.Infof("getting bucket %s", bucket)
+	bucketHandle := c.storageService.Bucket(bucket)
+	return bucketHandle.Attrs(ctx)
+}
+
 func (c *storageClient) DeleteBucket(ctx context.Context, bucket string) error {
 	c.logger.Infof("deleting bucket %q", bucket)
 	bucketHandle := c.storageService.Bucket(bucket)
@@ -69,6 +77,16 @@ func (c *storageClient) SetBucketPolicy(ctx context.Context, bucket, identity, r
 		return err
 	}
 	return nil
+}
+
+func (c *storageClient) HasBucketPolicy(ctx context.Context, bucket, identity, role string) (bool, error) {
+	c.logger.Infof("checking policy on bucket %q", bucket)
+	bucketHandle := c.storageService.Bucket(bucket)
+	policy, err := bucketHandle.IAM().Policy(ctx)
+	if err != nil {
+		return false, err
+	}
+	return policy.HasRole(identity, iam.RoleName(role)), nil
 }
 
 func (c *storageClient) ListObjects(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
@@ -111,8 +129,10 @@ func (c *storageClient) DeleteObject(ctx context.Context, bucket, object string)
 type MockStorageClient struct {
 	StorageAPI
 	CreateBucketFn      func(context.Context, string, string, *storage.BucketAttrs) error
+	GetBucketFn         func(context.Context, string) (*storage.BucketAttrs, error)
 	DeleteBucketFn      func(context.Context, string) error
 	SetBucketPolicyFn   func(context.Context, string, string, string) error
+	HasBucketPolicyFn   func(context.Context, string, string, string) (bool, error)
 	ListObjectsFn       func(context.Context, string, *storage.Query) ([]*storage.ObjectAttrs, error)
 	GetObjectMetadataFn func(context.Context, string, string) (*storage.ObjectAttrs, error)
 	DeleteObjectFn      func(context.Context, string, string) error
@@ -123,11 +143,17 @@ func GetMockStorageClient(modifyFn func(storageClient *MockStorageClient)) *Mock
 		CreateBucketFn: func(ctx context.Context, bucket, projectID string, attrs *storage.BucketAttrs) error {
 			return nil
 		},
+		GetBucketFn: func(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
+			return nil, nil
+		},
 		DeleteBucketFn: func(ctx context.Context, bucket string) error {
 			return nil
 		},
 		SetBucketPolicyFn: func(ctx context.Context, bucket, identity, role string) error {
 			return nil
+		},
+		HasBucketPolicyFn: func(ctx context.Context, bucket, identity, role string) (bool, error) {
+			return false, nil
 		},
 		ListObjectsFn: func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
 			return []*storage.ObjectAttrs{}, nil
@@ -149,12 +175,20 @@ func (m *MockStorageClient) CreateBucket(ctx context.Context, bucket, projectID 
 	return m.CreateBucketFn(ctx, bucket, projectID, attrs)
 }
 
+func (m *MockStorageClient) GetBucket(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
+	return m.GetBucketFn(ctx, bucket)
+}
+
 func (m *MockStorageClient) DeleteBucket(ctx context.Context, bucket string) error {
 	return m.DeleteBucketFn(ctx, bucket)
 }
 
 func (m *MockStorageClient) SetBucketPolicy(ctx context.Context, bucket, identity, role string) error {
 	return m.SetBucketPolicyFn(ctx, bucket, identity, role)
+}
+
+func (m *MockStorageClient) HasBucketPolicy(ctx context.Context, bucket, identity, role string) (bool, error) {
+	return m.HasBucketPolicyFn(ctx, bucket, identity, role)
 }
 
 func (m *MockStorageClient) ListObjects(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {

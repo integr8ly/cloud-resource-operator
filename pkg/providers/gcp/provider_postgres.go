@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -137,12 +138,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 		return nil, statusMessage, err
 	}
 	if pg.Spec.SnapshotFrequency != "" && pg.Spec.SnapshotRetention != "" {
-		storageClient, err := gcpiface.NewStorageAPI(ctx, option.WithCredentialsJSON(creds.ServiceAccountJson), logger)
-		if err != nil {
-			msg := "could not initialise storage client"
-			return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
-		}
-		statusMessage, err = p.reconcileCloudSqlInstanceSnapshots(ctx, pg, storageClient)
+		statusMessage, err = p.reconcileCloudSqlInstanceSnapshots(ctx, pg)
 		if err != nil {
 			return nil, statusMessage, err
 		}
@@ -715,44 +711,43 @@ func buildDefaultCloudSQLSecret(p *v1alpha1.Postgres) (*v1.Secret, error) {
 	}, nil
 }
 
-func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Context, pg *v1alpha1.Postgres, storageClient gcpiface.StorageAPI) (croType.StatusMessage, error) {
-	instanceName := annotations.Get(pg, ResourceIdentifierAnnotation)
+func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Context, pg *v1alpha1.Postgres) (croType.StatusMessage, error) {
 	snapshotRetention, err := str2duration.ParseDuration(string(pg.Spec.SnapshotRetention))
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to parse %q into go duration", pg.Spec.SnapshotRetention)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	snapshots, err := getAllSnapshotsForInstance(ctx, p.Client, pg)
+	snapshots, err := getAllSnapshotsForInstance(ctx, p.Client, pg.Name, pg.Namespace)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to fetch all snapshots associated with postgres instance %s", instanceName)
+		errMsg := fmt.Sprintf("failed to fetch all snapshots associated with postgres instance %s", pg.Name)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	if len(snapshots) == 0 {
 		err := p.createSnapshot(ctx, pg)
 		if err != nil {
-			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", instanceName)
+			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", pg.Name)
 			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
-		msg := fmt.Sprintf("created postgres snapshot CR for instance %s", instanceName)
+		msg := fmt.Sprintf("created postgres snapshot CR for instance %s", pg.Name)
 		return croType.StatusMessage(msg), nil
 	}
-	latestSnapshotCR, snapshotsRetained, err := getLatestPostgresSnapshotCR(ctx, instanceName, pg.Namespace, p.Client, storageClient)
+	latestSnapshot, err := getLatestPostgresSnapshot(ctx, p.Client, pg.Name, pg.Namespace)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to determine latest snapshot id for instance %s", instanceName)
+		errMsg := fmt.Sprintf("failed to determine latest snapshot id for instance %s", pg.Name)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	if latestSnapshotCR == nil {
-		msg := fmt.Sprintf("latest snapshot creation in progress for instance %s", instanceName)
+	if latestSnapshot == nil {
+		msg := fmt.Sprintf("latest snapshot creation in progress for instance %s", pg.Name)
 		return croType.StatusMessage(msg), nil
 	}
 	for i := range snapshots {
-		if snapshots[i].Name == latestSnapshotCR.Name {
+		if snapshots[i].Name == latestSnapshot.Name {
 			continue
 		}
 		retainUntil := snapshots[i].CreationTimestamp.Add(snapshotRetention)
 		if time.Now().After(retainUntil) {
 			p.Logger.Infof("deleting snapshot %s because its retention has expired", snapshots[i].Name)
-			err := p.Client.Delete(ctx, &snapshots[i])
+			err := p.Client.Delete(ctx, snapshots[i])
 			if err != nil {
 				errMsg := fmt.Sprintf("failed to delete postgres snapshot %s", snapshots[i].Name)
 				return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -764,16 +759,18 @@ func (p *PostgresProvider) reconcileCloudSqlInstanceSnapshots(ctx context.Contex
 		errMsg := fmt.Sprintf("failed to parse %q into go duration", pg.Spec.SnapshotFrequency)
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
-	nextSnapshotTime := latestSnapshotCR.CreationTimestamp.Add(snapshotFrequency)
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].GetCreationTimestamp().After(snapshots[j].GetCreationTimestamp().Time)
+	})
+	nextSnapshotTime := snapshots[0].CreationTimestamp.Add(snapshotFrequency)
 	if time.Now().After(nextSnapshotTime) {
 		err = p.createSnapshot(ctx, pg)
 		if err != nil {
-			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", instanceName)
+			errMsg := fmt.Sprintf("failed to create postgres snapshot for %s", pg.Name)
 			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
-	timeUntilNextSnapshot := str2duration.String(time.Until(nextSnapshotTime))
-	msg := fmt.Sprintf("postgres instance %s currently has %d retained snapshots; next snapshot in %s", instanceName, snapshotsRetained, timeUntilNextSnapshot)
+	msg := fmt.Sprintf("successfully reconciled postgres instance %s snapshots", pg.Name)
 	p.Logger.Info(msg)
 	return croType.StatusMessage(msg), nil
 }
