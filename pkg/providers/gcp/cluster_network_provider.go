@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -47,8 +46,7 @@ type NetworkManager interface {
 }
 
 var (
-	_              NetworkManager = (*NetworkProvider)(nil)
-	defaultTimeout                = time.Minute
+	_ NetworkManager = (*NetworkProvider)(nil)
 )
 
 type NetworkProvider struct {

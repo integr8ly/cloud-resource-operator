@@ -19,6 +19,7 @@ package postgressnapshot
 import (
 	"context"
 	"fmt"
+	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -53,7 +54,7 @@ type PostgresSnapshotReconciler struct {
 	k8sclient.Client
 	scheme        *runtime.Scheme
 	logger        *logrus.Entry
-	provider      providers.PostgresSnapshotProvider
+	providerList  []providers.PostgresSnapshotProvider
 	ConfigManager croAws.ConfigManager
 }
 
@@ -75,11 +76,15 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
+	providerList := []providers.PostgresSnapshotProvider{
+		awsPostgresSnapshotProvider,
+		gcp.NewGCPPostgresSnapshotProvider(client, logger),
+	}
 	return &PostgresSnapshotReconciler{
 		Client:        client,
 		scheme:        mgr.GetScheme(),
 		logger:        logger,
-		provider:      awsPostgresSnapshotProvider,
+		providerList:  providerList,
 		ConfigManager: croAws.NewDefaultConfigMapConfigManager(mgr.GetClient()),
 	}, nil
 }
@@ -97,8 +102,6 @@ func (r *PostgresSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger.Info("reconciling postgres snapshot")
-
-	// Fetch the PostgresSnapshot instance
 	instance := &integreatlyv1alpha1.PostgresSnapshot{}
 	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
@@ -108,14 +111,9 @@ func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// Return and don't requeue
 			return ctrl.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
-
-	// set info metric
 	defer r.exposePostgresSnapshotMetrics(ctx, instance)
-
-	// get postgres cr
 	postgresCr := &integreatlyv1alpha1.Postgres{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: instance.Spec.ResourceName, Namespace: instance.Namespace}, postgresCr)
 	if err != nil {
@@ -125,62 +123,69 @@ func (r *PostgresSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		return ctrl.Result{}, errorUtil.New(errMsg)
 	}
-
-	// check postgres deployment strategy is aws
-	if !r.provider.SupportsStrategy(postgresCr.Status.Strategy) {
-		errMsg := fmt.Sprintf("the resource %s uses an unsupported provider strategy %s, only resources using the aws provider are valid", instance.Spec.ResourceName, postgresCr.Status.Strategy)
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseFailed, croType.StatusMessage(errMsg)); updateErr != nil {
-			return ctrl.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, updateErr
+	cfgMgr := providers.NewConfigManager(providers.DefaultProviderConfigMapName, req.Namespace, r.Client)
+	stratMap, err := cfgMgr.GetStrategyMappingForDeploymentType(ctx, postgresCr.Spec.Type)
+	if err != nil {
+		if updateErr := resources.UpdatePhase(ctx, r.Client, instance, croType.PhaseFailed, croType.StatusDeploymentConfigNotFound.WrapError(err)); updateErr != nil {
+			return ctrl.Result{}, updateErr
 		}
-		return ctrl.Result{}, errorUtil.New(errMsg)
+		return ctrl.Result{}, errorUtil.Wrapf(err, "failed to read deployment type config for deployment %s", postgresCr.Spec.Type)
 	}
-
-	if instance.DeletionTimestamp != nil {
-		msg, err := r.provider.DeletePostgresSnapshot(ctx, instance, postgresCr)
+	strategyToUse := stratMap.Postgres
+	if instance.Status.Strategy != "" {
+		strategyToUse = instance.Status.Strategy
+		if strategyToUse != stratMap.Postgres {
+			r.logger.Infof("strategy and provider already set, changing of cloud-resource-config config maps not allowed in existing installation. the existing strategy is '%s' , cloud-resource-config is now set to '%s'. operator will continue to use existing strategy", strategyToUse, stratMap.Postgres)
+		}
+	}
+	for _, p := range r.providerList {
+		if !p.SupportsStrategy(strategyToUse) {
+			continue
+		}
+		if instance.Status.Strategy != strategyToUse {
+			instance.Status.Strategy = strategyToUse
+			if err = r.Client.Status().Update(ctx, instance); err != nil {
+				return ctrl.Result{}, errorUtil.Wrapf(err, "failed to update instance %s in namespace %s", instance.Name, instance.Namespace)
+			}
+		}
+		if instance.DeletionTimestamp != nil {
+			msg, err := p.DeletePostgresSnapshot(ctx, instance, postgresCr)
+			if err != nil {
+				if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+					return ctrl.Result{}, updateErr
+				}
+				return ctrl.Result{}, errorUtil.Wrapf(err, "failed to delete postgres snapshot")
+			}
+			r.logger.Info("waiting on postgres snapshot to successfully delete")
+			if err = resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseDeleteInProgress, msg); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
+		}
+		snap, msg, err := p.CreatePostgresSnapshot(ctx, instance, postgresCr)
 		if err != nil {
-			if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseFailed, msg.WrapError(err)); updateErr != nil {
+			if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseFailed, msg); updateErr != nil {
 				return ctrl.Result{}, updateErr
 			}
-			return ctrl.Result{}, errorUtil.Wrapf(err, "failed to delete postgres snapshot")
-		}
-
-		r.logger.Info("waiting on postgres snapshot to successfully delete")
-		if err = resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseDeleteInProgress, msg); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
-	}
-
-	// check status, if complete return
-	if instance.Status.Phase == croType.PhaseComplete {
-		r.logger.Infof("skipping creation of snapshot for %s as phase is complete", instance.Name)
-		return ctrl.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
-	}
-
-	// create the snapshot and return the phase
-	snap, msg, err := r.provider.CreatePostgresSnapshot(ctx, instance, postgresCr)
-
-	// error trying to create snapshot
-	if err != nil {
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseFailed, msg); updateErr != nil {
+		if snap == nil {
+			if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseInProgress, msg); updateErr != nil {
+				return ctrl.Result{}, updateErr
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
+		}
+		instance.Status.Message = msg
+		if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseComplete, msg); updateErr != nil {
 			return ctrl.Result{}, updateErr
 		}
+		return ctrl.Result{Requeue: true, RequeueAfter: p.GetReconcileTime(instance)}, nil
+	}
+	// unsupported strategy
+	if err = resources.UpdatePhase(ctx, r.Client, instance, croType.PhaseFailed, croType.StatusUnsupportedType.WrapError(err)); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	// no error but the snapshot doesn't exist yet
-	if snap == nil {
-		if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseInProgress, msg); updateErr != nil {
-			return ctrl.Result{}, updateErr
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
-	}
-
-	// no error, snapshot exists
-	if updateErr := resources.UpdateSnapshotPhase(ctx, r.Client, instance, croType.PhaseComplete, msg); updateErr != nil {
-		return ctrl.Result{}, updateErr
-	}
-	return ctrl.Result{Requeue: true, RequeueAfter: r.provider.GetReconcileTime(instance)}, nil
+	return ctrl.Result{}, errorUtil.New(fmt.Sprintf("unsupported deployment strategy %s", stratMap.Postgres))
 }
 
 func buildPostgresSnapshotStatusMetricLabels(cr *integreatlyv1alpha1.PostgresSnapshot, clusterID, snapshotName string, phase croType.StatusPhase) map[string]string {

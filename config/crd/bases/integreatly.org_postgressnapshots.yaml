@@ -36,11 +36,13 @@ spec:
             description: PostgresSnapshotSpec defines the desired state of PostgresSnapshot
             properties:
               resourceName:
-                description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                  Important: Run "operator-sdk generate k8s" to regenerate code after
-                  modifying this file Add custom validation using kubebuilder tags:
-                  https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+                description: ResourceName is the identification given to a resource
+                  by a cloud provider
                 type: string
+              skipDelete:
+                description: SkipDelete informs the reconciler to not delete the snapshot
+                  from the cloud provider
+                type: boolean
             required:
             - resourceName
             type: object
@@ -51,6 +53,8 @@ spec:
               phase:
                 type: string
               snapshotID:
+                type: string
+              strategy:
                 type: string
             type: object
         type: object
