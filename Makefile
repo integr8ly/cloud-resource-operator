@@ -102,7 +102,7 @@ cluster/seed/blobstorage:
 
 .PHONY: cluster/seed/redis
 cluster/seed/redis:
-	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: $(PROVIDER)/g" | sed "s/size: REPLACE_ME/size: $(REDIS_NODE_SIZE)/g" | oc apply -f - -n $(NAMESPACE)
+	@cat config/samples/integreatly_v1alpha1_redis.yaml | sed "s/name: REPLACE_ME/name: $(REDIS_NAME)/g" | sed "s/type: REPLACE_ME/type: $(PROVIDER)/g" | sed "s/size: REPLACE_ME/size: '$(REDIS_NODE_SIZE)'/g" | oc apply -f - -n $(NAMESPACE)
 
 .PHONY: cluster/seed/redissnapshot
 cluster/seed/redissnapshot:
