@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -378,6 +379,14 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 		RedisVersion:      redisVersion,
 		Labels:            tags,
 	}
+	// Override if node size is defined in the CR spec
+	if r.Spec.Size != "" {
+		size, err := strconv.ParseInt(r.Spec.Size, 10, 64)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to parse redis spec size")
+		}
+		defaultInstance.MemorySizeGb = int32(size)
+	}
 	if createInstanceRequest.Instance == nil {
 		createInstanceRequest.Instance = defaultInstance
 		return createInstanceRequest, nil
@@ -412,6 +421,7 @@ func (p *RedisProvider) buildCreateInstanceRequest(ctx context.Context, r *v1alp
 	if createInstanceRequest.Instance.RedisVersion == "" {
 		createInstanceRequest.Instance.RedisVersion = defaultInstance.RedisVersion
 	}
+
 	return createInstanceRequest, nil
 }
 

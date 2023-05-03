@@ -928,6 +928,64 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "success building redis create instance request with custom size",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+			},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Size: "7",
+					},
+				},
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				address: buildTestComputeAddress(nil),
+			},
+			want: &redispb.CreateInstanceRequest{
+				Parent:     parent,
+				InstanceId: instanceID,
+				Instance: func() *redispb.Instance {
+					inst := *redisInstance
+					inst.MemorySizeGb = 7
+					return &inst
+				}(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "fail to parse redis spec size",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil)),
+			},
+			args: args{
+				r: &v1alpha1.Redis{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testName,
+						Namespace: testNs,
+					},
+					Spec: types.ResourceTypeSpec{
+						Size: "invalid",
+					},
+				},
+				strategyConfig: &StrategyConfig{
+					Region:         gcpTestRegion,
+					ProjectID:      gcpTestProjectId,
+					CreateStrategy: json.RawMessage(`{}`),
+				},
+				address: buildTestComputeAddress(nil),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
 			name:   "fail to unmarshal gcp redis create strategy",
 			fields: fields{},
 			args: args{
