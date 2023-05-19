@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -113,7 +114,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 				p:    buildTestPostgres(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
-						return nil, fmt.Errorf("generic error")
+						return nil, errors.New("generic error")
 					}
 				}),
 			},
@@ -152,6 +153,150 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "error parsing postgres snapshot retention time",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestInvalidSnapshotTime
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
+						return &storage.ObjectAttrs{
+							Name:   testName,
+							Bucket: testName,
+						}, nil
+					}
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   testName,
+								Bucket: testName,
+							},
+						}, nil
+					}
+				}),
+				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, projectID, instanceName string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							ServiceAccountEmailAddress: gcpTestServiceAccountEmail,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+				},
+			},
+			want:    nil,
+			status:  croType.StatusMessage(fmt.Sprintf("failed to parse \"%s\" into go duration", gcpTestInvalidSnapshotTime)),
+			wantErr: true,
+		},
+		{
+			name: "error retrieving object lifecycle for bucket",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
+						return &storage.ObjectAttrs{
+							Name:   testName,
+							Bucket: testName,
+						}, nil
+					}
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   testName,
+								Bucket: testName,
+							},
+						}, nil
+					}
+					storageClient.HasBucketLifecycleFn = func(ctx context.Context, bucket string, days int64) (bool, error) {
+						return false, errors.New("generic error")
+					}
+				}),
+				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, projectID, instanceName string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							ServiceAccountEmailAddress: gcpTestServiceAccountEmail,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+				},
+			},
+			want:    nil,
+			status:  "failed to check object lifecycle for bucket " + testName,
+			wantErr: true,
+		},
+		{
+			name: "error setting object lifecycle for bucket",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
+			},
+			args: args{
+				snap: buildTestPostgresSnapshot(),
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
+				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
+					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
+						return &storage.ObjectAttrs{
+							Name:   testName,
+							Bucket: testName,
+						}, nil
+					}
+					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
+						return []*storage.ObjectAttrs{
+							{
+								Name:   testName,
+								Bucket: testName,
+							},
+						}, nil
+					}
+					storageClient.SetBucketLifecycleFn = func(ctx context.Context, bucket string, days int64) error {
+						return errors.New("generic error")
+					}
+				}),
+				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
+					sqlClient.GetInstanceFn = func(ctx context.Context, projectID, instanceName string) (*sqladmin.DatabaseInstance, error) {
+						return &sqladmin.DatabaseInstance{
+							ServiceAccountEmailAddress: gcpTestServiceAccountEmail,
+						}, nil
+					}
+				}),
+				strategyConfig: &StrategyConfig{
+					Region:    gcpTestRegion,
+					ProjectID: gcpTestProjectId,
+				},
+			},
+			want:    nil,
+			status:  "failed to set object lifecycle for bucket " + testName,
+			wantErr: true,
+		},
+		{
 			name: "success reconciling postgres snapshot",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
@@ -159,7 +304,12 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 			},
 			args: args{
 				snap: buildTestPostgresSnapshot(),
-				p:    buildTestPostgres(),
+				p: func() *v1alpha1.Postgres {
+					postgres := buildTestPostgres()
+					postgres.Spec.SnapshotRetention = gcpTestSnapshotRetention
+					postgres.Spec.SnapshotFrequency = gcpTestSnapshotFrequency
+					return postgres
+				}(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.GetObjectMetadataFn = func(ctx context.Context, bucket, object string) (*storage.ObjectAttrs, error) {
 						return &storage.ObjectAttrs{
@@ -266,7 +416,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				p:    buildTestPostgresPhase(croType.PhaseComplete),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.GetBucketFn = func(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
-						return nil, fmt.Errorf("generic error")
+						return nil, errors.New("generic error")
 					}
 				}),
 				strategyConfig: &StrategyConfig{
@@ -288,7 +438,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				p:    buildTestPostgresPhase(croType.PhaseComplete),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.CreateBucketFn = func(ctx context.Context, bucket, projectID string, attrs *storage.BucketAttrs) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 				}),
 				strategyConfig: &StrategyConfig{
@@ -311,7 +461,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				storageService: gcpiface.GetMockStorageClient(nil),
 				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
 					sqlClient.GetInstanceFn = func(ctx context.Context, projectID, instanceName string) (*sqladmin.DatabaseInstance, error) {
-						return nil, fmt.Errorf("generic error")
+						return nil, errors.New("generic error")
 					}
 				}),
 				strategyConfig: &StrategyConfig{
@@ -333,7 +483,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				p:    buildTestPostgresPhase(croType.PhaseComplete),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.HasBucketPolicyFn = func(ctx context.Context, bucket, identity, role string) (bool, error) {
-						return false, fmt.Errorf("generic error")
+						return false, errors.New("generic error")
 					}
 				}),
 				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
@@ -362,7 +512,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 				p:    buildTestPostgresPhase(croType.PhaseComplete),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.SetBucketPolicyFn = func(ctx context.Context, bucket, identity, role string) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 				}),
 				sqlService: gcpiface.GetMockSQLClient(func(sqlClient *gcpiface.MockSqlClient) {
@@ -397,7 +547,7 @@ func TestPostgresProvider_createPostgresSnapshot(t *testing.T) {
 						}, nil
 					}
 					sqlClient.ExportDatabaseFn = func(ctx context.Context, projectID, instanceName string, req *sqladmin.InstancesExportRequest) (*sqladmin.Operation, error) {
-						return nil, fmt.Errorf("generic error")
+						return nil, errors.New("generic error")
 					}
 				}),
 				strategyConfig: &StrategyConfig{
@@ -479,7 +629,7 @@ func TestPostgresProvider_reconcileSkipDelete(t *testing.T) {
 				Client: func() k8sclient.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot())
 					mc.ListFunc = func(ctx context.Context, list k8sclient.ObjectList, opts ...k8sclient.ListOption) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 					return mc
 				}(),
@@ -509,7 +659,7 @@ func TestPostgresProvider_reconcileSkipDelete(t *testing.T) {
 				Client: func() k8sclient.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot())
 					mc.UpdateFunc = func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 					return mc
 				}(),
@@ -593,7 +743,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				Client: func() k8sclient.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestLatestPostgresSnapshot(gcpTestPostgresSnapshotName))
 					mc.UpdateFunc = func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 					return mc
 				}(),
@@ -615,7 +765,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.DeleteObjectFn = func(ctx context.Context, bucket, object string) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 				}),
 				pg: buildTestPostgres(),
@@ -633,7 +783,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.ListObjectsFn = func(ctx context.Context, bucket string, query *storage.Query) ([]*storage.ObjectAttrs, error) {
-						return nil, fmt.Errorf("generic error")
+						return nil, errors.New("generic error")
 					}
 				}),
 				pg: buildTestPostgres(),
@@ -673,7 +823,7 @@ func TestPostgresProvider_deletePostgresSnapshot(t *testing.T) {
 				snap: buildTestPostgresSnapshot(),
 				storageService: gcpiface.GetMockStorageClient(func(storageClient *gcpiface.MockStorageClient) {
 					storageClient.DeleteBucketFn = func(ctx context.Context, bucket string) error {
-						return fmt.Errorf("generic error")
+						return errors.New("generic error")
 					}
 				}),
 				pg: buildTestPostgres(),
