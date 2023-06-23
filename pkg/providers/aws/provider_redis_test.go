@@ -374,8 +374,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -386,6 +390,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{
@@ -478,8 +485,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -490,6 +501,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 				}),
 			},
@@ -514,8 +528,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -526,6 +544,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return nil, genericAWSError
@@ -553,8 +574,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -565,6 +590,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -608,8 +636,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -620,6 +652,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -668,8 +703,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -680,6 +719,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -733,8 +775,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -745,6 +791,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -800,8 +849,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -812,6 +865,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -877,8 +933,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -889,6 +949,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -929,8 +992,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -941,6 +1008,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -992,8 +1062,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1004,6 +1078,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
 						return &elasticache.DescribeCacheSubnetGroupsOutput{
@@ -1137,8 +1214,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1149,6 +1230,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 				}),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
@@ -1275,8 +1359,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1287,6 +1375,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1352,8 +1443,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1364,6 +1459,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1410,8 +1508,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1422,6 +1524,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1464,12 +1569,16 @@ func Test_createRedisCluster(t *testing.T) {
 								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
 									group.ReplicationGroupId = aws.String("test-id")
 									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String(defaultCacheNodeType)
-									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1480,6 +1589,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1521,12 +1633,16 @@ func Test_createRedisCluster(t *testing.T) {
 								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
 									group.ReplicationGroupId = aws.String("test-id")
 									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String(defaultCacheNodeType)
-									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1537,6 +1653,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1580,12 +1699,16 @@ func Test_createRedisCluster(t *testing.T) {
 								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
 									group.ReplicationGroupId = aws.String("test-id")
 									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String(defaultCacheNodeType)
-									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1596,6 +1719,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1636,12 +1762,16 @@ func Test_createRedisCluster(t *testing.T) {
 								buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
 									group.ReplicationGroupId = aws.String("test-id")
 									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String(defaultCacheNodeType)
-									group.SnapshotRetentionLimit = aws.Int64(defaultSnapshotRetention)
+									group.CacheNodeType = aws.String("test")
+									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1652,6 +1782,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -1721,8 +1854,12 @@ func Test_createRedisCluster(t *testing.T) {
 									group.SnapshotRetentionLimit = aws.Int64(20)
 									group.NodeGroups = []*elasticache.NodeGroup{
 										{
-											NodeGroupId:      aws.String("primary-node"),
-											NodeGroupMembers: nil,
+											NodeGroupId: aws.String("primary-node"),
+											NodeGroupMembers: []*elasticache.NodeGroupMember{
+												{
+													PreferredAvailabilityZone: aws.String("eu-west-3"),
+												},
+											},
 											PrimaryEndpoint: &elasticache.Endpoint{
 												Address: testAddress,
 												Port:    testPort,
@@ -1733,6 +1870,9 @@ func Test_createRedisCluster(t *testing.T) {
 								},
 								)},
 						}, nil
+					}
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return &elasticache.TagListMessage{}, nil
 					}
 					elasticacheClient.describeCacheClustersFn = func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
 						return &elasticache.DescribeCacheClustersOutput{}, nil
@@ -2044,12 +2184,12 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		CacheSvc          elasticacheiface.ElastiCacheAPI
 	}
 	type args struct {
-		ctx      context.Context
-		cacheSvc elasticacheiface.ElastiCacheAPI
-		stsSvc   stsiface.STSAPI
-		r        *v1alpha1.Redis
-		stratCfg StrategyConfig
-		cache    *elasticache.NodeGroupMember
+		ctx              context.Context
+		cacheSvc         elasticacheiface.ElastiCacheAPI
+		stsSvc           stsiface.STSAPI
+		r                *v1alpha1.Redis
+		stratCfg         StrategyConfig
+		replicationGroup *elasticache.ReplicationGroup
 	}
 	tests := []struct {
 		name    string
@@ -2059,36 +2199,80 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			name: "test tags reconcile fails with invalid arn",
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
+					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
+						return nil, fmt.Errorf("%v", "invalid arn")
+					}
+				}),
+				stsSvc:   &mockStsClient{},
+				stratCfg: StrategyConfig{Region: "test"},
+				replicationGroup: buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+					group.ReplicationGroupId = aws.String("test-id")
+					group.Status = aws.String("available")
+					group.CacheNodeType = aws.String("test")
+					group.NodeGroups = []*elasticache.NodeGroup{
+						{
+							NodeGroupId: aws.String("primary-node"),
+							NodeGroupMembers: []*elasticache.NodeGroupMember{
+								{
+									PreferredAvailabilityZone: aws.String("1"),
+								},
+							},
+							PrimaryEndpoint: &elasticache.Endpoint{
+								Address: testAddress,
+								Port:    testPort,
+							},
+							Status: aws.String("available"),
+						},
+					}
+				},
+				),
+			},
+			fields: fields{
+				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
+				ConfigManager:     &ConfigManagerMock{},
+				CredentialManager: &CredentialManagerMock{},
+			},
+			want:    croType.StatusMessage("failed to add tags to AWS ElastiCache replication group arn:aws:elasticache::test:replicationgroup:test-id: invalid arn"),
+			wantErr: true,
+		},
+		{
 			name: "test tags reconcile completes successfully",
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
-						return &elasticache.DescribeCacheClustersOutput{
-							CacheClusters: buildCacheClusterList(nil),
-						}, nil
-					}
-					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName: &snapshotName,
-								},
-							},
-						}, nil
-					}
 					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
 						return &elasticache.TagListMessage{}, nil
 					}
 				}),
 				stsSvc:   &mockStsClient{},
 				stratCfg: StrategyConfig{Region: "test"},
-				cache: &elasticache.NodeGroupMember{
-					CacheClusterId:            aws.String("test"),
-					CacheNodeId:               aws.String("test"),
-					PreferredAvailabilityZone: aws.String("test"),
+				replicationGroup: buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+					group.ReplicationGroupId = aws.String("test-id")
+					group.Status = aws.String("available")
+					group.CacheNodeType = aws.String("test")
+					group.NodeGroups = []*elasticache.NodeGroup{
+						{
+							NodeGroupId: aws.String("primary-node"),
+							NodeGroupMembers: []*elasticache.NodeGroupMember{
+								{
+									PreferredAvailabilityZone: aws.String("eu-west-3"),
+								},
+							},
+							PrimaryEndpoint: &elasticache.Endpoint{
+								Address: testAddress,
+								Port:    testPort,
+							},
+							Status: aws.String("available"),
+						},
+					}
 				},
+				),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
@@ -2099,124 +2283,46 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test tags reconcile completes successfully with a DBClusterSnapshotNotFound error",
+			name: "test tags already exist",
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
 				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
-						return &elasticache.DescribeCacheClustersOutput{
-							CacheClusters: buildCacheClusterList(nil),
-						}, nil
-					}
-					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName: &snapshotName,
-								},
-							},
-						}, nil
-					}
-					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
-						return nil, awserr.New(elasticache.ErrCodeSnapshotNotFoundFault, elasticache.ErrCodeSnapshotNotFoundFault, fmt.Errorf("%v", elasticache.ErrCodeSnapshotNotFoundFault))
-					}
-				}),
-				stsSvc:   &mockStsClient{},
-				stratCfg: StrategyConfig{Region: "test"},
-				cache: &elasticache.NodeGroupMember{
-					CacheClusterId:            aws.String("test"),
-					CacheNodeId:               aws.String("test"),
-					PreferredAvailabilityZone: aws.String("test"),
-				},
-			},
-			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
-				ConfigManager:     &ConfigManagerMock{},
-				CredentialManager: &CredentialManagerMock{},
-			},
-			want:    croType.StatusMessage("successfully created and tagged"),
-			wantErr: false,
-		},
-		{
-			name: "test tags reconcile fails with any other than expected aws error",
-			args: args{
-				ctx: context.TODO(),
-				r:   buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
-						return &elasticache.DescribeCacheClustersOutput{
-							CacheClusters: buildCacheClusterList(nil),
-						}, nil
-					}
-					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName: &snapshotName,
-								},
-							},
-						}, nil
-					}
 					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
 						return nil, awserr.New(elasticache.ErrCodeSnapshotAlreadyExistsFault, elasticache.ErrCodeSnapshotAlreadyExistsFault, fmt.Errorf("%v", elasticache.ErrCodeSnapshotAlreadyExistsFault))
 					}
 				}),
 				stsSvc:   &mockStsClient{},
 				stratCfg: StrategyConfig{Region: "test"},
-				cache: &elasticache.NodeGroupMember{
-					CacheClusterId:            aws.String("test"),
-					CacheNodeId:               aws.String("test"),
-					PreferredAvailabilityZone: aws.String("test"),
-				},
-			},
-			fields: fields{
-				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
-				ConfigManager:     &ConfigManagerMock{},
-				CredentialManager: &CredentialManagerMock{},
-			},
-			want:    croType.StatusMessage("failed to add tags to aws elasticache snapshot"),
-			wantErr: true,
-		},
-		{
-			name: "test tags reconcile fails with any other generic error",
-			args: args{
-				ctx: context.TODO(),
-				r:   buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.describeCacheClustersFn = func(input *elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error) {
-						return &elasticache.DescribeCacheClustersOutput{
-							CacheClusters: buildCacheClusterList(nil),
-						}, nil
-					}
-					elasticacheClient.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
+				replicationGroup: buildReplicationGroup(func(group *elasticache.ReplicationGroup) {
+					group.ReplicationGroupId = aws.String("test-id")
+					group.Status = aws.String("available")
+					group.CacheNodeType = aws.String("test")
+					group.NodeGroups = []*elasticache.NodeGroup{
+						{
+							NodeGroupId: aws.String("primary-node"),
+							NodeGroupMembers: []*elasticache.NodeGroupMember{
 								{
-									SnapshotName: &snapshotName,
+									PreferredAvailabilityZone: aws.String("eu-west-3"),
 								},
 							},
-						}, nil
+							PrimaryEndpoint: &elasticache.Endpoint{
+								Address: testAddress,
+								Port:    testPort,
+							},
+							Status: aws.String("available"),
+						},
 					}
-					elasticacheClient.addTagsToResourceFn = func(input *elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error) {
-						return nil, fmt.Errorf("%v", elasticache.ErrCodeSnapshotAlreadyExistsFault)
-					}
-				}),
-				stsSvc:   &mockStsClient{},
-				stratCfg: StrategyConfig{Region: "test"},
-				cache: &elasticache.NodeGroupMember{
-					CacheClusterId:            aws.String("test"),
-					CacheNodeId:               aws.String("test"),
-					PreferredAvailabilityZone: aws.String("test"),
 				},
+				),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra()),
 				ConfigManager:     &ConfigManagerMock{},
 				CredentialManager: &CredentialManagerMock{},
 			},
-			want:    croType.StatusMessage("failed to add tags to aws elasticache snapshot"),
-			wantErr: true,
+			want:    croType.StatusMessage("Tags already added to AWS ElastiCache replication group"),
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -2228,7 +2334,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				CacheSvc:          tt.fields.CacheSvc,
 			}
-			got, err := p.TagElasticacheNode(tt.args.ctx, tt.args.cacheSvc, tt.args.stsSvc, tt.args.r, tt.args.cache)
+			got, err := p.TagElasticacheReplicationGroup(tt.args.ctx, tt.args.cacheSvc, tt.args.stsSvc, tt.args.r, tt.args.replicationGroup)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
 				return

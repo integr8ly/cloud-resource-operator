@@ -61,6 +61,8 @@ var healthyAWSReplicationGroupStatuses = []string{
 
 var _ providers.RedisProvider = (*RedisProvider)(nil)
 
+var tagsAdded bool = false
+
 // RedisProvider implementation for AWS Elasticache
 type RedisProvider struct {
 	Client            client.Client
@@ -347,19 +349,10 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	}
 
 	if !isSTS {
-		// add tags to cache nodes
-		cacheInstance := *foundCache.NodeGroups[0]
-		if *cacheInstance.Status != "available" {
-			logger.Infof("elasticache node %s current status is %s", *cacheInstance.NodeGroupId, *cacheInstance.Status)
-			return nil, croType.StatusMessage(fmt.Sprintf("cache node status not available, current status:  %s", *foundCache.Status)), nil
-		}
-
-		for _, cache := range cacheInstance.NodeGroupMembers {
-			msg, err := p.TagElasticacheNode(ctx, cacheSvc, stsSvc, r, cache)
-			if err != nil {
-				errMsg := fmt.Sprintf("failed to add tags to elasticache: %s", msg)
-				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-			}
+		msg, err := p.TagElasticacheReplicationGroup(ctx, cacheSvc, stsSvc, r, foundCache)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to add tags to elasticache replication group: %s", msg)
+			return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
 
@@ -394,23 +387,14 @@ func (p *RedisProvider) buildRedisTagCreateStrategy(ctx context.Context, cr *v1a
 	return "", nil
 }
 
-// TagElasticacheNode Add Tags to AWS Elasticache
-func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, cache *elasticache.NodeGroupMember) (croType.StatusMessage, error) {
-	logrus.Info("creating or updating tags on elasticache nodes and snapshots")
+// TagElasticacheReplicationGroup Add Tags to AWS Elasticache Replication Group
+func (p *RedisProvider) TagElasticacheReplicationGroup(ctx context.Context, cacheSvc elasticacheiface.ElastiCacheAPI, stsSvc stsiface.STSAPI, r *v1alpha1.Redis, replicationGroup *elasticache.ReplicationGroup) (croType.StatusMessage, error) {
+	logrus.Info("creating or updating tags on elasticache replication groups")
 
-	// check the node to make sure it is available before applying the tag
-	// this is needed as the cluster may be available while a node is not
-	cacheClusterOutput, err := cacheSvc.DescribeCacheClusters(&elasticache.DescribeCacheClustersInput{
-		CacheClusterId: cache.CacheClusterId,
-	})
-	if err != nil {
-		errMsg := "failed to get cache cluster output"
-		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
-	}
-	clusterStatus := *cacheClusterOutput.CacheClusters[0].CacheClusterStatus
-	if clusterStatus != "available" {
-		errMsg := fmt.Sprintf("%s status is %s, skipping adding tags", *cache.CacheClusterId, clusterStatus)
-		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+	replicationGroupStatus := *replicationGroup.Status
+	if replicationGroupStatus != "available" {
+		errMsg := fmt.Sprintf("%s status is %s, skipping adding tags", *replicationGroup.ReplicationGroupId, replicationGroupStatus)
+		return croType.StatusMessage(errMsg), nil
 	}
 
 	// get account identity
@@ -421,66 +405,40 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	// trim availability zone to return cache region
-	region := (*cache.PreferredAvailabilityZone)[:len(*cache.PreferredAvailabilityZone)-1]
+	// trim availability zone to return member cluster region
+	regionWithAZ := aws.StringValue(replicationGroup.NodeGroups[0].NodeGroupMembers[0].PreferredAvailabilityZone)
+	region := regionWithAZ[:len(regionWithAZ)-1] // remove last character (availability zone suffix)
 
-	// build cluster arn
-	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:cluster:my-mem-cluster
-	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:cluster:%s", region, *id.Account, *cache.CacheClusterId)
+	// build replication group arn
+	// need arn in the following format arn:aws:elasticache:us-east-1:1234567890:replicationgroup:my-mem-replication-group
+	arn := fmt.Sprintf("arn:aws:elasticache:%s:%s:replicationgroup:%s", region, *id.Account, *replicationGroup.ReplicationGroupId)
 
-	cacheTags, clusterID, err := p.getDefaultElasticacheTags(ctx, r)
+	cacheTags, _, err := p.getDefaultElasticacheTags(ctx, r)
 	if err != nil {
 		msg := "Failed to build default tags"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
-
-	// add tags
-	_, err = cacheSvc.AddTagsToResource(&elasticache.AddTagsToResourceInput{
-		ResourceName: aws.String(arn),
-		Tags:         cacheTags,
-	})
-	if err != nil {
-		msg := "failed to add tags to aws elasticache :"
-		return croType.StatusMessage(msg), err
-	}
-
-	// if snapshots exist add tags to them
-	inputDescribe := &elasticache.DescribeSnapshotsInput{
-		CacheClusterId: aws.String(*cache.CacheClusterId),
-	}
-
-	// loop snapshots adding tags per found snapshot
-	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
-	if snapshotList.Snapshots != nil && len(snapshotList.Snapshots) > 0 {
-		metricName := getMetricName(r.Name)
-		// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
-		resources.ResetMetric(metricName)
-		for _, snapshot := range snapshotList.Snapshots {
-			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
-			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
-			snapshotInput := &elasticache.AddTagsToResourceInput{
-				ResourceName: aws.String(snapshotArn),
-				Tags:         cacheTags,
-			}
-			labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
-			_, err = cacheSvc.AddTagsToResource(snapshotInput)
-			if err != nil {
-				cacheErr, isAwsErr := err.(awserr.Error)
-				if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
-					// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
-					logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
-					resources.SetMetric(metricName, labels, 1)
-				} else {
-					msg := "failed to add tags to aws elasticache snapshot"
-					return croType.StatusMessage(msg), err
-				}
-			} else {
-				resources.SetMetric(metricName, labels, 0)
-			}
+	logrus.Infof("arn %s", arn)
+	// only tag if tags don't already exist
+	if !tagsAdded {
+		_, err = cacheSvc.AddTagsToResource(&elasticache.AddTagsToResourceInput{
+			ResourceName: aws.String(arn),
+			Tags:         cacheTags,
+		})
+		if err != nil {
+			msg := fmt.Sprintf("failed to add tags to AWS ElastiCache replication group %s: %s", arn, err.Error())
+			return croType.StatusMessage(msg), err
+		} else {
+			tagsAdded = true
+			logrus.Infof("Initial tagging of replication groups successful %s", *replicationGroup.ReplicationGroupId)
 		}
+	} else {
+		logrus.Infof("already added")
+		msg := "Tags already added to AWS ElastiCache replication group"
+		return croType.StatusMessage(msg), nil
 	}
 
-	logrus.Infof("successfully created or updated tags to elasticache node %s", *cache.CacheClusterId)
+	logrus.Infof("successfully created or updated tags to elasticache replication group %s", *replicationGroup.ReplicationGroupId)
 	return "successfully created and tagged", nil
 }
 
