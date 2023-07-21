@@ -14,6 +14,8 @@ REDIS_NODE_SIZE ?= ""
 REDIS_NAME ?= example-redis
 # openshift/aws/gcp
 PROVIDER ?= openshift
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+GOLANGCI_LINT_VERSION=v1.50.0
 
 SHELL=/bin/bash
 
@@ -42,6 +44,10 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
 .PHONY: build
 build: code/gen
 	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./main.go
@@ -56,6 +62,11 @@ setup/service_account: kustomize
 	@oc project $(NAMESPACE)
 	@-oc create -f config/rbac/service_account.yaml -n $(NAMESPACE)
 	@$(KUSTOMIZE) build config/rbac | oc replace --force -f -	
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT)
+$(GOLANGCI_LINT): $(LOCALBIN)
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION)
 
 .PHONY: code/run/service_account
 code/run/service_account: setup/service_account
@@ -151,6 +162,10 @@ test/e2e/local: cluster/prepare
 	go clean -testcache && go test -v ./test/e2e -timeout=120m -ginkgo.v
 	oc delete project $(NAMESPACE)
 
+.PHONY: test/lint
+test/lint: golangci-lint
+	@$(GOLANGCI_LINT) run
+
 .PHONY: cluster/deploy
 cluster/deploy: kustomize
 	@echo Deploying operator with image: ${OPERATOR_IMAGE}
@@ -161,8 +176,6 @@ cluster/deploy: kustomize
 test/e2e/image:
 	@echo Running e2e tests:
 	$(OPERATOR_SDK) test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
-
-
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen

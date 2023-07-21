@@ -1,0 +1,33 @@
+output:
+  format: tab
+  sort-results: true
+
+linters:
+  disable:
+    - errcheck
+    - ineffassign
+    - unused
+    - govet
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters-settings:
+  gosimple:
+    checks: ["all"]
+  staticcheck:
+    checks: ["all", -SA4006, -SA9003, -SA1019]
+  errcheck:
+    check-blank: true
+
+presets:
+  - bugs
+  - error
+  - metalinter
+  - style
+  - unused
+
+run:
+  modules-download-mode: readonly
+  timeout: 5m
