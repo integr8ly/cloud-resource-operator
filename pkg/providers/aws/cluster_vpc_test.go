@@ -213,7 +213,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 		vpc    *ec2.Vpc
 		logger *logrus.Entry
 		zone   string
-		sub *ec2.Subnet
+		sub    *ec2.Subnet
 	}
 	tests := []struct {
 		name    string
@@ -225,23 +225,23 @@ func Test_createPrivateSubnet(t *testing.T) {
 			name: "failed to build subnet address",
 			args: args{
 				ctx:    context.TODO(),
-				c: moqClient.NewSigsClientMoqWithScheme(scheme),
+				c:      moqClient.NewSigsClientMoqWithScheme(scheme),
 				ec2Svc: nil,
 				vpc: &ec2.Vpc{
 					CidrBlock: aws.String(""),
 					VpcId:     aws.String(mockNetworkVpcId),
-							},
+				},
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				zone: "us-east-1",
+				zone:   "us-east-1",
 			},
-			want: nil,
+			want:    nil,
 			wantErr: true,
 		},
 		{
 			name: "error creating new subnet",
 			args: args{
-				ctx:    context.TODO(),
-				c: moqClient.NewSigsClientMoqWithScheme(scheme),
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
 						return &ec2.DescribeVpcsOutput{
@@ -284,16 +284,16 @@ func Test_createPrivateSubnet(t *testing.T) {
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				zone: "us-east-1",
+				zone:   "us-east-1",
 			},
-			want: nil,
+			want:    nil,
 			wantErr: true,
 		},
 		{
 			name: "error tagging private subnet",
 			args: args{
-				ctx:    context.TODO(),
-				c: moqClient.NewSigsClientMoqWithScheme(scheme),
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
 						return &ec2.DescribeVpcsOutput{
@@ -333,16 +333,16 @@ func Test_createPrivateSubnet(t *testing.T) {
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				zone: "us-east-1",
+				zone:   "us-east-1",
 			},
-			want: nil,
+			want:    nil,
 			wantErr: true,
 		},
 		{
 			name: "successfully create subnet",
 			args: args{
-				ctx:    context.TODO(),
-				c: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
 					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
 						return &ec2.DescribeVpcsOutput{
@@ -382,32 +382,32 @@ func Test_createPrivateSubnet(t *testing.T) {
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				zone: "eu-west-1",
+				zone:   "eu-west-1",
 			},
 			want: &ec2.Subnet{
 				AvailabilityZone: aws.String("test-zone-1"),
-				CidrBlock: aws.String("10.0.0.0/27"),
-				SubnetId: aws.String("test-id-1"),
+				CidrBlock:        aws.String("10.0.0.0/27"),
+				SubnetId:         aws.String("test-id-1"),
 				Tags: []*ec2.Tag{
 					{
-						Key: aws.String("kubernetes.io/role/internal-elb"),
+						Key:   aws.String("kubernetes.io/role/internal-elb"),
 						Value: aws.String("1"),
 					},
 					{
-						Key: aws.String("integreatly.org/clusterID"),
+						Key:   aws.String("integreatly.org/clusterID"),
 						Value: aws.String("test"),
 					},
 					{
-						Key: aws.String("Name"),
+						Key:   aws.String("Name"),
 						Value: aws.String("Cloud Resource Subnet"),
 					},
 					{
-						Key: aws.String("red-hat-managed"),
+						Key:   aws.String("red-hat-managed"),
 						Value: aws.String("true"),
 					},
 				},
 				VpcId: aws.String("standaloneID"),
-			},			
+			},
 			wantErr: false,
 		},
 	}
