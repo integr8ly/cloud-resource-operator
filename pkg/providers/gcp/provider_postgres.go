@@ -390,12 +390,8 @@ func (p *PostgresProvider) setPostgresDeletionTimestampMetric(ctx context.Contex
 	if pg.DeletionTimestamp != nil && !pg.DeletionTimestamp.IsZero() {
 
 		instanceName, err := resources.BuildInfraNameFromObject(ctx, p.Client, pg.ObjectMeta, defaultGcpIdentifierLength)
-		if instanceName == "" {
+		if err != nil || instanceName == "" {
 			p.Logger.Errorf("unable to build instance name")
-			return
-		}
-		if err != nil {
-			p.Logger.Errorf("failed to build infra name from object")
 			return
 		}
 

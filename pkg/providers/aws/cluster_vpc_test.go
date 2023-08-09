@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -327,6 +328,59 @@ func Test_createPrivateSubnet(t *testing.T) {
 							AvailabilityZones: buildSortedStandaloneAZs(),
 						}, nil
 					}
+				}),
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String("10.11.128.0/23"),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "us-east-1",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "subnet is nil",
+			args: args{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRTwentySix),
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+						return nil, awserr.New("InvalidSubnet.Conflict", "Subnet conflict error", nil)
+					}
+
 				}),
 				vpc: &ec2.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
