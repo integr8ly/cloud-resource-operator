@@ -340,7 +340,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "subnet is nil",
+			name: "error creating new subnet - subnet is nil",
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
