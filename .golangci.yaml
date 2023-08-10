@@ -17,7 +17,7 @@ linters-settings:
   gosimple:
     checks: ["all"]
   staticcheck:
-    checks: ["all", -SA4006, -SA9003, -SA1019]
+    checks: ["all"]
   errcheck:
     check-blank: true
 

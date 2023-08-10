@@ -134,8 +134,17 @@ func buildCacheClusterList(modifyFn func([]*elasticache.CacheCluster)) []*elasti
 func buildTestSchemeRedis() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croApis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = cloudCredentialApis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = monitoringv1.AddToScheme(scheme)
 	if err != nil {
 		return nil, err

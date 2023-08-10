@@ -20,8 +20,17 @@ import (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croapis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = configv1.Install(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = apis.AddToScheme(scheme)
 	if err != nil {
 		return nil, err

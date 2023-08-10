@@ -172,8 +172,17 @@ func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
 func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := croApis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = cloudCredentialApis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = monitoringv1.AddToScheme(scheme)
 	if err != nil {
 		return nil, err

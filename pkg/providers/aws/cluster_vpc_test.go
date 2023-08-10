@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	configv1 "github.com/openshift/api/config/v1"
@@ -193,6 +195,285 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("expected %v to equal %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_createPrivateSubnet(t *testing.T) {
+	scheme, err := buildTestSchemePostgresql()
+	if err != nil {
+		logrus.Fatal(err)
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type args struct {
+		ctx    context.Context
+		c      client.Client
+		ec2Svc ec2iface.EC2API
+		vpc    *ec2.Vpc
+		logger *logrus.Entry
+		zone   string
+		sub    *ec2.Subnet
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *ec2.Subnet
+		wantErr bool
+	}{
+		{
+			name: "failed to build subnet address",
+			args: args{
+				ctx:    context.TODO(),
+				c:      moqClient.NewSigsClientMoqWithScheme(scheme),
+				ec2Svc: nil,
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String(""),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "us-east-1",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error creating new subnet",
+			args: args{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRTwentySix),
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+						return nil, genericAWSError
+					}
+				}),
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String("10.11.128.0/23"),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "us-east-1",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error tagging private subnet",
+			args: args{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRTwentySix),
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+				}),
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String("10.11.128.0/23"),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "us-east-1",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "error creating new subnet - subnet is nil",
+			args: args{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRTwentySix),
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+						return nil, awserr.New("InvalidSubnet.Conflict", "Subnet conflict error", nil)
+					}
+
+				}),
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String("10.11.128.0/23"),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "us-east-1",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "successfully create subnet",
+			args: args{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
+					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+						return &ec2.DescribeVpcsOutput{
+							Vpcs: []*ec2.Vpc{
+								buildValidStandaloneVPC(validCIDRTwentySix),
+							},
+						}, nil
+					}
+					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+						return &ec2.CreateVpcOutput{
+							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+						}, nil
+					}
+					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+						return &ec2.DescribeRouteTablesOutput{
+							RouteTables: []*ec2.RouteTable{
+								buildMockEc2RouteTable(nil),
+							},
+						}, nil
+					}
+					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+						return &ec2.DescribeSubnetsOutput{
+							Subnets: buildValidBundleSubnets(),
+						}, nil
+					}
+					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+						return &ec2.DescribeAvailabilityZonesOutput{
+							AvailabilityZones: buildSortedStandaloneAZs(),
+						}, nil
+					}
+				}),
+				vpc: &ec2.Vpc{
+					CidrBlock: aws.String("10.11.128.0/23"),
+					VpcId:     aws.String(mockNetworkVpcId),
+				},
+				logger: logrus.NewEntry(logrus.StandardLogger()),
+				zone:   "eu-west-1",
+			},
+			want: &ec2.Subnet{
+				AvailabilityZone: aws.String("test-zone-1"),
+				CidrBlock:        aws.String("10.0.0.0/27"),
+				SubnetId:         aws.String("test-id-1"),
+				Tags: []*ec2.Tag{
+					{
+						Key:   aws.String("kubernetes.io/role/internal-elb"),
+						Value: aws.String("1"),
+					},
+					{
+						Key:   aws.String("integreatly.org/clusterID"),
+						Value: aws.String("test"),
+					},
+					{
+						Key:   aws.String("Name"),
+						Value: aws.String("Cloud Resource Subnet"),
+					},
+					{
+						Key:   aws.String("red-hat-managed"),
+						Value: aws.String("true"),
+					},
+				},
+				VpcId: aws.String("standaloneID"),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := createPrivateSubnet(tt.args.ctx, tt.args.c, tt.args.ec2Svc, tt.args.vpc, tt.args.logger, tt.args.zone)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("createPrivateSubnet() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("createPrivateSubnet() = %v, want %v", got, tt.want)
 			}
 		})
 	}

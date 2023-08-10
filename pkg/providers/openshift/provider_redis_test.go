@@ -33,7 +33,13 @@ var (
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := apis.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, err
+	}
 	err = appsv1.AddToScheme(scheme)
 	if err != nil {
 		return nil, err
