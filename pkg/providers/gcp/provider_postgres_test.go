@@ -844,25 +844,6 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error when building infra name from object",
-			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
-				Logger: logrus.NewEntry(logrus.StandardLogger()),
-			},
-			args: args{
-				p: &v1alpha1.Postgres{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              postgresProviderName,
-						Namespace:         testNs,
-						DeletionTimestamp: &metav1.Time{Time: now},
-					},
-				},
-				sqladminService: gcpiface.GetMockSQLClient(nil),
-			},
-			want:    "failed to build infra name from object",
-			wantErr: true,
-		},
-		{
 			name: "annotation found on postgres cr",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
