@@ -35,10 +35,10 @@ Prerequisites:
 commits
 - [OPM](https://docs.openshift.com/container-platform/4.11/cli_reference/opm-cli.html)
 
-Ensure you are running at least `Go 1.18`.
+Ensure you are running at least `Go 1.19`.
 ```shell script
 $ go version
-go version go1.18 darwin/amd64
+go version go1.19.10 linux/amd64
 ```
 
 If not, ensure Go Modules are enabled.
