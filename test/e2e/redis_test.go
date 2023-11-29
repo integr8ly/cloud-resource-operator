@@ -79,7 +79,7 @@ func buildRedisContainer(command []string) []v1.Container {
 	return []v1.Container{
 		{
 			Name:            "redis-connection",
-			Image:           "registry.redhat.io/rhscl/redis-32-rhel7",
+			Image:           "registry.redhat.io/rhscl/redis-6-rhel7",
 			Command:         command,
 			ImagePullPolicy: v1.PullIfNotPresent,
 		},
