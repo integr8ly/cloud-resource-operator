@@ -81,6 +81,7 @@ var (
 				"elasticache:ModifyCacheSubnetGroup",
 				"elasticache:DeleteCacheSubnetGroup",
 				"elasticache:ModifyReplicationGroup",
+				"elasticache:ListTagsForResource",
 				"rds:DescribeDBInstances",
 				"rds:CreateDBInstance",
 				"rds:DeleteDBInstance",

@@ -458,24 +458,31 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 		for _, snapshot := range snapshotList.Snapshots {
 			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
 			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
-			snapshotInput := &elasticache.AddTagsToResourceInput{
-				ResourceName: aws.String(snapshotArn),
-				Tags:         cacheTags,
-			}
-			labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
-			_, err = cacheSvc.AddTagsToResource(snapshotInput)
+			newCacheTags, err := filterExistingSnapshotTags(cacheSvc, cacheTags, snapshotArn)
 			if err != nil {
-				cacheErr, isAwsErr := err.(awserr.Error)
-				if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
-					// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
-					logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
-					resources.SetMetric(metricName, labels, 1)
-				} else {
-					msg := "failed to add tags to aws elasticache snapshot"
-					return croType.StatusMessage(msg), err
+				msg := "failed to filter existing snapshot Tags"
+				return croType.StatusMessage(msg), err
+			}
+			if newCacheTags != nil {
+				snapshotInput := &elasticache.AddTagsToResourceInput{
+					ResourceName: aws.String(snapshotArn),
+					Tags:         newCacheTags,
 				}
-			} else {
-				resources.SetMetric(metricName, labels, 0)
+				labels := buildCacheSnapshotNotFoundLabels(clusterID, snapshotArn, snapshot.SnapshotName, cache.CacheClusterId, arn)
+				_, err = cacheSvc.AddTagsToResource(snapshotInput)
+				if err != nil {
+					cacheErr, isAwsErr := err.(awserr.Error)
+					if isAwsErr && cacheErr.Code() == elasticache.ErrCodeSnapshotNotFoundFault {
+						// SnapshotNotFoundFault. this can happen when Status of Snapshot != "Available"
+						logrus.Warningf("SnapshotNotFoundFault error trying tag aws elasticache snapshot")
+						resources.SetMetric(metricName, labels, 1)
+					} else {
+						msg := "failed to add tags to aws elasticache snapshot"
+						return croType.StatusMessage(msg), err
+					}
+				} else {
+					resources.SetMetric(metricName, labels, 0)
+				}
 			}
 		}
 	}
@@ -1230,4 +1237,26 @@ func validServiceUpdateStates(status string) bool {
 		return true
 	}
 	return false
+}
+
+func filterExistingSnapshotTags(cacheSvc elasticacheiface.ElastiCacheAPI, tags []*elasticache.Tag, snapshotArn string) ([]*elasticache.Tag, error) {
+	var newCacheTags []*elasticache.Tag
+
+	input := &elasticache.ListTagsForResourceInput{
+		ResourceName: aws.String(snapshotArn),
+	}
+	existingSnapshotTags, err := cacheSvc.ListTagsForResource(input)
+	if err != nil {
+		return newCacheTags, errorUtil.Errorf("error list tags for snapshot %s : %v\n", snapshotArn, err)
+	}
+
+	for _, tag := range tags {
+		for _, snapshotTag := range existingSnapshotTags.TagList {
+			if snapshotTag.Key == tag.Key && snapshotTag.Value == tag.Value {
+				continue
+			}
+			newCacheTags = append(newCacheTags, tag)
+		}
+	}
+	return newCacheTags, nil
 }
