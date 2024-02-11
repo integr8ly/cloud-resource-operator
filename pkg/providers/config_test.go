@@ -116,7 +116,7 @@ func TestConfigManager_GetStrategyMappingForDeploymentType(t *testing.T) {
 			deployType:  "test",
 			client: func() client.Client {
 				mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-				mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+				mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 					return errors.New("failed to read provider config from configmap")
 				}
 				return mc

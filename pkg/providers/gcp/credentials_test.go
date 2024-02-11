@@ -83,7 +83,7 @@ func TestCredentialMinterCredentialManager_ReconcileProviderCredentials(t *testi
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							cr.Status.Provisioned = true
@@ -175,7 +175,7 @@ func TestCredentialMinterCredentialManager_ReconcileCredentials(t *testing.T) {
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							cr.Status.Provisioned = true
@@ -237,7 +237,7 @@ func TestCredentialMinterCredentialManager_ReconcileCredentials(t *testing.T) {
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							if cr.Status.Provisioned {
@@ -272,7 +272,7 @@ func TestCredentialMinterCredentialManager_ReconcileCredentials(t *testing.T) {
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							if cr.Status.Provisioned {
@@ -310,7 +310,7 @@ func TestCredentialMinterCredentialManager_ReconcileCredentials(t *testing.T) {
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							cr.Status.Provisioned = true
@@ -345,7 +345,7 @@ func TestCredentialMinterCredentialManager_ReconcileCredentials(t *testing.T) {
 					mc.UpdateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 						return nil
 					}
-					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						switch cr := obj.(type) {
 						case *cloudcredentialv1.CredentialsRequest:
 							cr.Status.Provisioned = true

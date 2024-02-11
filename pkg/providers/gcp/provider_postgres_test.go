@@ -216,7 +216,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure(nil))
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("failed to retrieve postgres strategy config")
 					}
 					return mc
@@ -2022,7 +2022,7 @@ func TestPostgresProvider_buildCloudSQLCreateStrategy(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mockClient
