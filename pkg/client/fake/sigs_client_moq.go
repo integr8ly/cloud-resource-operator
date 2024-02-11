@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
 )
@@ -31,7 +32,7 @@ var _ SigsClientInterface = &SigsClientInterfaceMock{}
 //			DeleteAllOfFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.DeleteAllOfOption) error {
 //				panic("mock out the DeleteAllOf method")
 //			},
-//			GetFunc: func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error {
+//			GetFunc: func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error {
 //				panic("mock out the Get method")
 //			},
 //			GetSigsClientFunc: func() k8sclient.Client {
@@ -49,11 +50,17 @@ var _ SigsClientInterface = &SigsClientInterfaceMock{}
 //			SchemeFunc: func() *runtime.Scheme {
 //				panic("mock out the Scheme method")
 //			},
-//			StatusFunc: func() k8sclient.StatusWriter {
+//			StatusFunc: func() k8sclient.SubResourceWriter {
 //				panic("mock out the Status method")
+//			},
+//			SubResourceFunc: func(subResource string) k8sclient.SubResourceClient {
+//				panic("mock out the SubResource method")
 //			},
 //			UpdateFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error {
 //				panic("mock out the Update method")
+//			},
+//			WatchFunc: func(ctx context.Context, obj k8sclient.ObjectList, opts ...k8sclient.ListOption) (watch.Interface, error) {
+//				panic("mock out the Watch method")
 //			},
 //		}
 //
@@ -72,7 +79,7 @@ type SigsClientInterfaceMock struct {
 	DeleteAllOfFunc func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.DeleteAllOfOption) error
 
 	// GetFunc mocks the Get method.
-	GetFunc func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error
+	GetFunc func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error
 
 	// GetSigsClientFunc mocks the GetSigsClient method.
 	GetSigsClientFunc func() k8sclient.Client
@@ -90,10 +97,16 @@ type SigsClientInterfaceMock struct {
 	SchemeFunc func() *runtime.Scheme
 
 	// StatusFunc mocks the Status method.
-	StatusFunc func() k8sclient.StatusWriter
+	StatusFunc func() k8sclient.SubResourceWriter
+
+	// SubResourceFunc mocks the SubResource method.
+	SubResourceFunc func(subResource string) k8sclient.SubResourceClient
 
 	// UpdateFunc mocks the Update method.
 	UpdateFunc func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error
+
+	// WatchFunc mocks the Watch method.
+	WatchFunc func(ctx context.Context, obj k8sclient.ObjectList, opts ...k8sclient.ListOption) (watch.Interface, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -132,6 +145,8 @@ type SigsClientInterfaceMock struct {
 			Key types.NamespacedName
 			// Obj is the obj argument value.
 			Obj k8sclient.Object
+			// Opts is the opts argument value.
+			Opts []k8sclient.GetOption
 		}
 		// GetSigsClient holds details about calls to the GetSigsClient method.
 		GetSigsClient []struct {
@@ -165,6 +180,11 @@ type SigsClientInterfaceMock struct {
 		// Status holds details about calls to the Status method.
 		Status []struct {
 		}
+		// SubResource holds details about calls to the SubResource method.
+		SubResource []struct {
+			// SubResource is the subResource argument value.
+			SubResource string
+		}
 		// Update holds details about calls to the Update method.
 		Update []struct {
 			// Ctx is the ctx argument value.
@@ -173,6 +193,15 @@ type SigsClientInterfaceMock struct {
 			Obj k8sclient.Object
 			// Opts is the opts argument value.
 			Opts []k8sclient.UpdateOption
+		}
+		// Watch holds details about calls to the Watch method.
+		Watch []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Obj is the obj argument value.
+			Obj k8sclient.ObjectList
+			// Opts is the opts argument value.
+			Opts []k8sclient.ListOption
 		}
 	}
 	lockCreate        sync.RWMutex
@@ -185,7 +214,9 @@ type SigsClientInterfaceMock struct {
 	lockRESTMapper    sync.RWMutex
 	lockScheme        sync.RWMutex
 	lockStatus        sync.RWMutex
+	lockSubResource   sync.RWMutex
 	lockUpdate        sync.RWMutex
+	lockWatch         sync.RWMutex
 }
 
 // Create calls CreateFunc.
@@ -309,23 +340,25 @@ func (mock *SigsClientInterfaceMock) DeleteAllOfCalls() []struct {
 }
 
 // Get calls GetFunc.
-func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error {
+func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error {
 	if mock.GetFunc == nil {
 		panic("SigsClientInterfaceMock.GetFunc: method is nil but SigsClientInterface.Get was just called")
 	}
 	callInfo := struct {
-		Ctx context.Context
-		Key types.NamespacedName
-		Obj k8sclient.Object
+		Ctx  context.Context
+		Key  types.NamespacedName
+		Obj  k8sclient.Object
+		Opts []k8sclient.GetOption
 	}{
-		Ctx: ctx,
-		Key: key,
-		Obj: obj,
+		Ctx:  ctx,
+		Key:  key,
+		Obj:  obj,
+		Opts: opts,
 	}
 	mock.lockGet.Lock()
 	mock.calls.Get = append(mock.calls.Get, callInfo)
 	mock.lockGet.Unlock()
-	return mock.GetFunc(ctx, key, obj)
+	return mock.GetFunc(ctx, key, obj, opts...)
 }
 
 // GetCalls gets all the calls that were made to Get.
@@ -333,14 +366,16 @@ func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.Namespac
 //
 //	len(mockedSigsClientInterface.GetCalls())
 func (mock *SigsClientInterfaceMock) GetCalls() []struct {
-	Ctx context.Context
-	Key types.NamespacedName
-	Obj k8sclient.Object
+	Ctx  context.Context
+	Key  types.NamespacedName
+	Obj  k8sclient.Object
+	Opts []k8sclient.GetOption
 } {
 	var calls []struct {
-		Ctx context.Context
-		Key types.NamespacedName
-		Obj k8sclient.Object
+		Ctx  context.Context
+		Key  types.NamespacedName
+		Obj  k8sclient.Object
+		Opts []k8sclient.GetOption
 	}
 	mock.lockGet.RLock()
 	calls = mock.calls.Get
@@ -514,7 +549,7 @@ func (mock *SigsClientInterfaceMock) SchemeCalls() []struct {
 }
 
 // Status calls StatusFunc.
-func (mock *SigsClientInterfaceMock) Status() k8sclient.StatusWriter {
+func (mock *SigsClientInterfaceMock) Status() k8sclient.SubResourceWriter {
 	if mock.StatusFunc == nil {
 		panic("SigsClientInterfaceMock.StatusFunc: method is nil but SigsClientInterface.Status was just called")
 	}
@@ -537,6 +572,38 @@ func (mock *SigsClientInterfaceMock) StatusCalls() []struct {
 	mock.lockStatus.RLock()
 	calls = mock.calls.Status
 	mock.lockStatus.RUnlock()
+	return calls
+}
+
+// SubResource calls SubResourceFunc.
+func (mock *SigsClientInterfaceMock) SubResource(subResource string) k8sclient.SubResourceClient {
+	if mock.SubResourceFunc == nil {
+		panic("SigsClientInterfaceMock.SubResourceFunc: method is nil but SigsClientInterface.SubResource was just called")
+	}
+	callInfo := struct {
+		SubResource string
+	}{
+		SubResource: subResource,
+	}
+	mock.lockSubResource.Lock()
+	mock.calls.SubResource = append(mock.calls.SubResource, callInfo)
+	mock.lockSubResource.Unlock()
+	return mock.SubResourceFunc(subResource)
+}
+
+// SubResourceCalls gets all the calls that were made to SubResource.
+// Check the length with:
+//
+//	len(mockedSigsClientInterface.SubResourceCalls())
+func (mock *SigsClientInterfaceMock) SubResourceCalls() []struct {
+	SubResource string
+} {
+	var calls []struct {
+		SubResource string
+	}
+	mock.lockSubResource.RLock()
+	calls = mock.calls.SubResource
+	mock.lockSubResource.RUnlock()
 	return calls
 }
 
@@ -577,5 +644,45 @@ func (mock *SigsClientInterfaceMock) UpdateCalls() []struct {
 	mock.lockUpdate.RLock()
 	calls = mock.calls.Update
 	mock.lockUpdate.RUnlock()
+	return calls
+}
+
+// Watch calls WatchFunc.
+func (mock *SigsClientInterfaceMock) Watch(ctx context.Context, obj k8sclient.ObjectList, opts ...k8sclient.ListOption) (watch.Interface, error) {
+	if mock.WatchFunc == nil {
+		panic("SigsClientInterfaceMock.WatchFunc: method is nil but SigsClientInterface.Watch was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Obj  k8sclient.ObjectList
+		Opts []k8sclient.ListOption
+	}{
+		Ctx:  ctx,
+		Obj:  obj,
+		Opts: opts,
+	}
+	mock.lockWatch.Lock()
+	mock.calls.Watch = append(mock.calls.Watch, callInfo)
+	mock.lockWatch.Unlock()
+	return mock.WatchFunc(ctx, obj, opts...)
+}
+
+// WatchCalls gets all the calls that were made to Watch.
+// Check the length with:
+//
+//	len(mockedSigsClientInterface.WatchCalls())
+func (mock *SigsClientInterfaceMock) WatchCalls() []struct {
+	Ctx  context.Context
+	Obj  k8sclient.ObjectList
+	Opts []k8sclient.ListOption
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Obj  k8sclient.ObjectList
+		Opts []k8sclient.ListOption
+	}
+	mock.lockWatch.RLock()
+	calls = mock.calls.Watch
+	mock.lockWatch.RUnlock()
 	return calls
 }

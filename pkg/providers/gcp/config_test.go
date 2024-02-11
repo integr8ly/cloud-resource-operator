@@ -175,7 +175,7 @@ func Test_getDefaultProject(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -246,7 +246,7 @@ func TestGetProjectFromStrategyOrDefault(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -313,7 +313,7 @@ func Test_getDefaultRegion(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -384,7 +384,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -526,7 +526,7 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 				configMapNamespace: testNs,
 				client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
