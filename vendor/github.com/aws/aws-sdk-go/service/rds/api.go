@@ -21923,7 +21923,8 @@ type CreateDBClusterInput struct {
 	//
 	// Constraints:
 	//
-	//    * Must contain from 1 to 63 letters, numbers, or hyphens.
+	//    * Must contain from 1 to 63 (for Aurora DB clusters) or 1 to 52 (for Multi-AZ
+	//    DB clusters) letters, numbers, or hyphens.
 	//
 	//    * First character must be a letter.
 	//
@@ -23003,7 +23004,7 @@ type CreateDBClusterParameterGroupInput struct {
 	//
 	// RDS for PostgreSQL
 	//
-	// Example: postgres12
+	// Example: postgres13
 	//
 	// To list all of the available parameter group families for a DB engine, use
 	// the following command:
@@ -26459,7 +26460,7 @@ type CreateDBShardGroupOutput struct {
 	DBClusterIdentifier *string `type:"string"`
 
 	// The name of the DB shard group.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// The Amazon Web Services Region-unique, immutable identifier for the DB shard
 	// group.
@@ -32659,7 +32660,7 @@ type DBShardGroup struct {
 	DBClusterIdentifier *string `type:"string"`
 
 	// The name of the DB shard group.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// The Amazon Web Services Region-unique, immutable identifier for the DB shard
 	// group.
@@ -35134,7 +35135,7 @@ type DeleteDBShardGroupInput struct {
 	// Teh name of the DB shard group to delete.
 	//
 	// DBShardGroupIdentifier is a required field
-	DBShardGroupIdentifier *string `type:"string" required:"true"`
+	DBShardGroupIdentifier *string `min:"1" type:"string" required:"true"`
 }
 
 // String returns the string representation.
@@ -35160,6 +35161,9 @@ func (s *DeleteDBShardGroupInput) Validate() error {
 	invalidParams := request.ErrInvalidParams{Context: "DeleteDBShardGroupInput"}
 	if s.DBShardGroupIdentifier == nil {
 		invalidParams.Add(request.NewErrParamRequired("DBShardGroupIdentifier"))
+	}
+	if s.DBShardGroupIdentifier != nil && len(*s.DBShardGroupIdentifier) < 1 {
+		invalidParams.Add(request.NewErrParamMinLen("DBShardGroupIdentifier", 1))
 	}
 
 	if invalidParams.Len() > 0 {
@@ -35194,7 +35198,7 @@ type DeleteDBShardGroupOutput struct {
 	DBClusterIdentifier *string `type:"string"`
 
 	// The name of the DB shard group.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// The Amazon Web Services Region-unique, immutable identifier for the DB shard
 	// group.
@@ -39671,7 +39675,7 @@ type DescribeDBShardGroupsInput struct {
 	// Constraints:
 	//
 	//    * If supplied, must match an existing DB shard group identifier.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// A filter that specifies one or more DB shard groups to describe.
 	Filters []*Filter `locationNameList:"Filter" type:"list"`
@@ -39712,6 +39716,9 @@ func (s DescribeDBShardGroupsInput) GoString() string {
 // Validate inspects the fields of the type to determine if they are valid.
 func (s *DescribeDBShardGroupsInput) Validate() error {
 	invalidParams := request.ErrInvalidParams{Context: "DescribeDBShardGroupsInput"}
+	if s.DBShardGroupIdentifier != nil && len(*s.DBShardGroupIdentifier) < 1 {
+		invalidParams.Add(request.NewErrParamMinLen("DBShardGroupIdentifier", 1))
+	}
 	if s.MaxRecords != nil && *s.MaxRecords < 20 {
 		invalidParams.Add(request.NewErrParamMinValue("MaxRecords", 20))
 	}
@@ -44624,6 +44631,8 @@ func (s *FailoverState) SetToDbClusterArn(v string) *FailoverState {
 //   - DescribeDBInstances
 //
 //   - DescribeDBRecommendations
+//
+//   - DescribeDBShardGroups
 //
 //   - DescribePendingMaintenanceActions
 type Filter struct {
@@ -49615,7 +49624,7 @@ type ModifyDBShardGroupInput struct {
 	// The name of the DB shard group to modify.
 	//
 	// DBShardGroupIdentifier is a required field
-	DBShardGroupIdentifier *string `type:"string" required:"true"`
+	DBShardGroupIdentifier *string `min:"1" type:"string" required:"true"`
 
 	// The maximum capacity of the DB shard group in Aurora capacity units (ACUs).
 	MaxACU *float64 `type:"double"`
@@ -49644,6 +49653,9 @@ func (s *ModifyDBShardGroupInput) Validate() error {
 	invalidParams := request.ErrInvalidParams{Context: "ModifyDBShardGroupInput"}
 	if s.DBShardGroupIdentifier == nil {
 		invalidParams.Add(request.NewErrParamRequired("DBShardGroupIdentifier"))
+	}
+	if s.DBShardGroupIdentifier != nil && len(*s.DBShardGroupIdentifier) < 1 {
+		invalidParams.Add(request.NewErrParamMinLen("DBShardGroupIdentifier", 1))
 	}
 
 	if invalidParams.Len() > 0 {
@@ -49684,7 +49696,7 @@ type ModifyDBShardGroupOutput struct {
 	DBClusterIdentifier *string `type:"string"`
 
 	// The name of the DB shard group.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// The Amazon Web Services Region-unique, immutable identifier for the DB shard
 	// group.
@@ -53325,7 +53337,7 @@ type RebootDBShardGroupInput struct {
 	// The name of the DB shard group to reboot.
 	//
 	// DBShardGroupIdentifier is a required field
-	DBShardGroupIdentifier *string `type:"string" required:"true"`
+	DBShardGroupIdentifier *string `min:"1" type:"string" required:"true"`
 }
 
 // String returns the string representation.
@@ -53351,6 +53363,9 @@ func (s *RebootDBShardGroupInput) Validate() error {
 	invalidParams := request.ErrInvalidParams{Context: "RebootDBShardGroupInput"}
 	if s.DBShardGroupIdentifier == nil {
 		invalidParams.Add(request.NewErrParamRequired("DBShardGroupIdentifier"))
+	}
+	if s.DBShardGroupIdentifier != nil && len(*s.DBShardGroupIdentifier) < 1 {
+		invalidParams.Add(request.NewErrParamMinLen("DBShardGroupIdentifier", 1))
 	}
 
 	if invalidParams.Len() > 0 {
@@ -53385,7 +53400,7 @@ type RebootDBShardGroupOutput struct {
 	DBClusterIdentifier *string `type:"string"`
 
 	// The name of the DB shard group.
-	DBShardGroupIdentifier *string `type:"string"`
+	DBShardGroupIdentifier *string `min:"1" type:"string"`
 
 	// The Amazon Web Services Region-unique, immutable identifier for the DB shard
 	// group.
