@@ -8,7 +8,7 @@ require (
 	cloud.google.com/go/monitoring v1.16.3
 	cloud.google.com/go/redis v1.14.1
 	cloud.google.com/go/storage v1.35.1
-	github.com/aws/aws-sdk-go v1.50.14
+	github.com/aws/aws-sdk-go v1.51.25
 	github.com/google/uuid v1.4.0
 	github.com/googleapis/gax-go/v2 v2.12.0
 	github.com/hashicorp/go-version v1.6.0
