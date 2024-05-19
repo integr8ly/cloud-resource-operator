@@ -391,10 +391,6 @@ func TestReconcilePostgres(t *testing.T) {
 				modifyFunc:       nil,
 			},
 			want: &v1alpha1.Postgres{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Postgres",
-					APIVersion: "integreatly.org/v1alpha1",
-				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",
@@ -435,10 +431,6 @@ func TestReconcilePostgres(t *testing.T) {
 				},
 			},
 			want: &v1alpha1.Postgres{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Postgres",
-					APIVersion: "integreatly.org/v1alpha1",
-				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:            "test",
 					Namespace:       "test",

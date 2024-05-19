@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/openshift/release:golang-1.19
+FROM registry.ci.openshift.org/openshift/release:golang-1.20
 
 ENV OPERATOR_SDK_VERSION=v1.14.0
 
@@ -14,4 +14,4 @@ RUN mkdir -p $GOPATH/src/github.com/operator-framework \
     && rm -rf $GOPATH/.cache
 
 # install gosec
-RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.11.0
+RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.18.2

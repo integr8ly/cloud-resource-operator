@@ -25,7 +25,7 @@ import (
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
-	utils "k8s.io/utils/pointer"
+	utils "k8s.io/utils/ptr"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
@@ -41,12 +41,12 @@ const gcpTestRedisInstanceName = "projects/" + gcpTestProjectId + "/locations/" 
 
 func buildTestComputeAddress(argsMap map[string]string) *computepb.Address {
 	address := &computepb.Address{
-		Name:    utils.String(gcpTestIpRangeName),
-		Network: utils.String(fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName)),
+		Name:    utils.To(gcpTestIpRangeName),
+		Network: utils.To(fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", gcpTestProjectId, gcpTestNetworkName)),
 	}
 	if argsMap != nil {
 		if argsMap["status"] != "" {
-			address.Status = utils.String(argsMap["status"])
+			address.Status = utils.To(argsMap["status"])
 		}
 	}
 	return address
@@ -1004,7 +1004,7 @@ func TestRedisProvider_buildCreateInstanceRequest(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mockClient
@@ -1991,7 +1991,7 @@ func TestRedisProvider_exposeRedisInstanceMetrics(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestGcpInfrastructure(nil))
-					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mockClient

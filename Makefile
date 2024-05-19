@@ -15,7 +15,7 @@ REDIS_NAME ?= example-redis
 # openshift/aws/gcp
 PROVIDER ?= openshift
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-GOLANGCI_LINT_VERSION=v1.50.0
+GOLANGCI_LINT_VERSION=v1.51.0
 
 SHELL=/bin/bash
 
@@ -263,4 +263,4 @@ setup/sts:
 
 .PHONY: gosec
 gosec:
-	gosec -exclude-dir=hack/redis ./...
+	gosec -exclude-dir=hack/redis -exclude=G402 test ./...

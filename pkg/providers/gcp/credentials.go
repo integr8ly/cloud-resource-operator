@@ -69,7 +69,7 @@ func (m *CredentialMinterCredentialManager) ReconcileCredentials(ctx context.Con
 	if err != nil {
 		return nil, nil, errorUtil.Wrapf(err, "failed to reconcile gcp credential request %s", name)
 	}
-	err = wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*5, timeOut, true, func(ctx2 context.Context) (bool, error) {
 		if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
 			if errors.IsNotFound(err) {
 				return false, nil

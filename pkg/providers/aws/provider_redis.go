@@ -647,7 +647,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 // poll for replication groups
 func getReplicationGroups(cacheSvc elasticacheiface.ElastiCacheAPI) ([]*elasticache.ReplicationGroup, error) {
 	var rgs []*elasticache.ReplicationGroup
-	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), time.Second*5, timeOut, true, func(ctx context.Context) (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeReplicationGroups(&elasticache.DescribeReplicationGroupsInput{})
 		if err != nil {
 			return false, nil

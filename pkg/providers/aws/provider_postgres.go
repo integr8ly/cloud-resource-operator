@@ -667,7 +667,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 // function to get rds instances, used to check/wait on AWS credentials
 func getRDSInstances(cacheSvc rdsiface.RDSAPI) ([]*rds.DBInstance, error) {
 	var pi []*rds.DBInstance
-	err := wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), time.Second*5, timeOut, true, func(ctx context.Context) (done bool, err error) {
 		listOutput, err := cacheSvc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
 		if err != nil {
 			return false, nil

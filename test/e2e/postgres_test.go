@@ -4,7 +4,7 @@ import (
 	goctx "context"
 	"database/sql"
 	"fmt"
-
+	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	bv1 "k8s.io/api/batch/v1"
@@ -47,7 +47,7 @@ func VerifyPostgresConnectionTest(t TestingTB, ctx *TestingContext, namespace st
 	}
 
 	// poll postgres connection job for success
-	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresConnectionJobName}, pj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}
@@ -85,7 +85,7 @@ func VerifyPostgresPermissionTest(t TestingTB, ctx *TestingContext, namespace st
 	}
 
 	// poll postgres command execution job to succeed
-	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresPermissionJobName}, pj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}

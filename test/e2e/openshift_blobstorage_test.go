@@ -3,9 +3,8 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-
 	t1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
-
+	"golang.org/x/net/context"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -47,7 +46,7 @@ func blobstorageCreateTest(t TestingTB, ctx *TestingContext, testBlobstorage *v1
 
 	// poll cr for complete status phase
 	bcr := &v1alpha1.BlobStorage{}
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: blobstorageName}, bcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get blobstorage cr")
 		}
