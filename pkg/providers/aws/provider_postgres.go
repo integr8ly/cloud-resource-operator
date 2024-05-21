@@ -59,6 +59,8 @@ const (
 	defaultPostgresUserKey               = "user"
 	defaultStorageEncrypted              = true
 	postgresProviderName                 = "aws-rds"
+	existingCert                         = "rds-ca-2019"
+	newCert                              = "rds-ca-rsa2048-g1"
 )
 
 var (
@@ -744,6 +746,11 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 	mi := &rds.ModifyDBInstanceInput{}
 	mi.DBInstanceIdentifier = foundConfig.DBInstanceIdentifier
 
+	// Once the fleet has moved to rds-ca-rsa2048-g1 this change is no longer needed the certs can be updated in the const for future cert retirements
+	if *foundConfig.CACertificateIdentifier == *aws.String(existingCert) {
+		mi.CACertificateIdentifier = aws.String(newCert)
+		updateFound = true
+	}
 	if *rdsConfig.DeletionProtection != *foundConfig.DeletionProtection {
 		mi.DeletionProtection = rdsConfig.DeletionProtection
 		updateFound = true
