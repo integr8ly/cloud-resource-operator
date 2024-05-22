@@ -302,10 +302,26 @@ func (r *CloudMetricsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}()
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.Redis{}). // manager needs at least one object to reconcile on
-		Watches(&source.Channel{Source: events}, &handler.EnqueueRequestForObject{}).
-		Complete(r)
+	//return ctrl.NewControllerManagedBy(mgr).
+	//	For(&integreatlyv1alpha1.Redis{}). // manager needs at least one object to reconcile on
+	//	Watches(&source.Channel{Source: events}, &handler.EnqueueRequestForObject{}).
+	//	Complete(r)
+
+	c, err := ctrl.NewControllerManagedBy(mgr).
+		For(&integreatlyv1alpha1.Redis{}).
+		Build(r)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: events},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

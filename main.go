@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	apis "github.com/integr8ly/cloud-resource-operator/apis"
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -36,7 +37,6 @@ import (
 	postgressnapshotController "github.com/integr8ly/cloud-resource-operator/controllers/postgressnapshot"
 	redisController "github.com/integr8ly/cloud-resource-operator/controllers/redis"
 	redissnapshotController "github.com/integr8ly/cloud-resource-operator/controllers/redissnapshot"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -73,18 +73,10 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		setupLog.Error(err, "Failed to get watch namespace")
-		os.Exit(1)
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Namespace:              namespace,
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
-		Port:                   9443,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "ce8de7ea.integreatly.org",
 	})

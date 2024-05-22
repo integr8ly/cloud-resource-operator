@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,9 +15,13 @@ type SigsClientInterface interface {
 	k8sclient.Reader
 	k8sclient.Writer
 	k8sclient.StatusClient
+	k8sclient.SubResourceClientConstructor
+
 	GetSigsClient() k8sclient.Client
 	Scheme() *runtime.Scheme
 	RESTMapper() meta.RESTMapper
+	GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error)
+	IsObjectNamespaced(obj runtime.Object) (bool, error)
 }
 
 func NewSigsClientMoqWithScheme(clientScheme *runtime.Scheme, initObjs ...runtime.Object) *SigsClientInterfaceMock {
@@ -25,7 +30,7 @@ func NewSigsClientMoqWithScheme(clientScheme *runtime.Scheme, initObjs ...runtim
 		GetSigsClientFunc: func() k8sclient.Client {
 			return sigsClient
 		},
-		GetFunc: func(ctx context.Context, key k8sclient.ObjectKey, obj k8sclient.Object) error {
+		GetFunc: func(ctx context.Context, key k8sclient.ObjectKey, obj k8sclient.Object, opts ...k8sclient.GetOption) error {
 			return sigsClient.Get(ctx, key, obj)
 		},
 		CreateFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.CreateOption) error {
