@@ -16,7 +16,7 @@ REDIS_NAME ?= example-redis
 PROVIDER ?= openshift
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION=v1.51.0
-
+# test
 SHELL=/bin/bash
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
