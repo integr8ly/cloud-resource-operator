@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"reflect"
 	"testing"
 
@@ -175,7 +175,7 @@ func Test_getDefaultProject(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -246,7 +246,7 @@ func TestGetProjectFromStrategyOrDefault(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -313,7 +313,7 @@ func Test_getDefaultRegion(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -384,7 +384,7 @@ func TestGetRegionFromStrategyOrDefault(t *testing.T) {
 			args: args{
 				c: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc
@@ -490,7 +490,7 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 					buildTestGcpStrategyConfigMap(map[string]*string{
 						"redis": aws.String(`{"development":{"region":"region","projectID":"","createStrategy":{},"deleteStrategy":{}}}`),
 					}),
-					buildTestGcpInfrastructure(map[string]*string{"projectID": pointer.String("")}),
+					buildTestGcpInfrastructure(map[string]*string{"projectID": ptr.To("")}),
 				),
 			},
 			args: args{
@@ -509,7 +509,7 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 					buildTestGcpStrategyConfigMap(map[string]*string{
 						"redis": aws.String(`{"development":{"region":"","projectID":"projectID","createStrategy":{},"deleteStrategy":{}}}`),
 					}),
-					buildTestGcpInfrastructure(map[string]*string{"region": pointer.String("")}),
+					buildTestGcpInfrastructure(map[string]*string{"region": ptr.To("")}),
 				),
 			},
 			args: args{
@@ -526,7 +526,7 @@ func TestConfigMapConfigManager_getTierStrategyForProvider(t *testing.T) {
 				configMapNamespace: testNs,
 				client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(nil)
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mc

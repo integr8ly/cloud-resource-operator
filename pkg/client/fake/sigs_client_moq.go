@@ -7,6 +7,7 @@ import (
 	"context"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
@@ -31,11 +32,17 @@ var _ SigsClientInterface = &SigsClientInterfaceMock{}
 //			DeleteAllOfFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.DeleteAllOfOption) error {
 //				panic("mock out the DeleteAllOf method")
 //			},
-//			GetFunc: func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error {
+//			GetFunc: func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error {
 //				panic("mock out the Get method")
 //			},
 //			GetSigsClientFunc: func() k8sclient.Client {
 //				panic("mock out the GetSigsClient method")
+//			},
+//			GroupVersionKindForFunc: func(obj runtime.Object) (schema.GroupVersionKind, error) {
+//				panic("mock out the GroupVersionKindFor method")
+//			},
+//			IsObjectNamespacedFunc: func(obj runtime.Object) (bool, error) {
+//				panic("mock out the IsObjectNamespaced method")
 //			},
 //			ListFunc: func(ctx context.Context, list k8sclient.ObjectList, opts ...k8sclient.ListOption) error {
 //				panic("mock out the List method")
@@ -49,8 +56,11 @@ var _ SigsClientInterface = &SigsClientInterfaceMock{}
 //			SchemeFunc: func() *runtime.Scheme {
 //				panic("mock out the Scheme method")
 //			},
-//			StatusFunc: func() k8sclient.StatusWriter {
+//			StatusFunc: func() k8sclient.SubResourceWriter {
 //				panic("mock out the Status method")
+//			},
+//			SubResourceFunc: func(subResource string) k8sclient.SubResourceClient {
+//				panic("mock out the SubResource method")
 //			},
 //			UpdateFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error {
 //				panic("mock out the Update method")
@@ -72,10 +82,16 @@ type SigsClientInterfaceMock struct {
 	DeleteAllOfFunc func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.DeleteAllOfOption) error
 
 	// GetFunc mocks the Get method.
-	GetFunc func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error
+	GetFunc func(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error
 
 	// GetSigsClientFunc mocks the GetSigsClient method.
 	GetSigsClientFunc func() k8sclient.Client
+
+	// GroupVersionKindForFunc mocks the GroupVersionKindFor method.
+	GroupVersionKindForFunc func(obj runtime.Object) (schema.GroupVersionKind, error)
+
+	// IsObjectNamespacedFunc mocks the IsObjectNamespaced method.
+	IsObjectNamespacedFunc func(obj runtime.Object) (bool, error)
 
 	// ListFunc mocks the List method.
 	ListFunc func(ctx context.Context, list k8sclient.ObjectList, opts ...k8sclient.ListOption) error
@@ -90,7 +106,10 @@ type SigsClientInterfaceMock struct {
 	SchemeFunc func() *runtime.Scheme
 
 	// StatusFunc mocks the Status method.
-	StatusFunc func() k8sclient.StatusWriter
+	StatusFunc func() k8sclient.SubResourceWriter
+
+	// SubResourceFunc mocks the SubResource method.
+	SubResourceFunc func(subResource string) k8sclient.SubResourceClient
 
 	// UpdateFunc mocks the Update method.
 	UpdateFunc func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.UpdateOption) error
@@ -132,9 +151,21 @@ type SigsClientInterfaceMock struct {
 			Key types.NamespacedName
 			// Obj is the obj argument value.
 			Obj k8sclient.Object
+			// Opts is the opts argument value.
+			Opts []k8sclient.GetOption
 		}
 		// GetSigsClient holds details about calls to the GetSigsClient method.
 		GetSigsClient []struct {
+		}
+		// GroupVersionKindFor holds details about calls to the GroupVersionKindFor method.
+		GroupVersionKindFor []struct {
+			// Obj is the obj argument value.
+			Obj runtime.Object
+		}
+		// IsObjectNamespaced holds details about calls to the IsObjectNamespaced method.
+		IsObjectNamespaced []struct {
+			// Obj is the obj argument value.
+			Obj runtime.Object
 		}
 		// List holds details about calls to the List method.
 		List []struct {
@@ -165,6 +196,11 @@ type SigsClientInterfaceMock struct {
 		// Status holds details about calls to the Status method.
 		Status []struct {
 		}
+		// SubResource holds details about calls to the SubResource method.
+		SubResource []struct {
+			// SubResource is the subResource argument value.
+			SubResource string
+		}
 		// Update holds details about calls to the Update method.
 		Update []struct {
 			// Ctx is the ctx argument value.
@@ -175,17 +211,20 @@ type SigsClientInterfaceMock struct {
 			Opts []k8sclient.UpdateOption
 		}
 	}
-	lockCreate        sync.RWMutex
-	lockDelete        sync.RWMutex
-	lockDeleteAllOf   sync.RWMutex
-	lockGet           sync.RWMutex
-	lockGetSigsClient sync.RWMutex
-	lockList          sync.RWMutex
-	lockPatch         sync.RWMutex
-	lockRESTMapper    sync.RWMutex
-	lockScheme        sync.RWMutex
-	lockStatus        sync.RWMutex
-	lockUpdate        sync.RWMutex
+	lockCreate              sync.RWMutex
+	lockDelete              sync.RWMutex
+	lockDeleteAllOf         sync.RWMutex
+	lockGet                 sync.RWMutex
+	lockGetSigsClient       sync.RWMutex
+	lockGroupVersionKindFor sync.RWMutex
+	lockIsObjectNamespaced  sync.RWMutex
+	lockList                sync.RWMutex
+	lockPatch               sync.RWMutex
+	lockRESTMapper          sync.RWMutex
+	lockScheme              sync.RWMutex
+	lockStatus              sync.RWMutex
+	lockSubResource         sync.RWMutex
+	lockUpdate              sync.RWMutex
 }
 
 // Create calls CreateFunc.
@@ -309,23 +348,25 @@ func (mock *SigsClientInterfaceMock) DeleteAllOfCalls() []struct {
 }
 
 // Get calls GetFunc.
-func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.NamespacedName, obj k8sclient.Object) error {
+func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.NamespacedName, obj k8sclient.Object, opts ...k8sclient.GetOption) error {
 	if mock.GetFunc == nil {
 		panic("SigsClientInterfaceMock.GetFunc: method is nil but SigsClientInterface.Get was just called")
 	}
 	callInfo := struct {
-		Ctx context.Context
-		Key types.NamespacedName
-		Obj k8sclient.Object
+		Ctx  context.Context
+		Key  types.NamespacedName
+		Obj  k8sclient.Object
+		Opts []k8sclient.GetOption
 	}{
-		Ctx: ctx,
-		Key: key,
-		Obj: obj,
+		Ctx:  ctx,
+		Key:  key,
+		Obj:  obj,
+		Opts: opts,
 	}
 	mock.lockGet.Lock()
 	mock.calls.Get = append(mock.calls.Get, callInfo)
 	mock.lockGet.Unlock()
-	return mock.GetFunc(ctx, key, obj)
+	return mock.GetFunc(ctx, key, obj, opts...)
 }
 
 // GetCalls gets all the calls that were made to Get.
@@ -333,14 +374,16 @@ func (mock *SigsClientInterfaceMock) Get(ctx context.Context, key types.Namespac
 //
 //	len(mockedSigsClientInterface.GetCalls())
 func (mock *SigsClientInterfaceMock) GetCalls() []struct {
-	Ctx context.Context
-	Key types.NamespacedName
-	Obj k8sclient.Object
+	Ctx  context.Context
+	Key  types.NamespacedName
+	Obj  k8sclient.Object
+	Opts []k8sclient.GetOption
 } {
 	var calls []struct {
-		Ctx context.Context
-		Key types.NamespacedName
-		Obj k8sclient.Object
+		Ctx  context.Context
+		Key  types.NamespacedName
+		Obj  k8sclient.Object
+		Opts []k8sclient.GetOption
 	}
 	mock.lockGet.RLock()
 	calls = mock.calls.Get
@@ -372,6 +415,70 @@ func (mock *SigsClientInterfaceMock) GetSigsClientCalls() []struct {
 	mock.lockGetSigsClient.RLock()
 	calls = mock.calls.GetSigsClient
 	mock.lockGetSigsClient.RUnlock()
+	return calls
+}
+
+// GroupVersionKindFor calls GroupVersionKindForFunc.
+func (mock *SigsClientInterfaceMock) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	if mock.GroupVersionKindForFunc == nil {
+		panic("SigsClientInterfaceMock.GroupVersionKindForFunc: method is nil but SigsClientInterface.GroupVersionKindFor was just called")
+	}
+	callInfo := struct {
+		Obj runtime.Object
+	}{
+		Obj: obj,
+	}
+	mock.lockGroupVersionKindFor.Lock()
+	mock.calls.GroupVersionKindFor = append(mock.calls.GroupVersionKindFor, callInfo)
+	mock.lockGroupVersionKindFor.Unlock()
+	return mock.GroupVersionKindForFunc(obj)
+}
+
+// GroupVersionKindForCalls gets all the calls that were made to GroupVersionKindFor.
+// Check the length with:
+//
+//	len(mockedSigsClientInterface.GroupVersionKindForCalls())
+func (mock *SigsClientInterfaceMock) GroupVersionKindForCalls() []struct {
+	Obj runtime.Object
+} {
+	var calls []struct {
+		Obj runtime.Object
+	}
+	mock.lockGroupVersionKindFor.RLock()
+	calls = mock.calls.GroupVersionKindFor
+	mock.lockGroupVersionKindFor.RUnlock()
+	return calls
+}
+
+// IsObjectNamespaced calls IsObjectNamespacedFunc.
+func (mock *SigsClientInterfaceMock) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	if mock.IsObjectNamespacedFunc == nil {
+		panic("SigsClientInterfaceMock.IsObjectNamespacedFunc: method is nil but SigsClientInterface.IsObjectNamespaced was just called")
+	}
+	callInfo := struct {
+		Obj runtime.Object
+	}{
+		Obj: obj,
+	}
+	mock.lockIsObjectNamespaced.Lock()
+	mock.calls.IsObjectNamespaced = append(mock.calls.IsObjectNamespaced, callInfo)
+	mock.lockIsObjectNamespaced.Unlock()
+	return mock.IsObjectNamespacedFunc(obj)
+}
+
+// IsObjectNamespacedCalls gets all the calls that were made to IsObjectNamespaced.
+// Check the length with:
+//
+//	len(mockedSigsClientInterface.IsObjectNamespacedCalls())
+func (mock *SigsClientInterfaceMock) IsObjectNamespacedCalls() []struct {
+	Obj runtime.Object
+} {
+	var calls []struct {
+		Obj runtime.Object
+	}
+	mock.lockIsObjectNamespaced.RLock()
+	calls = mock.calls.IsObjectNamespaced
+	mock.lockIsObjectNamespaced.RUnlock()
 	return calls
 }
 
@@ -514,7 +621,7 @@ func (mock *SigsClientInterfaceMock) SchemeCalls() []struct {
 }
 
 // Status calls StatusFunc.
-func (mock *SigsClientInterfaceMock) Status() k8sclient.StatusWriter {
+func (mock *SigsClientInterfaceMock) Status() k8sclient.SubResourceWriter {
 	if mock.StatusFunc == nil {
 		panic("SigsClientInterfaceMock.StatusFunc: method is nil but SigsClientInterface.Status was just called")
 	}
@@ -537,6 +644,38 @@ func (mock *SigsClientInterfaceMock) StatusCalls() []struct {
 	mock.lockStatus.RLock()
 	calls = mock.calls.Status
 	mock.lockStatus.RUnlock()
+	return calls
+}
+
+// SubResource calls SubResourceFunc.
+func (mock *SigsClientInterfaceMock) SubResource(subResource string) k8sclient.SubResourceClient {
+	if mock.SubResourceFunc == nil {
+		panic("SigsClientInterfaceMock.SubResourceFunc: method is nil but SigsClientInterface.SubResource was just called")
+	}
+	callInfo := struct {
+		SubResource string
+	}{
+		SubResource: subResource,
+	}
+	mock.lockSubResource.Lock()
+	mock.calls.SubResource = append(mock.calls.SubResource, callInfo)
+	mock.lockSubResource.Unlock()
+	return mock.SubResourceFunc(subResource)
+}
+
+// SubResourceCalls gets all the calls that were made to SubResource.
+// Check the length with:
+//
+//	len(mockedSigsClientInterface.SubResourceCalls())
+func (mock *SigsClientInterfaceMock) SubResourceCalls() []struct {
+	SubResource string
+} {
+	var calls []struct {
+		SubResource string
+	}
+	mock.lockSubResource.RLock()
+	calls = mock.calls.SubResource
+	mock.lockSubResource.RUnlock()
 	return calls
 }
 

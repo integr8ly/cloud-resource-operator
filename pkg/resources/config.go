@@ -3,6 +3,8 @@ package resources
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"os"
 	"strconv"
 	"strings"
@@ -100,4 +102,11 @@ func BuildTimestampedInfraNameFromObjectCreation(ctx context.Context, c client.C
 		return "", errorUtil.Wrap(err, "failed to retrieve timestamped cluster identifier")
 	}
 	return ShortenString(fmt.Sprintf("%s-%s-%s-%s", clusterID, om.Namespace, om.Name, om.GetObjectMeta().GetCreationTimestamp()), n), nil
+}
+
+func DefaultBackoff() wait.Backoff {
+	backoff := retry.DefaultBackoff
+	backoff.Steps = 60
+	backoff.Duration = 300 * time.Second
+	return backoff
 }

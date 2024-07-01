@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"k8s.io/client-go/util/retry"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
@@ -165,12 +166,22 @@ func NewTestingContext(kubeConfig *rest.Config) (*TestingContext, error) {
 		urlToCheck = *consoleUrl
 	}
 
-	selfSignedCerts, err := HasSelfSignedCerts(fmt.Sprintf("https://%s", urlToCheck), http.DefaultClient)
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // gosec G402, Used only in tests, cluster checked for self-signed certs
+		},
+	}
+
+	httpClient := &http.Client{
+		Transport: transport,
+	}
+
+	selfSignedCerts, err := HasSelfSignedCerts(fmt.Sprintf("https://%s", urlToCheck), httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine self-signed certs status on cluster: %w", err)
 	}
 
-	httpClient, err := NewTestingHTTPClient(kubeConfig)
+	httpClient, err = NewTestingHTTPClient(kubeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create testing http client: %v", err)
 	}
@@ -186,7 +197,17 @@ func NewTestingContext(kubeConfig *rest.Config) (*TestingContext, error) {
 }
 
 func NewTestingHTTPClient(kubeConfig *rest.Config) (*http.Client, error) {
-	selfSignedCerts, err := HasSelfSignedCerts(kubeConfig.Host, http.DefaultClient)
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // gosec G402, Used only in tests, cluster checked for self-signed certs
+		},
+	}
+
+	httpClient := &http.Client{
+		Transport: transport,
+	}
+
+	selfSignedCerts, err := HasSelfSignedCerts(kubeConfig.Host, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine self-signed certs status on cluster: %w", err)
 	}
@@ -197,12 +218,12 @@ func NewTestingHTTPClient(kubeConfig *rest.Config) (*http.Client, error) {
 		return nil, fmt.Errorf("failed to create new cookie jar: %v", err)
 	}
 
-	transport := &http.Transport{
+	transport = &http.Transport{
 		// #nosec G402 selfSignedCerts is a dynamic value
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: selfSignedCerts},
 	}
 
-	httpClient := &http.Client{
+	httpClient = &http.Client{
 		Jar:           jar,
 		Transport:     transport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return nil },
@@ -239,7 +260,7 @@ func WaitForDeployment(t TestingTB, kubeclient kubernetes.Interface, namespace, 
 
 func waitForDeployment(t TestingTB, kubeclient kubernetes.Interface, namespace, name string, replicas int,
 	retryInterval, timeout time.Duration, isOperator bool) error {
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx context.Context) (done bool, err error) {
 		deployment, err := kubeclient.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -261,4 +282,11 @@ func waitForDeployment(t TestingTB, kubeclient kubernetes.Interface, namespace, 
 	}
 	t.Logf("Deployment available (%d/%d)\n", replicas, replicas)
 	return nil
+}
+
+func DefaultBackoff() wait.Backoff {
+	backoff := retry.DefaultBackoff
+	backoff.Steps = 30
+	backoff.Duration = 300 * time.Second
+	return backoff
 }

@@ -26,7 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utils "k8s.io/utils/pointer"
+	utils "k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -151,7 +151,7 @@ func retrieveTestClusterId(filter string) string {
 
 func buildValidGcpNetwork(clusterID string) *computepb.Network {
 	return &computepb.Network{
-		Name: utils.String(fmt.Sprintf("%s-network", clusterID)),
+		Name: utils.To(fmt.Sprintf("%s-network", clusterID)),
 		Subnetworks: []string{
 			fmt.Sprintf(gcpTestSubnetURL, fmt.Sprintf("%s-master-subnet", clusterID)),
 			fmt.Sprintf(gcpTestSubnetURL, fmt.Sprintf("%s-worker-subnet", clusterID)),
@@ -161,7 +161,7 @@ func buildValidGcpNetwork(clusterID string) *computepb.Network {
 
 func buildInvalidGcpNetworkOneSubnet(clusterID string) *computepb.Network {
 	return &computepb.Network{
-		Name: utils.String(fmt.Sprintf("%s-network", clusterID)),
+		Name: utils.To(fmt.Sprintf("%s-network", clusterID)),
 		Subnetworks: []string{
 			fmt.Sprintf("%s-master-subnet", clusterID),
 		},
@@ -177,7 +177,7 @@ func buildEmptyGcpNetworkPeering(clusterID string) *computepb.Network {
 func buildValidGcpNetworkPeering(clusterID string) *computepb.Network {
 	net := buildEmptyGcpNetworkPeering(clusterID)
 	net.Peerings = append(net.Peerings, &computepb.NetworkPeering{
-		Name: utils.String(defaultServiceConnectionName),
+		Name: utils.To(defaultServiceConnectionName),
 	})
 	return net
 }
@@ -188,9 +188,9 @@ func buildValidGcpAddressRange(name string) *computepb.Address {
 
 func buildValidGcpAddressRangeStatus(name string, status string) *computepb.Address {
 	return &computepb.Address{
-		Name:    utils.String(name),
-		Purpose: utils.String(computepb.Address_VPC_PEERING.String()),
-		Status:  utils.String(status),
+		Name:    utils.To(name),
+		Purpose: utils.To(computepb.Address_VPC_PEERING.String()),
+		Status:  utils.To(status),
 	}
 }
 
@@ -216,9 +216,9 @@ func buildValidConnection(name string, projectID string, parent string) *service
 func buildValidSubnet(subnetUrl string, cidr string) *computepb.Subnetwork {
 	name, region, _ := parseSubnetUrl(subnetUrl)
 	return &computepb.Subnetwork{
-		Name:        utils.String(name),
-		Region:      utils.String(region),
-		IpCidrRange: utils.String(cidr),
+		Name:        utils.To(name),
+		Region:      utils.To(region),
+		IpCidrRange: utils.To(cidr),
 	}
 }
 

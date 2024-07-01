@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
-	utils "k8s.io/utils/pointer"
+	utils "k8s.io/utils/ptr"
 )
 
 func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
@@ -43,7 +43,7 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 				DatabaseVersion:             "POSTGRES_13",
 				DiskEncryptionConfiguration: &sqladmin.DiskEncryptionConfiguration{},
 				FailoverReplica: &DatabaseInstanceFailoverReplica{
-					Available: utils.Bool(false),
+					Available: utils.To(false),
 					Name:      "testName",
 				},
 				GceZone:      "test",
@@ -75,43 +75,43 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 							RetentionUnit:   "COUNT",
 							RetainedBackups: 30,
 						},
-						BinaryLogEnabled:               utils.Bool(false),
-						Enabled:                        utils.Bool(false),
+						BinaryLogEnabled:               utils.To(false),
+						Enabled:                        utils.To(false),
 						Kind:                           "test",
 						Location:                       "test",
-						PointInTimeRecoveryEnabled:     utils.Bool(true),
-						ReplicationLogArchivingEnabled: utils.Bool(false),
+						PointInTimeRecoveryEnabled:     utils.To(true),
+						ReplicationLogArchivingEnabled: utils.To(false),
 						StartTime:                      "test",
 						TransactionLogRetentionDays:    1,
 					},
 					Collation:                   "test",
 					ConnectorEnforcement:        "test",
-					CrashSafeReplicationEnabled: utils.Bool(false),
+					CrashSafeReplicationEnabled: utils.To(false),
 					DataDiskSizeGb:              20,
 					DataDiskType:                "test",
 					DatabaseFlags:               []*sqladmin.DatabaseFlags{},
-					DatabaseReplicationEnabled:  utils.Bool(false),
-					DeletionProtectionEnabled:   utils.Bool(true),
+					DatabaseReplicationEnabled:  utils.To(false),
+					DeletionProtectionEnabled:   utils.To(true),
 					DenyMaintenancePeriods:      []*sqladmin.DenyMaintenancePeriod{},
 					InsightsConfig:              &sqladmin.InsightsConfig{},
 					IpConfiguration: &IpConfiguration{
 						AllocatedIpRange:   "test",
 						AuthorizedNetworks: []*sqladmin.AclEntry{},
-						Ipv4Enabled:        utils.Bool(true),
+						Ipv4Enabled:        utils.To(true),
 						PrivateNetwork:     "test",
-						RequireSsl:         utils.Bool(true),
+						RequireSsl:         utils.To(true),
 					},
 					Kind:               "test",
 					LocationPreference: &sqladmin.LocationPreference{},
 					MaintenanceWindow: &MaintenanceWindow{
-						Day:  utils.Int64(0),
-						Hour: utils.Int64(0),
+						Day:  utils.To(int64(0)),
+						Hour: utils.To(int64(0)),
 					},
 					PasswordValidationPolicy: &sqladmin.PasswordValidationPolicy{},
 					PricingPlan:              "test",
 					ReplicationType:          "test",
 					SettingsVersion:          2,
-					StorageAutoResize:        utils.Bool(true),
+					StorageAutoResize:        utils.To(true),
 					StorageAutoResizeLimit:   100,
 					Tier:                     "test",
 					UserLabels: map[string]string{
@@ -203,7 +203,7 @@ func TestDatabaseInstance_MapToGcpDatabaseInstance(t *testing.T) {
 					PricingPlan:              "test",
 					ReplicationType:          "test",
 					SettingsVersion:          2,
-					StorageAutoResize:        utils.Bool(true),
+					StorageAutoResize:        utils.To(true),
 					StorageAutoResizeLimit:   100,
 					Tier:                     "test",
 					UserLabels: map[string]string{

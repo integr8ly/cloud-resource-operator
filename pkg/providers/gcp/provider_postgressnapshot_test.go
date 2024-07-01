@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 
 	"cloud.google.com/go/storage"
@@ -106,7 +107,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "error retrieving object metadata for snapshot",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -125,7 +126,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "success creating postgres snapshot",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -155,7 +156,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "error parsing postgres snapshot retention time",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -201,7 +202,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "error retrieving object lifecycle for bucket",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -250,7 +251,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "error setting object lifecycle for bucket",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -299,7 +300,7 @@ func TestPostgresProvider_reconcilePostgresSnapshot(t *testing.T) {
 		{
 			name: "success reconciling postgres snapshot",
 			fields: fields{
-				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSnapshot()),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(buildTestPostgresSnapshot()).WithStatusSubresource(buildTestPostgresSnapshot()).Build(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{

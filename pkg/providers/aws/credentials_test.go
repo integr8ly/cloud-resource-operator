@@ -275,6 +275,9 @@ func TestCredentialManager_ReconcileBucketOwnerCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
+	if k8sutil.IsRunModeLocal() {
+		_ = os.Setenv("WATCH_NAMESPACE", "test")
+	}
 	type args struct {
 		ctx    context.Context
 		name   string
@@ -419,7 +422,7 @@ func TestNewCredentialManager(t *testing.T) {
 			args: args{
 				client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return errors.New("generic error")
 					}
 					return mockClient
@@ -432,7 +435,7 @@ func TestNewCredentialManager(t *testing.T) {
 			args: args{
 				client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return nil
 					}
 					return mockClient

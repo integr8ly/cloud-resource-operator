@@ -18,7 +18,11 @@ package main
 
 import (
 	"flag"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	corev1 "k8s.io/api/core/v1"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -27,6 +31,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	apis "github.com/integr8ly/cloud-resource-operator/apis"
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
@@ -36,7 +41,6 @@ import (
 	postgressnapshotController "github.com/integr8ly/cloud-resource-operator/controllers/postgressnapshot"
 	redisController "github.com/integr8ly/cloud-resource-operator/controllers/redis"
 	redissnapshotController "github.com/integr8ly/cloud-resource-operator/controllers/redissnapshot"
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -79,12 +83,36 @@ func main() {
 		os.Exit(1)
 	}
 
+	operatorInstallationNamespace, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		setupLog.Error(err, "Failed to retrieve operator namespace")
+		os.Exit(1)
+	}
+
+	// If a watch namespace is detected (i.e. operator is namespace scoped), then pass the NS to cache.Options.DefaultNamespaces
+	// If no watch namespace is detected (i.e. operator is cluster scoped), then pass an empty Cache object
+	var managerCache = cache.Options{}
+	if namespace != "" {
+		managerCache = cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.ConfigMap{}: {
+					Namespaces: map[string]cache.Config{
+						operatorInstallationNamespace: {},
+						namespace:                     {},
+					},
+				},
+			},
+			DefaultNamespaces: map[string]cache.Config{
+				namespace: {},
+			},
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Namespace:              namespace,
+		Cache:                  managerCache,
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
-		Port:                   9443,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "ce8de7ea.integreatly.org",
 	})

@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -82,11 +81,8 @@ func New(mgr manager.Manager) (*RedisSnapshotReconciler, error) {
 func (r *RedisSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&integreatlyv1alpha1.RedisSnapshot{}).
-		Watches(&source.Kind{Type: &integreatlyv1alpha1.RedisSnapshot{}}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &integreatlyv1alpha1.RedisSnapshot{},
-		}).
+		Watches(&integreatlyv1alpha1.RedisSnapshot{}, &handler.EnqueueRequestForObject{}).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &integreatlyv1alpha1.RedisSnapshot{}, handler.OnlyControllerOwner())).
 		Complete(r)
 }
 

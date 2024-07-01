@@ -2915,7 +2915,7 @@ func TestNewAWSPostgresProvider(t *testing.T) {
 			args: args{
 				client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return errors.New("generic error")
 					}
 					return mockClient
@@ -3040,7 +3040,7 @@ func TestPostgresProvider_setPostgresDeletionTimestampMetric(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mockClient

@@ -42,7 +42,7 @@ const (
 	redisConfigMapKey     = "redis.conf"
 	redisContainerName    = "redis"
 	redisPort             = 6379
-	redisContainerCommand = "/usr/bin/redis-server"
+	redisContainerCommand = "/opt/rh/rh-redis6/root/usr/bin/redis-server"
 )
 
 var _ providers.RedisProvider = (*RedisProvider)(nil)
@@ -348,7 +348,7 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
 	return []corev1.Container{
 		{
-			Image:           "registry.redhat.io/rhel9/redis-7",
+			Image:           "registry.redhat.io/rhscl/redis-6-rhel7",
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Name:            redisContainerName,
 			Command: []string{
@@ -524,7 +524,7 @@ func buildDefaultRedisPVC(r *v1alpha1.Redis) *corev1.PersistentVolumeClaim {
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			Resources: corev1.ResourceRequirements{
+			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},

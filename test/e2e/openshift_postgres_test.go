@@ -3,12 +3,11 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-	"time"
-
 	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	"golang.org/x/net/context"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-
 	"k8s.io/apimachinery/pkg/util/wait"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -311,7 +310,7 @@ func postgresCreateTest(t TestingTB, ctx *TestingContext, testPostgres *v1alpha1
 
 	// poll cr for complete status phase
 	pcr := &v1alpha1.Postgres{}
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pcr); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get postgres cr")
 		}
@@ -350,7 +349,7 @@ func postgresDeleteTest(t TestingTB, ctx *TestingContext, testPostgres *v1alpha1
 	}
 	t.Logf("%s custom resource deleted", testPostgres.Name)
 
-	err := wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, testPostgres); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -364,7 +363,7 @@ func postgresDeleteTest(t TestingTB, ctx *TestingContext, testPostgres *v1alpha1
 	}
 
 	pvc := GetTestPVC(postgresName, namespace)
-	err = wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, pvc); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -378,7 +377,7 @@ func postgresDeleteTest(t TestingTB, ctx *TestingContext, testPostgres *v1alpha1
 	}
 
 	service := GetTestService(postgresName, namespace)
-	err = wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, service); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -400,7 +399,7 @@ func postgresDeleteTest(t TestingTB, ctx *TestingContext, testPostgres *v1alpha1
 func verifySuccessfulPostgresDeploymentStatus(ctx *TestingContext, namespace string) error {
 	// get postgres deployment
 	upd := &appsv1.Deployment{}
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: postgresName}, upd); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get postgres deployment")
 		}

@@ -199,7 +199,7 @@ func (m *CredentialMinterCredentialManager) reconcileCredentials(ctx context.Con
 	if err != nil {
 		return nil, errorUtil.Wrapf(err, "failed to reconcile aws credential request %s", name)
 	}
-	err = wait.PollImmediate(time.Second*5, timeOut, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*5, timeOut, true, func(ctx context.Context) (done bool, err error) {
 		if err = m.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
 			if errors.IsNotFound(err) {
 				return false, nil
