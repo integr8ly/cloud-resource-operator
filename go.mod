@@ -15,8 +15,8 @@ require (
 	github.com/lib/pq v1.10.6
 	github.com/onsi/ginkgo/v2 v2.14.0
 	github.com/onsi/gomega v1.30.0
-	github.com/openshift/api v0.0.0-20221013123534-96eec44e1979
-	github.com/openshift/cloud-credential-operator v0.0.0-20211102171825-9d7d082fe277
+	github.com/openshift/api v0.0.0-20231204192004-bfea29e5e6c4
+	github.com/openshift/cloud-credential-operator v0.0.0-20240510165258-af5662f1dbe2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.58.0
 	github.com/prometheus/client_golang v1.18.0
