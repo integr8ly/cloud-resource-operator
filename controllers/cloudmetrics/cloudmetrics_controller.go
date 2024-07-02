@@ -5,6 +5,8 @@ package cloudmetrics
 
 import (
 	"context"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"time"
 
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
@@ -18,16 +20,13 @@ import (
 	"github.com/sirupsen/logrus"
 
 	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	customMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // CroGaugeMetric allows for a mapping between an exposed prometheus metric and multiple cloud provider specific metric
@@ -302,10 +301,21 @@ func (r *CloudMetricsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}()
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&integreatlyv1alpha1.Redis{}). // manager needs at least one object to reconcile on
-		Watches(&source.Channel{Source: events}, &handler.EnqueueRequestForObject{}).
-		Complete(r)
+	c, err := ctrl.NewControllerManagedBy(mgr).
+		For(&integreatlyv1alpha1.Redis{}).
+		Build(r)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: events},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *CloudMetricsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

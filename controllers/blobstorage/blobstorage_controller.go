@@ -42,7 +42,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_blobstorage")
@@ -92,7 +91,7 @@ func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
 func (r *BlobStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.BlobStorage{}).
-		Watches(&source.Kind{Type: &v1alpha1.BlobStorage{}}, &handler.EnqueueRequestForObject{}).
+		Watches(&v1alpha1.BlobStorage{}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 

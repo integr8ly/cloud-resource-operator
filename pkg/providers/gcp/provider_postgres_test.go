@@ -23,7 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	utils "k8s.io/utils/pointer"
+	utils "k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -216,7 +216,7 @@ func TestPostgresProvider_deleteCloudSQLInstance(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mc := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresSecret(), buildTestGcpInfrastructure(nil))
-					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mc.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("failed to retrieve postgres strategy config")
 					}
 					return mc
@@ -1451,7 +1451,7 @@ func TestPostgresProvider_reconcileCloudSQLInstance(t *testing.T) {
 									},
 								},
 								DeletionProtectionEnabled: defaultDeleteProtectionEnabled,
-								StorageAutoResize:         utils.Bool(defaultStorageAutoResize),
+								StorageAutoResize:         utils.To(defaultStorageAutoResize),
 								IpConfiguration: &sqladmin.IpConfiguration{
 									Ipv4Enabled: defaultIPConfigIPV4Enabled,
 								},
@@ -2022,7 +2022,7 @@ func TestPostgresProvider_buildCloudSQLCreateStrategy(t *testing.T) {
 			fields: fields{
 				Client: func() client.Client {
 					mockClient := moqClient.NewSigsClientMoqWithScheme(scheme)
-					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object) error {
+					mockClient.GetFunc = func(ctx context.Context, key k8sTypes.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 						return fmt.Errorf("generic error")
 					}
 					return mockClient

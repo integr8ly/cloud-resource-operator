@@ -3,15 +3,14 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-	"time"
-
 	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	"golang.org/x/net/context"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/wait"
-
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
 
@@ -248,7 +247,7 @@ func redisCreateTest(t TestingTB, ctx *TestingContext, testRedis *v1alpha1.Redis
 	// poll cr for complete status phase
 	rcr := &v1alpha1.Redis{}
 
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, rcr); err != nil {
 			if k8serr.IsNotFound(err) {
 				return false, errorUtil.Wrapf(err, "Redis failed to get redis, retrying")
@@ -290,7 +289,7 @@ func redisDeleteTest(t TestingTB, ctx *TestingContext, testRedis *v1alpha1.Redis
 		return errorUtil.Wrapf(err, "failed  to delete example redis")
 	}
 
-	err := wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, testRedis); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -304,7 +303,7 @@ func redisDeleteTest(t TestingTB, ctx *TestingContext, testRedis *v1alpha1.Redis
 	}
 
 	pvc := GetTestPVC(redisName, namespace)
-	err = wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, pvc); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -318,7 +317,7 @@ func redisDeleteTest(t TestingTB, ctx *TestingContext, testRedis *v1alpha1.Redis
 	}
 
 	service := GetTestService(redisName, namespace)
-	err = wait.Poll(time.Second*10, time.Minute*2, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), time.Second*10, time.Minute*2, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, service); err != nil {
 			if k8serr.IsNotFound(err) {
 				return true, nil
@@ -338,7 +337,7 @@ func redisDeleteTest(t TestingTB, ctx *TestingContext, testRedis *v1alpha1.Redis
 // // verify that the deployment status is available
 func verifySuccessfulRedisDeploymentStatus(ctx *TestingContext, namespace string) error {
 	rd := &appsv1.Deployment{}
-	err := wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err := wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisName}, rd); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get redis deployment")
 		}

@@ -34,12 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -92,11 +90,8 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 func (r *PostgresSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&integreatlyv1alpha1.PostgresSnapshot{}).
-		Watches(&source.Kind{Type: &integreatlyv1alpha1.PostgresSnapshot{}}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &integreatlyv1alpha1.PostgresSnapshot{},
-		}).
+		Watches(&integreatlyv1alpha1.PostgresSnapshot{}, &handler.EnqueueRequestForObject{}).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &integreatlyv1alpha1.PostgresSnapshot{}, handler.OnlyControllerOwner())).
 		Complete(r)
 }
 

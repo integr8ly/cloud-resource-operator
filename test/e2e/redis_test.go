@@ -4,12 +4,12 @@ import (
 	goctx "context"
 	"fmt"
 	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	errorUtil "github.com/pkg/errors"
+	"golang.org/x/net/context"
 	bv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-
-	errorUtil "github.com/pkg/errors"
 )
 
 const (
@@ -38,7 +38,7 @@ func VerifyRedisConnectionTest(t TestingTB, ctx *TestingContext, namespace strin
 	}
 
 	// poll redis connection job for success
-	err = wait.Poll(retryInterval, timeout, func() (done bool, err error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), retryInterval, timeout, false, func(ctx2 context.Context) (done bool, err error) {
 		if err := ctx.Client.Get(goctx.TODO(), types.NamespacedName{Namespace: namespace, Name: redisConnectionJobName}, rj); err != nil {
 			return true, errorUtil.Wrapf(err, "could not get connection job")
 		}
