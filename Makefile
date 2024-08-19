@@ -16,6 +16,7 @@ REDIS_NAME ?= example-redis
 PROVIDER ?= openshift
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION=v1.51.0
+CONTAINER_ENGINE ?= podman
 
 SHELL=/bin/bash
 
@@ -142,11 +143,11 @@ test/unit:
 .PHONY: image/build
 image/build: build
 	echo "build image ${OPERATOR_IMG}"
-	docker build --platform=$(CONTAINER_PLATFORM) -t ${OPERATOR_IMG} .
+	${CONTAINER_ENGINE} build --platform=$(CONTAINER_PLATFORM) -t ${OPERATOR_IMG} .
 
 .PHONY: image/push
 image/push: image/build
-	docker push ${OPERATOR_IMG}
+	${CONTAINER_ENGINE} push ${OPERATOR_IMG}
 
 .PHONY: test/e2e/prow
 test/e2e/prow: export component := cloud-resource-operator
@@ -241,13 +242,13 @@ release/prepare: gen/csv image/push create/olm/bundle
 .PHONY: image/build/pipelines
 image/build/pipelines: build
 	echo "build image ${OPERATOR_IMG}"
-	sudo podman build --platform=$(CONTAINER_PLATFORM) --ulimit nofile=65535:65535 . -t ${OPERATOR_IMG}
-	sudo podman save ${OPERATOR_IMG} | sudo -u jenkins podman load
+	${CONTAINER_ENGINE} build --platform=$(CONTAINER_PLATFORM) --ulimit nofile=65535:65535 . -t ${OPERATOR_IMG}
+	${CONTAINER_ENGINE} save ${OPERATOR_IMG} | sudo -u jenkins ${CONTAINER_ENGINE} load
 
 .PHONY: image/push/pipelines
 image/push/pipelines: image/build/pipelines
 	echo "pushing image ${OPERATOR_IMG}"
-	podman push ${OPERATOR_IMG}
+	${CONTAINER_ENGINE} push ${OPERATOR_IMG}
 
 .PHONY: verify/release/exist
 verify/release/exist:
