@@ -7,7 +7,7 @@ LATEST_VERSION=$(grep cloud-resource-operator bundles/cloud-resource-operator.pa
 
 ORG="${IMAGE_ORG:-integreatly}"
 REG="${IMAGE_REG:-quay.io}"
-BUILD_TOOL="${BUILD_TOOL:-docker}"
+BUILD_TOOL="${BUILD_TOOL:-podman}"
 CONTAINER_PLATFORM="${CONTAINER_PLATFORM:-linux/amd64}"
 UPGRADE_CRO="${UPGRADE:-true}"
 VERSIONS="${BUNDLE_VERSIONS:-$LATEST_VERSION}"
