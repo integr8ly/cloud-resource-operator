@@ -1,13 +1,13 @@
 # Build the manager binary	
-FROM registry.redhat.io/ubi8/go-toolset:1.20.12-5 as builder
+FROM registry.redhat.io/ubi9/go-toolset:1.20.12 as builder
 		
 WORKDIR /workspace	
 # Copy the Go Modules manifests	
 COPY go.mod go.mod	
-COPY go.sum go.sum	
-# cache deps before building and copying source so that we don't need to re-download as much	
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer	
-RUN go mod download	
+RUN go mod download
 		
 # Copy the go source	
 COPY main.go main.go	
@@ -22,7 +22,7 @@ COPY test/ test/
 # Build	
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o cloud-resource-operator main.go
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 ENV OPERATOR=/usr/local/bin/cloud-resource-operator \
 USER_UID=1001 \
