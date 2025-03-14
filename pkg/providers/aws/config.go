@@ -4,13 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws"
-	awsCredentials "github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sts"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 
@@ -124,33 +120,39 @@ func BuildDefaultConfigMap(name, namespace string) *v1.ConfigMap {
 	}
 }
 
-func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials *Credentials, strategy *StrategyConfig) (*session.Session, error) {
+func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials *Credentials, strategy *StrategyConfig) (*aws.Config, error) {
 	region, err := GetRegionFromStrategyOrDefault(ctx, c, strategy)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get region from strategy while creating aws session")
 	}
 
-	awsConfig := aws.Config{
-		Region: aws.String(region),
-	}
+	//awsConfig := aws.Config{
+	//	Region: aws.String(region),
+	//}
+	awsConfig := config.WithRegion(region)
+	//TODO
 	// Check if STS credentials are passed
-	if len(credentials.RoleArn) > 0 {
-		// If running locally and STS role to assume is created, assume this role locally
-		// Local IAM user must be a principle in the role created with the sts:AssumeRole action
-		// Otherwise assume running in a pod in STS cluster
-		if k8sutil.IsRunModeLocal() {
-			sess := session.Must(session.NewSession(&awsConfig))
-			awsConfig.Credentials = stscreds.NewCredentials(sess, credentials.RoleArn)
-		} else {
-			svc := sts.New(session.Must(session.NewSession(&awsConfig)))
-			credentialsProvider := stscreds.NewWebIdentityRoleProviderWithOptions(svc, credentials.RoleArn, "Red-Hat-cloud-resources-operator", stscreds.FetchTokenPath(credentials.TokenFilePath))
-			awsConfig.Credentials = awsCredentials.NewCredentials(credentialsProvider)
-		}
-	} else {
-		awsConfig.Credentials = awsCredentials.NewStaticCredentials(credentials.AccessKeyID, credentials.SecretAccessKey, "")
+	//if len(credentials.RoleArn) > 0 {
+	//	// If running locally and STS role to assume is created, assume this role locally
+	//	// Local IAM user must be a principle in the role created with the sts:AssumeRole action
+	//	// Otherwise assume running in a pod in STS cluster
+	//	if k8sutil.IsRunModeLocal() {
+	//		sess := session.Must(session.NewSession(&awsConfig))
+	//		awsConfig.Credentials = stscreds.NewCredentials(sess, credentials.RoleArn)
+	//	} else {
+	//		svc := sts.New(session.Must(session.NewSession(&awsConfig)))
+	//		credentialsProvider := stscreds.NewWebIdentityRoleProviderWithOptions(svc, credentials.RoleArn, "Red-Hat-cloud-resources-operator", stscreds.FetchTokenPath(credentials.TokenFilePath))
+	//		awsConfig.Credentials = awsCredentials.NewCredentials(credentialsProvider)
+	//	}
+	//} else {
+	//	awsConfig.Credentials = awsCredentials.NewStaticCredentials(credentials.AccessKeyID, credentials.SecretAccessKey, "")
+	//}
+	cfg, err := config.LoadDefaultConfig(context.TODO(), awsConfig)
+	if err != nil {
+		return nil, err
 	}
-	sess := session.Must(session.NewSession(&awsConfig))
-	return sess, nil
+	//sess := session.Must(session.NewSession(&awsConfig))
+	return &cfg, nil
 }
 
 func GetRegionFromStrategyOrDefault(ctx context.Context, c client.Client, strategy *StrategyConfig) (string, error) {

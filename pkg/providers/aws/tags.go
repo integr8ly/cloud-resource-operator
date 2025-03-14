@@ -1,11 +1,11 @@
 package aws
 
 import (
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 )
 
@@ -29,8 +29,8 @@ func genericToRdsTag(tag *resources.Tag) *rds.Tag {
 	return &rds.Tag{Key: aws.String(tag.Key), Value: aws.String(tag.Value)}
 }
 
-func genericToS3Tag(tag *resources.Tag) *s3.Tag {
-	return &s3.Tag{Key: aws.String(tag.Key), Value: aws.String(tag.Value)}
+func genericToS3Tag(tag *resources.Tag) types.Tag {
+	return types.Tag{Key: aws.String(tag.Key), Value: aws.String(tag.Value)}
 }
 
 func genericToElasticacheTag(tag *resources.Tag) *elasticache.Tag {
@@ -45,8 +45,8 @@ func genericToRdsTags(tags []*resources.Tag) []*rds.Tag {
 	return rdsTags
 }
 
-func genericToS3Tags(tags []*resources.Tag) []*s3.Tag {
-	var s3Tags []*s3.Tag
+func genericToS3Tags(tags []*resources.Tag) []types.Tag {
+	var s3Tags []types.Tag
 	for _, tag := range tags {
 		s3Tags = append(s3Tags, genericToS3Tag(tag))
 	}
