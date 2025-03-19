@@ -49,48 +49,48 @@ var (
 	snapshotName = "test-snapshot"
 )
 
-type mockElasticacheClient struct {
-	elasticacheiface.ElastiCacheAPI
-	modifyCacheSubnetGroupFn    func(*elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error)
-	deleteCacheSubnetGroupFn    func(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error)
-	describeCacheSubnetGroupsFn func(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error)
-	describeCacheClustersFn     func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error)
-	describeReplicationGroupsFn func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error)
-	describeSnapshotsFn         func(*elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error)
-	createSnapshotFn            func(*elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error)
-	deleteSnapshotFn            func(*elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error)
-	describeUpdateActionsFn     func(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error)
-	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
-	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
-	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
-	createReplicationGroupFn    func(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error)
-	calls                       struct {
-		DescribeSnapshots []struct {
-			In1 *elasticache.DescribeSnapshotsInput
-		}
-		DescribeReplicationGroups []struct {
-			In1 *elasticache.DescribeReplicationGroupsInput
-		}
-		CreateSnapshot []struct {
-			In1 *elasticache.CreateSnapshotInput
-		}
-		DeleteSnapshot []struct {
-			In1 *elasticache.DeleteSnapshotInput
-		}
-		DescribeUpdateActions []struct {
-			In1 *elasticache.DescribeUpdateActionsInput
-		}
-		ModifyReplicationGroup []struct {
-			In1 *elasticache.ModifyReplicationGroupInput
-		}
-		BatchApplyUpdateAction []struct {
-			In1 *elasticache.BatchApplyUpdateActionInput
-		}
-		CreateReplicationGroup []struct {
-			In1 *elasticache.CreateReplicationGroupInput
-		}
-	}
-}
+//type mockElasticacheClient struct {
+//	elasticacheiface.ElastiCacheAPI
+//	modifyCacheSubnetGroupFn    func(*elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error)
+//	deleteCacheSubnetGroupFn    func(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error)
+//	describeCacheSubnetGroupsFn func(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error)
+//	describeCacheClustersFn     func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error)
+//	describeReplicationGroupsFn func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error)
+//	describeSnapshotsFn         func(*elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error)
+//	createSnapshotFn            func(*elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error)
+//	deleteSnapshotFn            func(*elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error)
+//	describeUpdateActionsFn     func(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error)
+//	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
+//	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
+//	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
+//	createReplicationGroupFn    func(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error)
+//	calls                       struct {
+//		DescribeSnapshots []struct {
+//			In1 *elasticache.DescribeSnapshotsInput
+//		}
+//		DescribeReplicationGroups []struct {
+//			In1 *elasticache.DescribeReplicationGroupsInput
+//		}
+//		CreateSnapshot []struct {
+//			In1 *elasticache.CreateSnapshotInput
+//		}
+//		DeleteSnapshot []struct {
+//			In1 *elasticache.DeleteSnapshotInput
+//		}
+//		DescribeUpdateActions []struct {
+//			In1 *elasticache.DescribeUpdateActionsInput
+//		}
+//		ModifyReplicationGroup []struct {
+//			In1 *elasticache.ModifyReplicationGroupInput
+//		}
+//		BatchApplyUpdateAction []struct {
+//			In1 *elasticache.BatchApplyUpdateActionInput
+//		}
+//		CreateReplicationGroup []struct {
+//			In1 *elasticache.CreateReplicationGroupInput
+//		}
+//	}
+//}
 
 func buildMockElasticacheClient(modifyFn func(*mockElasticacheClient)) *mockElasticacheClient {
 	mock := &mockElasticacheClient{

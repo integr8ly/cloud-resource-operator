@@ -5,22 +5,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/smithy-go"
+	"github.com/stretchr/testify/mock"
 	"net"
 	"reflect"
 	"testing"
+	"time"
+	"unsafe"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	errorUtil "github.com/pkg/errors"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -54,11 +58,15 @@ const (
 )
 
 var (
-	genericAWSError = awserr.New("666", "generic aws error", errors.New("generic aws error"))
+	genericAWSError = &smithy.GenericAPIError{
+		Code:    "666",
+		Message: "generic aws error",
+		Fault:   smithy.FaultUnknown,
+	}
 )
 
 func buildMockNetwork(modifyFn func(n *Network)) *Network {
-	mock := &Network{Vpc: &ec2.Vpc{VpcId: aws.String(mockNetworkVpcId)}}
+	mock := &Network{Vpc: &ec2types.Vpc{VpcId: aws.String(mockNetworkVpcId)}}
 	if modifyFn != nil {
 		modifyFn(mock)
 	}
@@ -67,7 +75,7 @@ func buildMockNetwork(modifyFn func(n *Network)) *Network {
 
 func buildMockNetworkConnection(modifyFn func(n *NetworkConnection)) *NetworkConnection {
 	mock := &NetworkConnection{
-		StandaloneSecurityGroup: &ec2.SecurityGroup{
+		StandaloneSecurityGroup: &ec2types.SecurityGroup{
 			GroupId:   aws.String(defaultSecurityGroupId),
 			GroupName: aws.String(defaultSecurityGroupName),
 			VpcId:     aws.String(defaultStandaloneVpcId),
@@ -84,11 +92,11 @@ const (
 	mockVpcPeeringConnectionID = "test"
 )
 
-func buildMockVpcPeeringConnection(modifyFn func(*ec2.VpcPeeringConnection)) *ec2.VpcPeeringConnection {
-	mock := &ec2.VpcPeeringConnection{
+func buildMockVpcPeeringConnection(modifyFn func(*ec2types.VpcPeeringConnection)) *ec2types.VpcPeeringConnection {
+	mock := &ec2types.VpcPeeringConnection{
 		VpcPeeringConnectionId: aws.String(mockVpcPeeringConnectionID),
-		Status: &ec2.VpcPeeringConnectionStateReason{
-			Code: aws.String(ec2.VpcPeeringConnectionStateReasonCodeActive),
+		Status: &ec2types.VpcPeeringConnectionStateReason{
+			Code: ec2types.VpcPeeringConnectionStateReasonCodeActive,
 		},
 	}
 	if modifyFn != nil {
@@ -105,17 +113,17 @@ func buildTestConfigManager(modifyFn func(m *ConfigManagerMock)) *ConfigManagerM
 	return mock
 }
 
-func buildMockVpc(modifyFn func(*ec2.Vpc)) *ec2.Vpc {
-	mock := &ec2.Vpc{
+func buildMockVpc(modifyFn func(*ec2types.Vpc)) *ec2types.Vpc {
+	mock := &ec2types.Vpc{
 		VpcId:     aws.String(defaultVpcId),
 		CidrBlock: aws.String(defaultNonOverlappingCidr),
-		Tags: []*ec2.Tag{
-			buildMockEc2Tag(func(e *ec2.Tag) {
+		Tags: []ec2types.Tag{
+			buildMockEc2Tag(func(e *ec2types.Tag) {
 				e.Key = aws.String("test-vpc")
 				e.Value = aws.String("test-vpc")
 			}),
 		},
-		State: aws.String(ec2.VpcStateAvailable),
+		State: ec2types.VpcStateAvailable,
 	}
 	if modifyFn != nil {
 		modifyFn(mock)
@@ -123,19 +131,19 @@ func buildMockVpc(modifyFn func(*ec2.Vpc)) *ec2.Vpc {
 	return mock
 }
 
-func buildMockEc2Tag(modifyFn func(*ec2.Tag)) *ec2.Tag {
-	mock := &ec2.Tag{
+func buildMockEc2Tag(modifyFn func(*ec2types.Tag)) ec2types.Tag {
+	mock := ec2types.Tag{
 		Key:   aws.String(defaultSubnetTag),
 		Value: aws.String(defaultInfraName),
 	}
 	if modifyFn != nil {
-		modifyFn(mock)
+		modifyFn(&mock)
 	}
 	return mock
 }
 
-func buildMockEc2SecurityGroup(modifyFn func(*ec2.SecurityGroup)) *ec2.SecurityGroup {
-	mock := &ec2.SecurityGroup{
+func buildMockEc2SecurityGroup(modifyFn func(*ec2types.SecurityGroup)) *ec2types.SecurityGroup {
+	mock := &ec2types.SecurityGroup{
 		GroupName: aws.String(defaultSecurityGroupName),
 		GroupId:   aws.String(defaultSecurityGroupId),
 		VpcId:     aws.String(defaultStandaloneVpcId),
@@ -146,10 +154,10 @@ func buildMockEc2SecurityGroup(modifyFn func(*ec2.SecurityGroup)) *ec2.SecurityG
 	return mock
 }
 
-func buildMockEc2IpPermission(modifyFn func(*ec2.IpPermission)) *ec2.IpPermission {
-	mock := &ec2.IpPermission{
+func buildMockEc2IpPermission(modifyFn func(*ec2types.IpPermission)) *ec2types.IpPermission {
+	mock := &ec2types.IpPermission{
 		IpProtocol: aws.String("-1"),
-		IpRanges: []*ec2.IpRange{
+		IpRanges: []ec2types.IpRange{
 			{
 				CidrIp: aws.String(defaultNonOverlappingCidr),
 			},
@@ -161,8 +169,8 @@ func buildMockEc2IpPermission(modifyFn func(*ec2.IpPermission)) *ec2.IpPermissio
 	return mock
 }
 
-func buildMockEc2RouteTable(modifyFn func(*ec2.RouteTable)) *ec2.RouteTable {
-	mock := &ec2.RouteTable{
+func buildMockEc2RouteTable(modifyFn func(*ec2types.RouteTable)) *ec2types.RouteTable {
+	mock := &ec2types.RouteTable{
 		RouteTableId: aws.String(defaultStandaloneRouteTableId),
 		VpcId:        aws.String(defaultStandaloneVpcId),
 	}
@@ -172,8 +180,8 @@ func buildMockEc2RouteTable(modifyFn func(*ec2.RouteTable)) *ec2.RouteTable {
 	return mock
 }
 
-func buildMockEc2Route(modifyFn func(*ec2.Route)) *ec2.Route {
-	mock := &ec2.Route{
+func buildMockEc2Route(modifyFn func(*ec2types.Route)) *ec2types.Route {
+	mock := &ec2types.Route{
 		DestinationCidrBlock:   aws.String(validCIDRTwentySix),
 		VpcPeeringConnectionId: aws.String(mockVpcPeeringConnectionID),
 	}
@@ -183,13 +191,13 @@ func buildMockEc2Route(modifyFn func(*ec2.Route)) *ec2.Route {
 	return mock
 }
 
-func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
-	return &ec2.Subnet{
+func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2types.Subnet {
+	return &ec2types.Subnet{
 		SubnetId:         aws.String(subnetId),
 		VpcId:            aws.String(vpcID),
 		AvailabilityZone: aws.String(azId),
 		CidrBlock:        aws.String(cidrBlock),
-		Tags: []*ec2.Tag{
+		Tags: []ec2types.Tag{
 			{
 				Key:   aws.String(defaultAWSPrivateSubnetTagKey),
 				Value: aws.String("1"),
@@ -202,13 +210,13 @@ func buildSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 				Key:   aws.String(resources.TagDisplayName),
 				Value: aws.String(defaultSubnetNameTagValue),
 			},
-			genericToEc2Tag(resources.BuildManagedTag()),
+			*genericToEc2Tag(resources.BuildManagedTag()),
 		},
 	}
 }
 
-func buildUntaggedSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
-	return &ec2.Subnet{
+func buildUntaggedSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2types.Subnet {
+	return &ec2types.Subnet{
 		SubnetId:         aws.String(subnetId),
 		VpcId:            aws.String(vpcID),
 		AvailabilityZone: aws.String(azId),
@@ -216,19 +224,19 @@ func buildUntaggedSubnet(vpcID, subnetId, azId, cidrBlock string) *ec2.Subnet {
 	}
 }
 
-func buildStandaloneSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
-		buildSubnet(defaultStandaloneVpcId, "test-id", "test", "test"),
+func buildStandaloneSubnets() []ec2types.Subnet {
+	return []ec2types.Subnet{
+		*buildSubnet(defaultStandaloneVpcId, "test-id", "test", "test"),
 	}
 }
 
-func buildValidBundleSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
+func buildValidBundleSubnets() []ec2types.Subnet {
+	return []ec2types.Subnet{
 		{
 			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String(defaultVpcId),
 			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
@@ -246,13 +254,13 @@ func buildValidBundleSubnets() []*ec2.Subnet {
 	}
 }
 
-func buildMultipleValidBundleSubnets() []*ec2.Subnet {
-	return []*ec2.Subnet{
+func buildMultipleValidBundleSubnets() []ec2types.Subnet {
+	return []ec2types.Subnet{
 		{
 			SubnetId:         aws.String("test-id"),
 			VpcId:            aws.String(defaultVpcId),
 			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
@@ -267,7 +275,7 @@ func buildMultipleValidBundleSubnets() []*ec2.Subnet {
 			SubnetId:         aws.String("test-id-2"),
 			VpcId:            aws.String(defaultVpcId),
 			AvailabilityZone: aws.String("test"),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String(defaultSubnetTag),
 					Value: aws.String("test"),
@@ -281,13 +289,13 @@ func buildMultipleValidBundleSubnets() []*ec2.Subnet {
 	}
 }
 
-func buildValidClusterSubnet(modifyFn func(*ec2.Subnet)) *ec2.Subnet {
-	mock := &ec2.Subnet{
+func buildValidClusterSubnet(modifyFn func(*ec2types.Subnet)) *ec2types.Subnet {
+	mock := &ec2types.Subnet{
 		SubnetId:         aws.String("test-id-2"),
 		VpcId:            aws.String(defaultVpcId),
 		AvailabilityZone: aws.String("test"),
-		Tags: []*ec2.Tag{
-			buildMockEc2Tag(func(e *ec2.Tag) {
+		Tags: []ec2types.Tag{
+			buildMockEc2Tag(func(e *ec2types.Tag) {
 				e.Key = aws.String(getOSDClusterTagKey(defaultInfraName))
 				e.Value = aws.String(clusterOwnedTagValue)
 			}),
@@ -299,19 +307,19 @@ func buildValidClusterSubnet(modifyFn func(*ec2.Subnet)) *ec2.Subnet {
 	return mock
 }
 
-func buildStandaloneVPCAssociatedSubnets(subnetOne, subnetTwo string) []*ec2.Subnet {
-	return []*ec2.Subnet{
-		buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, subnetOne),
-		buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, subnetTwo),
+func buildStandaloneVPCAssociatedSubnets(subnetOne, subnetTwo string) []ec2types.Subnet {
+	return []ec2types.Subnet{
+		*buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, subnetOne),
+		*buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, subnetTwo),
 	}
 }
 
-func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
-	return []*ec2.Vpc{
+func buildValidClusterVPC(cidrBlock string) []ec2types.Vpc {
+	return []ec2types.Vpc{
 		{
 			VpcId:     aws.String(defaultVpcId),
 			CidrBlock: aws.String(cidrBlock),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String("test-vpc"),
 					Value: aws.String("test-vpc"),
@@ -320,19 +328,19 @@ func buildValidClusterVPC(cidrBlock string) []*ec2.Vpc {
 					Key:   aws.String(getOSDClusterTagKey(defaultInfraName)),
 					Value: aws.String(clusterOwnedTagValue),
 				},
-				genericToEc2Tag(resources.BuildManagedTag()),
+				*genericToEc2Tag(resources.BuildManagedTag()),
 			},
-			State: aws.String(ec2.VpcStateAvailable),
+			State: ec2types.VpcStateAvailable,
 		},
 	}
 }
-func buildValidStandaloneVPCTags() []*ec2.Tag {
-	return []*ec2.Tag{
+func buildValidStandaloneVPCTags() []ec2types.Tag {
+	return []ec2types.Tag{
 		{
 			Key:   aws.String(defaultSubnetTag),
 			Value: aws.String(defaultInfraName),
 		},
-		genericToEc2Tag(resources.BuildManagedTag()),
+		*genericToEc2Tag(resources.BuildManagedTag()),
 		{
 			Key:   aws.String(resources.TagDisplayName),
 			Value: aws.String(defaultVpcNameTagValue),
@@ -340,20 +348,20 @@ func buildValidStandaloneVPCTags() []*ec2.Tag {
 	}
 }
 
-func buildValidStandaloneVPC(cidr string) *ec2.Vpc {
-	return &ec2.Vpc{
+func buildValidStandaloneVPC(cidr string) *ec2types.Vpc {
+	return &ec2types.Vpc{
 		VpcId:     aws.String(defaultStandaloneVpcId),
 		CidrBlock: aws.String(cidr),
 		Tags:      buildValidStandaloneVPCTags(),
-		State:     aws.String(ec2.VpcStateAvailable),
+		State:     ec2types.VpcStateAvailable,
 	}
 }
 
-func buildValidNonTaggedStandaloneVPC(cidr string) *ec2.Vpc {
-	return &ec2.Vpc{
+func buildValidNonTaggedStandaloneVPC(cidr string) *ec2types.Vpc {
+	return &ec2types.Vpc{
 		VpcId:     aws.String(defaultVpcId),
 		CidrBlock: aws.String(cidr),
-		State:     aws.String(ec2.VpcStateAvailable),
+		State:     ec2types.VpcStateAvailable,
 	}
 }
 
@@ -364,11 +372,11 @@ func buildValidNonTaggedStandaloneVPC(cidr string) *ec2.Vpc {
 // i.e. create the vpc and return network response with vpc and all other resources are nil
 func buildValidNetworkResponseVPCExists(cidr, vpcID, subnetOne, subnetTwo string) *Network {
 	return &Network{
-		Vpc: &ec2.Vpc{
+		Vpc: &ec2types.Vpc{
 			CidrBlock: aws.String(cidr),
 			VpcId:     aws.String(vpcID),
 			Tags:      buildValidStandaloneVPCTags(),
-			State:     aws.String(ec2.VpcStateAvailable),
+			State:     ec2types.VpcStateAvailable,
 		},
 		Subnets: buildStandaloneVPCAssociatedSubnets(subnetOne, subnetTwo),
 	}
@@ -376,18 +384,18 @@ func buildValidNetworkResponseVPCExists(cidr, vpcID, subnetOne, subnetTwo string
 
 func buildValidNetworkResponseCreateVPC(cidr, vpcID string) *Network {
 	return &Network{
-		Vpc: &ec2.Vpc{
+		Vpc: &ec2types.Vpc{
 			CidrBlock: aws.String(cidr),
 			VpcId:     aws.String(vpcID),
 			Tags:      buildValidStandaloneVPCTags(),
-			State:     aws.String(ec2.VpcStateAvailable),
+			State:     ec2types.VpcStateAvailable,
 		},
 		Subnets: nil,
 	}
 }
 
-func buildSortedStandaloneAZs() []*ec2.AvailabilityZone {
-	return []*ec2.AvailabilityZone{
+func buildSortedStandaloneAZs() []ec2types.AvailabilityZone {
+	return []ec2types.AvailabilityZone{
 		{
 			ZoneName: aws.String(defaultAzIdOne),
 		},
@@ -410,8 +418,8 @@ func buildSubnetGroupDescription() string {
 	return fmt.Sprintf("%s-%s", defaultSubnetGroupDesc, "test")
 }
 
-func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
-	return []*rds.DBSubnetGroup{
+func buildRDSSubnetGroup() []rdstypes.DBSubnetGroup {
+	return []rdstypes.DBSubnetGroup{
 		{
 			DBSubnetGroupName: aws.String(buildSubnetGroupID()),
 			VpcId:             aws.String(mockNetworkVpcId),
@@ -420,8 +428,8 @@ func buildRDSSubnetGroup() []*rds.DBSubnetGroup {
 	}
 }
 
-func buildElasticacheSubnetGroup(modifyFn func(*elasticache.CacheSubnetGroup)) *elasticache.CacheSubnetGroup {
-	mock := &elasticache.CacheSubnetGroup{
+func buildElasticacheSubnetGroup(modifyFn func(*elasticachetypes.CacheSubnetGroup)) *elasticachetypes.CacheSubnetGroup {
+	mock := &elasticachetypes.CacheSubnetGroup{
 		CacheSubnetGroupName:        aws.String(buildSubnetGroupID()),
 		VpcId:                       aws.String(mockNetworkVpcId),
 		CacheSubnetGroupDescription: aws.String(buildSubnetGroupDescription()),
@@ -437,15 +445,204 @@ func buildValidIpNet(CIDR string) *net.IPNet {
 	return ip
 }
 
+// ///////////////////////
+// Define EC2ClientInterface for v2
+type Ec2ClientInterface interface {
+	DescribeVpcs(ctx context.Context, params *ec2.DescribeVpcsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error)
+	DescribeSubnets(ctx context.Context, params *ec2.DescribeSubnetsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error)
+}
+
+// Mock client for EC2
+type mockEc2Client struct {
+	ec2.Client
+	mock.Mock
+	firstSubnet     *ec2types.Subnet
+	secondSubnet    *ec2types.Subnet
+	subnets         []ec2types.Subnet
+	vpcs            []ec2types.Vpc
+	vpc             *ec2types.Vpc
+	secGroups       []ec2types.SecurityGroup
+	azs             []ec2types.AvailabilityZone
+	wantErrList     bool
+	returnSecondSub bool
+
+	createTagsFn                    func(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
+	describeVpcsFn                  func(ctx context.Context, input *ec2.DescribeVpcsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error)
+	describeSecurityGroupsFn        func(ctx context.Context, input *ec2.DescribeSecurityGroupsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
+	deleteSecurityGroupFn           func(ctx context.Context, input *ec2.DeleteSecurityGroupInput, opts ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error)
+	describeVpcPeeringConnectionFn  func(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
+	createVpcPeeringConnectionFn    func(ctx context.Context, input *ec2.CreateVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcPeeringConnectionOutput, error)
+	acceptVpcPeeringConnectionFn    func(ctx context.Context, input *ec2.AcceptVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.AcceptVpcPeeringConnectionOutput, error)
+	deleteVpcPeeringConnectionFn    func(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcPeeringConnectionOutput, error)
+	describeRouteTablesFn           func(ctx context.Context, input *ec2.DescribeRouteTablesInput, opts ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
+	createRouteFn                   func(ctx context.Context, input *ec2.CreateRouteInput, opts ...func(*ec2.Options)) (*ec2.CreateRouteOutput, error)
+	deleteRouteFn                   func(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error)
+	createVpcFn                     func(ctx context.Context, input *ec2.CreateVpcInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcOutput, error)
+	deleteVpcFn                     func(ctx context.Context, input *ec2.DeleteVpcInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcOutput, error)
+	createSubnetFn                  func(ctx context.Context, input *ec2.CreateSubnetInput, opts ...func(*ec2.Options)) (*ec2.CreateSubnetOutput, error)
+	describeInstanceTypeOfferingsFn func(ctx context.Context, input *ec2.DescribeInstanceTypeOfferingsInput, opts ...func(*ec2.Options)) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
+	describeSubnetsFn               func(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error)
+	describeAvailabilityZonesFn     func(ctx context.Context, input *ec2.DescribeAvailabilityZonesInput, opts ...func(*ec2.Options)) (*ec2.DescribeAvailabilityZonesOutput, error)
+	createSecurityGroupFn           func(ctx context.Context, input *ec2.CreateSecurityGroupInput, opts ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
+
+	// Optional call tracking if needed
+	calls struct {
+		DescribeRouteTables       []ec2.DescribeRouteTablesInput
+		DescribeSecurityGroups    []ec2.DescribeSecurityGroupsInput
+		DescribeAvailabilityZones []ec2.DescribeAvailabilityZonesInput
+		DescribeSubnets           []struct {
+			Input *ec2.DescribeSubnetsInput
+		}
+		DescribeVpcs []struct {
+			Input *ec2.DescribeVpcsInput
+		}
+		CreateRoute []ec2.CreateRouteInput
+	}
+}
+
+func (m *mockEc2Client) DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	if m.describeSubnetsFn == nil {
+		panic("mockEc2Client.DescribeSubnets: method is nil")
+	}
+
+	lockMockEc2ClientDescribeSubnets.Lock()
+	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, struct {
+		Input *ec2.DescribeSubnetsInput
+	}{Input: input})
+	lockMockEc2ClientDescribeSubnets.Unlock()
+
+	return m.describeSubnetsFn(ctx, input, opts...)
+}
+
+func (m *mockEc2Client) DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
+	if m.describeVpcsFn == nil {
+		panic("mockEc2Client.DescribeVpcs: method is nil")
+	}
+
+	lockMockEc2ClientDescribeVpcs.Lock()
+	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, struct {
+		Input *ec2.DescribeVpcsInput
+	}{Input: input})
+	lockMockEc2ClientDescribeVpcs.Unlock()
+
+	return m.describeVpcsFn(ctx, input, opts...)
+}
+
+func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
+	mock := &mockEc2Client{}
+
+	mock.deleteVpcFn = func(ctx context.Context, input *ec2.DeleteVpcInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcOutput, error) {
+		return &ec2.DeleteVpcOutput{}, nil
+	}
+
+	mock.createTagsFn = func(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error) {
+		return &ec2.CreateTagsOutput{}, nil
+	}
+
+	mock.describeInstanceTypeOfferingsFn = func(ctx context.Context, input *ec2.DescribeInstanceTypeOfferingsInput, opts ...func(*ec2.Options)) (*ec2.DescribeInstanceTypeOfferingsOutput, error) {
+		return &ec2.DescribeInstanceTypeOfferingsOutput{
+			InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
+				{
+					Location: aws.String(defaultAzIdOne),
+				},
+				{
+					Location: aws.String(defaultAzIdTwo),
+				},
+			},
+		}, nil
+	}
+
+	mock.describeSubnetsFn = func(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+		return &ec2.DescribeSubnetsOutput{}, nil
+	}
+
+	if modifyFn != nil {
+		modifyFn(mock)
+	}
+	return mock
+}
+
+type mockRdsClient struct {
+	mock.Mock
+	rds.Client
+	// Define function fields to mock specific method calls
+	modifyDBSubnetGroupFn               func(ctx context.Context, input *rds.ModifyDBSubnetGroupInput, opts ...func(*rds.Options)) (*rds.ModifyDBSubnetGroupOutput, error)
+	listTagsForResourceFn               func(ctx context.Context, input *rds.ListTagsForResourceInput, opts ...func(*rds.Options)) (*rds.ListTagsForResourceOutput, error)
+	removeTagsFromResourceFn            func(ctx context.Context, input *rds.RemoveTagsFromResourceInput, opts ...func(*rds.Options)) (*rds.RemoveTagsFromResourceOutput, error)
+	deleteDBSubnetGroupFn               func(ctx context.Context, input *rds.DeleteDBSubnetGroupInput, opts ...func(*rds.Options)) (*rds.DeleteDBSubnetGroupOutput, error)
+	addTagsToResourceFn                 func(ctx context.Context, input *rds.AddTagsToResourceInput, opts ...func(*rds.Options)) (*rds.AddTagsToResourceOutput, error)
+	describeDBSnapshotsFn               func(ctx context.Context, input *rds.DescribeDBSnapshotsInput, opts ...func(*rds.Options)) (*rds.DescribeDBSnapshotsOutput, error)
+	describeDBInstancesFn               func(ctx context.Context, input *rds.DescribeDBInstancesInput, opts ...func(*rds.Options)) (*rds.DescribeDBInstancesOutput, error)
+	describeDBSubnetGroupsFn            func(ctx context.Context, input *rds.DescribeDBSubnetGroupsInput, opts ...func(*rds.Options)) (*rds.DescribeDBSubnetGroupsOutput, error)
+	describePendingMaintenanceActionsFn func(ctx context.Context, input *rds.DescribePendingMaintenanceActionsInput, opts ...func(*rds.Options)) (*rds.DescribePendingMaintenanceActionsOutput, error)
+	applyPendingMaintenanceActionFn     func(ctx context.Context, input *rds.ApplyPendingMaintenanceActionInput, opts ...func(*rds.Options)) (*rds.ApplyPendingMaintenanceActionOutput, error)
+	modifyDBInstanceFn                  func(ctx context.Context, input *rds.ModifyDBInstanceInput, opts ...func(*rds.Options)) (*rds.ModifyDBInstanceOutput, error)
+}
+
+type mockElasticacheClient struct {
+	mock.Mock
+	elasticache.Client
+	// Define function fields to mock specific method calls
+	modifyCacheSubnetGroupFn    func(ctx context.Context, input *elasticache.ModifyCacheSubnetGroupInput, opts ...func(*elasticache.Options)) (*elasticache.ModifyCacheSubnetGroupOutput, error)
+	deleteCacheSubnetGroupFn    func(ctx context.Context, input *elasticache.DeleteCacheSubnetGroupInput, opts ...func(*elasticache.Options)) (*elasticache.DeleteCacheSubnetGroupOutput, error)
+	describeCacheSubnetGroupsFn func(ctx context.Context, input *elasticache.DescribeCacheSubnetGroupsInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeCacheSubnetGroupsOutput, error)
+	describeCacheClustersFn     func(ctx context.Context, input *elasticache.DescribeCacheClustersInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error)
+	describeReplicationGroupsFn func(ctx context.Context, input *elasticache.DescribeReplicationGroupsInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeReplicationGroupsOutput, error)
+	describeSnapshotsFn         func(ctx context.Context, input *elasticache.DescribeSnapshotsInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeSnapshotsOutput, error)
+	createSnapshotFn            func(ctx context.Context, input *elasticache.CreateSnapshotInput, opts ...func(*elasticache.Options)) (*elasticache.CreateSnapshotOutput, error)
+	deleteSnapshotFn            func(ctx context.Context, input *elasticache.DeleteSnapshotInput, opts ...func(*elasticache.Options)) (*elasticache.DeleteSnapshotOutput, error)
+	describeUpdateActionsFn     func(ctx context.Context, input *elasticache.DescribeUpdateActionsInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeUpdateActionsOutput, error)
+	modifyReplicationGroupFn    func(ctx context.Context, input *elasticache.ModifyReplicationGroupInput, opts ...func(*elasticache.Options)) (*elasticache.ModifyReplicationGroupOutput, error)
+	batchApplyUpdateActionFn    func(ctx context.Context, input *elasticache.BatchApplyUpdateActionInput, opts ...func(*elasticache.Options)) (*elasticache.BatchApplyUpdateActionOutput, error)
+	addTagsToResourceFn         func(ctx context.Context, input *elasticache.AddTagsToResourceInput, opts ...func(*elasticache.Options)) (*elasticache.AddTagsToResourceOutput, error)
+	createReplicationGroupFn    func(ctx context.Context, input *elasticache.CreateReplicationGroupInput, opts ...func(*elasticache.Options)) (*elasticache.CreateReplicationGroupOutput, error)
+	calls                       struct {
+		DescribeSnapshots []struct {
+			In1 *elasticache.DescribeSnapshotsInput
+		}
+		DescribeReplicationGroups []struct {
+			In1 *elasticache.DescribeReplicationGroupsInput
+		}
+		CreateSnapshot []struct {
+			In1 *elasticache.CreateSnapshotInput
+		}
+		DeleteSnapshot []struct {
+			In1 *elasticache.DeleteSnapshotInput
+		}
+		DescribeUpdateActions []struct {
+			In1 *elasticache.DescribeUpdateActionsInput
+		}
+		ModifyReplicationGroup []struct {
+			In1 *elasticache.ModifyReplicationGroupInput
+		}
+		BatchApplyUpdateAction []struct {
+			In1 *elasticache.BatchApplyUpdateActionInput
+		}
+		CreateReplicationGroup []struct {
+			In1 *elasticache.CreateReplicationGroupInput
+		}
+	}
+}
+
+type MockVpcExistsWaiter struct {
+	mock.Mock
+}
+
+func (m *MockVpcExistsWaiter) Wait(ctx context.Context, params *ec2.DescribeVpcsInput, maxWait time.Duration, optFns ...func(*ec2.VpcExistsWaiterOptions)) error {
+	args := m.Called(ctx, params, maxWait)
+	return args.Error(0)
+}
+
+// ///////////////////////
 func TestNetworkProvider_IsEnabled(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Logger *logrus.Entry
-		Client client.Client
-		Ec2Api ec2iface.EC2API
+		Logger    *logrus.Entry
+		Client    client.Client
+		Ec2Client *ec2.Client
 	}
 	type args struct {
 		ctx context.Context
@@ -466,20 +663,18 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(validCIDRSixteen),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(validCIDRSixteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 			},
 			want:    true,
 			wantErr: false,
@@ -493,18 +688,17 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(validCIDRSixteen),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-				})},
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(validCIDRSixteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+			},
 			want:    false,
 			wantErr: false,
 		},
@@ -517,18 +711,16 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(validCIDRSixteen),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildMultipleValidBundleSubnets(),
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(validCIDRSixteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildMultipleValidBundleSubnets(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 			},
 			want:    false,
 			wantErr: false,
@@ -542,13 +734,13 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(validCIDRSixteen),
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(validCIDRSixteen),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 			},
 			wantErr: true,
 		},
@@ -561,11 +753,11 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 			},
 			wantErr: true,
 		},
@@ -579,18 +771,16 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 			},
 			wantErr: true,
 		},
@@ -600,7 +790,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 			n := &NetworkProvider{
 				Logger:       tt.fields.Logger,
 				Client:       tt.fields.Client,
-				Ec2Api:       tt.fields.Ec2Api,
+				Ec2Client:    tt.fields.Ec2Client,
 				IsSTSCluster: false,
 			}
 			got, err := n.IsEnabled(tt.args.ctx)
@@ -621,12 +811,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
-		IsSTSCluster   bool
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
+		IsSTSCluster      bool
 	}
 	type args struct {
 		ctx  context.Context
@@ -643,21 +833,27 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully error on invalid cidr params standalone vpc network - CIDR /15",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(validCIDREighteen),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildStandaloneSubnets(),
-						}, nil
-					},
-				},
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Retrun an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(validCIDREighteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildStandaloneSubnets(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Retrun an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -669,28 +865,32 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network  - CIDR /16",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRSixteen),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Retrun an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRSixteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Retrun an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -703,29 +903,33 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network  - CIDR /16 (sts cluster)",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRSixteen),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
-				IsSTSCluster:   true,
+				RdsClient: func() *rds.Client {
+					// Return an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRSixteen),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Return an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger:       logrus.NewEntry(logrus.StandardLogger()),
+				IsSTSCluster: true,
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -738,28 +942,32 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully build standalone vpc network - CIDR /26",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Return an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Return an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -772,16 +980,24 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "fail if trying to build standalone vpc network - CIDR /27",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Return an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Return an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -793,14 +1009,22 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "fail if unable to get cluster id",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Return an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Return an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -812,14 +1036,23 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "verify ec2 error when describing vpcs",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					// Return an empty client
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					//Todo confirm the genericAWSError passes
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					// Return an empty client
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -831,39 +1064,43 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
-								buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{*buildValidStandaloneVPC(validCIDRTwentySix)},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+							*buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB),
+						},
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -876,28 +1113,30 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on non tagged standalone vpc",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(nil),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -912,34 +1151,37 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully timed out to check if VPC exists and failed the deletion",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(nil),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.WaitUntilVpcExistsFn = func(input *ec2.DescribeVpcsInput) error {
-						return errorUtil.New("VPC does not exists")
-					}
-					ec2Client.deleteVpcFn = func(input *ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
-						return nil, errorUtil.New("can't delete VPC, it does not exists")
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockWaiter := new(MockVpcExistsWaiter)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidNonTaggedStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockWaiter.On("Wait", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
+						errorUtil.New("VPC does not exists"))
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						errorUtil.New("can't delete VPC, it does not exists"),
+					)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -952,75 +1194,60 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on already created rds and elasticache subnet groups for standalone vpc",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{
-							DBSubnetGroups: buildRDSSubnetGroup(),
-						}, nil
-					}
-					rdsClient.modifyDBSubnetGroupFn = func(input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
-						return &rds.ModifyDBSubnetGroupOutput{}, nil
-					}
-					rdsClient.listTagsForResourceFn = func(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
-						return &rds.ListTagsForResourceOutput{
-							TagList: []*rds.Tag{
-								{
-									Key:   aws.String("something"),
-									Value: aws.String("something value"),
-								},
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: buildRDSSubnetGroup(),
+					}, nil)
+					mockRds.On("ModifyDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBSubnetGroupOutput{}, nil)
+					mockRds.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ListTagsForResourceOutput{
+						TagList: []rdstypes.Tag{
+							{
+								Key:   aws.String("something"),
+								Value: aws.String("something value"),
 							},
-						}, nil
-					}
-					rdsClient.removeTagsFromResourceFn = func(input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
-						return nil, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.modifyCacheSubnetGroupFn = func(input *elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error) {
-						return &elasticache.ModifyCacheSubnetGroupOutput{}, nil
-					}
-					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
-						return &elasticache.DescribeCacheSubnetGroupsOutput{
-							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
-								buildElasticacheSubnetGroup(nil),
-							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockRds.On("RemoveTagsFromResource", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					//todo
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("ModifyCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("ModifyCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
+							*buildElasticacheSubnetGroup(nil),
+						},
+					}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -1034,42 +1261,48 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create subnets in correct azs",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1082,60 +1315,61 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create subnets in large unsorted az zones list - zone one and two",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
+							{
+								Location: aws.String(defaultAzIdOne),
 							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
+							{
+								Location: aws.String(defaultAzIdTwo),
 							},
-						}, nil
-					}
-					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
-						return &ec2.DescribeInstanceTypeOfferingsOutput{
-							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
-								{
-									Location: aws.String(defaultAzIdOne),
-								},
-								{
-									Location: aws.String(defaultAzIdTwo),
-								},
-								{
-									Location: aws.String("test-zone-3"),
-								},
-								{
-									Location: aws.String("test-zone-4"),
-								},
+							{
+								Location: aws.String("test-zone-3"),
 							},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+							{
+								Location: aws.String("test-zone-4"),
+							},
+						},
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1148,40 +1382,43 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully reconcile on standalone vpc - create correct subnets for vpc cidr block 10.0.50.0/23",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentyThree)},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentyThree),
-						}, nil
-					}
-					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskTwoA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskTwoB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{*buildValidStandaloneVPC(validCIDRTwentyThree)},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentyThree),
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1194,26 +1431,35 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "verify cluster vpc cidr block and standalone vpc cidr block overlaps return an error",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidClusterVPC(validCIDRSixteen)[0]},
-						}, nil
-					},
-					subnets: []*ec2.Subnet{},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-				},
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentyThree),
+						},
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1225,28 +1471,37 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "verify ec2 VpcLimitExceeded returns an error",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{}, awserr.New("VpcLimitExceeded", "The maximum number of VPCs has been reached.", nil)
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(defaultNonOverlappingCidr),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					//TODO awserr gone in v2 of aws-go-sdk
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(
+						awserr.New("VpcLimitExceeded", "The maximum number of VPCs has been reached.", nil))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1258,28 +1513,37 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "verify ec2 InvalidVpcRange returns an error",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{}, awserr.New("InvalidVpcRange", "The specified CIDR block range is not valid. The block range must be between a /28 netmask and /16 netmask", nil)
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(defaultNonOverlappingCidr),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					//TODO awserr gone in v2 of aws-go-sdk
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(
+						awserr.New("InvalidVpcRange", "The specified CIDR block range is not valid. The block range must be between a /28 netmask and /16 netmask", nil))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1291,32 +1555,39 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "successfully error if vpc route table does not exist",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{RouteTables: []*ec2.RouteTable{}}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1328,49 +1599,52 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 			name: "fail when not enough availability zones support default node types",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
+							{
+								Location: aws.String(defaultAzIdOne),
 							},
-						}, nil
-					}
-					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
-						return &ec2.DescribeInstanceTypeOfferingsOutput{
-							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
-								{
-									Location: aws.String(defaultAzIdOne),
-								},
-							},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1395,76 +1669,77 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						},
 					},
 				}),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								{
-									VpcId:     aws.String(defaultStandaloneVpcId),
-									CidrBlock: aws.String(validCIDRTwentySix),
-									Tags: []*ec2.Tag{
-										{
-											Key:   aws.String("integreatly.org/clusterID"),
-											Value: aws.String("test"),
-										},
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							{
+								VpcId:     aws.String(defaultStandaloneVpcId),
+								CidrBlock: aws.String(validCIDRTwentySix),
+								Tags: []ec2types.Tag{
+									{
+										Key:   aws.String("integreatly.org/clusterID"),
+										Value: aws.String("test"),
 									},
-									State: aws.String(ec2.VpcStateAvailable),
 								},
+								State: ec2types.VpcStateAvailable,
 							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = []*ec2.Subnet{}
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{Subnets: []*ec2.Subnet{
-							ec2Client.firstSubnet,
-							ec2Client.secondSubnet,
-						}}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									tags, _ := getDefaultTagSpec(context.TODO(), moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()), &resources.Tag{Key: resources.TagDisplayName, Value: defaultRouteTableNameTagValue}, ec2.ResourceTypeRouteTable)
-									table.Tags = tags[0].Tags
-								}),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = []ec2types.Subnet{}
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*mockEc2.firstSubnet,
+							*mockEc2.secondSubnet,
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+								tags, _ := getDefaultTagSpec(context.TODO(), moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()), &resources.Tag{Key: resources.TagDisplayName, Value: defaultRouteTableNameTagValue}, string(ec2types.ResourceTypeRouteTable))
+								table.Tags = tags[0].Tags
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
+							{
+								Location: aws.String(defaultAzIdOne),
 							},
-						}, nil
-					}
-					ec2Client.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
-						return &ec2.DescribeInstanceTypeOfferingsOutput{
-							InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
-								{
-									Location: aws.String(defaultAzIdOne),
-								},
-								{
-									Location: aws.String(defaultAzIdTwo),
-								},
+							{
+								Location: aws.String(defaultAzIdTwo),
 							},
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					//Todo confirm the genericAWSError passes
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1483,37 +1758,50 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						InfrastructureName: defaultInfraName,
 					},
 				}),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC(defaultNonOverlappingCidr),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(defaultNonOverlappingCidr),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
 					// runs when sts disabled
 					vpc := buildValidNonTaggedStandaloneVPC(validCIDRSixteen)
-					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						vpc.SetTags(input.Tags)
-						return &ec2.CreateTagsOutput{}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						if len(input.TagSpecifications) == 1 {
-							vpc.SetTags(input.TagSpecifications[0].Tags)
-						}
-						return &ec2.CreateVpcOutput{
-							Vpc: vpc,
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							input := args.Get(1).(*ec2.CreateTagsInput)
+							vpc.Tags = append(vpc.Tags, input.Tags...)
+						}).Return(&ec2.CreateTagsOutput{}, nil)
+
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							input := args.Get(1).(*ec2.CreateVpcInput)
+							if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+								vpc.Tags = append(vpc.Tags, input.TagSpecifications[0].Tags...)
+							}
+						}).Return(&ec2.CreateVpcOutput{Vpc: vpc}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1533,69 +1821,86 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						InfrastructureName: defaultInfraName,
 					},
 				}),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRTwentySix)},
-						}, nil
-					}
-					ec2Client.firstSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.firstSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildUntaggedSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
 					// runs when sts disabled
-					ec2Client.createTagsFn = func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						resource := aws.StringValue(input.Resources[0])
-						if resource == aws.StringValue(ec2Client.firstSubnet.SubnetId) {
-							ec2Client.firstSubnet.SetTags(input.Tags)
-							return &ec2.CreateTagsOutput{}, nil
-						}
-						if resource == aws.StringValue(ec2Client.secondSubnet.SubnetId) {
-							ec2Client.secondSubnet.SetTags(input.Tags)
-							return &ec2.CreateTagsOutput{}, nil
-						}
-						return &ec2.CreateTagsOutput{}, nil
-					}
-					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
-						if len(input.TagSpecifications) == 1 {
-							if ec2Client.returnSecondSub {
-								ec2Client.secondSubnet.SetTags(input.TagSpecifications[0].Tags)
-							} else {
-								ec2Client.firstSubnet.SetTags(input.TagSpecifications[0].Tags)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							input, ok := args.Get(1).(*ec2.CreateTagsInput)
+							if !ok || input == nil {
+								return
 							}
-						}
-						if ec2Client.returnSecondSub {
-							return &ec2.CreateSubnetOutput{
-								Subnet: ec2Client.secondSubnet,
-							}, nil
-						}
-						return ec2Client.returnFirstSubnet()
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+							// Assign tags if TagSpecifications are provided
+							for _, resourceID := range input.Resources {
+								if resourceID == aws.ToString(mockEc2.firstSubnet.SubnetId) {
+									mockEc2.firstSubnet.Tags = append(mockEc2.firstSubnet.Tags, input.Tags...)
+								} else if resourceID == aws.ToString(mockEc2.secondSubnet.SubnetId) {
+									mockEc2.secondSubnet.Tags = append(mockEc2.secondSubnet.Tags, input.Tags...)
+								}
+							}
+						}).
+						Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							input, ok := args.Get(1).(*ec2.CreateSubnetInput)
+							if !ok || input == nil {
+								return
+							}
+							if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+								if mockEc2.returnSecondSub {
+									mockEc2.secondSubnet.Tags = append(mockEc2.secondSubnet.Tags, input.TagSpecifications[0].Tags...)
+								} else {
+									mockEc2.firstSubnet.Tags = append(mockEc2.firstSubnet.Tags, input.TagSpecifications[0].Tags...)
+								}
+							}
+
+						}).
+						Return(&ec2.CreateSubnetOutput{
+							Subnet: func() *ec2types.Subnet {
+								if mockEc2.returnSecondSub {
+									return mockEc2.secondSubnet
+								}
+								return mockEc2.firstSubnet
+							}(),
+						}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:  context.TODO(),
@@ -1608,12 +1913,12 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   tt.fields.IsSTSCluster,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      tt.fields.IsSTSCluster,
 			}
 			got, err := n.CreateNetwork(tt.args.ctx, tt.args.CIDR)
 			if (err != nil) != tt.wantErr {
@@ -1633,11 +1938,11 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -1652,14 +1957,26 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - no vpc found",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1670,20 +1987,31 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - of standalone vpc",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)},
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRSixteen),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1694,24 +2022,32 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - of standalone vpc and associated subnets",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)},
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneSubnets()
-				}),
-				ElasticacheApi: buildMockElasticacheClient(nil),
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRSixteen)},
+					}, nil)
+					mockEc2.subnets = buildStandaloneSubnets()
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						Marker:        nil,
+						UpdateActions: []elasticachetypes.UpdateAction{},
+					}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1722,34 +2058,31 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 			name: "verify deletion - of standalone vpc and associated subnets and subnet groups",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDRSixteen)},
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneSubnets()
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-					elasticacheClient.describeCacheSubnetGroupsFn = func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
-						return &elasticache.DescribeCacheSubnetGroupsOutput{
-							CacheSubnetGroups: []*elasticache.CacheSubnetGroup{
-								buildElasticacheSubnetGroup(nil),
-							},
-						}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRSixteen)},
+					}, nil)
+					mockEc2.subnets = buildStandaloneSubnets()
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
+							*buildElasticacheSubnetGroup(nil),
+						},
+					}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -1761,12 +2094,12 @@ func TestNetworkProvider_DeleteNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			if err := n.DeleteNetwork(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetwork() error = %v, wantErr %v", err, tt.wantErr)
@@ -1787,11 +2120,11 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 		tier          string
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	tests := []struct {
 		name    string
@@ -1804,16 +2137,24 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 			name: "verify successful reconcile",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {}),
-						}}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {}),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1834,16 +2175,24 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 			name: "verify invalid CIDR",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {}),
-						}}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {}),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1863,16 +2212,24 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 			name: "verify unmarshal error",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {}),
-						}}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {}),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1892,25 +2249,31 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 			name: "verify default cidr block and no error on empty cidr block",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra(), buildTestNetwork(func(network *configv1.Network) {})),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.CidrBlock = aws.String("10.4.0.0/16")
 							}),
-						}}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1940,18 +2303,26 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 						"",
 					}
 				})),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.CidrBlock = aws.String("")
 							}),
-						}}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -1980,16 +2351,24 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 						"172.0.0.0/8",
 					}
 				})),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {}),
-						}}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {}),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -2009,12 +2388,12 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			got, err := n.ReconcileNetworkProviderConfig(tt.args.ctx, tt.args.configManager, tt.args.tier, tt.args.logger)
 			if (err != nil) != tt.wantErr {
@@ -2034,7 +2413,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		ec2Client  ec2iface.EC2API
+		Ec2Client  *ec2.Client
 		kubeClient client.Client
 		logger     *logrus.Entry
 	}
@@ -2052,27 +2431,24 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when cluster vpc id cannot be found from associated subnets because subnets don't have the required tags",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								{
-									VpcId: aws.String(mockNetworkVpcId),
-								},
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							{
+								VpcId: aws.String(mockNetworkVpcId),
 							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(func(subnet *ec2.Subnet) {
-									subnet.Tags = nil
-								}),
-							},
-						}, nil
-					}
-
-				}),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(func(subnet *ec2types.Subnet) {
+								subnet.Tags = nil
+							}),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2085,28 +2461,22 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when peering connections cannot be listed",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return nil, errors.New("test")
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2119,26 +2489,22 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when vpc peering cannot be created",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{VpcPeeringConnections: []*ec2.VpcPeeringConnection{}}, nil
-					}
-					ec2Client.createVpcPeeringConnectionFn = func(input *ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{},
+					}, nil)
+					mockEc2.On("CreateVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2151,29 +2517,25 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when tags cannot be added to peering connection",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{VpcPeeringConnections: []*ec2.VpcPeeringConnection{}}, nil
-					}
-					ec2Client.createVpcPeeringConnectionFn = func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
-						return &ec2.CreateVpcPeeringConnectionOutput{VpcPeeringConnection: buildMockVpcPeeringConnection(nil)}, nil
-					}
-					ec2Client.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{},
+					}, nil)
+					mockEc2.On("CreateVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcPeeringConnectionOutput{
+						VpcPeeringConnection: buildMockVpcPeeringConnection(nil),
+					}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2186,35 +2548,29 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when unable to accept peering connection",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{VpcPeeringConnections: []*ec2.VpcPeeringConnection{}}, nil
-					}
-					ec2Client.createVpcPeeringConnectionFn = func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
-						mockPeeringConnection := buildMockVpcPeeringConnection(func(mock *ec2.VpcPeeringConnection) {
-							mock.Status.Code = aws.String(ec2.VpcPeeringConnectionStateReasonCodePendingAcceptance)
-						})
-						return &ec2.CreateVpcPeeringConnectionOutput{VpcPeeringConnection: mockPeeringConnection}, nil
-					}
-					ec2Client.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						return nil, nil
-					}
-					ec2Client.acceptVpcPeeringConnectionFn = func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{},
+					}, nil)
+					mockEc2.On("CreateVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcPeeringConnectionOutput{
+						VpcPeeringConnection: buildMockVpcPeeringConnection(func(mock *ec2types.VpcPeeringConnection) {
+							mock.Status.Code = ec2types.VpcPeeringConnectionStateReasonCodePendingAcceptance
+						},
+						),
+					}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+					mockEc2.On("AcceptVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2227,35 +2583,28 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 		{
 			name: "fails when peering connection state is unknown",
 			fields: fields{
-				ec2Client: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{VpcPeeringConnections: []*ec2.VpcPeeringConnection{}}, nil
-					}
-					ec2Client.createVpcPeeringConnectionFn = func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
-						mockPeeringConnection := buildMockVpcPeeringConnection(func(mock *ec2.VpcPeeringConnection) {
-							mock.Status.Code = aws.String(ec2.VpcPeeringConnectionStateReasonCodeExpired)
-						})
-						return &ec2.CreateVpcPeeringConnectionOutput{VpcPeeringConnection: mockPeeringConnection}, nil
-					}
-					ec2Client.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-						return nil, nil
-					}
-					ec2Client.acceptVpcPeeringConnectionFn = func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{},
+					}, nil)
+					mockEc2.On("CreateVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcPeeringConnectionOutput{
+						VpcPeeringConnection: buildMockVpcPeeringConnection(func(mock *ec2types.VpcPeeringConnection) {
+							mock.Status.Code = ec2types.VpcPeeringConnectionStateReasonCodeExpired
+						}),
+					}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+					mockEc2.On("AcceptVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				kubeClient: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
 				logger:     logrus.NewEntry(logrus.StandardLogger()),
 			},
@@ -2269,7 +2618,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Ec2Api:       tt.fields.ec2Client,
+				Ec2Client:    tt.fields.Ec2Client,
 				Client:       tt.fields.kubeClient,
 				Logger:       tt.fields.logger,
 				IsSTSCluster: false,
@@ -2292,11 +2641,11 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -2312,11 +2661,12 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			name: "fails when cannot get standalone vpc",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					// //Todo confirm the genericAWSError passes
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, genericAWSError)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2328,18 +2678,16 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			name: "fails when cannot get vpc peering connection",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2351,27 +2699,25 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 			name: "success when network peering found",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{buildValidStandaloneVPC(validCIDREighteen)},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDREighteen),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2385,12 +2731,12 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			got, err := n.GetClusterNetworkPeering(tt.args.ctx)
 			if err != nil && !errorContains(err, tt.wantErr) {
@@ -2410,11 +2756,11 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		peering *NetworkPeering
@@ -2429,11 +2775,11 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			name: "fails when cannot describe peering connections",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2445,16 +2791,16 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			name: "fails when cannot delete peering connections",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{buildMockVpcPeeringConnection(nil)},
-						}, nil
-					}
-					ec2Client.deleteVpcPeeringConnectionFn = func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
-						return nil, errors.New("test")
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("DeleteVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2466,20 +2812,18 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			name: "success when status is deleting",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
-									connection.Status.Code = aws.String(ec2.VpcPeeringConnectionStateReasonCodeDeleting)
-								}),
-							},
-						}, nil
-					}
-					ec2Client.deleteVpcPeeringConnectionFn = func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
-						return nil, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(func(connection *ec2types.VpcPeeringConnection) {
+								connection.Status.Code = ec2types.VpcPeeringConnectionStateReasonCodeDeleting
+							}),
+						},
+					}, nil)
+					mockEc2.On("DeleteVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2490,16 +2834,16 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 			name: "success when vpc deletion succeeds",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{buildMockVpcPeeringConnection(nil)},
-						}, nil
-					}
-					ec2Client.deleteVpcPeeringConnectionFn = func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
-						return nil, nil
-					}
-				}),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("DeleteVpcPeeringConnection", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
@@ -2510,14 +2854,14 @@ func TestNetworkProvider_DeleteNetworkPeering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
-			if err := n.DeleteNetworkPeering(tt.args.peering); err != nil && err.Error() != tt.wantErr {
+			if err := n.DeleteNetworkPeering(context.TODO(), tt.args.peering); err != nil && err.Error() != tt.wantErr {
 				t.Errorf("DeleteNetworkPeering() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -2530,11 +2874,11 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx     context.Context
@@ -2551,92 +2895,83 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test successful security group creation",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						calls := ec2Client.DescribeSecurityGroupsCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeSecurityGroupsOutput{
-								SecurityGroups: []*ec2.SecurityGroup{
-									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-										group.GroupName = aws.String("not test security group id")
+						},
+					}, nil)
+					// call describe security groups twice to hit both conditionals
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.GroupName = aws.String("not test security group id")
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
+						},
+					}, nil).Once()
+					// call describe route table twice to hit both conditionals
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+								table.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(tag *ec2types.Tag) {
+										tag.Key = aws.String("kubernetes.io/cluster/test")
+										tag.Value = aws.String("owned")
 									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
-							},
-						}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return &ec2.CreateSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
+								}
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+								table.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(tag *ec2types.Tag) {
+										tag.Key = aws.String(defaultSubnetTag)
+										tag.Value = aws.String("test")
 									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
-										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return &ec2.CreateRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+								}
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
@@ -2649,96 +2984,70 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test successful security group creation with Firewall and Private Link Route Tables",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						calls := ec2Client.DescribeSecurityGroupsCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeSecurityGroupsOutput{
-								SecurityGroups: []*ec2.SecurityGroup{
-									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-										group.GroupName = aws.String("not test security group id")
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
-							},
-						}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return &ec2.CreateSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
-										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						calls := ec2Client.CreateRouteCalls()
-						if len(calls) == 1 {
-							return nil, awserr.New("RouteNotSupported", "Route table contains routes that do not target a network interface", nil)
-						}
-						return &ec2.CreateRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+					// call describe security groups twice to hit both conditionals
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.GroupName = aws.String("not test security group id")
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
+						},
+					}, nil).Once()
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							calls := mockEc2.CreateRouteCalls()
+							if len(calls) == 1 {
+								args[0] = nil
+								args[1] = errors.New("RouteNotSupported: Route table contains routes that do not target a network interface")
+								return
+							}
+							args[0] = &ec2.CreateRouteOutput{}
+							args[1] = nil
+						}).
+						Return(&ec2.CreateRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
@@ -2751,92 +3060,96 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test error on route table route creation error",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						calls := ec2Client.DescribeSecurityGroupsCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeSecurityGroupsOutput{
-								SecurityGroups: []*ec2.SecurityGroup{
-									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-										group.GroupName = aws.String("not test security group id")
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
-							},
-						}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return &ec2.CreateSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
+						},
+					}, nil)
+					// call describe security groups twice to hit both conditionals
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.GroupName = aws.String("not test security group id")
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
+						},
+					}, nil).Once()
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							calls := mockEc2.DescribeRouteTablesCalls()
+							var output *ec2.DescribeRouteTablesOutput
+							if len(calls) == 1 {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String("kubernetes.io/cluster/test")
+													e.Value = aws.String("owned")
+												}),
+											}
 										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return &ec2.CreateRouteOutput{}, awserr.New("OtherError", "Route table contains routes that do not target a network interface", nil)
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+									},
+								}
+							} else {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String(defaultSubnetTag)
+													e.Value = aws.String("test")
+												}),
+											}
+										}),
+									},
+								}
+							}
+
+							args[0] = output
+							args[1] = nil
+						}).
+						Return(&ec2.DescribeRouteTablesOutput{}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).
+						Return(errors.New("OtherError: Route table contains routes that do not target a network interface"), nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
@@ -2848,53 +3161,54 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "error creating security group",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						calls := ec2Client.DescribeSecurityGroupsCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeSecurityGroupsOutput{
-								SecurityGroups: []*ec2.SecurityGroup{
-									buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-										group.GroupName = aws.String("not test security group id")
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+						},
+					}, nil)
+					// call describe security groups twice to hit both conditionals
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.GroupName = aws.String("not test security group id")
+							}),
+						},
+					}, nil).Once()
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
+						},
+					}, nil).Once()
+					//Todo confirm the genericAWSError passes
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
@@ -2906,86 +3220,93 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test security group exists with no tags",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
-									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
+						},
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							calls := mockEc2.DescribeRouteTablesCalls()
+							var output *ec2.DescribeRouteTablesOutput
+							if len(calls) == 1 {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String("kubernetes.io/cluster/test")
+													e.Value = aws.String("owned")
+												}),
+											}
 										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return &ec2.CreateRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+									},
+								}
+							} else {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String(defaultSubnetTag)
+													e.Value = aws.String("test")
+												}),
+											}
+										}),
+									},
+								}
+							}
+
+							args[0] = output
+							args[1] = nil
+						}).
+						Return(&ec2.DescribeRouteTablesOutput{}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
 				network: buildMockNetwork(nil),
 			},
 			want: &NetworkConnection{
-				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {}),
+				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {}),
 			},
 			wantErr: false,
 		},
@@ -2993,97 +3314,104 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test security group exists with tags and invalid permissions",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-									group.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {}),
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(resources.TagDisplayName)
-											e.Value = aws.String(defaultVpcNameTagValue)
-										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
+						},
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {
+										e.Key = aws.String(resources.TagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
+								}
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							calls := mockEc2.DescribeRouteTablesCalls()
+							var output *ec2.DescribeRouteTablesOutput
+							if len(calls) == 1 {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String("kubernetes.io/cluster/test")
+													e.Value = aws.String("owned")
+												}),
+											}
 										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return &ec2.CreateRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+									},
+								}
+							} else {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String(defaultSubnetTag)
+													e.Value = aws.String("test")
+												}),
+											}
+										}),
+									},
+								}
+							}
+
+							args[0] = output
+							args[1] = nil
+						}).
+						Return(&ec2.DescribeRouteTablesOutput{}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
 				network: buildMockNetwork(nil),
 			},
 			want: &NetworkConnection{
-				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-					group.Tags = []*ec2.Tag{
-						buildMockEc2Tag(func(e *ec2.Tag) {}),
-						buildMockEc2Tag(func(e *ec2.Tag) {
+				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+					group.Tags = []ec2types.Tag{
+						buildMockEc2Tag(func(e *ec2types.Tag) {}),
+						buildMockEc2Tag(func(e *ec2types.Tag) {
 							e.Key = aws.String(resources.TagDisplayName)
 							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
@@ -3096,106 +3424,113 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 			name: "test security group exists with tags and valid permissions",
 			fields: fields{
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: &mockRdsClient{},
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-									group.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {}),
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(resources.TagDisplayName)
-											e.Value = aws.String(defaultVpcNameTagValue)
-										}),
-									}
-									group.IpPermissions = []*ec2.IpPermission{
-										buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						calls := ec2Client.DescribeRouteTablesCalls()
-						if len(calls) == 1 {
-							return &ec2.DescribeRouteTablesOutput{
-								RouteTables: []*ec2.RouteTable{
-									buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-										table.Tags = []*ec2.Tag{
-											buildMockEc2Tag(func(e *ec2.Tag) {
-												e.Key = aws.String("kubernetes.io/cluster/test")
-												e.Value = aws.String("owned")
-											}),
-										}
+						},
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {
+										e.Key = aws.String(resources.TagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-								},
-							}, nil
-						}
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(defaultSubnetTag)
-											e.Value = aws.String("test")
+								}
+								group.IpPermissions = []ec2types.IpPermission{
+									*buildMockEc2IpPermission(func(permission *ec2types.IpPermission) {}),
+								}
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Run(func(args mock.Arguments) {
+							calls := mockEc2.DescribeRouteTablesCalls()
+							var output *ec2.DescribeRouteTablesOutput
+							if len(calls) == 1 {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String("kubernetes.io/cluster/test")
+													e.Value = aws.String("owned")
+												}),
+											}
 										}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcPeeringConnectionFn = func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-						return &ec2.DescribeVpcPeeringConnectionsOutput{
-							VpcPeeringConnections: []*ec2.VpcPeeringConnection{
-								buildMockVpcPeeringConnection(nil),
-							},
-						}, nil
-					}
-					ec2Client.createRouteFn = func(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
-						return &ec2.CreateRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
+									},
+								}
+							} else {
+								output = &ec2.DescribeRouteTablesOutput{
+									RouteTables: []ec2types.RouteTable{
+										*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+											table.Tags = []ec2types.Tag{
+												buildMockEc2Tag(func(e *ec2types.Tag) {
+													e.Key = aws.String(defaultSubnetTag)
+													e.Value = aws.String("test")
+												}),
+											}
+										}),
+									},
+								}
+							}
+
+							args[0] = output
+							args[1] = nil
+						}).
+						Return(&ec2.DescribeRouteTablesOutput{}, nil)
+					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
+						VpcPeeringConnections: []ec2types.VpcPeeringConnection{
+							*buildMockVpcPeeringConnection(nil),
+						},
+					}, nil)
+					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx:     context.TODO(),
 				network: buildMockNetwork(nil),
 			},
 			want: &NetworkConnection{
-				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-					group.Tags = []*ec2.Tag{
-						buildMockEc2Tag(func(e *ec2.Tag) {}),
-						buildMockEc2Tag(func(e *ec2.Tag) {
+				StandaloneSecurityGroup: buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+					group.Tags = []ec2types.Tag{
+						buildMockEc2Tag(func(e *ec2types.Tag) {}),
+						buildMockEc2Tag(func(e *ec2types.Tag) {
 							e.Key = aws.String(resources.TagDisplayName)
 							e.Value = aws.String(defaultVpcNameTagValue)
 						}),
 					}
-					group.IpPermissions = []*ec2.IpPermission{
-						buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
+					group.IpPermissions = []ec2types.IpPermission{
+						*buildMockEc2IpPermission(func(permission *ec2types.IpPermission) {}),
 					}
 				}),
 			},
@@ -3205,12 +3540,12 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			got, err := n.CreateNetworkConnection(tt.args.ctx, tt.args.network)
 			if (err != nil) != tt.wantErr {
@@ -3230,11 +3565,11 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx            context.Context
@@ -3249,59 +3584,60 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		{
 			name: "ensure no error return if security group is nil",
 			fields: fields{
-				Client:         moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{},
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Return(&ec2.DescribeRouteTablesOutput{
+							RouteTables: []ec2types.RouteTable{
+								*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+									table.Tags = []ec2types.Tag{
+										buildMockEc2Tag(func(e *ec2types.Tag) {
 											e.Key = aws.String("kubernetes.io/cluster/test")
 											e.Value = aws.String("owned")
 										}),
 									}
 								}),
 							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+						}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				networkPeering: &NetworkPeering{
-					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2types.VpcPeeringConnection) {
 
 					}),
 				},
@@ -3311,74 +3647,75 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		{
 			name: "ensure ec2 delete security group is called if security group is not nil and is a security group provisioned by cro",
 			fields: fields{
-				Client:         moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{},
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-									group.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {}),
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(resources.TagDisplayName)
-											e.Value = aws.String(defaultVpcNameTagValue)
-										}),
-									}
-									group.IpPermissions = []*ec2.IpPermission{
-										buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {
+										e.Key = aws.String(resources.TagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
+									}),
+								}
+								group.IpPermissions = []ec2types.IpPermission{
+									*buildMockEc2IpPermission(func(permission *ec2types.IpPermission) {}),
+								}
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Return(&ec2.DescribeRouteTablesOutput{
+							RouteTables: []ec2types.RouteTable{
+								*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+									table.Tags = []ec2types.Tag{
+										buildMockEc2Tag(func(e *ec2types.Tag) {
 											e.Key = aws.String("kubernetes.io/cluster/test")
 											e.Value = aws.String("owned")
 										}),
 									}
 								}),
 							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+						}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				networkPeering: &NetworkPeering{
-					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2types.VpcPeeringConnection) {
 
 					}),
 				},
@@ -3388,62 +3725,65 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		{
 			name: "ensure ec2 delete security group is not called if security groups are found but not a cro provisioned security group",
 			fields: fields{
-				Client:         moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{},
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-									group.GroupName = aws.String("not a cro security group")
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.GroupName = aws.String("not a cro security group")
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Return(&ec2.DescribeRouteTablesOutput{
+							RouteTables: []ec2types.RouteTable{
+								*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+									table.Tags = []ec2types.Tag{
+										buildMockEc2Tag(func(e *ec2types.Tag) {
 											e.Key = aws.String("kubernetes.io/cluster/test")
 											e.Value = aws.String("owned")
 										}),
 									}
 								}),
 							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+						}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				networkPeering: &NetworkPeering{
-					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2types.VpcPeeringConnection) {
 
 					}),
 				},
@@ -3453,79 +3793,75 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 		{
 			name: "ensure ec2 delete routes is called",
 			fields: fields{
-				Client:         moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi:         &mockRdsClient{},
-				ElasticacheApi: &mockElasticacheClient{},
-				Logger:         logrus.NewEntry(logrus.StandardLogger()),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildMockEc2SecurityGroup(func(group *ec2.SecurityGroup) {
-									group.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
-											e.Key = aws.String(resources.TagDisplayName)
-											e.Value = aws.String(defaultVpcNameTagValue)
-										}),
-									}
-									group.IpPermissions = []*ec2.IpPermission{
-										buildMockEc2IpPermission(func(permission *ec2.IpPermission) {}),
-									}
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(func(table *ec2.RouteTable) {
-									table.Routes = []*ec2.Route{
-										buildMockEc2Route(nil),
-									}
-									table.Tags = []*ec2.Tag{
-										buildMockEc2Tag(func(e *ec2.Tag) {
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildMockEc2SecurityGroup(func(group *ec2types.SecurityGroup) {
+								group.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
+										e.Key = aws.String(resources.TagDisplayName)
+										e.Value = aws.String(defaultVpcNameTagValue)
+									}),
+								}
+								group.IpPermissions = []ec2types.IpPermission{
+									*buildMockEc2IpPermission(func(permission *ec2types.IpPermission) {}),
+								}
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).
+						Return(&ec2.DescribeRouteTablesOutput{
+							RouteTables: []ec2types.RouteTable{
+								*buildMockEc2RouteTable(func(table *ec2types.RouteTable) {
+									table.Tags = []ec2types.Tag{
+										buildMockEc2Tag(func(e *ec2types.Tag) {
 											e.Key = aws.String("kubernetes.io/cluster/test")
 											e.Value = aws.String("owned")
 										}),
 									}
 								}),
 							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{
-							buildMockVpc(func(vpc *ec2.Vpc) {
+						}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildMockVpc(func(vpc *ec2types.Vpc) {
 								vpc.VpcId = aws.String(defaultStandaloneVpcId)
 								vpc.CidrBlock = aws.String(validCIDRTwentySix)
-								vpc.Tags = []*ec2.Tag{
-									buildMockEc2Tag(func(e *ec2.Tag) {
+								vpc.Tags = []ec2types.Tag{
+									buildMockEc2Tag(func(e *ec2types.Tag) {
 										e.Key = aws.String(resources.TagDisplayName)
 										e.Value = aws.String(defaultVpcNameTagValue)
 									}),
-									buildMockEc2Tag(func(e *ec2.Tag) {}),
+									buildMockEc2Tag(func(e *ec2types.Tag) {}),
 								}
 							}),
-						}}, nil
-					}
-					ec2Client.deleteRouteFn = func(input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
-						return &ec2.DeleteRouteOutput{}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockEc2.On("DeleteRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteRouteOutput{}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
+				Logger: logrus.NewEntry(logrus.StandardLogger()),
 			},
 			args: args{
 				ctx: context.TODO(),
 				networkPeering: &NetworkPeering{
-					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2.VpcPeeringConnection) {
+					PeeringConnection: buildMockVpcPeeringConnection(func(connection *ec2types.VpcPeeringConnection) {
 
 					}),
 				},
@@ -3536,12 +3872,12 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			if err := n.DeleteNetworkConnection(tt.args.ctx, tt.args.networkPeering); (err != nil) != tt.wantErr {
 				t.Errorf("DeleteNetworkConnection() error = %v, wantErr %v", err, tt.wantErr)
@@ -3556,11 +3892,11 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 		t.Fatal("failed to build scheme", err)
 	}
 	type fields struct {
-		Client         client.Client
-		RdsApi         rdsiface.RDSAPI
-		Ec2Api         ec2iface.EC2API
-		ElasticacheApi elasticacheiface.ElastiCacheAPI
-		Logger         *logrus.Entry
+		Client            client.Client
+		RdsClient         *rds.Client
+		Ec2Client         *ec2.Client
+		ElasticacheClient *elasticache.Client
+		Logger            *logrus.Entry
 	}
 	type args struct {
 		ctx context.Context
@@ -3576,46 +3912,38 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
-									mock.GroupName = aws.String("testsecuritygroup")
-									mock.VpcId = aws.String("testID")
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC("10.0.0.0/23"),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildSecurityGroup(func(mock *ec2types.SecurityGroup) {
+								mock.GroupName = aws.String("testsecuritygroup")
+								mock.VpcId = aws.String("testID")
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC("10.0.0.0/23"),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3638,24 +3966,23 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					//Todo confirm the genericAWSError passes
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3667,24 +3994,22 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3696,36 +4021,30 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
-									mock.GroupName = aws.String("testsecuritygroup")
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildSecurityGroup(func(mock *ec2types.SecurityGroup) {
+								mock.GroupName = aws.String("testsecuritygroup")
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3737,32 +4056,28 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, awserr.New(elasticache.ErrCodeCacheSubnetGroupNotFoundFault, "", errors.New(elasticache.ErrCodeCacheSubnetGroupNotFoundFault))
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					//TODO this may not be a valid check for the error message as its unknown for v2 run the test to see if it fails
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(
+						&elasticache.DeleteCacheSubnetGroupOutput{}, errors.New("error: Cache subnet group not found"))
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3774,30 +4089,27 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, awserr.New(rds.ErrCodeDBSubnetGroupNotFoundFault, "", errors.New(rds.ErrCodeDBSubnetGroupNotFoundFault))
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					//TODO this may not be a valid check for the error message as its unknown for v2, run the test to see if it fails
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).
+						Return(&rds.DeleteDBSubnetGroupOutput{}, errors.New("error: Cache subnet group not found"))
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					//TODO check if checking the DescribeSecurityGroups twice is required. Betting its not lol.
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3809,32 +4121,29 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, awserr.New(elasticache.ErrCodeAuthorizationNotFoundFault, "", errors.New(elasticache.ErrCodeAuthorizationNotFoundFault))
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					//TODO check if checking the DescribeSecurityGroups twice is required. Betting its not lol.
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					//TODO this may not be a valid check for the error message as its unknown for v2, run the test to see if it fails
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).
+						Return(&elasticache.DeleteCacheSubnetGroupOutput{}, errors.New("error: Code Authorization Not Found Fault"))
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3846,32 +4155,29 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, awserr.New(rds.ErrCodeAuthorizationNotFoundFault, "", errors.New(rds.ErrCodeAuthorizationNotFoundFault))
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return &ec2.DeleteSecurityGroupOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					//TODO this may not be a valid check for the error message as its unknown for v2, run the test to see if it fails
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).
+						Return(&rds.DeleteDBSubnetGroupOutput{}, errors.New("error: Code Authorization Not Found Fault"))
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteSecurityGroupOutput{}, nil)
+					//TODO check if checking the DescribeSecurityGroups twice is required. Betting its not lol.
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3883,43 +4189,39 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 			fields: fields{
 				Logger: logrus.NewEntry(logrus.StandardLogger()),
 				Client: moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				RdsApi: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.deleteDBSubnetGroupFn = func(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-						return &rds.DeleteDBSubnetGroupOutput{}, nil
-					}
-				}),
-				Ec2Api: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.deleteSecurityGroupFn = func(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-						return nil, genericAWSError
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: []*ec2.SecurityGroup{
-								buildSecurityGroup(func(mock *ec2.SecurityGroup) {
-									mock.GroupName = aws.String("testsecuritygroup")
-									mock.VpcId = aws.String("testID")
-								}),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildValidClusterVPC("10.0.0.0/23"),
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-				}),
-				ElasticacheApi: buildMockElasticacheClient(func(elasticacheClient *mockElasticacheClient) {
-					elasticacheClient.deleteCacheSubnetGroupFn = func(input *elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error) {
-						return &elasticache.DeleteCacheSubnetGroupOutput{}, nil
-					}
-				}),
+				RdsClient: func() *rds.Client {
+					mockRds := new(mockRdsClient)
+					mockRds.On("DeleteDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSubnetGroupOutput{}, nil)
+					return (*rds.Client)(unsafe.Pointer(mockRds))
+				}(),
+				Ec2Client: func() *ec2.Client {
+					mockEc2 := new(mockEc2Client)
+					//Todo confirm the genericAWSError passes
+					mockEc2.On("DeleteSecurityGroup", mock.Anything, mock.Anything, mock.Anything).
+						Return(nil, genericAWSError)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: []ec2types.SecurityGroup{
+							*buildSecurityGroup(func(mock *ec2types.SecurityGroup) {
+								mock.GroupName = aws.String("testsecuritygroup")
+								mock.VpcId = aws.String("testID")
+							}),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildValidClusterVPC("10.0.0.0/23"),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							*buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				}(),
+				ElasticacheClient: func() *elasticache.Client {
+					mockElasticache := new(mockElasticacheClient)
+					mockElasticache.On("DeleteCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteCacheSubnetGroupOutput{}, nil)
+					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				}(),
 			},
 			args: args{
 				ctx: context.TODO(),
@@ -3930,12 +4232,12 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := &NetworkProvider{
-				Client:         tt.fields.Client,
-				RdsApi:         tt.fields.RdsApi,
-				Ec2Api:         tt.fields.Ec2Api,
-				ElasticacheApi: tt.fields.ElasticacheApi,
-				Logger:         tt.fields.Logger,
-				IsSTSCluster:   false,
+				Client:            tt.fields.Client,
+				RdsClient:         tt.fields.RdsClient,
+				Ec2Client:         tt.fields.Ec2Client,
+				ElasticacheClient: tt.fields.ElasticacheClient,
+				Logger:            tt.fields.Logger,
+				IsSTSCluster:      false,
 			}
 			if err := n.DeleteBundledCloudResources(tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("NetworkProvider.DeleteBundledCloudResources() error = %v, wantErr %v", err, tt.wantErr)

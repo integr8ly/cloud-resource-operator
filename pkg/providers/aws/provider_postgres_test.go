@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"os"
 	"reflect"
 	"strconv"
@@ -60,106 +61,106 @@ var (
 	snapshotIdentifier                         = "testIdentifier"
 )
 
-type mockRdsClient struct {
-	rdsiface.RDSAPI
-	modifyDBSubnetGroupFn               func(*rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error)
-	listTagsForResourceFn               func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
-	removeTagsFromResourceFn            func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
-	deleteDBSubnetGroupFn               func(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error)
-	addTagsToResourceFn                 func(*rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error)
-	describeDBSnapshotsFn               func(*rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error)
-	describeDBInstancesFn               func(*rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
-	describeDBSubnetGroupsFn            func(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
-	describePendingMaintenanceActionsFn func(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error)
-	applyPendingMaintenanceActionFn     func(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error)
-	modifyDBInstanceFn                  func(*rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
-}
+//type mockRdsClient struct {
+//	mock.Mock
+//	modifyDBSubnetGroupFn               func(*rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error)
+//	listTagsForResourceFn               func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
+//	removeTagsFromResourceFn            func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
+//	deleteDBSubnetGroupFn               func(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error)
+//	addTagsToResourceFn                 func(*rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error)
+//	describeDBSnapshotsFn               func(*rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error)
+//	describeDBInstancesFn               func(*rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
+//	describeDBSubnetGroupsFn            func(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
+//	describePendingMaintenanceActionsFn func(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error)
+//	applyPendingMaintenanceActionFn     func(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error)
+//	modifyDBInstanceFn                  func(*rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
+//}
 
-type mockEc2Client struct {
-	ec2iface.EC2API
-	firstSubnet     *ec2.Subnet
-	secondSubnet    *ec2.Subnet
-	subnets         []*ec2.Subnet
-	vpcs            []*ec2.Vpc
-	vpc             *ec2.Vpc
-	secGroups       []*ec2.SecurityGroup
-	azs             []*ec2.AvailabilityZone
-	wantErrList     bool
-	returnSecondSub bool
-	// new approach for manually defined mocks
-	// to allow for simple overrides in test table declarations
-	createTagsFn                    func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
-	describeVpcsFn                  func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
-	describeSecurityGroupsFn        func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
-	deleteSecurityGroupFn           func(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
-	describeVpcPeeringConnectionFn  func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
-	createVpcPeeringConnectionFn    func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
-	acceptVpcPeeringConnectionFn    func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
-	deleteVpcPeeringConnectionFn    func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
-	describeRouteTablesFn           func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
-	createRouteFn                   func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
-	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
-	createVpcFn                     func(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error)
-	deleteVpcFn                     func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error)
-	createSubnetFn                  func(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error)
-	describeInstanceTypeOfferingsFn func(*ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
-	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
-	describeSubnetsFn               func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
-	describeAvailabilityZonesFn     func(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
-	createSecurityGroupFn           func(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error)
-	calls                           struct {
-		DescribeRouteTables []struct {
-			Tables *ec2.DescribeRouteTablesInput
-		}
-		DescribeSecurityGroups []struct {
-			Groups *ec2.DescribeSecurityGroupsInput
-		}
-		DescribeSubnets []struct {
-			Subnets *ec2.DescribeSubnetsInput
-		}
-		DescribeAvailabilityZones []struct {
-			AvailabilityZones *ec2.DescribeAvailabilityZonesInput
-		}
-		DescribeVpcs []struct {
-			Vpcs *ec2.DescribeVpcsInput
-		}
-		CreateRoute []struct {
-			Route *ec2.CreateRouteInput
-		}
-	}
-}
+//type mockEc2Client struct {
+//	ec2iface.EC2API
+//	firstSubnet     *ec2.Subnet
+//	secondSubnet    *ec2.Subnet
+//	subnets         []*ec2.Subnet
+//	vpcs            []*ec2.Vpc
+//	vpc             *ec2.Vpc
+//	secGroups       []*ec2.SecurityGroup
+//	azs             []*ec2.AvailabilityZone
+//	wantErrList     bool
+//	returnSecondSub bool
+//	// new approach for manually defined mocks
+//	// to allow for simple overrides in test table declarations
+//	createTagsFn                    func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+//	describeVpcsFn                  func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+//	describeSecurityGroupsFn        func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
+//	deleteSecurityGroupFn           func(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
+//	describeVpcPeeringConnectionFn  func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
+//	createVpcPeeringConnectionFn    func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
+//	acceptVpcPeeringConnectionFn    func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
+//	deleteVpcPeeringConnectionFn    func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
+//	describeRouteTablesFn           func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
+//	createRouteFn                   func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
+//	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
+//	createVpcFn                     func(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error)
+//	deleteVpcFn                     func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error)
+//	createSubnetFn                  func(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error)
+//	describeInstanceTypeOfferingsFn func(*ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
+//	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
+//	describeSubnetsFn               func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+//	describeAvailabilityZonesFn     func(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
+//	createSecurityGroupFn           func(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error)
+//	calls                           struct {
+//		DescribeRouteTables []struct {
+//			Tables *ec2.DescribeRouteTablesInput
+//		}
+//		DescribeSecurityGroups []struct {
+//			Groups *ec2.DescribeSecurityGroupsInput
+//		}
+//		DescribeSubnets []struct {
+//			Subnets *ec2.DescribeSubnetsInput
+//		}
+//		DescribeAvailabilityZones []struct {
+//			AvailabilityZones *ec2.DescribeAvailabilityZonesInput
+//		}
+//		DescribeVpcs []struct {
+//			Vpcs *ec2.DescribeVpcsInput
+//		}
+//		CreateRoute []struct {
+//			Route *ec2.CreateRouteInput
+//		}
+//	}
+//}
 
-func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
-	mock := &mockEc2Client{}
-	mock.WaitUntilVpcExistsFn = func(input *ec2.DescribeVpcsInput) error {
-		return nil
-	}
-	mock.deleteVpcFn = func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
-		return &ec2.DeleteVpcOutput{}, nil
-	}
-	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-		return &ec2.CreateTagsOutput{}, nil
-	}
-	mock.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
-		return &ec2.DescribeInstanceTypeOfferingsOutput{
-			InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
-				{
-					Location: aws.String(defaultAzIdOne),
-				},
-				{
-					Location: aws.String(defaultAzIdTwo),
-				},
-			},
-		}, nil
-	}
-	mock.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-		return &ec2.DescribeSubnetsOutput{}, nil
-	}
-	if modifyFn != nil {
-		modifyFn(mock)
-	}
-	return mock
-}
+//func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
+//	mock := &mockEc2Client{}
+//	mock.WaitUntilVpcExistsFn = func(input *ec2.DescribeVpcsInput) error {
+//		return nil
+//	}
+//	mock.deleteVpcFn = func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
+//		return &ec2.DeleteVpcOutput{}, nil
+//	}
+//	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+//		return &ec2.CreateTagsOutput{}, nil
+//	}
+//	mock.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
+//		return &ec2.DescribeInstanceTypeOfferingsOutput{
+//			InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
+//				{
+//					Location: aws.String(defaultAzIdOne),
+//				},
+//				{
+//					Location: aws.String(defaultAzIdTwo),
+//				},
+//			},
+//		}, nil
+//	}
+//	mock.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+//		return &ec2.DescribeSubnetsOutput{}, nil
+//	}
+//	if modifyFn != nil {
+//		modifyFn(mock)
+//	}
+//	return mock
+//}
 
 func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
 	mock := &mockRdsClient{}
@@ -265,39 +266,39 @@ func (m *mockRdsClient) RemoveTagsFromResource(input *rds.RemoveTagsFromResource
 	return m.removeTagsFromResourceFn(input)
 }
 
-func (m *mockEc2Client) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-	if m.describeSubnetsFn == nil {
-		panic("mockEc2Client.DescribeSubnets: method is nil")
-	}
-	callInfo := struct {
-		Subnets *ec2.DescribeSubnetsInput
-	}{
-		Subnets: input,
-	}
-
-	lockMockEc2ClientDescribeSubnets.Lock()
-	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, callInfo)
-	lockMockEc2ClientDescribeSubnets.Unlock()
-
-	return m.describeSubnetsFn(input)
-}
-
-func (m *mockEc2Client) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	if m.describeVpcsFn == nil {
-		panic("mockEc2Client.DescribeVpcs: method is nil")
-	}
-	callInfo := struct {
-		Vpcs *ec2.DescribeVpcsInput
-	}{
-		Vpcs: input,
-	}
-
-	lockMockEc2ClientDescribeVpcs.Lock()
-	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, callInfo)
-	lockMockEc2ClientDescribeVpcs.Unlock()
-
-	return m.describeVpcsFn(input)
-}
+//func (m *mockEc2Client) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+//	if m.describeSubnetsFn == nil {
+//		panic("mockEc2Client.DescribeSubnets: method is nil")
+//	}
+//	callInfo := struct {
+//		Subnets *ec2.DescribeSubnetsInput
+//	}{
+//		Subnets: input,
+//	}
+//
+//	lockMockEc2ClientDescribeSubnets.Lock()
+//	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, callInfo)
+//	lockMockEc2ClientDescribeSubnets.Unlock()
+//
+//	return m.describeSubnetsFn(input)
+//}
+//
+//func (m *mockEc2Client) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+//	if m.describeVpcsFn == nil {
+//		panic("mockEc2Client.DescribeVpcs: method is nil")
+//	}
+//	callInfo := struct {
+//		Vpcs *ec2.DescribeVpcsInput
+//	}{
+//		Vpcs: input,
+//	}
+//
+//	lockMockEc2ClientDescribeVpcs.Lock()
+//	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, callInfo)
+//	lockMockEc2ClientDescribeVpcs.Unlock()
+//
+//	return m.describeVpcsFn(input)
+//}
 
 func (m *mockEc2Client) WaitUntilVpcExists(input *ec2.DescribeVpcsInput) error {
 	return m.WaitUntilVpcExistsFn(input)
@@ -803,12 +804,12 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 	}
 }
 
-func buildVpcs() []*ec2.Vpc {
-	return []*ec2.Vpc{
+func buildVpcs() []ec2types.Vpc {
+	return []ec2types.Vpc{
 		{
 			VpcId:     aws.String(defaultVpcId),
 			CidrBlock: aws.String("10.0.0.0/16"),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String("test-vpc"),
 					Value: aws.String("test-vpc"),
@@ -826,8 +827,8 @@ func buildAZ() []*ec2.AvailabilityZone {
 		},
 	}
 }
-func buildSecurityGroup(modifyFn func(cluster *ec2.SecurityGroup)) *ec2.SecurityGroup {
-	mock := &ec2.SecurityGroup{
+func buildSecurityGroup(modifyFn func(cluster *ec2types.SecurityGroup)) *ec2types.SecurityGroup {
+	mock := &ec2types.SecurityGroup{
 		GroupName: aws.String("test"),
 		GroupId:   aws.String("testID"),
 	}
@@ -838,9 +839,9 @@ func buildSecurityGroup(modifyFn func(cluster *ec2.SecurityGroup)) *ec2.Security
 	return mock
 }
 
-func buildSecurityGroups(groupName string) []*ec2.SecurityGroup {
-	return []*ec2.SecurityGroup{
-		buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+func buildSecurityGroups(groupName string) []ec2types.SecurityGroup {
+	return []ec2types.SecurityGroup{
+		*buildSecurityGroup(func(mock *ec2types.SecurityGroup) {
 			mock.GroupName = aws.String(groupName)
 		}),
 	}
