@@ -800,11 +800,14 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 			logrus.Info(fmt.Sprintf("Engine upgrade found, the current EngineVersion is %s and is upgrading to %s", *foundConfig.EngineVersion, *rdsConfig.EngineVersion))
 			mi.EngineVersion = rdsConfig.EngineVersion
 			mi.AllowMajorVersionUpgrade = aws.Bool(true)
-			if cr.Spec.ApplyImmediately {
-				mi.ApplyImmediately = aws.Bool(cr.Spec.ApplyImmediately)
-			}
 			updateFound = true
 		}
+	}
+
+	// ApplyImmediately should not be dependent to EngineVersion change
+	// EngineVersion should not prevent Immediate DBInstanceClass update
+	if cr.Spec.ApplyImmediately {
+		mi.ApplyImmediately = aws.Bool(cr.Spec.ApplyImmediately)
 	}
 
 	if (!updateFound || !verifyPendingModification(mi, foundConfig.PendingModifiedValues)) && (mi.ApplyImmediately == nil || !*mi.ApplyImmediately) {
