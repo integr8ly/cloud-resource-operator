@@ -124,7 +124,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	}
 
 	// setup aws elasticache cluster sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
+	sess, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to create elasticache replication group"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -523,7 +523,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// setup aws elasticache cluster sdk session
-	sess, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
+	sess, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to delete elasticache replication group"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -613,7 +613,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 
-			if err = networkManager.DeleteNetworkPeering(networkPeering); err != nil {
+			if err = networkManager.DeleteNetworkPeering(ctx, networkPeering); err != nil {
 				msg := "failed to delete cluster network peering"
 				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}

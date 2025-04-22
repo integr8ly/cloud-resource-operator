@@ -123,7 +123,7 @@ func BuildDefaultConfigMap(name, namespace string) *v1.ConfigMap {
 	}
 }
 
-func CreateSessionFromStrategy(ctx context.Context, c client.Client, credentials *Credentials, strategy *StrategyConfig) (*aws.Config, error) {
+func CreateConfigFromStrategy(ctx context.Context, c client.Client, credentials *Credentials, strategy *StrategyConfig) (*aws.Config, error) {
 	region, err := GetRegionFromStrategyOrDefault(ctx, c, strategy)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get region from strategy while creating aws session")

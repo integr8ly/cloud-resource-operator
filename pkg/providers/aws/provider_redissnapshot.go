@@ -256,5 +256,5 @@ func (p *RedisSnapshotProvider) createSessionForResource(ctx context.Context, na
 		return nil, err
 	}
 
-	return CreateSessionFromStrategy(ctx, p.client, providerCreds, stratCfg)
+	return CreateConfigFromStrategy(ctx, p.client, providerCreds, stratCfg)
 }

@@ -97,6 +97,8 @@ func (np *NetworkPeering) IsReady() bool {
 	return np.PeeringConnection.Status.Code == ec2types.VpcPeeringConnectionStateReasonCodeActive
 }
 
+// TODO regenerate moq file for this interface.
+//
 //go:generate moq -out cluster_network_provider_moq.go . NetworkManager
 type NetworkManager interface {
 	CreateNetwork(context.Context, *net.IPNet) (*Network, error)
@@ -105,7 +107,7 @@ type NetworkManager interface {
 	DeleteNetworkConnection(context.Context, *NetworkPeering) error
 	CreateNetworkPeering(context.Context, *Network) (*NetworkPeering, error)
 	GetClusterNetworkPeering(context.Context) (*NetworkPeering, error)
-	DeleteNetworkPeering(ctx context.Context, peering *NetworkPeering) error
+	DeleteNetworkPeering(context.Context, *NetworkPeering) error
 	IsEnabled(context.Context) (bool, error)
 	DeleteBundledCloudResources(context.Context) error
 }

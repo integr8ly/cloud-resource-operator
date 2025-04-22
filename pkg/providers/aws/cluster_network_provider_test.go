@@ -479,6 +479,7 @@ type mockEc2Client struct {
 	deleteRouteFn                   func(ctx context.Context, input *ec2.DeleteRouteInput, opts ...func(*ec2.Options)) (*ec2.DeleteRouteOutput, error)
 	createVpcFn                     func(ctx context.Context, input *ec2.CreateVpcInput, opts ...func(*ec2.Options)) (*ec2.CreateVpcOutput, error)
 	deleteVpcFn                     func(ctx context.Context, input *ec2.DeleteVpcInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcOutput, error)
+	WaitUntilVpcExistsFn            func(ctx context.Context, input *ec2.DescribeVpcsInput, opts ...func(*ec2.Options)) error
 	createSubnetFn                  func(ctx context.Context, input *ec2.CreateSubnetInput, opts ...func(*ec2.Options)) (*ec2.CreateSubnetOutput, error)
 	describeInstanceTypeOfferingsFn func(ctx context.Context, input *ec2.DescribeInstanceTypeOfferingsInput, opts ...func(*ec2.Options)) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
 	describeSubnetsFn               func(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error)
@@ -633,7 +634,6 @@ func (m *MockVpcExistsWaiter) Wait(ctx context.Context, params *ec2.DescribeVpcs
 	return args.Error(0)
 }
 
-// ///////////////////////
 func TestNetworkProvider_IsEnabled(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {

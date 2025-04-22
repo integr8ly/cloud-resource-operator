@@ -371,10 +371,10 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			defer func() {
 				k8sutil.AppFS = afero.NewOsFs()
 			}()
-			got, err := CreateSessionFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
+			got, err := CreateConfigFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
 			if tt.wantErr {
 				if !errorContains(err, "failed to get region") {
-					t.Fatalf("unexpected error from CreateSessionFromStrategy(): %v", err)
+					t.Fatalf("unexpected error from CreateConfigFromStrategy(): %v", err)
 				}
 				return
 			}

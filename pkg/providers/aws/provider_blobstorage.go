@@ -138,7 +138,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// setup aws s3 sdk session
 	p.Logger.Infof("creating new aws sdk config in region %s", stratCfg.Region)
-	cfg, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
+	cfg, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws config to create s3 bucket"
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -240,7 +240,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 
 	// create new s3 config
 	p.Logger.Infof("creating new aws sdk config in region %s", stratCfg.Region)
-	cfg, err := CreateSessionFromStrategy(ctx, p.Client, providerCreds, stratCfg)
+	cfg, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to delete s3 bucket"
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)

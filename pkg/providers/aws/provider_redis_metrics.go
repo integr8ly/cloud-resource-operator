@@ -69,7 +69,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}
 
 	// create a session from redis strategy (region) and reconciled aws keys
-	sess, err := CreateSessionFromStrategy(ctx, r.Client, providerCreds, redisStrategyConfig)
+	sess, err := CreateConfigFromStrategy(ctx, r.Client, providerCreds, redisStrategyConfig)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to create aws session to scrape elasticache cloud watch metrics")
 	}

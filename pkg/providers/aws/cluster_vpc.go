@@ -153,7 +153,7 @@ func GetVPCSubnets(ctx context.Context, ec2Client ec2.Client, logger *logrus.Ent
 }
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
-func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) ([]*string, error) {
+func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) ([]string, error) {
 	logger.Info("gathering all private subnets in cluster vpc")
 	// get cluster vpc
 	foundVPC, err := getClusterVpc(ctx, c, ec2Client, logger)
@@ -197,9 +197,9 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client ec2.Cli
 	}
 
 	// build list of subnet ids
-	var subIDs []*string
+	var subIDs []string
 	for _, sub := range privSubs {
-		subIDs = append(subIDs, sub.SubnetId)
+		subIDs = append(subIDs, *sub.SubnetId)
 	}
 
 	if subIDs == nil {
