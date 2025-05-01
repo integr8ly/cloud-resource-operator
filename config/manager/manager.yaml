@@ -10,6 +10,8 @@ spec:
       name: cloud-resource-operator
   template:
     metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
       labels:
         name: cloud-resource-operator
     spec:
@@ -20,6 +22,7 @@ spec:
         - cloud-resource-operator
         args:
         - --enable-leader-election
+        - --health-probe-address=:8081
         image: controller
         imagePullPolicy: Always
         livenessProbe:

@@ -3,6 +3,10 @@ output:
   sort-results: true
 
 linters:
+  enable:
+    - ginkgolinter
+    - prealloc
+    - revive
   disable:
     - errcheck
     - ineffassign
@@ -14,6 +18,9 @@ issues:
   max-same-issues: 0
 
 linters-settings:
+  revive:
+    rules:
+      - name: comment-spacings
   gosimple:
     checks: ["all"]
   staticcheck:
