@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	croapis "github.com/integr8ly/cloud-resource-operator/apis"
-	v1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croapis "github.com/integr8ly/cloud-resource-operator/api"
+	v1alpha1 "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-credential-operator/pkg/apis"

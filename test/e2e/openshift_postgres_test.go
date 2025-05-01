@@ -3,7 +3,7 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-	types2 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	types2 "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"golang.org/x/net/context"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -13,7 +13,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 

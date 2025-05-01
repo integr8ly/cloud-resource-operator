@@ -1,17 +1,15 @@
 output:
-  format: tab
+  formats: tab
   sort-results: true
 
 linters:
-  enable:
-    - ginkgolinter
-    - prealloc
-    - revive
   disable:
     - errcheck
     - ineffassign
     - unused
     - govet
+    - staticcheck
+
 
 issues:
   max-issues-per-linter: 0
@@ -38,3 +36,9 @@ presets:
 run:
   modules-download-mode: readonly
   timeout: 5m
+
+build:
+  vendor-dirs:
+    - vendor
+  go-build-flags:
+    - -mod=mod

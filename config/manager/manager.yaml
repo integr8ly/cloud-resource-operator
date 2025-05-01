@@ -22,7 +22,6 @@ spec:
         - cloud-resource-operator
         args:
         - --enable-leader-election
-        - --health-probe-address=:8081
         image: controller
         imagePullPolicy: Always
         livenessProbe:

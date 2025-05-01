@@ -1,6 +1,6 @@
 module github.com/integr8ly/cloud-resource-operator
 
-go 1.23.0
+go 1.23
 
 require (
 	cloud.google.com/go/compute v1.25.1

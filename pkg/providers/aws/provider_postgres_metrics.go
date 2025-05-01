@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	errorUtil "github.com/pkg/errors"
@@ -126,7 +126,7 @@ func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Cont
 	}
 
 	// ensure metric data results are not nil
-	if metricOutput.MetricDataResults == nil || len(metricOutput.MetricDataResults) == 0 {
+	if len(metricOutput.MetricDataResults) == 0 {
 		return nil, errorUtil.New("no metric data returned from rds cloudwatch")
 	}
 

@@ -1,29 +1,28 @@
-# Build the manager binary	
-FROM registry.redhat.io/ubi9/go-toolset:1.23.6 AS builder
+# Build the manager binary
+FROM registry.access.redhat.com/ubi9/go-toolset:1.23 AS builder
 
 # this is required for podman
 USER root
 
-WORKDIR /workspace	
-# Copy the Go Modules manifests	
-COPY go.mod go.mod	
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
 COPY go.sum go.sum
+COPY vendor/ vendor/
 # cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer	
+# and so that source changes don't invalidate our downloaded layer
 RUN go mod download
-		
-# Copy the go source	
-COPY main.go main.go	
-COPY apis/ apis/
-COPY vendor/ vendor/			
-COPY internal/controller/ internal/controller/
+
+# Copy the go source
+COPY cmd/ cmd/
+COPY api/ api/
 COPY pkg/ pkg/
-COPY internal/ internal/	
-COPY version/ version/		
+COPY internal/ internal/
+COPY version/ version/
 COPY test/ test/
-		
-# Build	
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o cloud-resource-operator main.go
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -mod=vendor -a -tags netgo -ldflags="-w -s -extldflags '-static'" -o cloud-resource-operator ./cmd/main.go
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 

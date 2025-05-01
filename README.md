@@ -30,15 +30,15 @@ Prerequisites:
 - `make`
 - [go](https://golang.org/dl/)
 - [yq](https://github.com/mikefarah/yq) version v4+
-- [operator-sdk](https://github.com/operator-framework/operator-sdk) version v1.14.0.
+- [operator-sdk](https://github.com/operator-framework/operator-sdk) version v1.39.0.
 - [git-secrets](https://github.com/awslabs/git-secrets) - for preventing cloud-provider credentials being included in 
 commits
 - [OPM](https://docs.openshift.com/container-platform/4.11/cli_reference/opm-cli.html)
 
-Ensure you are running at least `Go 1.20`.
+Ensure you are running at least `Go 1.23`.
 ```shell script
 $ go version
-go version go1.20 linux/amd64
+go version go1.23 linux/amd64
 ```
 
 If not, ensure Go Modules are enabled.
