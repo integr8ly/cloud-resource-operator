@@ -289,11 +289,12 @@ func buildMultipleValidBundleSubnets() []ec2types.Subnet {
 	}
 }
 
-func buildValidClusterSubnet(modifyFn func(*ec2types.Subnet)) *ec2types.Subnet {
-	mock := &ec2types.Subnet{
+func buildValidClusterSubnet(modifyFn func(ec2types.Subnet)) ec2types.Subnet {
+	mock := ec2types.Subnet{
 		SubnetId:         aws.String("test-id-2"),
 		VpcId:            aws.String(defaultVpcId),
 		AvailabilityZone: aws.String("test"),
+		CidrBlock:        aws.String("10.0.0.0/24"),
 		Tags: []ec2types.Tag{
 			buildMockEc2Tag(func(e *ec2types.Tag) {
 				e.Key = aws.String(getOSDClusterTagKey(defaultInfraName))
@@ -501,67 +502,33 @@ type mockEc2Client struct {
 	}
 }
 
-func (m *mockEc2Client) DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
-	if m.describeSubnetsFn == nil {
-		panic("mockEc2Client.DescribeSubnets: method is nil")
-	}
+//func (m *mockEc2Client) DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+//	if m.describeSubnetsFn == nil {
+//		panic("mockEc2Client.DescribeSubnets: method is nil")
+//	}
+//
+//	lockMockEc2ClientDescribeSubnets.Lock()
+//	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, struct {
+//		Input *ec2.DescribeSubnetsInput
+//	}{Input: input})
+//	lockMockEc2ClientDescribeSubnets.Unlock()
+//
+//	return m.describeSubnetsFn(ctx, input, opts...)
+//}
 
-	lockMockEc2ClientDescribeSubnets.Lock()
-	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, struct {
-		Input *ec2.DescribeSubnetsInput
-	}{Input: input})
-	lockMockEc2ClientDescribeSubnets.Unlock()
-
-	return m.describeSubnetsFn(ctx, input, opts...)
-}
-
-func (m *mockEc2Client) DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
-	if m.describeVpcsFn == nil {
-		panic("mockEc2Client.DescribeVpcs: method is nil")
-	}
-
-	lockMockEc2ClientDescribeVpcs.Lock()
-	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, struct {
-		Input *ec2.DescribeVpcsInput
-	}{Input: input})
-	lockMockEc2ClientDescribeVpcs.Unlock()
-
-	return m.describeVpcsFn(ctx, input, opts...)
-}
-
-func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
-	mock := &mockEc2Client{}
-
-	mock.deleteVpcFn = func(ctx context.Context, input *ec2.DeleteVpcInput, opts ...func(*ec2.Options)) (*ec2.DeleteVpcOutput, error) {
-		return &ec2.DeleteVpcOutput{}, nil
-	}
-
-	mock.createTagsFn = func(ctx context.Context, input *ec2.CreateTagsInput, opts ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error) {
-		return &ec2.CreateTagsOutput{}, nil
-	}
-
-	mock.describeInstanceTypeOfferingsFn = func(ctx context.Context, input *ec2.DescribeInstanceTypeOfferingsInput, opts ...func(*ec2.Options)) (*ec2.DescribeInstanceTypeOfferingsOutput, error) {
-		return &ec2.DescribeInstanceTypeOfferingsOutput{
-			InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
-				{
-					Location: aws.String(defaultAzIdOne),
-				},
-				{
-					Location: aws.String(defaultAzIdTwo),
-				},
-			},
-		}, nil
-	}
-
-	mock.describeSubnetsFn = func(ctx context.Context, input *ec2.DescribeSubnetsInput, opts ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
-		return &ec2.DescribeSubnetsOutput{}, nil
-	}
-
-	if modifyFn != nil {
-		modifyFn(mock)
-	}
-	return mock
-}
+//func (m *mockEc2Client) DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput, opts ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
+//	if m.describeVpcsFn == nil {
+//		panic("mockEc2Client.DescribeVpcs: method is nil")
+//	}
+//
+//	lockMockEc2ClientDescribeVpcs.Lock()
+//	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, struct {
+//		Input *ec2.DescribeVpcsInput
+//	}{Input: input})
+//	lockMockEc2ClientDescribeVpcs.Unlock()
+//
+//	return m.describeVpcsFn(ctx, input, opts...)
+//}
 
 type mockRdsClient struct {
 	mock.Mock
@@ -670,7 +637,7 @@ func TestNetworkProvider_IsEnabled(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -880,7 +847,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -918,7 +885,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -957,7 +924,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -1127,7 +1094,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -1172,7 +1139,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -1771,7 +1738,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					// runs when sts disabled
@@ -1842,7 +1809,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					// runs when sts disabled
@@ -2264,7 +2231,7 @@ func TestNetworkProvider_ReconcileNetworkProviderConfig(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -2442,7 +2409,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(func(subnet *ec2types.Subnet) {
+							buildValidClusterSubnet(func(subnet ec2types.Subnet) {
 								subnet.Tags = nil
 							}),
 						},
@@ -2468,7 +2435,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("test"))
@@ -2496,7 +2463,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
@@ -2524,7 +2491,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
@@ -2555,7 +2522,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
@@ -2590,7 +2557,7 @@ func TestNetworkProvider_CreateNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcPeeringConnections", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcPeeringConnectionsOutput{
@@ -2683,7 +2650,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -2713,7 +2680,7 @@ func TestNetworkProvider_GetClusterNetworkPeering(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -2962,7 +2929,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3038,7 +3005,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 						Return(&ec2.CreateRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3140,7 +3107,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 						Return(errors.New("OtherError: Route table contains routes that do not target a network interface"), nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3199,7 +3166,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3290,7 +3257,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3392,7 +3359,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3505,7 +3472,7 @@ func TestNetworkProvider_CreateNetworkConnection(t *testing.T) {
 					mockEc2.On("CreateRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3623,7 +3590,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3701,7 +3668,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3769,7 +3736,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3847,7 +3814,7 @@ func TestNetworkProvider_DeleteNetworkConnection(t *testing.T) {
 					mockEc2.On("DeleteRoute", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteRouteOutput{}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -3934,7 +3901,7 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))
@@ -4212,7 +4179,7 @@ func TestNetworkProvider_DeleteBundledCloudResources(t *testing.T) {
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					return (*ec2.Client)(unsafe.Pointer(mockEc2))

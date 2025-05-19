@@ -29,9 +29,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
-	croApis "github.com/integr8ly/cloud-resource-operator/apis"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croApis "github.com/integr8ly/cloud-resource-operator/api"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	cloudCredentialApis "github.com/openshift/cloud-credential-operator/pkg/apis"
@@ -467,7 +467,7 @@ func buildMockNetworkManager() *NetworkManagerMock {
 		GetClusterNetworkPeeringFunc: func(ctx context.Context) (*NetworkPeering, error) {
 			return &NetworkPeering{}, nil
 		},
-		DeleteNetworkPeeringFunc: func(np *NetworkPeering) error {
+		DeleteNetworkPeeringFunc: func(ctx context.Context, np *NetworkPeering) error {
 			return nil
 		},
 		DeleteNetworkFunc: func(ctx context.Context) error {
@@ -1532,7 +1532,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					mockEc2 := new(mockEc2Client)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
@@ -1573,7 +1573,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 					mockEc2 := new(mockEc2Client)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: []ec2types.Subnet{
-							*buildValidClusterSubnet(nil),
+							buildValidClusterSubnet(nil),
 						},
 					}, nil)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{

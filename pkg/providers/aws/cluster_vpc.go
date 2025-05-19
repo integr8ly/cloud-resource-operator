@@ -52,7 +52,7 @@ const (
 )
 
 // ensures a subnet group is in place for the creation of a resource
-func configureSecurityGroup(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) error {
+func configureSecurityGroup(ctx context.Context, c client.Client, ec2Client EC2API, logger *logrus.Entry) error {
 	// get cluster id
 	clusterID, err := resources.GetClusterID(ctx, c)
 	if err != nil {
@@ -125,7 +125,7 @@ func configureSecurityGroup(ctx context.Context, c client.Client, ec2Client ec2.
 }
 
 // GetVPCSubnets returns a list of subnets associated with cluster VPC
-func GetVPCSubnets(ctx context.Context, ec2Client ec2.Client, logger *logrus.Entry, vpc *ec2types.Vpc) ([]*ec2types.Subnet, error) {
+func GetVPCSubnets(ctx context.Context, ec2Client EC2API, logger *logrus.Entry, vpc *ec2types.Vpc) ([]*ec2types.Subnet, error) {
 	logger.Info("gathering cluster vpc and subnet information")
 	// poll subnets to ensure credentials have reconciled
 	subs, err := getSubnets(ctx, ec2Client)
@@ -153,7 +153,7 @@ func GetVPCSubnets(ctx context.Context, ec2Client ec2.Client, logger *logrus.Ent
 }
 
 // GetSubnetIDS returns a list of subnet ids associated with cluster vpc
-func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) ([]string, error) {
+func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client EC2API, logger *logrus.Entry) ([]string, error) {
 	logger.Info("gathering all private subnets in cluster vpc")
 	// get cluster vpc
 	foundVPC, err := getClusterVpc(ctx, c, ec2Client, logger)
@@ -220,7 +220,7 @@ func privateSubnetExists(privSubs []*ec2types.Subnet, zone *ec2types.Availabilit
 }
 
 // creates and tags a private subnet
-func createPrivateSubnet(ctx context.Context, c client.Client, ec2Client ec2.Client, vpc *ec2types.Vpc, logger *logrus.Entry, zone string) (*ec2types.Subnet, error) {
+func createPrivateSubnet(ctx context.Context, c client.Client, ec2Client EC2API, vpc *ec2types.Vpc, logger *logrus.Entry, zone string) (*ec2types.Subnet, error) {
 	// get list of potential subnet addresses
 	logger.Infof("creating private subnet in %s", *vpc.VpcId)
 	subs, err := buildSubnetAddress(vpc, logger)
@@ -259,7 +259,7 @@ func createPrivateSubnet(ctx context.Context, c client.Client, ec2Client ec2.Cli
 }
 
 // tags a private subnet with the default aws private subnet tag
-func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Client ec2.Client, sub *ec2types.Subnet, logger *logrus.Entry) error {
+func tagPrivateSubnet(ctx context.Context, c client.Client, ec2Client EC2API, sub *ec2types.Subnet, logger *logrus.Entry) error {
 	logger.Infof("tagging cloud resource subnet %s", *sub.SubnetId)
 	tags, err := getDefaultSubnetTags(ctx, c)
 	if err != nil {
@@ -437,7 +437,7 @@ func incrementIP(ip net.IP, inc int) net.IP {
 }
 
 // returns vpc id and cidr block for found vpc
-func GetCidr(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) (string, string, error) {
+func GetCidr(ctx context.Context, c client.Client, ec2Client EC2API, logger *logrus.Entry) (string, string, error) {
 	foundVPC, err := getClusterVpc(ctx, c, ec2Client, logger)
 	if err != nil {
 		return "", "", errorUtil.Wrap(err, "error getting vpcs")
@@ -452,7 +452,7 @@ func GetCidr(ctx context.Context, c client.Client, ec2Client ec2.Client, logger 
 }
 
 // function to get AZ
-func getAZs(ctx context.Context, ec2Client ec2.Client) ([]ec2types.AvailabilityZone, error) {
+func getAZs(ctx context.Context, ec2Client EC2API) ([]ec2types.AvailabilityZone, error) {
 	azs, err := ec2Client.DescribeAvailabilityZones(ctx, &ec2.DescribeAvailabilityZonesInput{})
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting availability zones")
@@ -461,7 +461,7 @@ func getAZs(ctx context.Context, ec2Client ec2.Client) ([]ec2types.AvailabilityZ
 }
 
 // function to get subnets, used to check/wait on AWS credentials
-func getSubnets(ctx context.Context, ec2Client ec2.Client) ([]ec2types.Subnet, error) {
+func getSubnets(ctx context.Context, ec2Client EC2API) ([]ec2types.Subnet, error) {
 	var subs []ec2types.Subnet
 	err := wait.PollUntilContextTimeout(context.TODO(), time.Second*5, time.Minute*5, true, func(ctx context.Context) (bool, error) {
 		listOutput, err := ec2Client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{})
@@ -477,7 +477,7 @@ func getSubnets(ctx context.Context, ec2Client ec2.Client) ([]ec2types.Subnet, e
 	return subs, nil
 }
 
-func getVPCIDByClusterSubnets(ctx context.Context, ec2Client *ec2.Client, clusterID string) (string, error) {
+func getVPCIDByClusterSubnets(ctx context.Context, ec2Client EC2API, clusterID string) (string, error) {
 	listOutput, err := ec2Client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{})
 	if err != nil {
 		return "", err
@@ -495,7 +495,7 @@ func getVPCIDByClusterSubnets(ctx context.Context, ec2Client *ec2.Client, cluste
 }
 
 // function to get vpc of a cluster
-func getClusterVpc(ctx context.Context, c client.Client, ec2Client ec2.Client, logger *logrus.Entry) (*ec2types.Vpc, error) {
+func getClusterVpc(ctx context.Context, c client.Client, ec2Client EC2API, logger *logrus.Entry) (*ec2types.Vpc, error) {
 	// first call to aws api from the network provider is to get cluster vpc
 	// polling to allow credential minter time to reconcile credentials
 
@@ -505,7 +505,7 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Client ec2.Client, l
 		return nil, errorUtil.Wrap(err, "error getting clusterID")
 	}
 
-	vpcId, err := getVPCIDByClusterSubnets(ctx, &ec2Client, clusterID)
+	vpcId, err := getVPCIDByClusterSubnets(ctx, ec2Client, clusterID)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc id from associated subnets")
 	}
@@ -528,7 +528,7 @@ func getClusterVpc(ctx context.Context, c client.Client, ec2Client ec2.Client, l
 // getSecurityGroup a utility function for returning cro resource security group
 // we filter security groups based on a pre-determined security group name
 // if a security group does not exist a nil object is returned
-func getSecurityGroup(ctx context.Context, ec2Client ec2.Client, secName string) (*ec2types.SecurityGroup, error) {
+func getSecurityGroup(ctx context.Context, ec2Client EC2API, secName string) (*ec2types.SecurityGroup, error) {
 	// get security groups
 	secGroups, err := ec2Client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{})
 	if err != nil {

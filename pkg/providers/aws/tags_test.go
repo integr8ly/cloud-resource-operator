@@ -5,15 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
 func Test_ec2TagListToGenericList(t *testing.T) {
 	type args struct {
-		ec2Tags []*ec2.Tag
+		ec2Tags []ec2types.Tag
 	}
 	tests := []struct {
 		name string
@@ -23,7 +23,7 @@ func Test_ec2TagListToGenericList(t *testing.T) {
 		{
 			name: "test convert format",
 			args: args{
-				ec2Tags: []*ec2.Tag{
+				ec2Tags: []ec2types.Tag{
 					{
 						Key:   aws.String("testKey"),
 						Value: aws.String("testVal"),
@@ -40,7 +40,7 @@ func Test_ec2TagListToGenericList(t *testing.T) {
 		{
 			name: "test missing keys or values",
 			args: args{
-				ec2Tags: []*ec2.Tag{
+				ec2Tags: []ec2types.Tag{
 					{
 						Value: aws.String("testVal"),
 					},
@@ -70,7 +70,7 @@ func Test_ec2TagListToGenericList(t *testing.T) {
 
 func Test_rdsTagListToGenericList(t *testing.T) {
 	type args struct {
-		rdsTags []*rds.Tag
+		rdsTags []rdstypes.Tag
 	}
 	tests := []struct {
 		name string
@@ -80,7 +80,7 @@ func Test_rdsTagListToGenericList(t *testing.T) {
 		{
 			name: "test convert format",
 			args: args{
-				rdsTags: []*rds.Tag{
+				rdsTags: []rdstypes.Tag{
 					{
 						Key:   aws.String("testKey"),
 						Value: aws.String("testVal"),
@@ -97,7 +97,7 @@ func Test_rdsTagListToGenericList(t *testing.T) {
 		{
 			name: "test missing keys or values",
 			args: args{
-				rdsTags: []*rds.Tag{
+				rdsTags: []rdstypes.Tag{
 					{
 						Value: aws.String("testVal"),
 					},
@@ -132,7 +132,7 @@ func Test_genericListToEc2TagList(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want []*ec2.Tag
+		want []ec2types.Tag
 	}{
 		{
 			name: "test convert format",
@@ -144,7 +144,7 @@ func Test_genericListToEc2TagList(t *testing.T) {
 					},
 				},
 			},
-			want: []*ec2.Tag{
+			want: []ec2types.Tag{
 				{
 					Key:   aws.String("testKey"),
 					Value: aws.String("testVal"),
@@ -163,7 +163,7 @@ func Test_genericListToEc2TagList(t *testing.T) {
 					},
 				},
 			},
-			want: []*ec2.Tag{
+			want: []ec2types.Tag{
 				{
 					Key:   aws.String(""),
 					Value: aws.String("testVal"),
@@ -191,7 +191,7 @@ func Test_genericToRdsTags(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want []*rds.Tag
+		want []rdstypes.Tag
 	}{
 		{
 			name: "test convert format",
@@ -203,7 +203,7 @@ func Test_genericToRdsTags(t *testing.T) {
 					},
 				},
 			},
-			want: []*rds.Tag{
+			want: []rdstypes.Tag{
 				{
 					Key:   aws.String("testKey"),
 					Value: aws.String("testVal"),
@@ -222,7 +222,7 @@ func Test_genericToRdsTags(t *testing.T) {
 					},
 				},
 			},
-			want: []*rds.Tag{
+			want: []rdstypes.Tag{
 				{
 					Key:   aws.String(""),
 					Value: aws.String("testVal"),
@@ -250,7 +250,7 @@ func Test_genericListToElasticacheTagList(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want []*elasticache.Tag
+		want []elasticachetypes.Tag
 	}{
 		{
 			name: "test convert format",
@@ -262,7 +262,7 @@ func Test_genericListToElasticacheTagList(t *testing.T) {
 					},
 				},
 			},
-			want: []*elasticache.Tag{
+			want: []elasticachetypes.Tag{
 				{
 					Key:   aws.String("testKey"),
 					Value: aws.String("testVal"),
@@ -281,7 +281,7 @@ func Test_genericListToElasticacheTagList(t *testing.T) {
 					},
 				},
 			},
-			want: []*elasticache.Tag{
+			want: []elasticachetypes.Tag{
 				{
 					Key:   aws.String(""),
 					Value: aws.String("testVal"),

@@ -116,9 +116,9 @@ var _ NetworkManager = (*NetworkProvider)(nil)
 
 type NetworkProvider struct {
 	Client            client.Client
-	RdsClient         *rds.Client
-	Ec2Client         *ec2.Client
-	ElasticacheClient *elasticache.Client
+	RdsClient         RDSAPI
+	Ec2Client         EC2API
+	ElasticacheClient ElastiCacheAPI
 	Logger            *logrus.Entry
 	IsSTSCluster      bool
 }
@@ -129,9 +129,9 @@ func NewNetworkManager(cfg aws.Config, client client.Client, logger *logrus.Entr
 	}
 	return &NetworkProvider{
 		Client:            client,
-		RdsClient:         rds.NewFromConfig(cfg),
-		Ec2Client:         ec2.NewFromConfig(cfg),
-		ElasticacheClient: elasticache.NewFromConfig(cfg),
+		Ec2Client:         NewEC2Client(cfg),
+		RdsClient:         NewRDSClient(cfg),
+		ElasticacheClient: NewElasticacheClient(cfg),
 		Logger:            logger.WithField("provider", "standalone_network_provider"),
 		IsSTSCluster:      isSTSCluster,
 	}
@@ -164,7 +164,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 		//By default, `integreatly.org/clusterID`.
 		//
 		//NOTE - Once a VPC is created we do not want to update it. To avoid changing cidr block
-		clusterVPC, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, n.Logger)
+		clusterVPC, err := getClusterVpc(ctx, n.Client, n.Ec2Client, n.Logger)
 		if err != nil {
 			return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 		}
@@ -308,7 +308,7 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	}
 
 	// remove all subnets created by cro
-	vpcSubs, err := getVPCAssociatedSubnets(ctx, *n.Ec2Client, logger, foundVpc)
+	vpcSubs, err := getVPCAssociatedSubnets(ctx, n.Ec2Client, logger, foundVpc)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to get standalone vpc subnets")
 	}
@@ -328,7 +328,7 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	}
 
 	// remove rds subnet group created by cro
-	rdsSubnetGroup, err := getRDSSubnetGroup(ctx, *n.RdsClient, subnetGroupName)
+	rdsSubnetGroup, err := getRDSSubnetGroup(ctx, n.RdsClient, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting subnet group on delete")
 	}
@@ -343,7 +343,7 @@ func (n *NetworkProvider) DeleteNetwork(ctx context.Context) error {
 	}
 
 	// remove elasticache subnet group created by cro
-	elasticacheSubnetGroup, err := getElasticacheSubnetByGroup(ctx, *n.ElasticacheClient, subnetGroupName)
+	elasticacheSubnetGroup, err := getElasticacheSubnetByGroup(ctx, n.ElasticacheClient, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting subnet group on delete")
 	}
@@ -441,7 +441,7 @@ func (n *NetworkProvider) CreateNetworkConnection(ctx context.Context, network *
 	}
 
 	// we require the cluster vpc cidr block for standalone vpc route
-	clusterVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting standalone vpc route tables")
 	}
@@ -486,7 +486,7 @@ func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context, networkPe
 	}
 
 	// get standalone security group
-	standaloneSecGroup, err := getSecurityGroup(ctx, *n.Ec2Client, standaloneSecurityGroupName)
+	standaloneSecGroup, err := getSecurityGroup(ctx, n.Ec2Client, standaloneSecurityGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed to find standalone security group")
 	}
@@ -544,7 +544,7 @@ func (n *NetworkProvider) DeleteNetworkConnection(ctx context.Context, networkPe
 func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Network) (*NetworkPeering, error) {
 	logger := resources.NewActionLogger(n.Logger, "CreateNetworkPeering")
 
-	clusterVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, n.Logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc, no vpc found")
 	}
@@ -615,7 +615,7 @@ func (n *NetworkProvider) CreateNetworkPeering(ctx context.Context, network *Net
 		logger.Infof("accepted peering connection")
 	case ec2types.VpcPeeringConnectionStateReasonCodeActive, ec2types.VpcPeeringConnectionStateReasonCodeProvisioning, ec2types.VpcPeeringConnectionStateReasonCodeInitiatingRequest:
 	default:
-		return nil, errorUtil.New(fmt.Sprintf("vpc peering connection %s is in an invalid state '%s' with message '%s'", peeringConnection.VpcPeeringConnectionId, peeringConnection.Status.Code, peeringConnection.Status.Message))
+		return nil, errorUtil.New(fmt.Sprintf("vpc peering connection %s is in an invalid state '%s' with message '%s'", *peeringConnection.VpcPeeringConnectionId, peeringConnection.Status.Code, *peeringConnection.Status.Message))
 	}
 
 	// return a wrapped vpc peering connection
@@ -698,7 +698,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 	logger := n.Logger.WithField("action", "isEnabled")
 
 	//check if there is a cluster vpc already created.
-	foundVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, logger)
+	foundVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, logger)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "unable to get vpc")
 	}
@@ -709,7 +709,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 
 	// returning subnets from cluster vpc
 	logger.Info("getting cluster vpc subnets")
-	vpcSubnets, err := GetVPCSubnets(ctx, *n.Ec2Client, logger, foundVpc)
+	vpcSubnets, err := GetVPCSubnets(ctx, n.Ec2Client, logger, foundVpc)
 	if err != nil {
 		return false, errorUtil.Wrap(err, "error happened while returning vpc subnets")
 	}
@@ -723,7 +723,7 @@ func (n *NetworkProvider) IsEnabled(ctx context.Context) (bool, error) {
 			if aws.ToString(tag.Key) == fmt.Sprintf("%sclusterID", organizationTag) &&
 				aws.ToString(tag.Value) == clusterID {
 				validBundledVPCSubnets = append(validBundledVPCSubnets, subnet)
-				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", *subnet.SubnetId, *subnet.VpcId)
+				logger.Infof("found bundled vpc subnet %s in cluster vpc %s", aws.ToString(subnet.SubnetId), aws.ToString(subnet.VpcId))
 			}
 		}
 	}
@@ -779,14 +779,14 @@ func (n *NetworkProvider) DeleteBundledCloudResources(ctx context.Context) error
 	// not connected with the default vpc. In order to delete it, it is required to describe them
 	// all in the account and then find the one with the correct group name and then request deletion
 	// using the group id of the matched security group
-	securityGroup, err := getSecurityGroup(ctx, *n.Ec2Client, securityGroupName)
+	securityGroup, err := getSecurityGroup(ctx, n.Ec2Client, securityGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting ec2 security group")
 	}
 	if securityGroup == nil {
 		return nil
 	}
-	vpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, logger)
+	vpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, logger)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting cluster vpc")
 	}
@@ -804,7 +804,7 @@ func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Networ
 	logger := resources.NewActionLogger(n.Logger, "getNetworkPeering")
 	// we will always peer with the openshift/kubernetes cluster vpc that this operator is running on
 	logger.Info("getting cluster vpc")
-	clusterVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
@@ -838,7 +838,7 @@ func (n *NetworkProvider) getNetworkPeering(ctx context.Context, network *Networ
 			if peeringConn.Status.Code != ec2types.VpcPeeringConnectionStateReasonCodeDeleted &&
 				peeringConn.Status.Code != ec2types.VpcPeeringConnectionStateReasonCodeDeleting {
 				peeringConnection = &describeVpcPeerOutput.VpcPeeringConnections[peeringConnIdx]
-				logger.Infof("existing vpc peering connection found %s", peeringConnection.VpcPeeringConnectionId)
+				logger.Infof("existing vpc peering connection found %s", *peeringConnection.VpcPeeringConnectionId)
 				break
 			}
 		}
@@ -860,7 +860,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	}
 
 	// get standalone security group
-	standaloneSecGroup, err := getSecurityGroup(ctx, *n.Ec2Client, standaloneSecurityGroupName)
+	standaloneSecGroup, err := getSecurityGroup(ctx, n.Ec2Client, standaloneSecurityGroupName)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to find standalone security group")
 	}
@@ -875,7 +875,7 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	}
 
 	// get the cluster bundled vpc
-	clusterVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
@@ -1116,7 +1116,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		}
 	}
 	if len(validAzs) != defaultNumberOfExpectedSubnets {
-		return nil, errorUtil.New(fmt.Sprintf("expected 2 availability zones, found %s", validAzs))
+		return nil, errorUtil.New(fmt.Sprintf("expected 2 availability zones, found %+v", validAzs))
 	}
 
 	// validSubnets and validAzs contain the same index (2 items)
@@ -1138,7 +1138,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	// check expected subnets exist in expect az
 	// filter based on a tag key attached to private subnets
 	// get subnets in vpc
-	subs, err := getVPCAssociatedSubnets(ctx, *n.Ec2Client, logger, vpc)
+	subs, err := getVPCAssociatedSubnets(ctx, n.Ec2Client, logger, vpc)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "error getting vpc subnets")
 	}
@@ -1185,7 +1185,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 				return nil, errorUtil.Wrap(err, "error creating new subnet")
 			}
 			if !n.IsSTSCluster {
-				if newErr := tagPrivateSubnet(ctx, n.Client, *n.Ec2Client, createOutput.Subnet, logger); newErr != nil {
+				if newErr := tagPrivateSubnet(ctx, n.Client, n.Ec2Client, createOutput.Subnet, logger); newErr != nil {
 					return nil, newErr
 				}
 			}
@@ -1206,7 +1206,7 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 		for _, sub := range subs {
 			logger.Infof("validating subnet %s", *sub.SubnetId)
 			if !resources.TagsContainsAll(ec2TagListToGenericList(subnetTags), ec2TagListToGenericList(sub.Tags)) {
-				if err := tagPrivateSubnet(ctx, n.Client, *n.Ec2Client, &sub, logger); err != nil {
+				if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Client, &sub, logger); err != nil {
 					return nil, errorUtil.Wrap(err, "failed to tag subnet")
 				}
 			}
@@ -1222,7 +1222,7 @@ func (n *NetworkProvider) getClusterRouteTables(ctx context.Context) ([]ec2types
 		return nil, errorUtil.Wrap(err, "failed to get route tables")
 	}
 
-	clusterVPC, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, n.Logger)
+	clusterVPC, err := getClusterVpc(ctx, n.Client, n.Ec2Client, n.Logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc")
 	}
@@ -1323,7 +1323,7 @@ func (n *NetworkProvider) reconcileRDSVpcConfiguration(ctx context.Context, priv
 		return errorUtil.Wrap(err, "failed to get default tags for rds subnet group")
 	}
 
-	foundSubnetGroup, err := getRDSSubnetGroup(ctx, *n.RdsClient, subnetGroupName)
+	foundSubnetGroup, err := getRDSSubnetGroup(ctx, n.RdsClient, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "failed getting rds subnet group")
 	}
@@ -1429,7 +1429,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 	}
 
 	// check if group exists
-	foundSubnetGroup, err := getElasticacheSubnetByGroup(ctx, *n.ElasticacheClient, subnetGroupName)
+	foundSubnetGroup, err := getElasticacheSubnetByGroup(ctx, n.ElasticacheClient, subnetGroupName)
 	if err != nil {
 		return errorUtil.Wrap(err, "error getting elasticache subnet group on reconcile")
 	}
@@ -1489,7 +1489,7 @@ func (n *NetworkProvider) reconcileElasticacheVPCConfiguration(ctx context.Conte
 // By default, `integreatly.org/clusterID`.
 //
 // This tag is used to identify a standalone vpc
-func getStandaloneVpc(ctx context.Context, client client.Client, ec2Client *ec2.Client, logger *logrus.Entry) (*ec2types.Vpc, error) {
+func getStandaloneVpc(ctx context.Context, client client.Client, ec2Client EC2API, logger *logrus.Entry) (*ec2types.Vpc, error) {
 	// get all vpcs
 	vpcs, err := ec2Client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{})
 	if err != nil {
@@ -1521,7 +1521,7 @@ getVPCAssociatedSubnets will return a list of subnets or an error
 this is used twice, to find all subnets associated with a vpc in order to remove all subnets on deletion
 it is also used as a helper function when we filter private associated subnets
 */
-func getVPCAssociatedSubnets(ctx context.Context, ec2Client ec2.Client, logger *logrus.Entry, vpc *ec2types.Vpc) ([]ec2types.Subnet, error) {
+func getVPCAssociatedSubnets(ctx context.Context, ec2Client EC2API, logger *logrus.Entry, vpc *ec2types.Vpc) ([]ec2types.Subnet, error) {
 	logger.Info("gathering cluster vpc and subnet information")
 	// poll subnets to ensure credentials have reconciled
 	subs, err := getSubnets(ctx, ec2Client)
@@ -1546,7 +1546,7 @@ func getVPCAssociatedSubnets(ctx context.Context, ec2Client ec2.Client, logger *
 }
 
 // getRDSSubnetGroup returns rds db subnet group by the group name or an error
-func getRDSSubnetGroup(ctx context.Context, rdsClient rds.Client, subnetGroupName string) (*rdstypes.DBSubnetGroup, error) {
+func getRDSSubnetGroup(ctx context.Context, rdsClient RDSAPI, subnetGroupName string) (*rdstypes.DBSubnetGroup, error) {
 	// check if group exists
 	groups, err := rdsClient.DescribeDBSubnetGroups(ctx, &rds.DescribeDBSubnetGroupsInput{})
 	if err != nil {
@@ -1561,7 +1561,7 @@ func getRDSSubnetGroup(ctx context.Context, rdsClient rds.Client, subnetGroupNam
 }
 
 // getElasticacheSubnetByGroup returns elasticache subnet group by the group name or an error
-func getElasticacheSubnetByGroup(ctx context.Context, elasticacheClient elasticache.Client, subnetGroupName string) (*elasticachetypes.CacheSubnetGroup, error) {
+func getElasticacheSubnetByGroup(ctx context.Context, elasticacheClient ElastiCacheAPI, subnetGroupName string) (*elasticachetypes.CacheSubnetGroup, error) {
 	// check if group exists
 	groups, err := elasticacheClient.DescribeCacheSubnetGroups(ctx, &elasticache.DescribeCacheSubnetGroupsInput{})
 	if err != nil {
@@ -1620,7 +1620,7 @@ func (n *NetworkProvider) ReconcileNetworkProviderConfig(ctx context.Context, co
 // the default mask is /26
 // for other masks the user is required to provide their own via config
 func (n *NetworkProvider) getNonOverlappingDefaultCIDR(ctx context.Context) (*net.IPNet, error) {
-	clusterVpc, err := getClusterVpc(ctx, n.Client, *n.Ec2Client, n.Logger)
+	clusterVpc, err := getClusterVpc(ctx, n.Client, n.Ec2Client, n.Logger)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to get cluster vpc for cidr block")
 	}

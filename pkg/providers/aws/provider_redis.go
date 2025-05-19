@@ -21,7 +21,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -338,7 +338,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 		// modifications are required to bring the elasticache instance up to date with the strategy map, perform updates.
 		if modifyInput != nil {
-			logger.Infof("%s differs from expected strategy, applying pending modifications :\n%s", *foundCache.ReplicationGroupId, modifyInput)
+			logger.Infof("%s differs from expected strategy, applying pending modifications :\n %v", *foundCache.ReplicationGroupId, modifyInput)
 			if _, err := elasticacheClient.ModifyReplicationGroup(ctx, modifyInput); err != nil {
 				errMsg := "failed to modify elasticache cluster"
 				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
@@ -757,7 +757,7 @@ func buildElasticacheUpdateStrategy(ctx context.Context, ec2Client ec2.Client, e
 				LocationType: ec2types.LocationTypeAvailabilityZone,
 			})
 			if err != nil {
-				return nil, errorUtil.Wrapf(err, "failed to get instance type offerings for type %s", foundConfig.CacheNodeType)
+				return nil, errorUtil.Wrapf(err, "failed to get instance type offerings for type %v", foundConfig.CacheNodeType)
 			}
 
 			// normalise returned instance type offerings to a list of availability zones, to make comparison easier.
@@ -1081,7 +1081,7 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, ca
 		return
 	}
 
-	logrus.Infof("there are elasticache service update actions %d available : %s", len(output.UpdateActions), output.UpdateActions)
+	logrus.Infof("there are elasticache service update actions %d available : %v", len(output.UpdateActions), output.UpdateActions)
 	for _, updateAction := range output.UpdateActions {
 		metricLabels := map[string]string{}
 		metricLabels[resources.LabelClusterIDKey] = clusterID
