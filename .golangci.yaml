@@ -1,5 +1,5 @@
 output:
-  format: tab
+  formats: tab
   sort-results: true
 
 linters:
@@ -8,12 +8,17 @@ linters:
     - ineffassign
     - unused
     - govet
+    - staticcheck
+
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 
 linters-settings:
+  revive:
+    rules:
+      - name: comment-spacings
   gosimple:
     checks: ["all"]
   staticcheck:
@@ -31,3 +36,9 @@ presets:
 run:
   modules-download-mode: readonly
   timeout: 5m
+
+build:
+  vendor-dirs:
+    - vendor
+  go-build-flags:
+    - -mod=mod

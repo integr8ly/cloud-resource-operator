@@ -4,7 +4,7 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"

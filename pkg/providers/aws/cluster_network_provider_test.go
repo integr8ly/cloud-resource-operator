@@ -1504,7 +1504,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						return &ec2.CreateTagsOutput{}, nil
 					}
 					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+						if len(input.TagSpecifications) == 1 {
 							vpc.SetTags(input.TagSpecifications[0].Tags)
 						}
 						return &ec2.CreateVpcOutput{
@@ -1574,7 +1574,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 						return &ec2.CreateTagsOutput{}, nil
 					}
 					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
-						if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+						if len(input.TagSpecifications) == 1 {
 							if ec2Client.returnSecondSub {
 								ec2Client.secondSubnet.SetTags(input.TagSpecifications[0].Tags)
 							} else {

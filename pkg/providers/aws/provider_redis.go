@@ -18,14 +18,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	"github.com/integr8ly/cloud-resource-operator/pkg/annotations"
 
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/sirupsen/logrus"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -451,7 +451,7 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, cacheSvc elastic
 
 	// loop snapshots adding tags per found snapshot
 	snapshotList, _ := cacheSvc.DescribeSnapshots(inputDescribe)
-	if snapshotList.Snapshots != nil && len(snapshotList.Snapshots) > 0 {
+	if len(snapshotList.Snapshots) > 0 {
 		metricName := getMetricName(r.Name)
 		// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
 		resources.ResetMetric(metricName)

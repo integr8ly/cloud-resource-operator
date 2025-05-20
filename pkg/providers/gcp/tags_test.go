@@ -2,8 +2,8 @@ package gcp
 
 import (
 	"context"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

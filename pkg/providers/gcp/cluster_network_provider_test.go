@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/integr8ly/cloud-resource-operator/apis"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	"github.com/integr8ly/cloud-resource-operator/api"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp/gcpiface"
@@ -65,7 +65,7 @@ func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	err := multierr.Combine(
 		corev1.AddToScheme(scheme),
-		apis.AddToScheme(scheme),
+		api.AddToScheme(scheme),
 		configv1.Install(scheme),
 	)
 	if err != nil {

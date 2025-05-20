@@ -14,15 +14,51 @@ REDIS_NODE_SIZE ?= ""
 REDIS_NAME ?= example-redis
 # openshift/aws/gcp
 PROVIDER ?= openshift
-GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-GOLANGCI_LINT_VERSION=v1.51.0
 CONTAINER_ENGINE ?= podman
+
+ENVTEST_K8S_VERSION = 1.31.0
 
 SHELL=/bin/bash
 
+## Tool Binaries
+KUBECTL ?= kubectl
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v5.4.3
+CONTROLLER_TOOLS_VERSION ?= v0.17.3
+ENVTEST_VERSION ?= release-0.19
+GOLANGCI_LINT_VERSION ?= v1.64.0
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+
+$(ENVTEST): $(LOCALBIN)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
+
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary (ideally with version)
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] || { \
+  set -e; \
+  package=$(2)@$(3) ;\
+  echo "Downloading $${package}" ;\
+  rm -f $(1) || true ;\
+  GOBIN=$(LOCALBIN) GOFLAGS= go install $${package} ;\
+  mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $(1)-$(3) $(1)
+endef
+
+
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
 # otherwise use it through "go run" (slower but will always work and will use correct version)
-OPERATOR_SDK_VERSION=1.14.0
+OPERATOR_SDK_VERSION=1.39.0
 ifeq ($(shell operator-sdk version 2> /dev/null | sed -e 's/", .*/"/' -e 's/.* //'), "v$(OPERATOR_SDK_VERSION)")
 	OPERATOR_SDK ?= operator-sdk
 else
@@ -51,11 +87,15 @@ $(LOCALBIN):
 
 .PHONY: build
 build: code/gen
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./main.go
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./cmd/main.go
 
 .PHONY: run
 run:
-	RECTIME=30 WATCH_NAMESPACE=$(NAMESPACE) go run ./main.go
+	RECTIME=30 WATCH_NAMESPACE=$(NAMESPACE) go run ./cmd/main.go
+
+ifndef ignore-not-found
+  ignore-not-found = false
+endif
 
 .PHONY: setup/service_account
 setup/service_account: kustomize
@@ -65,14 +105,17 @@ setup/service_account: kustomize
 	@$(KUSTOMIZE) build config/rbac | oc replace --force -f -	
 
 .PHONY: golangci-lint
-golangci-lint: $(GOLANGCI_LINT)
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+
 $(GOLANGCI_LINT): $(LOCALBIN)
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 .PHONY: code/run/service_account
 code/run/service_account: setup/service_account
 	@oc login --token=$(shell oc create token cloud-resource-operator -n ${NAMESPACE} --duration=24h) --server=$(shell sh -c "oc cluster-info | grep -Eo 'https?://[-a-zA-Z0-9\.:]*'") --kubeconfig=TMP_SA_KUBECONFIG --insecure-skip-tls-verify=true
-	WATCH_NAMESPACE=$(NAMESPACE) go run ./main.go
+	WATCH_NAMESPACE=$(NAMESPACE) go run ./cmd/main.go
+
+PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 
 .PHONY: code/gen
 code/gen: manifests kustomize generate
@@ -138,7 +181,7 @@ cluster/clean:
 test/unit:
 	@echo Running tests:
 	go install github.com/rakyll/gotest@v0.0.6
-	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/providers/... ./pkg/resources/... ./apis/integreatly/v1alpha1/types/... ./pkg/client/...
+	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/providers/... ./pkg/resources/... ./api/integreatly/v1alpha1/types/... ./pkg/client/...
 
 .PHONY: image/build
 image/build: build
@@ -151,7 +194,6 @@ image/push: image/build
 
 .PHONY: test/e2e/prow
 test/e2e/prow: export component := cloud-resource-operator
-test/e2e/prow: export OPERATOR_IMAGE := ${IMAGE_FORMAT}
 test/e2e/prow: cluster/prepare cluster/deploy
 	@echo Running e2e tests:
 	go clean -testcache && go test -v ./test/e2e -timeout=120m -ginkgo.v
@@ -163,14 +205,18 @@ test/e2e/local: cluster/prepare
 	go clean -testcache && go test -v ./test/e2e -timeout=120m -ginkgo.v
 	oc delete project $(NAMESPACE)
 
+
+    PROJECT_ROOT := $(shell git rev-parse --show-toplevel) # Define project root
+
 .PHONY: test/lint
 test/lint: golangci-lint
-	@$(GOLANGCI_LINT) run
+	@cd $(PROJECT_ROOT) && $(GOLANGCI_LINT) run
+
 
 .PHONY: cluster/deploy
 cluster/deploy: kustomize
-	@echo Deploying operator with image: ${OPERATOR_IMAGE}
-	@ - cd config/manager && $(KUSTOMIZE) edit set image controller=${OPERATOR_IMAGE}
+	@echo Deploying operator with image: ${OPERATOR_IMG}
+	@ - cd config/manager && $(KUSTOMIZE) edit set image controller=${OPERATOR_IMG}
 	@ - $(KUSTOMIZE) build config/cloud-resource-operator | oc apply -f -
 
 .PHONY: test/e2e/image
@@ -179,57 +225,39 @@ test/e2e/image:
 	$(OPERATOR_SDK) test local ./test/e2e --go-test-flags "-timeout=60m -v -parallel=2" --image $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):$(VERSION)
 
 # Generate manifests e.g. CRD, RBAC etc.
+.PHONY: manifests
 manifests: controller-gen
 	$(CONTROLLER_GEN) "crd:crdVersions=v1" rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 # Generate code
+.PHONY: generate
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
-# find or download controller-gen
-# download controller-gen if necessary
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	@{ \
-	set -e ;\
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$CONTROLLER_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.2 ;\
-	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
-	}
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 
-kustomize:
-ifeq (, $(shell which kustomize))
-	@{ \
-	set -e ;\
-	KUSTOMIZE_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$KUSTOMIZE_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/kustomize/kustomize/v4@v4.5.5 ;\
-	rm -rf $$KUSTOMIZE_GEN_TMP_DIR ;\
-	}
-KUSTOMIZE=$(GOBIN)/kustomize
-else
-KUSTOMIZE=$(shell which kustomize)
-endif
+$(CONTROLLER_GEN): $(LOCALBIN)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+
+$(KUSTOMIZE): $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: code/audit
 code/audit:
 	gosec ./...
 
 .PHONY: code/gen
-code/gen: setup/moq vendor/fix apis/integreatly/v1alpha1/zz_generated.deepcopy.go
+code/gen: setup/moq vendor/fix api/integreatly/v1alpha1/zz_generated.deepcopy.go
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 	@go generate ./...
 
 .PHONY: setup/moq
 setup/moq:
-	go install github.com/matryer/moq@v0.3.0
+	go install github.com/matryer/moq@v0.5.0
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
@@ -265,3 +293,9 @@ setup/sts:
 .PHONY: gosec
 gosec:
 	gosec -exclude-dir=hack/redis -exclude=G402 test ./...
+
+.PHONY: build-installer
+	build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	mkdir -p dist
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml

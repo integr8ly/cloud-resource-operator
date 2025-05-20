@@ -10,7 +10,7 @@ import (
 	"net/http/cookiejar"
 	"time"
 
-	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	integreatlyv1alpha1 "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	_ "github.com/lib/pq"
 	configv1 "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"

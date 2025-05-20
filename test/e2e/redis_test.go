@@ -3,7 +3,7 @@ package e2e
 import (
 	goctx "context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	errorUtil "github.com/pkg/errors"
 	"golang.org/x/net/context"
 	bv1 "k8s.io/api/batch/v1"

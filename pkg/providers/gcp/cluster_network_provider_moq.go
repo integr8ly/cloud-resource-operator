@@ -6,7 +6,7 @@ package gcp
 import (
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"context"
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"google.golang.org/api/servicenetworking/v1"
 	"net"
 	"sync"

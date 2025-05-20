@@ -8,12 +8,12 @@ import (
 	"reflect"
 	"testing"
 
-	croType "github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1/types"
+	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/integr8ly/cloud-resource-operator/apis"
-	"github.com/integr8ly/cloud-resource-operator/apis/integreatly/v1alpha1"
+	"github.com/integr8ly/cloud-resource-operator/api"
+	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -32,7 +32,7 @@ var (
 
 func buildTestScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
-	err := apis.AddToScheme(scheme)
+	err := api.AddToScheme(scheme)
 	if err != nil {
 		return nil, err
 	}

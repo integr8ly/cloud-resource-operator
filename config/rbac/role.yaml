@@ -2,7 +2,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -50,7 +49,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  creationTimestamp: null
   name: manager-role
   namespace: cloud-resource-operator
 rules:
@@ -70,6 +68,7 @@ rules:
   - '*'
 - apiGroups:
   - apps
+  - integreatly
   resources:
   - '*'
   verbs:
@@ -98,12 +97,6 @@ rules:
   - ingresses
   - networks
   - schedulers
-  verbs:
-  - '*'
-- apiGroups:
-  - integreatly
-  resources:
-  - '*'
   verbs:
   - '*'
 - apiGroups:
