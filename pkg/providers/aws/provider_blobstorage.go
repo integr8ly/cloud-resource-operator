@@ -193,7 +193,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	return bsi, msg, nil
 }
 
-func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string, s3Client *s3.Client) (croType.StatusMessage, error) {
+func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName string, bs *v1alpha1.BlobStorage, stratCfgRegion string, s3Client S3API) (croType.StatusMessage, error) {
 	p.Logger.Infof("bucket %s found, Adding tags to bucket", bucketName)
 
 	bucketTags, err := p.getDefaultS3Tags(ctx, bs)
@@ -251,7 +251,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	return p.reconcileBucketDelete(ctx, bs, s3Client, bucketCreateCfg, bucketDeleteCfg)
 }
 
-func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) (croType.StatusMessage, error) {
+func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client S3API, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) (croType.StatusMessage, error) {
 	buckets, err := getS3buckets(ctx, s3Client)
 	if err != nil {
 		return "error getting s3 buckets", err
@@ -299,7 +299,7 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 	return croType.StatusEmpty, nil
 }
 
-func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) error {
+func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client S3API, bucketCfg *s3.CreateBucketInput, bucketDeleteCfg *S3DeleteStrat) error {
 	// build end user credential name
 	endUserCredsName := buildEndUserCredentialsNameFromBucket(*bucketCfg.Bucket)
 
@@ -340,7 +340,7 @@ func (p *BlobStorageProvider) getDefaultS3Tags(ctx context.Context, cr *v1alpha1
 	return genericToS3Tags(tags), nil
 }
 
-func deleteBucket(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput) error {
+func deleteBucket(ctx context.Context, s3Client S3API, bucketCfg *s3.CreateBucketInput) error {
 	_, err := s3Client.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: bucketCfg.Bucket,
 	})
@@ -366,7 +366,7 @@ func deleteBucket(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.Create
 	return nil
 }
 
-func emptyBucket(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput) error {
+func emptyBucket(ctx context.Context, s3Client S3API, bucketCfg *s3.CreateBucketInput) error {
 	size, err := getBucketSize(ctx, s3Client, bucketCfg)
 	if err != nil {
 		return err
@@ -412,7 +412,7 @@ func emptyBucket(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.CreateB
 	return nil
 }
 
-func getBucketSize(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput) (int, error) {
+func getBucketSize(ctx context.Context, s3Client S3API, bucketCfg *s3.CreateBucketInput) (int, error) {
 	// get bucket items
 	resp, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: aws.String(*bucketCfg.Bucket)})
 	if err != nil {
@@ -423,7 +423,7 @@ func getBucketSize(ctx context.Context, s3Client *s3.Client, bucketCfg *s3.Creat
 }
 
 // getS3Buckets retrieves a list of S3 buckets using AWS SDK v2
-func getS3Buckets(ctx context.Context, s3client *s3.Client) ([]types.Bucket, error) {
+func getS3Buckets(ctx context.Context, s3client S3API) ([]types.Bucket, error) {
 	output, err := s3client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to list AWS S3 buckets")
@@ -431,7 +431,7 @@ func getS3Buckets(ctx context.Context, s3client *s3.Client) ([]types.Bucket, err
 	return output.Buckets, nil
 }
 
-func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client *s3.Client, bucketCfg *s3.CreateBucketInput) (croType.StatusMessage, error) {
+func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1alpha1.BlobStorage, s3Client S3API, bucketCfg *s3.CreateBucketInput) (croType.StatusMessage, error) {
 	// the aws access key can sometimes still not be registered in aws on first try, so loop
 	p.Logger.Infof("listing existing aws s3 buckets")
 	buckets, err := getS3Buckets(ctx, s3Client)
@@ -493,7 +493,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 }
 
 // function to get s3 buckets, used to check/wait on AWS credentials
-func getS3buckets(ctx context.Context, s3Client *s3.Client) ([]types.Bucket, error) {
+func getS3buckets(ctx context.Context, s3Client S3API) ([]types.Bucket, error) {
 	var existingBuckets []types.Bucket
 	err := wait.PollUntilContextTimeout(ctx, time.Second*5, time.Minute*5, true, func(ctx context.Context) (bool, error) {
 		listOutput, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
@@ -509,7 +509,7 @@ func getS3buckets(ctx context.Context, s3Client *s3.Client) ([]types.Bucket, err
 	return existingBuckets, nil
 }
 
-func reconcileS3BucketSettings(ctx context.Context, bucket string, s3Client *s3.Client) error {
+func reconcileS3BucketSettings(ctx context.Context, bucket string, s3Client S3API) error {
 	_, err := s3Client.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
 		Bucket: aws.String(bucket),
 		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{

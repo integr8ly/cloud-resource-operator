@@ -77,9 +77,9 @@ func (p *PostgresSnapshotProvider) CreatePostgresSnapshot(ctx context.Context, s
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	rdsClient := rds.NewFromConfig(*cfg)
+	rdsClient := NewRDSClient(*cfg)
 
-	return p.createPostgresSnapshot(ctx, snapshot, postgres, *rdsClient)
+	return p.createPostgresSnapshot(ctx, snapshot, postgres, rdsClient)
 }
 
 func (p *PostgresSnapshotProvider) DeletePostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres) (croType.StatusMessage, error) {
@@ -92,12 +92,12 @@ func (p *PostgresSnapshotProvider) DeletePostgresSnapshot(ctx context.Context, s
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	rdsClient := rds.NewFromConfig(*cfg)
+	rdsClient := NewRDSClient(*cfg)
 
-	return p.deletePostgresSnapshot(ctx, snapshot, postgres, *rdsClient)
+	return p.deletePostgresSnapshot(ctx, snapshot, postgres, rdsClient)
 }
 
-func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres, rdsClient rds.Client) (*providers.PostgresSnapshotInstance, croType.StatusMessage, error) {
+func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres, rdsClient RDSAPI) (*providers.PostgresSnapshotInstance, croType.StatusMessage, error) {
 	logger := resources.NewActionLogger(p.logger, "createPostgresSnapshot")
 
 	// generate snapshot name
@@ -173,7 +173,7 @@ func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, s
 	return nil, croType.StatusMessage(msg), nil
 }
 
-func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres, rdsClient rds.Client) (croType.StatusMessage, error) {
+func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, snapshot *v1alpha1.PostgresSnapshot, postgres *v1alpha1.Postgres, rdsClient RDSAPI) (croType.StatusMessage, error) {
 	snapshotName := snapshot.Status.SnapshotID
 	foundSnapshot, err := p.findSnapshotInstance(ctx, rdsClient, snapshotName)
 
@@ -207,7 +207,7 @@ func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, s
 	return "snapshot deletion started", nil
 }
 
-func (p *PostgresSnapshotProvider) findSnapshotInstance(ctx context.Context, rdsClient rds.Client, snapshotName string) (*rdstypes.DBSnapshot, error) {
+func (p *PostgresSnapshotProvider) findSnapshotInstance(ctx context.Context, rdsClient RDSAPI, snapshotName string) (*rdstypes.DBSnapshot, error) {
 	// check snapshot exists
 	listOutput, err := rdsClient.DescribeDBSnapshots(ctx, &rds.DescribeDBSnapshotsInput{
 		DBSnapshotIdentifier: aws.String(snapshotName),

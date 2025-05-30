@@ -3,16 +3,14 @@ package aws
 import (
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	"github.com/stretchr/testify/mock"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"reflect"
 	"testing"
-	"unsafe"
-
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -83,9 +81,9 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 	}
 	type args struct {
 		ctx               context.Context
-		cloudWatchClient  *cloudwatch.Client
+		cloudWatchClient  CloudWatchAPI
 		redis             *v1alpha1.Redis
-		elastiCacheClient *elasticache.Client
+		elastiCacheClient ElastiCacheAPI
 		metricTypes       []providers.CloudProviderMetricType
 	}
 	tests := []struct {
@@ -105,24 +103,25 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchClient: func() *cloudwatch.Client {
-					mockCloudWatch := new(mockCloudWatchClient)
-					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
 						MetricDataResults: []cloudwatchtypes.MetricDataResult{
 							{
-								Id:     aws.String(testMetricName),
-								Values: []float64{testMetricValue},
+								Id:         aws.String(testMetricName),
+								Values:     []float64{testMetricValue},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
 							},
 						},
 					}, nil)
-					return (*cloudwatch.Client)(unsafe.Pointer(mockCloudWatch))
+					return mockCloudWatch
 				}(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
@@ -153,10 +152,15 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchClient: func() *cloudwatch.Client {
-					mockCloudWatch := new(mockCloudWatchClient)
-					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
 						MetricDataResults: []cloudwatchtypes.MetricDataResult{
+							{
+								Id:         aws.String(testMetricName),
+								Values:     []float64{testMetricValue},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
+							},
 							{
 								Id:         aws.String(testMetricName),
 								Values:     []float64{testMetricValue},
@@ -164,14 +168,14 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*cloudwatch.Client)(unsafe.Pointer(mockCloudWatch))
+					return mockCloudWatch
 				}(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
@@ -202,15 +206,15 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchClient: func() *cloudwatch.Client {
-					mockCloudWatch := new(mockCloudWatchClient)
-					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{}, nil)
-					return (*cloudwatch.Client)(unsafe.Pointer(mockCloudWatch))
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{}, nil)
+					return mockCloudWatch
 				}(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					return mockElasticache
 				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
@@ -228,7 +232,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := r.scrapeRedisCloudWatchMetricData(tt.args.ctx, *tt.args.cloudWatchClient, tt.args.redis, *tt.args.elastiCacheClient, tt.args.metricTypes)
+			got, err := r.scrapeRedisCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchClient, tt.args.redis, tt.args.elastiCacheClient, tt.args.metricTypes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("scrapeRedisCloudWatchMetricData() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -76,7 +76,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}
 
 	// scrape metric data from cloud watch
-	cloudMetrics, err := r.scrapeRedisCloudWatchMetricData(ctx, *cloudwatch.NewFromConfig(*cfg), redis, *elasticache.NewFromConfig(*cfg), metricTypes)
+	cloudMetrics, err := r.scrapeRedisCloudWatchMetricData(ctx, NewCloudWatchClient(*cfg), redis, NewElasticacheClient(*cfg), metricTypes)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to scrape elasticache cloud watch metrics")
 	}
@@ -86,7 +86,7 @@ func (r *RedisMetricsProvider) ScrapeRedisMetrics(ctx context.Context, redis *v1
 	}, nil
 }
 
-func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Context, cloudwatchClient cloudwatch.Client, redis *v1alpha1.Redis, elasticacheClient elasticache.Client, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
+func (r *RedisMetricsProvider) scrapeRedisCloudWatchMetricData(ctx context.Context, cloudwatchClient CloudWatchAPI, redis *v1alpha1.Redis, elasticacheClient ElastiCacheAPI, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
 	resourceID, err := resources.BuildInfraNameFromObject(ctx, r.Client, redis.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)

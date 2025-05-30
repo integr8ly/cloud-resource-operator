@@ -97,8 +97,6 @@ func (np *NetworkPeering) IsReady() bool {
 	return np.PeeringConnection.Status.Code == ec2types.VpcPeeringConnectionStateReasonCodeActive
 }
 
-// TODO regenerate moq file for this interface.
-//
 //go:generate moq -out cluster_network_provider_moq.go . NetworkManager
 type NetworkManager interface {
 	CreateNetwork(context.Context, *net.IPNet) (*Network, error)
@@ -119,6 +117,7 @@ type NetworkProvider struct {
 	RdsClient         RDSAPI
 	Ec2Client         EC2API
 	ElasticacheClient ElastiCacheAPI
+	VpcWaiter         VpcWaiter
 	Logger            *logrus.Entry
 	IsSTSCluster      bool
 }
@@ -132,6 +131,7 @@ func NewNetworkManager(cfg aws.Config, client client.Client, logger *logrus.Entr
 		Ec2Client:         NewEC2Client(cfg),
 		RdsClient:         NewRDSClient(cfg),
 		ElasticacheClient: NewElasticacheClient(cfg),
+		VpcWaiter:         NewRealVpcWaiter(ec2.NewFromConfig(cfg)),
 		Logger:            logger.WithField("provider", "standalone_network_provider"),
 		IsSTSCluster:      isSTSCluster,
 	}
@@ -211,8 +211,7 @@ func (n *NetworkProvider) CreateNetwork(ctx context.Context, vpcCidrBlock *net.I
 
 		logger.Infof("creating vpc: %s", aws.ToString(createVpcOutput.Vpc.VpcId))
 
-		waiter := ec2.NewVpcExistsWaiter(n.Ec2Client)
-		waitVpcErr := waiter.Wait(context.TODO(), &ec2.DescribeVpcsInput{
+		waitVpcErr := n.VpcWaiter.Wait(context.TODO(), &ec2.DescribeVpcsInput{
 			VpcIds: []string{*createVpcOutput.Vpc.VpcId},
 		}, 1*time.Minute)
 

@@ -3,10 +3,13 @@ package aws
 import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
-
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"time"
 )
 
 func NewEC2Client(cfg aws.Config) EC2API {
@@ -17,6 +20,10 @@ func NewEC2Client(cfg aws.Config) EC2API {
 
 type RealEC2Client struct {
 	Client *ec2.Client
+}
+
+func (r *RealEC2Client) DescribeInstanceTypes(ctx context.Context, input *ec2.DescribeInstanceTypesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstanceTypesOutput, error) {
+	return r.Client.DescribeInstanceTypes(ctx, input, optFns...)
 }
 
 func (r *RealEC2Client) AuthorizeSecurityGroupIngress(ctx context.Context, input *ec2.AuthorizeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
@@ -87,6 +94,20 @@ func (r *RealEC2Client) WaitUntilVpcExists(ctx context.Context, input *ec2.Descr
 	return ec2.NewVpcExistsWaiter(r.Client).Wait(ctx, input, 0)
 }
 
+type realVpcWaiter struct {
+	waiter *ec2.VpcExistsWaiter
+}
+
+func NewRealVpcWaiter(client *ec2.Client) VpcWaiter {
+	return &realVpcWaiter{
+		waiter: ec2.NewVpcExistsWaiter(client),
+	}
+}
+
+func (r *realVpcWaiter) Wait(ctx context.Context, input *ec2.DescribeVpcsInput, maxWaitTime time.Duration, optFns ...func(*ec2.VpcExistsWaiterOptions)) error {
+	return r.waiter.Wait(ctx, input, maxWaitTime, optFns...)
+}
+
 func (r *RealEC2Client) CreateSubnet(ctx context.Context, input *ec2.CreateSubnetInput, optFns ...func(*ec2.Options)) (*ec2.CreateSubnetOutput, error) {
 	return r.Client.CreateSubnet(ctx, input, optFns...)
 }
@@ -116,6 +137,22 @@ func NewRDSClient(cfg aws.Config) RDSAPI {
 
 type RealRDSClient struct {
 	Client *rds.Client
+}
+
+func (r *RealRDSClient) DeleteDBSnapshot(ctx context.Context, input *rds.DeleteDBSnapshotInput, optFns ...func(*rds.Options)) (*rds.DeleteDBSnapshotOutput, error) {
+	return r.Client.DeleteDBSnapshot(ctx, input, optFns...)
+}
+
+func (r *RealRDSClient) CreateDBSnapshot(ctx context.Context, input *rds.CreateDBSnapshotInput, optFns ...func(*rds.Options)) (*rds.CreateDBSnapshotOutput, error) {
+	return r.Client.CreateDBSnapshot(ctx, input, optFns...)
+}
+
+func (r *RealRDSClient) DeleteDBInstance(ctx context.Context, input *rds.DeleteDBInstanceInput, optFns ...func(*rds.Options)) (*rds.DeleteDBInstanceOutput, error) {
+	return r.Client.DeleteDBInstance(ctx, input, optFns...)
+}
+
+func (r *RealRDSClient) CreateDBInstance(ctx context.Context, input *rds.CreateDBInstanceInput, optFns ...func(*rds.Options)) (*rds.CreateDBInstanceOutput, error) {
+	return r.Client.CreateDBInstance(ctx, input, optFns...)
 }
 
 func (r *RealRDSClient) CreateDBSubnetGroup(ctx context.Context, input *rds.CreateDBSubnetGroupInput, optFns ...func(*rds.Options)) (*rds.CreateDBSubnetGroupOutput, error) {
@@ -177,6 +214,10 @@ type RealElasticacheClient struct {
 	Client *elasticache.Client
 }
 
+func (r *RealElasticacheClient) DeleteReplicationGroup(ctx context.Context, input *elasticache.DeleteReplicationGroupInput, optFns ...func(*elasticache.Options)) (*elasticache.DeleteReplicationGroupOutput, error) {
+	return r.Client.DeleteReplicationGroup(ctx, input, optFns...)
+}
+
 func (r *RealElasticacheClient) CreateCacheSubnetGroup(ctx context.Context, input *elasticache.CreateCacheSubnetGroupInput, optFns ...func(*elasticache.Options)) (*elasticache.CreateCacheSubnetGroupOutput, error) {
 	return r.Client.CreateCacheSubnetGroup(ctx, input, optFns...)
 }
@@ -231,4 +272,124 @@ func (r *RealElasticacheClient) AddTagsToResource(ctx context.Context, input *el
 
 func (r *RealElasticacheClient) CreateReplicationGroup(ctx context.Context, input *elasticache.CreateReplicationGroupInput, optFns ...func(*elasticache.Options)) (*elasticache.CreateReplicationGroupOutput, error) {
 	return r.Client.CreateReplicationGroup(ctx, input, optFns...)
+}
+
+// ---------- S3 ----------
+func NewS3Client(cfg aws.Config) S3API {
+	return &RealS3Client{
+		Client: s3.NewFromConfig(cfg),
+	}
+}
+
+type RealS3Client struct {
+	Client *s3.Client
+}
+
+func (r *RealS3Client) PutBucketEncryption(ctx context.Context, input *s3.PutBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.PutBucketEncryptionOutput, error) {
+	return r.Client.PutBucketEncryption(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) PutPublicAccessBlock(ctx context.Context, input *s3.PutPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.PutPublicAccessBlockOutput, error) {
+	return r.Client.PutPublicAccessBlock(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) PutBucketTagging(ctx context.Context, input *s3.PutBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.PutBucketTaggingOutput, error) {
+	return r.Client.PutBucketTagging(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) DeleteObjects(ctx context.Context, input *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	return r.Client.DeleteObjects(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) CreateBucket(ctx context.Context, input *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+	return r.Client.CreateBucket(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) DeleteBucket(ctx context.Context, input *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+	return r.Client.DeleteBucket(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) ListBuckets(ctx context.Context, input *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+	return r.Client.ListBuckets(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) PutObject(ctx context.Context, input *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	return r.Client.PutObject(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) GetObject(ctx context.Context, input *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return r.Client.GetObject(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) DeleteObject(ctx context.Context, input *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	return r.Client.DeleteObject(ctx, input, optFns...)
+}
+
+func (r *RealS3Client) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	return r.Client.ListObjectsV2(ctx, input, optFns...)
+}
+
+// ---------- CloudWatch ----------
+func NewCloudWatchClient(cfg aws.Config) CloudWatchAPI {
+	return &RealCloudWatchClient{
+		Client: cloudwatch.NewFromConfig(cfg),
+	}
+}
+
+type RealCloudWatchClient struct {
+	Client *cloudwatch.Client
+}
+
+func (r *RealCloudWatchClient) GetMetricData(ctx context.Context, input *cloudwatch.GetMetricDataInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+	return r.Client.GetMetricData(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) PutMetricData(ctx context.Context, input *cloudwatch.PutMetricDataInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.PutMetricDataOutput, error) {
+	return r.Client.PutMetricData(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) GetMetricStatistics(ctx context.Context, input *cloudwatch.GetMetricStatisticsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricStatisticsOutput, error) {
+	return r.Client.GetMetricStatistics(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) ListMetrics(ctx context.Context, input *cloudwatch.ListMetricsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.ListMetricsOutput, error) {
+	return r.Client.ListMetrics(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) DescribeAlarms(ctx context.Context, input *cloudwatch.DescribeAlarmsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.DescribeAlarmsOutput, error) {
+	return r.Client.DescribeAlarms(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) PutMetricAlarm(ctx context.Context, input *cloudwatch.PutMetricAlarmInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.PutMetricAlarmOutput, error) {
+	return r.Client.PutMetricAlarm(ctx, input, optFns...)
+}
+
+func (r *RealCloudWatchClient) DeleteAlarms(ctx context.Context, input *cloudwatch.DeleteAlarmsInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.DeleteAlarmsOutput, error) {
+	return r.Client.DeleteAlarms(ctx, input, optFns...)
+}
+
+// ---------- STS ----------
+func NewSTSClient(cfg aws.Config) STSAPI {
+	return &RealSTSClient{
+		Client: sts.NewFromConfig(cfg),
+	}
+}
+
+type RealSTSClient struct {
+	Client *sts.Client
+}
+
+// GetCallerIdentity calls the STS GetCallerIdentity API.
+func (r *RealSTSClient) GetCallerIdentity(ctx context.Context, input *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
+	return r.Client.GetCallerIdentity(ctx, input, optFns...)
+}
+
+// AssumeRole calls the STS AssumeRole API.
+func (r *RealSTSClient) AssumeRole(ctx context.Context, input *sts.AssumeRoleInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
+	return r.Client.AssumeRole(ctx, input, optFns...)
+}
+
+// GetFederationToken calls the STS GetFederationToken API.
+func (r *RealSTSClient) GetFederationToken(ctx context.Context, input *sts.GetFederationTokenInput, optFns ...func(*sts.Options)) (*sts.GetFederationTokenOutput, error) {
+	return r.Client.GetFederationToken(ctx, input, optFns...)
 }

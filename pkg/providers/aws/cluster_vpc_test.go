@@ -6,18 +6,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
-	"github.com/stretchr/testify/mock"
-	"reflect"
-	"testing"
-	"unsafe"
-
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/runtime"
+	"reflect"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"testing"
 )
 
 func Test_buildSubnetAddress(t *testing.T) {
@@ -127,7 +125,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    []*ec2types.Tag
+		want    []ec2types.Tag
 		wantErr bool
 	}{
 		{
@@ -164,7 +162,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 					},
 				}),
 			},
-			want: []*ec2types.Tag{
+			want: []ec2types.Tag{
 				{
 					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
 					Value: aws.String("1"),
@@ -212,7 +210,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 	type args struct {
 		ctx       context.Context
 		c         client.Client
-		ec2Client *ec2.Client
+		ec2Client EC2API
 		vpc       *ec2types.Vpc
 		logger    *logrus.Entry
 		zone      string
@@ -229,10 +227,9 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					// TODO verify , used to return nil before aws-go-sdk-v2 change now it returns a mock ec2 client.
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					return mockEc2
 				}(),
 				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String(""),
@@ -249,8 +246,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: []ec2types.Vpc{
 							*buildValidStandaloneVPC(validCIDRTwentySix),
@@ -273,9 +270,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
 						AvailabilityZones: buildSortedStandaloneAZs(),
 					}, nil)
-					//Todo confirm the genericAWSError passes
-					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSubnetOutput)(nil), genericAWSError)
+					return mockEc2
 
 				}(),
 				vpc: &ec2types.Vpc{
@@ -293,8 +289,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: []ec2types.Vpc{
 							*buildValidStandaloneVPC(validCIDRTwentySix),
@@ -302,6 +298,9 @@ func Test_createPrivateSubnet(t *testing.T) {
 					}, nil)
 					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
 						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSubnetOutput{
+						Subnet: buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
 					}, nil)
 					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
 					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
@@ -317,7 +316,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
 						AvailabilityZones: buildSortedStandaloneAZs(),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
@@ -334,8 +333,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: []ec2types.Vpc{
 							*buildValidStandaloneVPC(validCIDRTwentySix),
@@ -358,13 +357,12 @@ func Test_createPrivateSubnet(t *testing.T) {
 					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
 						AvailabilityZones: buildSortedStandaloneAZs(),
 					}, nil)
-					// TODO verify error change for v2
 					err := &smithy.GenericAPIError{
 						Code:    "InvalidSubnet.Conflict",
 						Message: "Subnet conflict error",
 					}
-					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(nil, err)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSubnetOutput)(nil), err)
+					return mockEc2
 				}(),
 				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
@@ -381,8 +379,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: []ec2types.Vpc{
 							*buildValidStandaloneVPC(validCIDRTwentySix),
@@ -391,6 +389,9 @@ func Test_createPrivateSubnet(t *testing.T) {
 					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
 						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
 					}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSubnetOutput{
+						Subnet: buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+					}, err)
 					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
 					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
 					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
@@ -405,7 +406,8 @@ func Test_createPrivateSubnet(t *testing.T) {
 					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
 						AvailabilityZones: buildSortedStandaloneAZs(),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					return mockEc2
 				}(),
 				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
@@ -443,7 +445,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createPrivateSubnet(tt.args.ctx, tt.args.c, *tt.args.ec2Client, tt.args.vpc, tt.args.logger, tt.args.zone)
+			got, err := createPrivateSubnet(tt.args.ctx, tt.args.c, tt.args.ec2Client, tt.args.vpc, tt.args.logger, tt.args.zone)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createPrivateSubnet() error = %v, wantErr %v", err, tt.wantErr)
 				return

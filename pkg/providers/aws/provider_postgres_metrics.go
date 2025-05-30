@@ -85,8 +85,9 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 		return nil, errorUtil.Wrap(err, "failed to create aws session to scrape rds cloud watch metrics")
 	}
 
+	cloudwatchClient := NewCloudWatchClient(*cfg)
 	// scrape metric data from cloud watch
-	cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, *cloudwatch.NewFromConfig(*cfg), postgres, metricTypes)
+	cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, cloudwatchClient, postgres, metricTypes)
 	if err != nil {
 		return nil, errorUtil.Wrap(err, "failed to scrape rds cloud watch metrics")
 	}
@@ -98,7 +99,7 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 
 // scrapeRDSCloudWatchMetricData fetches cloud watch metrics for rds
 // and parses it to a GenericCloudMetric in order to return to the controller
-func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Context, cloudWatchClient cloudwatch.Client, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
+func (p *PostgresMetricsProvider) scrapeRDSCloudWatchMetricData(ctx context.Context, cloudWatchClient CloudWatchAPI, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
 	resourceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, postgres.ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)

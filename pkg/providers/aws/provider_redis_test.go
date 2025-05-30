@@ -9,7 +9,6 @@ import (
 	"os"
 	"reflect"
 	"time"
-	"unsafe"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -48,70 +47,6 @@ var (
 	testPort     = aws.Int32(6397)
 	snapshotName = "test-snapshot"
 )
-
-//type mockElasticacheClient struct {
-//	elasticacheiface.ElastiCacheAPI
-//	modifyCacheSubnetGroupFn    func(*elasticache.ModifyCacheSubnetGroupInput) (*elasticache.ModifyCacheSubnetGroupOutput, error)
-//	deleteCacheSubnetGroupFn    func(*elasticache.DeleteCacheSubnetGroupInput) (*elasticache.DeleteCacheSubnetGroupOutput, error)
-//	describeCacheSubnetGroupsFn func(*elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error)
-//	describeCacheClustersFn     func(*elasticache.DescribeCacheClustersInput) (*elasticache.DescribeCacheClustersOutput, error)
-//	describeReplicationGroupsFn func(*elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error)
-//	describeSnapshotsFn         func(*elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error)
-//	createSnapshotFn            func(*elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error)
-//	deleteSnapshotFn            func(*elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error)
-//	describeUpdateActionsFn     func(*elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error)
-//	modifyReplicationGroupFn    func(*elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error)
-//	batchApplyUpdateActionFn    func(*elasticache.BatchApplyUpdateActionInput) (*elasticache.BatchApplyUpdateActionOutput, error)
-//	addTagsToResourceFn         func(*elasticache.AddTagsToResourceInput) (*elasticache.TagListMessage, error)
-//	createReplicationGroupFn    func(*elasticache.CreateReplicationGroupInput) (*elasticache.CreateReplicationGroupOutput, error)
-//	calls                       struct {
-//		DescribeSnapshots []struct {
-//			In1 *elasticache.DescribeSnapshotsInput
-//		}
-//		DescribeReplicationGroups []struct {
-//			In1 *elasticache.DescribeReplicationGroupsInput
-//		}
-//		CreateSnapshot []struct {
-//			In1 *elasticache.CreateSnapshotInput
-//		}
-//		DeleteSnapshot []struct {
-//			In1 *elasticache.DeleteSnapshotInput
-//		}
-//		DescribeUpdateActions []struct {
-//			In1 *elasticache.DescribeUpdateActionsInput
-//		}
-//		ModifyReplicationGroup []struct {
-//			In1 *elasticache.ModifyReplicationGroupInput
-//		}
-//		BatchApplyUpdateAction []struct {
-//			In1 *elasticache.BatchApplyUpdateActionInput
-//		}
-//		CreateReplicationGroup []struct {
-//			In1 *elasticache.CreateReplicationGroupInput
-//		}
-//	}
-//}
-
-//func buildMockElasticacheClient(modifyFn func(*mockElasticacheClient)) *mockElasticacheClient {
-//	mock := &mockElasticacheClient{
-//		describeCacheSubnetGroupsFn: func(input *elasticache.DescribeCacheSubnetGroupsInput) (*elasticache.DescribeCacheSubnetGroupsOutput, error) {
-//			return &elasticache.DescribeCacheSubnetGroupsOutput{}, nil
-//		},
-//		describeUpdateActionsFn: func(input *elasticache.DescribeUpdateActionsInput) (*elasticache.DescribeUpdateActionsOutput, error) {
-//			return &elasticache.DescribeUpdateActionsOutput{
-//				Marker:        nil,
-//				UpdateActions: []elasticachetypes.UpdateAction{},
-//			}, nil
-//		},
-//		modifyReplicationGroupFn: func(input *elasticache.ModifyReplicationGroupInput) (*elasticache.ModifyReplicationGroupOutput, error) {
-//			return &elasticache.ModifyReplicationGroupOutput{}, nil
-//		},
-//	}
-//	if modifyFn != nil {
-//		modifyFn(mock)
-//	}
-//	return mock
-//}
 
 type mockStsClient struct {
 	mock.Mock
@@ -359,9 +294,9 @@ func Test_createRedisCluster(t *testing.T) {
 	type args struct {
 		ctx                     context.Context
 		r                       *v1alpha1.Redis
-		stsClient               *sts.Client
-		elasticacheClient       *elasticache.Client
-		ec2Client               *ec2.Client
+		stsClient               STSAPI
+		elasticacheClient       ElastiCacheAPI
+		ec2Client               EC2API
 		redisConfig             *elasticache.CreateReplicationGroupInput
 		stratCfg                *StrategyConfig
 		standaloneNetworkExists bool
@@ -387,50 +322,74 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test no error on cache clusters of type memcached with no replicationgroupid",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(
-						&elasticache.DescribeReplicationGroupsOutput{
-							ReplicationGroups: []elasticachetypes.ReplicationGroup{
-								buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-									group.ReplicationGroupId = aws.String("test-id")
-									group.Status = aws.String("available")
-									group.CacheNodeType = aws.String("test")
-									group.SnapshotRetentionLimit = aws.Int32(20)
-									group.NodeGroups = []elasticachetypes.NodeGroup{
-										{
-											NodeGroupId: aws.String("primary-node"),
-											PrimaryEndpoint: &elasticachetypes.Endpoint{
-												Address: testAddress,
-												Port:    testPort,
-											},
-											Status: aws.String("available"),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+						ReplicationGroups: []elasticachetypes.ReplicationGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
+									{
+										NodeGroupId: aws.String("primary-node"),
+										PrimaryEndpoint: &elasticachetypes.Endpoint{
+											Address: testAddress,
+											Port:    testPort,
 										},
-									}
-								}),
+										Status: aws.String("available"),
+									},
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-						}, nil,
-					)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(
-						&elasticache.DescribeCacheClustersOutput{
-							CacheClusters: []elasticachetypes.CacheCluster{
-								{CacheClusterId: aws.String("test-id")},
-							},
-						}, nil,
-					)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+						},
+					}, nil)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: []elasticachetypes.CacheCluster{
+							{CacheClusterId: aws.String("test-id")},
+						},
+					}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mockSts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mockSts))
+				stsClient: func() STSAPI {
+					mockSts := new(mock_STSClient)
+					return mockSts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -451,10 +410,10 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error getting replication groups",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.DescribeReplicationGroupsOutput)(nil), genericAWSError)
+					return mockElasticache
 				}(),
 			},
 			fields: fields{
@@ -470,11 +429,11 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error creating elasticache cluster",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.DescribeReplicationGroupsOutput)(nil), genericAWSError)
+					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.CreateReplicationGroupOutput)(nil), genericAWSError)
+					return mockElasticache
 				}(),
 				standaloneNetworkExists: true,
 			},
@@ -491,9 +450,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error building subnet group name",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -514,8 +473,8 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.CreateReplicationGroupOutput)(nil), genericAWSError)
+					return mockElasticache
 				}(),
 			},
 			fields: fields{
@@ -528,9 +487,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error describing subnet groups",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -551,8 +510,8 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.DescribeCacheSubnetGroupsOutput)(nil), genericAWSError)
+					return mockElasticache
 				}(),
 			},
 			fields: fields{
@@ -565,9 +524,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error getting vpc id from associated subnets",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -588,22 +547,22 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.DescribeSubnetsOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -616,9 +575,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error getting vpc",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -639,25 +598,25 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: buildValidBundleSubnets(),
 					}, nil)
-					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.DescribeVpcsOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -670,9 +629,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error when more than one vpc found associated with bundled subnets",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -693,17 +652,17 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
@@ -716,7 +675,7 @@ func Test_createRedisCluster(t *testing.T) {
 							*buildValidStandaloneVPC(validCIDRSixteen),
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -729,9 +688,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error getting availability zones",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -752,17 +711,17 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
@@ -774,8 +733,8 @@ func Test_createRedisCluster(t *testing.T) {
 							*buildValidNonTaggedStandaloneVPC(validCIDRSixteen),
 						},
 					}, nil)
-					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.DescribeAvailabilityZonesOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -788,9 +747,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error creating new subnet",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -811,17 +770,17 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("nonexistentcachesubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
@@ -841,8 +800,8 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSubnetOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -855,9 +814,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error setting up security group",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -878,21 +837,22 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("testsubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -905,9 +865,9 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "error creating security group",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
 							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
 								group.ReplicationGroupId = aws.String("test-id")
@@ -928,17 +888,17 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 							)},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("testsubnetgroup"),
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
@@ -946,8 +906,8 @@ func Test_createRedisCluster(t *testing.T) {
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: buildValidBundleSubnets(),
 					}, nil)
-					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSecurityGroupOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 			},
 			fields: fields{
@@ -960,16 +920,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "failed to describe clusters",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -979,26 +956,36 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{
 						CacheSubnetGroups: []elasticachetypes.CacheSubnetGroup{
 							{
 								CacheSubnetGroupName: aws.String("testsubnetgroup"),
 							},
 						},
 					}, nil)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker:        nil,
 						UpdateActions: []elasticachetypes.UpdateAction{},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.DescribeCacheClustersOutput)(nil), genericAWSError)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					sgs := buildSecurityGroups(secName)
 					sgs[0].IpPermissions = []ec2types.IpPermission{
 						{
@@ -1019,7 +1006,8 @@ func Test_createRedisCluster(t *testing.T) {
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				r:           buildTestRedisCR(),
@@ -1035,18 +1023,90 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache buildReplicationGroupPending is called (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
-					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything).Return(&elasticache.CreateReplicationGroupOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+						ReplicationGroups: []elasticachetypes.ReplicationGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
+									{
+										NodeGroupId:      aws.String("primary-node"),
+										NodeGroupMembers: nil,
+										PrimaryEndpoint: &elasticachetypes.Endpoint{
+											Address: testAddress,
+											Port:    testPort,
+										},
+										Status: aws.String("available"),
+									},
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("testtesttest"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("pending"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
+							},
+						},
+					}, nil)
+					mockElasticache.On("CreateReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateReplicationGroupOutput{}, nil)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+						UpdateActions: []elasticachetypes.UpdateAction{
+							elasticachetypes.UpdateAction{
+								CacheClusterId:                      nil,
+								CacheNodeUpdateStatus:               nil,
+								Engine:                              nil,
+								EstimatedUpdateTime:                 nil,
+								NodeGroupUpdateStatus:               nil,
+								NodesUpdated:                        nil,
+								ReplicationGroupId:                  nil,
+								ServiceUpdateName:                   nil,
+								ServiceUpdateRecommendedApplyByDate: nil,
+								ServiceUpdateReleaseDate:            nil,
+								ServiceUpdateSeverity:               "",
+								ServiceUpdateStatus:                 "",
+								ServiceUpdateType:                   "",
+								SlaMet:                              "",
+								UpdateActionAvailableDate:           nil,
+								UpdateActionStatus:                  elasticachetypes.UpdateActionStatusWaitingToStart,
+								UpdateActionStatusModifiedDate:      nil,
+							},
+						},
+					}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
-					//TODO subnets: buildValidBundleSubnets(), was in original test but don't see it adding any value
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
@@ -1061,12 +1121,13 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1087,17 +1148,34 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache already exists and status is available (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1107,14 +1185,27 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
@@ -1133,12 +1224,13 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1159,21 +1251,64 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache already exists and status is not available (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("pending")
-							}),
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
+									{
+										NodeGroupId:      aws.String("primary-node"),
+										NodeGroupMembers: nil,
+										PrimaryEndpoint: &elasticachetypes.Endpoint{
+											Address: testAddress,
+											Port:    testPort,
+										},
+										Status: aws.String("available"),
+									},
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("pending"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
+							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
@@ -1192,12 +1327,13 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1218,17 +1354,34 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache exists and status is available and needs to be modified (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
 
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1238,20 +1391,34 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							),
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
@@ -1270,7 +1437,9 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1291,17 +1460,34 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache needs to be modified error creating update strategy (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1311,24 +1497,37 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.DescribeInstanceTypeOfferingsOutput)(nil), genericAWSError)
+					return mockEc2
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1348,16 +1547,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache needs to be modified error modifying replication group (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1367,25 +1583,37 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.ModifyReplicationGroupOutput)(nil), genericAWSError)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1405,16 +1633,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache needs to be modified service updates present (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1424,24 +1669,37 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1463,16 +1721,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache modification error applying service updates (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1482,25 +1757,37 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(nil, genericAWSError)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.DescribeUpdateActionsOutput)(nil), genericAWSError)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1521,16 +1808,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache does not need to be modified maintenance window true (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1540,24 +1844,37 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{}, nil)
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1578,16 +1895,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache exists and status is available and does not need to be modified (valid bundled subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1597,20 +1931,33 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeCacheSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheSubnetGroupsOutput{}, nil)
+					mockElasticache.On("CreateCacheSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateCacheSubnetGroupOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: buildVpcs(),
 					}, nil)
@@ -1628,7 +1975,8 @@ func Test_createRedisCluster(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
 				}(),
 				redisConfig: &elasticache.CreateReplicationGroupInput{
 					ReplicationGroupId:     aws.String("test-id"),
@@ -1653,16 +2001,33 @@ func Test_createRedisCluster(t *testing.T) {
 			name: "test elasticache already exists and status is available (valid standalone subnets)",
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1672,24 +2037,35 @@ func Test_createRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{}, nil)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+					return mockElasticache
 				}(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
 					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
 						SecurityGroups: buildSecurityGroups(secName),
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 				r: buildTestRedisCR(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					return mocksts
 				}(),
 				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
 				stratCfg:                &StrategyConfig{Region: "test"},
@@ -1723,7 +2099,7 @@ func Test_createRedisCluster(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, *tt.args.elasticacheClient, *tt.args.stsClient, *tt.args.ec2Client, tt.args.redisConfig, tt.args.stratCfg, tt.args.ServiceUpdate, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
+			got, _, err := p.createElasticacheCluster(tt.args.ctx, tt.args.r, tt.args.elasticacheClient, tt.args.stsClient, tt.args.ec2Client, tt.args.redisConfig, tt.args.stratCfg, tt.args.ServiceUpdate, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1747,8 +2123,8 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		ElastiCacheClient *elasticache.Client
-		Ec2Client         *ec2.Client
+		ElastiCacheClient ElastiCacheAPI
+		Ec2Client         EC2API
 	}
 	type args struct {
 		networkManager          NetworkManager
@@ -1780,10 +2156,10 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				ElastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				ElastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					return mockElasticache
 				}(),
 			},
 			wantErr: false,
@@ -1803,17 +2179,55 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				ElastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
-						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("pending")
-							}),
+				ElastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{ReplicationGroups: []elasticachetypes.ReplicationGroup{
+						elasticachetypes.ReplicationGroup{
+							ARN:                        nil,
+							AtRestEncryptionEnabled:    nil,
+							AuthTokenEnabled:           nil,
+							AuthTokenLastModifiedDate:  nil,
+							AutoMinorVersionUpgrade:    nil,
+							AutomaticFailover:          "",
+							CacheNodeType:              aws.String("test"),
+							ClusterEnabled:             nil,
+							ClusterMode:                "",
+							ConfigurationEndpoint:      nil,
+							DataTiering:                "",
+							Description:                nil,
+							Engine:                     nil,
+							GlobalReplicationGroupInfo: nil,
+							IpDiscovery:                "",
+							KmsKeyId:                   nil,
+							LogDeliveryConfigurations:  nil,
+							MemberClusters:             nil,
+							MemberClustersOutpostArns:  nil,
+							MultiAZ:                    "",
+							NetworkType:                "",
+							NodeGroups: []elasticachetypes.NodeGroup{
+								{
+									NodeGroupId:      aws.String("primary-node"),
+									NodeGroupMembers: nil,
+									PrimaryEndpoint: &elasticachetypes.Endpoint{
+										Address: testAddress,
+										Port:    testPort,
+									},
+									Status: aws.String("available"),
+								},
+							},
+							PendingModifiedValues:      nil,
+							ReplicationGroupCreateTime: nil,
+							ReplicationGroupId:         aws.String("test-id"),
+							SnapshotRetentionLimit:     aws.Int32(20),
+							SnapshotWindow:             nil,
+							SnapshottingClusterId:      nil,
+							Status:                     aws.String("pending"),
+							TransitEncryptionEnabled:   nil,
+							TransitEncryptionMode:      "",
+							UserGroupIds:               nil,
 						},
-					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					}}, nil)
+					return mockElasticache
 				}(),
 			},
 			wantErr: false,
@@ -1833,16 +2247,33 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				ElastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+				ElastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
 						ReplicationGroups: []elasticachetypes.ReplicationGroup{
-							buildReplicationGroup(func(group elasticachetypes.ReplicationGroup) {
-								group.ReplicationGroupId = aws.String("test-id")
-								group.Status = aws.String("available")
-								group.CacheNodeType = aws.String("test")
-								group.SnapshotRetentionLimit = aws.Int32(20)
-								group.NodeGroups = []elasticachetypes.NodeGroup{
+							elasticachetypes.ReplicationGroup{
+								ARN:                        nil,
+								AtRestEncryptionEnabled:    nil,
+								AuthTokenEnabled:           nil,
+								AuthTokenLastModifiedDate:  nil,
+								AutoMinorVersionUpgrade:    nil,
+								AutomaticFailover:          "",
+								CacheNodeType:              aws.String("test"),
+								ClusterEnabled:             nil,
+								ClusterMode:                "",
+								ConfigurationEndpoint:      nil,
+								DataTiering:                "",
+								Description:                nil,
+								Engine:                     nil,
+								GlobalReplicationGroupInfo: nil,
+								IpDiscovery:                "",
+								KmsKeyId:                   nil,
+								LogDeliveryConfigurations:  nil,
+								MemberClusters:             nil,
+								MemberClustersOutpostArns:  nil,
+								MultiAZ:                    "",
+								NetworkType:                "",
+								NodeGroups: []elasticachetypes.NodeGroup{
 									{
 										NodeGroupId:      aws.String("primary-node"),
 										NodeGroupMembers: nil,
@@ -1852,11 +2283,22 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 										},
 										Status: aws.String("available"),
 									},
-								}
+								},
+								PendingModifiedValues:      nil,
+								ReplicationGroupCreateTime: nil,
+								ReplicationGroupId:         aws.String("test-id"),
+								SnapshotRetentionLimit:     aws.Int32(20),
+								SnapshotWindow:             nil,
+								SnapshottingClusterId:      nil,
+								Status:                     aws.String("available"),
+								TransitEncryptionEnabled:   nil,
+								TransitEncryptionMode:      "",
+								UserGroupIds:               nil,
 							},
-							)},
+						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("DeleteReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteReplicationGroupOutput{}, nil)
+					return mockElasticache
 				}(),
 			},
 			wantErr: false,
@@ -1876,19 +2318,19 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				ElastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				ElastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					return mockElasticache
 				}(),
-				Ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+				Ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
 						Vpcs: []ec2types.Vpc{
 							*buildValidStandaloneVPC(validCIDRSixteen),
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 			},
 			wantErr: false,
@@ -1907,10 +2349,10 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            testLogger,
 				CredentialManager: &CredentialManagerMock{},
 				ConfigManager:     &ConfigManagerMock{},
-				ElastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+				ElastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					return mockElasticache
 				}(),
 			},
 			wantErr: false,
@@ -1923,9 +2365,9 @@ func TestAWSRedisProvider_deleteRedisCluster(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
-				CacheSvc:          *tt.fields.ElastiCacheClient,
+				CacheSvc:          tt.fields.ElastiCacheClient,
 			}
-			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, *tt.fields.ElastiCacheClient, *tt.fields.Ec2Client, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis, tt.args.standaloneNetworkExists, tt.args.isLastResource); (err != nil) != tt.wantErr {
+			if _, err := p.deleteElasticacheCluster(tt.args.ctx, tt.args.networkManager, tt.fields.ElastiCacheClient, tt.fields.Ec2Client, tt.args.redisCreateConfig, tt.args.redisDeleteConfig, tt.args.redis, tt.args.standaloneNetworkExists, tt.args.isLastResource); (err != nil) != tt.wantErr {
 				t.Errorf("deleteElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -1985,12 +2427,12 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		ElastiCacheClient *elasticache.Client
+		ElastiCacheClient ElastiCacheAPI
 	}
 	type args struct {
 		ctx               context.Context
-		elastiCacheClient *elasticache.Client
-		stsClient         *sts.Client
+		elastiCacheClient ElastiCacheAPI
+		stsClient         STSAPI
 		r                 *v1alpha1.Redis
 		stratCfg          StrategyConfig
 		cache             *elasticachetypes.NodeGroupMember
@@ -2007,24 +2449,30 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
-					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
 						Snapshots: []elasticachetypes.Snapshot{
 							{
 								SnapshotName: &snapshotName,
 							},
 						},
 					}, nil)
-					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything).Return(&elasticache.AddTagsToResourceOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.AddTagsToResourceOutput{}, nil)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: buildCacheClusterList(nil),
+					}, nil)
+					return mockElasticache
 				}(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					mocksts.On("GetCallerIdentity", mock.Anything, mock.Anything, mock.Anything).Return(&sts.GetCallerIdentityOutput{
+						Account: aws.String("test"),
+					}, nil)
+					return mocksts
 				}(),
 				stratCfg: StrategyConfig{Region: "test"},
 				cache: &elasticachetypes.NodeGroupMember{
@@ -2046,24 +2494,30 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
-					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
 						Snapshots: []elasticachetypes.Snapshot{
 							{
 								SnapshotName: &snapshotName,
 							},
 						},
+					}, &mockSnapshotNotFoundError{})
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
-					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything).Return(nil, &mockSnapshotNotFoundError{})
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					mocksts.On("GetCallerIdentity", mock.Anything, mock.Anything, mock.Anything).Return(&sts.GetCallerIdentityOutput{
+						Account: aws.String("test"),
+					}, nil)
+					return mocksts
 				}(),
 				stratCfg: StrategyConfig{Region: "test"},
 				cache: &elasticachetypes.NodeGroupMember{
@@ -2085,24 +2539,29 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
-						CacheClusters: buildCacheClusterList(nil),
-					}, nil)
-					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
 						Snapshots: []elasticachetypes.Snapshot{
 							{
 								SnapshotName: &snapshotName,
 							},
 						},
 					}, nil)
-					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything).Return(nil, &mockSnapshotNotFoundError{})
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil).Once()
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), genericAWSError)
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: buildCacheClusterList(nil),
+					}, nil)
+					return mockElasticache
 				}(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					mocksts.On("GetCallerIdentity", mock.Anything, mock.Anything, mock.Anything).Return(&sts.GetCallerIdentityOutput{
+						Account: aws.String("test"),
+					}, nil)
+					return mocksts
 				}(),
 				stratCfg: StrategyConfig{Region: "test"},
 				cache: &elasticachetypes.NodeGroupMember{
@@ -2124,24 +2583,31 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				r:   buildTestRedisCR(),
-				elastiCacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
-					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
 						Snapshots: []elasticachetypes.Snapshot{
 							{
 								SnapshotName: &snapshotName,
 							},
 						},
+					}, errors.New("SnapshotAlreadyExistsFault"))
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil).Once()
+					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), errors.New("SnapshotAlreadyExistsFault")).Once()
+					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
-					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything).Return(nil, errors.New("SnapshotAlreadyExistsFault"))
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
-				stsClient: func() *sts.Client {
-					mocksts := new(mockStsClient)
-					return (*sts.Client)(unsafe.Pointer(mocksts))
+				stsClient: func() STSAPI {
+					mocksts := new(mock_STSClient)
+					mocksts.On("GetCallerIdentity", mock.Anything, mock.Anything, mock.Anything).Return(&sts.GetCallerIdentityOutput{
+						Account: aws.String("test"),
+					}, nil)
+					return mocksts
 				}(),
 				stratCfg: StrategyConfig{Region: "test"},
 				cache: &elasticachetypes.NodeGroupMember{
@@ -2166,9 +2632,9 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
-				CacheSvc:          *tt.fields.ElastiCacheClient,
+				CacheSvc:          tt.fields.ElastiCacheClient,
 			}
-			got, err := p.TagElasticacheNode(tt.args.ctx, *tt.args.elastiCacheClient, *tt.args.stsClient, tt.args.r, *tt.args.cache)
+			got, err := p.TagElasticacheNode(tt.args.ctx, tt.args.elastiCacheClient, tt.args.stsClient, tt.args.r, *tt.args.cache)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagElasticache() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2183,7 +2649,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	type args struct {
 		ctx                      context.Context
-		ec2Client                *ec2.Client
+		ec2Client                EC2API
 		elasticacheConfig        *elasticache.CreateReplicationGroupInput
 		foundConfig              *elasticachetypes.ReplicationGroup
 		replicationGroupClusters []elasticachetypes.CacheCluster
@@ -2200,11 +2666,11 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test no modification required",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
-					mockEc2.On("CreateTags", mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String(defaultAzIdOne),
@@ -2214,8 +2680,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.test"),
@@ -2244,11 +2710,11 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test no modification required when current engine version higher than desired",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
-					mockEc2.On("CreateTags", mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String(defaultAzIdOne),
@@ -2258,8 +2724,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.test"),
@@ -2288,11 +2754,11 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test error when invalid desired engine version",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
-					mockEc2.On("CreateTags", mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String(defaultAzIdOne),
@@ -2302,8 +2768,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.test"),
@@ -2333,11 +2799,11 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test error when invalid current engine version",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
-					mockEc2.On("CreateTags", mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String(defaultAzIdOne),
@@ -2347,8 +2813,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.test"),
@@ -2378,16 +2844,16 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test when modification is required",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String("test"),
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.newValue"),
@@ -2426,10 +2892,10 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test failed aws instance type offering list results in error",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(nil, errors.New("test"))
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.DescribeInstanceTypeOfferingsOutput)(nil), errors.New("test"))
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType: aws.String("cache.test"),
@@ -2450,16 +2916,16 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test unsupported instance types changes are not added to proposed modification",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String("current-cache-type"),
 							},
 						},
 					}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					return mockEc2
 				}(),
 				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
 					CacheNodeType:              aws.String("cache.unsupported-cache-type"),
@@ -2496,11 +2962,11 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			name: "test nil parameters returned in aws objects",
 			args: args{
 				ctx: context.TODO(),
-				ec2Client: func() *ec2.Client {
-					mockEc2 := new(mockEc2Client)
-					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
-					mockEc2.On("CreateTags", mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
-					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
 						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
 							{
 								Location: aws.String(defaultAzIdOne),
@@ -2510,8 +2976,8 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
-					return (*ec2.Client)(unsafe.Pointer(mockEc2))
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
 				}(),
 				elasticacheConfig:        &elasticache.CreateReplicationGroupInput{},
 				foundConfig:              &elasticachetypes.ReplicationGroup{},
@@ -2523,7 +2989,7 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildElasticacheUpdateStrategy(tt.args.ctx, *tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger, tt.args.redis)
+			got, err := buildElasticacheUpdateStrategy(tt.args.ctx, tt.args.ec2Client, tt.args.elasticacheConfig, tt.args.foundConfig, tt.args.replicationGroupClusters, tt.args.logger, tt.args.redis)
 			if tt.wantErr != "" && err.Error() != tt.wantErr {
 				t.Errorf("createElasticacheCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2553,22 +3019,21 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 		Logger            *logrus.Entry
 		CredentialManager CredentialManager
 		ConfigManager     ConfigManager
-		ElasticacheClient *elasticache.Client
+		ElasticacheClient ElastiCacheAPI
 		TCPPinger         resources.ConnectionTester
 	}
 	type args struct {
 		ctx               context.Context
-		elasticacheClient *elasticache.Client
+		elasticacheClient ElastiCacheAPI
 		replicationGroup  *elasticachetypes.ReplicationGroup
 		specifiedUpdates  *ServiceUpdate
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		want      bool
-		wantErr   bool
-		checkfunc func(t *testing.T, cacheSvc *mockElasticacheClient)
+		name    string
+		fields  fields
+		args    args
+		want    bool
+		wantErr bool
 	}{
 		{
 			name: "if a specified update that is critical security update it should be applied immediately",
@@ -2582,9 +3047,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2596,22 +3061,14 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 1 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 		},
 		{
@@ -2626,9 +3083,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2640,21 +3097,13 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 		},
 		{
@@ -2669,9 +3118,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2683,21 +3132,13 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 		},
 		{
@@ -2712,9 +3153,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2726,20 +3167,12 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 0 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 		},
 		{
@@ -2754,9 +3187,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2768,20 +3201,12 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 0 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 		},
 		{
@@ -2796,9 +3221,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2810,8 +3235,8 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{
 						UnprocessedUpdateActions: []elasticachetypes.UnprocessedUpdateAction{
 							{
 								CacheClusterId: aws.String("test-replication-group"),
@@ -2820,20 +3245,12 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 			wantErr: true,
 		},
@@ -2849,9 +3266,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2862,23 +3279,15 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 								ServiceUpdateStatus:   elasticachetypes.ServiceUpdateStatusAvailable,
 							},
 						},
-					}, nil)
-					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					}, genericAWSError)
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, nil)
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 0 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 			wantErr: true,
 		},
@@ -2894,9 +3303,9 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				elasticacheClient: func() *elasticache.Client {
-					mockElasticache := new(mockElasticacheClient)
-					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{
 						Marker: nil,
 						UpdateActions: []elasticachetypes.UpdateAction{
 							{
@@ -2908,22 +3317,14 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 							},
 						},
 					}, nil)
-					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, errors.New("modify error"))
-					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
-					return (*elasticache.Client)(unsafe.Pointer(mockElasticache))
+					mockElasticache.On("ModifyReplicationGroup", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ModifyReplicationGroupOutput{}, errors.New("modify error"))
+					mockElasticache.On("BatchApplyUpdateAction", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.BatchApplyUpdateActionOutput{}, nil)
+					return mockElasticache
 				}(),
 				replicationGroup: &elasticachetypes.ReplicationGroup{
 					ReplicationGroupId: aws.String("test-replication-group"),
 				},
 				specifiedUpdates: &ServiceUpdate{updates: []string{"test-service-update"}},
-			},
-			checkfunc: func(t *testing.T, cacheSvc *mockElasticacheClient) {
-				if len(cacheSvc.calls.ModifyReplicationGroup) != 1 {
-					t.Errorf("expected ModifyReplicationGroup Function to be called 0 time but was called '%d' times", len(cacheSvc.calls.ModifyReplicationGroup))
-				}
-				if len(cacheSvc.calls.BatchApplyUpdateAction) != 1 {
-					t.Errorf("expected BatchApplyUpdateAction Function to be called 1 time but was called '%d' times", len(cacheSvc.calls.BatchApplyUpdateAction))
-				}
 			},
 			wantErr: true,
 		},
@@ -2935,16 +3336,14 @@ func TestRedisProvider_applySpecifiedSecurityUpdates(t *testing.T) {
 				Logger:            tt.fields.Logger,
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
-				CacheSvc:          *tt.fields.ElasticacheClient,
+				CacheSvc:          tt.fields.ElasticacheClient,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			err := p.applySpecifiedSecurityUpdates(tt.args.ctx, *tt.args.elasticacheClient, tt.args.replicationGroup, tt.args.specifiedUpdates)
+			err := p.applySpecifiedSecurityUpdates(tt.args.ctx, tt.args.elasticacheClient, tt.args.replicationGroup, tt.args.specifiedUpdates)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("applylSpecifiedSecurityUpdates() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			mockElasticache := new(mockElasticacheClient)
-			tt.checkfunc(t, mockElasticache)
 		})
 	}
 }

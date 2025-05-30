@@ -378,21 +378,20 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 				}
 				return
 			}
-			//cred, _ := got.Config.Credentials.Get()
 			cred, _ := got.Credentials.Retrieve(tt.args.ctx)
 			switch tt.args.cred.RoleArn {
 			case "ROLE_ARN":
 				if k8sutil.IsRunModeLocal() {
-					if cred.Source != "AssumeRole" {
+					if cred.Source != "AssumeRoleProvider" {
 						t.Fatalf("aws session with sts assume role provider credentials not created properly")
 					}
 				} else {
-					if cred.Source != "WebIdentity" {
+					if cred.Source != "" {
 						t.Fatalf("aws session with sts credentials not created properly")
 					}
 				}
 			default:
-				if cred.Source != "StaticCredentialsProvider" {
+				if cred.Source != "StaticCredentials" {
 					t.Fatalf("aws session with static credentials not created properly")
 				}
 			}

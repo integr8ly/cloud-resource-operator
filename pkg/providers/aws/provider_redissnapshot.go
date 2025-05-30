@@ -77,12 +77,12 @@ func (p *RedisSnapshotProvider) CreateRedisSnapshot(ctx context.Context, snapsho
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	elasticacheClient := elasticache.NewFromConfig(*cfg)
+	elasticacheClient := NewElasticacheClient(*cfg)
 
-	return p.createRedisSnapshot(ctx, snapshot, redis, *elasticacheClient)
+	return p.createRedisSnapshot(ctx, snapshot, redis, elasticacheClient)
 }
 
-func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis, elasticacheClient elasticache.Client) (*providers.RedisSnapshotInstance, croType.StatusMessage, error) {
+func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis, elasticacheClient ElastiCacheAPI) (*providers.RedisSnapshotInstance, croType.StatusMessage, error) {
 	logger := resources.NewActionLogger(p.logger, "createRedisSnapshot")
 	// generate snapshot name
 	snapshotName, err := resources.BuildTimestampedInfraNameFromObjectCreation(ctx, p.client, snapshot.ObjectMeta, defaultAwsIdentifierLength)
@@ -180,12 +180,12 @@ func (p *RedisSnapshotProvider) DeleteRedisSnapshot(ctx context.Context, snapsho
 		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
-	elasticacheClient := elasticache.NewFromConfig(*cfg)
+	elasticacheClient := NewElasticacheClient(*cfg)
 
-	return p.deleteRedisSnapshot(ctx, snapshot, redis, *elasticacheClient)
+	return p.deleteRedisSnapshot(ctx, snapshot, redis, elasticacheClient)
 }
 
-func (p *RedisSnapshotProvider) deleteRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis, elasticacheClient elasticache.Client) (croType.StatusMessage, error) {
+func (p *RedisSnapshotProvider) deleteRedisSnapshot(ctx context.Context, snapshot *v1alpha1.RedisSnapshot, redis *v1alpha1.Redis, elasticacheClient ElastiCacheAPI) (croType.StatusMessage, error) {
 	snapshotName := snapshot.Status.SnapshotID
 	foundSnapshot, err := p.findSnapshotInstance(ctx, elasticacheClient, snapshotName)
 
@@ -219,7 +219,7 @@ func (p *RedisSnapshotProvider) deleteRedisSnapshot(ctx context.Context, snapsho
 	return "snapshot deletion started", nil
 }
 
-func (p *RedisSnapshotProvider) findSnapshotInstance(ctx context.Context, elasticacheClient elasticache.Client, snapshotName string) (*elasticachetypes.Snapshot, error) {
+func (p *RedisSnapshotProvider) findSnapshotInstance(ctx context.Context, elasticacheClient ElastiCacheAPI, snapshotName string) (*elasticachetypes.Snapshot, error) {
 	// check snapshot exists
 	listOutput, err := elasticacheClient.DescribeSnapshots(ctx, &elasticache.DescribeSnapshotsInput{
 		SnapshotName: aws.String(snapshotName),
@@ -232,13 +232,18 @@ func (p *RedisSnapshotProvider) findSnapshotInstance(ctx context.Context, elasti
 		return nil, err
 	}
 	var foundSnapshot elasticachetypes.Snapshot
+	found := false
 	for _, c := range listOutput.Snapshots {
 		if *c.SnapshotName == snapshotName {
 			foundSnapshot = c
+			found = true
 			break
 		}
 	}
-	return &foundSnapshot, nil
+	if found {
+		return &foundSnapshot, nil
+	}
+	return nil, nil
 }
 
 func (p *RedisSnapshotProvider) createConfigForResource(ctx context.Context, namespace string, resourceType providers.ResourceType, tier string) (*aws.Config, error) {

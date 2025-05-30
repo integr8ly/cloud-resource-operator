@@ -1,5 +1,5 @@
 IMAGE_REG ?= quay.io
-IMAGE_ORG ?= austincunningham
+IMAGE_ORG ?= integreatly
 IMAGE_NAME ?= cloud-resource-operator
 OPERATOR_IMG = $(IMAGE_REG)/$(IMAGE_ORG)/$(IMAGE_NAME):v$(VERSION)
 CONTAINER_PLATFORM ?= linux/amd64
