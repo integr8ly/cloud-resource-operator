@@ -180,7 +180,7 @@ cluster/clean:
 .PHONY: test/unit
 test/unit:
 	@echo Running tests:
-	go install github.com/rakyll/gotest@v0.0.6
+	GOFLAGS= go install github.com/rakyll/gotest@v0.0.6
 	gotest -v -covermode=count -coverprofile=coverage.out ./pkg/providers/... ./pkg/resources/... ./api/integreatly/v1alpha1/types/... ./pkg/client/...
 
 .PHONY: image/build
@@ -257,7 +257,7 @@ code/gen: setup/moq vendor/fix api/integreatly/v1alpha1/zz_generated.deepcopy.go
 
 .PHONY: setup/moq
 setup/moq:
-	go install github.com/matryer/moq@v0.5.0
+	GOFLAGS= go install github.com/matryer/moq@v0.5.0
 
 .PHONY: create/olm/bundle
 create/olm/bundle:

@@ -2,6 +2,10 @@ FROM registry.ci.openshift.org/openshift/release:golang-1.23
 
 ENV OPERATOR_SDK_VERSION=v1.39.0
 
+ENV GOPATH=/go
+ENV GOBIN=$GOPATH/bin
+ENV PATH=$GOBIN:$PATH
+
 # install operator-sdk (from git with no history and only the tag)
 RUN mkdir -p $GOPATH/src/github.com/operator-framework \
     && cd $GOPATH/src/github.com/operator-framework \
