@@ -259,14 +259,17 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 
 	// check if the bucket has already been deleted
 	var foundBucket *types.Bucket
+	found := false
 	for _, i := range buckets {
 		if *i.Name == *bucketCfg.Bucket {
 			foundBucket = &i
+			found = true
 			break
 		}
 	}
+	logrus.Info("found bucket", foundBucket)
 
-	if foundBucket == nil {
+	if !found {
 		if err := p.removeCredsAndFinalizer(ctx, bs, s3Client, bucketCfg, bucketDeleteCfg); err != nil {
 			errMsg := fmt.Sprintf("unable to remove credential secrets and finalizer for %s", *bucketCfg.Bucket)
 			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
@@ -442,17 +445,19 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 
 	// check if bucket already exists
 	p.Logger.Infof("checking if aws s3 bucket %s already exists", *bucketCfg.Bucket)
+	found := false
 	var foundBucket *types.Bucket
 	for _, b := range buckets {
 		if *b.Name == *bucketCfg.Bucket {
 			foundBucket = &b
+			found = true
 			break
 		}
 	}
 
 	defer p.exposeBlobStorageMetrics(ctx, bs)
 
-	if foundBucket != nil {
+	if found {
 		if err = reconcileS3BucketSettings(ctx, aws.StringValue(foundBucket.Name), s3Client); err != nil {
 			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
 			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
@@ -584,6 +589,11 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 	s3createConfig := &s3.CreateBucketInput{}
 	if err = json.Unmarshal(stratCfg.CreateStrategy, s3createConfig); err != nil {
 		return nil, nil, nil, errorUtil.Wrap(err, "failed to unmarshal aws s3 create strat configuration")
+	}
+	// setting Location Restraint required now for all regions outside of us-east-1 for s3 buckets
+	// setting it equal to the default region for the cluster.
+	s3createConfig.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+		LocationConstraint: types.BucketLocationConstraint(defRegion),
 	}
 
 	// delete s3 bucket config created by the provider

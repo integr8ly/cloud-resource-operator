@@ -252,9 +252,11 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 
 	// check if the cluster has already been created
 	var foundCache elasticachetypes.ReplicationGroup
+	found := false
 	for _, c := range rgs {
 		if *c.ReplicationGroupId == *elasticacheConfig.ReplicationGroupId {
 			foundCache = c
+			found = true
 			break
 		}
 	}
@@ -272,7 +274,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	_, isSTS := p.CredentialManager.(*STSCredentialManager)
 
 	// create elasticache cluster if it doesn't exist
-	if &foundCache == nil {
+	if !found {
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
 				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])

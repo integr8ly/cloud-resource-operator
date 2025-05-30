@@ -967,14 +967,24 @@ func (n *NetworkProvider) reconcileStandaloneSecurityGroup(ctx context.Context, 
 	}
 
 	// authorize the security group ingres if it is not as expected
-	if _, err := n.Ec2Client.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
+	_, err = n.Ec2Client.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
 		GroupId: aws.String(*standaloneSecGroup.GroupId),
 		IpPermissions: []ec2types.IpPermission{
 			*ipPermission,
 		},
-	}); err != nil {
-		return nil, errorUtil.Wrap(err, "error authorizing security group ingress")
+	})
+	if err != nil {
+		var apiErr interface {
+			ErrorCode() string
+		}
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "InvalidPermission.Duplicate" {
+			logger.Infof("Security group rule 'peer: 10.0.0.0/16, ALL, ALLOW' already exists for group %s. Skipping authorization.", *standaloneSecGroup.GroupId)
+		} else {
+			logger.Errorf("Failed to authorize security group ingress for group %s: %v", *standaloneSecGroup.GroupId, err)
+			return nil, errorUtil.Wrap(err, "error authorizing security group ingress")
+		}
 	}
+
 	logger.Infof("ip permissions have been updated to expected permissions for security group %s", *standaloneSecGroup.GroupName)
 	return standaloneSecGroup, nil
 }
