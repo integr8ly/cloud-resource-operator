@@ -1134,10 +1134,11 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 	var expectedAZSubnets []*NetworkAZSubnet
 	for subnetIndex, subnet := range validSubnets {
 		for azIndex, az := range validAzs {
+			currentAz := az
 			if azIndex == subnetIndex {
 				azSubnet := &NetworkAZSubnet{
 					IP: subnet,
-					AZ: &az,
+					AZ: &currentAz,
 				}
 				expectedAZSubnets = append(expectedAZSubnets, azSubnet)
 			}
@@ -1213,9 +1214,10 @@ func (n *NetworkProvider) reconcileStandaloneVPCSubnets(ctx context.Context, log
 
 		// ensure subnets have the correct tags
 		for _, sub := range subs {
+			currentSub := sub //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
 			logger.Infof("validating subnet %s", *sub.SubnetId)
-			if !resources.TagsContainsAll(ec2TagListToGenericList(subnetTags), ec2TagListToGenericList(sub.Tags)) {
-				if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Client, &sub, logger); err != nil {
+			if !resources.TagsContainsAll(ec2TagListToGenericList(subnetTags), ec2TagListToGenericList(currentSub.Tags)) {
+				if err := tagPrivateSubnet(ctx, n.Client, n.Ec2Client, &currentSub, logger); err != nil {
 					return nil, errorUtil.Wrap(err, "failed to tag subnet")
 				}
 			}
@@ -1514,10 +1516,12 @@ func getStandaloneVpc(ctx context.Context, client client.Client, ec2Client EC2AP
 	// find associated vpc to tag
 	var foundVPC *ec2types.Vpc
 	for _, vpc := range vpcs.Vpcs {
-		for _, tag := range vpc.Tags {
-			if *tag.Key == croOwnerTag.Key && *tag.Value == croOwnerTag.Value {
-				logger.Infof("found vpc: %s", *vpc.VpcId)
-				foundVPC = &vpc
+		currentVpc := vpc //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		for _, tag := range currentVpc.Tags {
+			currentTag := tag //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+			if *currentTag.Key == croOwnerTag.Key && *currentTag.Value == croOwnerTag.Value {
+				logger.Infof("found vpc: %s", *currentVpc.VpcId)
+				foundVPC = &currentVpc
 			}
 		}
 	}
@@ -1901,7 +1905,8 @@ func routeExists(routes []ec2types.Route, checkRoute *ec2types.Route) bool {
 
 func contains(strs []string, str *string) bool {
 	for _, s := range strs {
-		if aws.ToString(str) == aws.ToString(&s) {
+		currentS := s
+		if aws.ToString(str) == aws.ToString(&currentS) {
 			return true
 		}
 	}

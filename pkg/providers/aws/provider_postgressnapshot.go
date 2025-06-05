@@ -222,7 +222,8 @@ func (p *PostgresSnapshotProvider) findSnapshotInstance(ctx context.Context, rds
 	var foundSnapshot *rdstypes.DBSnapshot
 	for _, c := range listOutput.DBSnapshots {
 		if *c.DBSnapshotIdentifier == snapshotName {
-			foundSnapshot = &c
+			currentSnapshot := c //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+			foundSnapshot = &currentSnapshot
 			break
 		}
 	}

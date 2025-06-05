@@ -557,8 +557,9 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	// check if the instance has already been deleted
 	var foundInstance *rdstypes.DBInstance
 	for _, i := range pgs {
-		if *i.DBInstanceIdentifier == *rdsDeleteConfig.DBInstanceIdentifier {
-			foundInstance = &i
+		currentInstance := i //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		if *currentInstance.DBInstanceIdentifier == *rdsDeleteConfig.DBInstanceIdentifier {
+			foundInstance = &currentInstance
 			break
 		}
 	}
@@ -689,7 +690,8 @@ func getFoundInstance(pi []rdstypes.DBInstance, config *rds.CreateDBInstanceInpu
 	var foundInstance *rdstypes.DBInstance
 	for _, i := range pi {
 		if *i.DBInstanceIdentifier == *config.DBInstanceIdentifier {
-			foundInstance = &i
+			currentInstance := i //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+			foundInstance = &currentInstance
 			return foundInstance
 		}
 	}
@@ -1004,7 +1006,8 @@ func (p *PostgresProvider) configureRDSVpc(ctx context.Context, rdsClient RDSAPI
 	var foundSubnet *rdstypes.DBSubnetGroup
 	for _, sub := range groups.DBSubnetGroups {
 		if *sub.DBSubnetGroupName == sgID {
-			foundSubnet = &sub
+			currentSubnet := sub //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+			foundSubnet = &currentSubnet
 			break
 		}
 	}

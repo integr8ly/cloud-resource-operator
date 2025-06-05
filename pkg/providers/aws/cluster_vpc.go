@@ -139,8 +139,9 @@ func GetVPCSubnets(ctx context.Context, ec2Client EC2API, logger *logrus.Entry, 
 	// find associated subnets
 	var associatedSubs []*ec2types.Subnet
 	for _, sub := range subs {
-		if *sub.VpcId == *vpc.VpcId {
-			associatedSubs = append(associatedSubs, &sub)
+		currentSub := sub
+		if *currentSub.VpcId == *vpc.VpcId {
+			associatedSubs = append(associatedSubs, &currentSub)
 		}
 	}
 
@@ -177,7 +178,8 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client EC2API,
 	var privSubs []*ec2types.Subnet
 	for _, sub := range subs {
 		for _, tags := range sub.Tags {
-			if *tags.Key == defaultAWSPrivateSubnetTagKey {
+			currentTags := tags
+			if *currentTags.Key == defaultAWSPrivateSubnetTagKey {
 				privSubs = append(privSubs, sub)
 			}
 		}
@@ -185,10 +187,11 @@ func GetPrivateSubnetIDS(ctx context.Context, c client.Client, ec2Client EC2API,
 
 	// for every az check there is a private subnet, if none create one
 	for _, az := range azs {
-		logger.Infof("checking if private subnet exists in zone %s", *az.ZoneName)
-		if !privateSubnetExists(privSubs, &az) {
+		currentAz := az //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		logger.Infof("checking if private subnet exists in zone %s", *currentAz.ZoneName)
+		if !privateSubnetExists(privSubs, &currentAz) {
 			logger.Infof("no private subnet found in %s", *az.ZoneName)
-			subnet, err := createPrivateSubnet(ctx, c, ec2Client, foundVPC, logger, *az.ZoneName)
+			subnet, err := createPrivateSubnet(ctx, c, ec2Client, foundVPC, logger, *currentAz.ZoneName)
 			if err != nil {
 				return nil, errorUtil.Wrap(err, "failed to created private subnet")
 			}
@@ -538,8 +541,9 @@ func getSecurityGroup(ctx context.Context, ec2Client EC2API, secName string) (*e
 	// check if security group exists
 	var foundSecGroup *ec2types.SecurityGroup
 	for _, sec := range secGroups.SecurityGroups {
-		if *sec.GroupName == secName {
-			foundSecGroup = &sec
+		currentSec := sec //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		if *currentSec.GroupName == secName {
+			foundSecGroup = &currentSec
 			break
 		}
 	}

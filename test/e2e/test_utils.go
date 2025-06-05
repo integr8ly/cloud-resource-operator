@@ -167,7 +167,7 @@ func NewTestingContext(kubeConfig *rest.Config) (*TestingContext, error) {
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // gosec G402, Used only in tests, cluster checked for self-signed certs
+			InsecureSkipVerify: true, // #nosec G402 -- Used only in tests, cluster checked for self-signed certs
 		},
 	}
 
@@ -198,7 +198,7 @@ func NewTestingContext(kubeConfig *rest.Config) (*TestingContext, error) {
 func NewTestingHTTPClient(kubeConfig *rest.Config) (*http.Client, error) {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // gosec G402, Used only in tests, cluster checked for self-signed certs
+			InsecureSkipVerify: true, // #nosec G402 -- G402: Used only in tests, cluster checked for self-signed certs
 		},
 	}
 

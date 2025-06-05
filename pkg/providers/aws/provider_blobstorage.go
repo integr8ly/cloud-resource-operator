@@ -261,8 +261,9 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 	var foundBucket *types.Bucket
 	found := false
 	for _, i := range buckets {
-		if *i.Name == *bucketCfg.Bucket {
-			foundBucket = &i
+		currentBucket := i //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		if *currentBucket.Name == *bucketCfg.Bucket {
+			foundBucket = &currentBucket
 			found = true
 			break
 		}
@@ -448,8 +449,9 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	found := false
 	var foundBucket *types.Bucket
 	for _, b := range buckets {
-		if *b.Name == *bucketCfg.Bucket {
-			foundBucket = &b
+		currentBucket := b //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
+		if *currentBucket.Name == *bucketCfg.Bucket {
+			foundBucket = &currentBucket
 			found = true
 			break
 		}

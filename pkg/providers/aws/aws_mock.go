@@ -205,10 +205,11 @@ func (m *mock_Ec2Client) DescribeSecurityGroupsCalls() []struct {
 
 	lockMockEc2ClientDescribeSecurityGroups.RLock()
 	for _, groupInput := range m.calls.DescribeSecurityGroups {
+		currentGroup := groupInput //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
 		calls = append(calls, struct {
 			Groups *ec2.DescribeSecurityGroupsInput
 		}{
-			Groups: &groupInput,
+			Groups: &currentGroup,
 		})
 	}
 	lockMockEc2ClientDescribeSecurityGroups.RUnlock()
@@ -224,10 +225,11 @@ func (m *mock_Ec2Client) DescribeRouteTablesCalls() []struct {
 	}
 	lockMockEc2ClientDescribeRouteTables.RLock()
 	for _, tableInput := range m.calls.DescribeRouteTables {
+		currentTable := tableInput //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
 		calls = append(calls, struct {
 			Tables *ec2.DescribeRouteTablesInput
 		}{
-			Tables: &tableInput,
+			Tables: &currentTable,
 		})
 	}
 	lockMockEc2ClientDescribeRouteTables.RUnlock()
@@ -243,10 +245,11 @@ func (m *mock_Ec2Client) CreateRouteCalls() []struct {
 	}
 	lockMockEc2ClientCreateRoute.RLock()
 	for _, routeInput := range m.calls.CreateRoute {
+		currentRoute := routeInput //fix gosec error G601 (CWE-118): Implicit memory aliasing in for loop.
 		calls = append(calls, struct {
 			Route *ec2.CreateRouteInput
 		}{
-			Route: &routeInput,
+			Route: &currentRoute,
 		})
 	}
 	lockMockEc2ClientCreateRoute.RUnlock()
