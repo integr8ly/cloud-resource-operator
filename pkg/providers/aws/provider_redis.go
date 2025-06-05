@@ -463,7 +463,7 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, elasticacheClien
 
 	// loop snapshots adding tags per found snapshot
 	snapshotList, _ := elasticacheClient.DescribeSnapshots(ctx, inputDescribe)
-	if snapshotList.Snapshots != nil && len(snapshotList.Snapshots) > 0 {
+	if len(snapshotList.Snapshots) > 0 {
 		metricName := getMetricName(r.Name)
 		// We need to reset before recreating so that metrics for deleted snapshots are not orphaned
 		resources.ResetMetric(metricName)

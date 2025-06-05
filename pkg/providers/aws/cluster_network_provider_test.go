@@ -1952,7 +1952,7 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).
 						Run(func(args mock.Arguments) {
 							input := args.Get(1).(*ec2.CreateVpcInput)
-							if input.TagSpecifications != nil && len(input.TagSpecifications) == 1 {
+							if len(input.TagSpecifications) == 1 {
 								vpc.Tags = append(vpc.Tags, input.TagSpecifications[0].Tags...)
 							}
 						}).Return(&ec2.CreateVpcOutput{Vpc: vpc}, nil)
