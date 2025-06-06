@@ -965,6 +965,40 @@
         }
       }
     },
+    "InstanceGroupManagerResizeRequests": {
+      "clients": {
+        "rest": {
+          "libraryClient": "InstanceGroupManagerResizeRequestsClient",
+          "rpcs": {
+            "Cancel": {
+              "methods": [
+                "Cancel"
+              ]
+            },
+            "Delete": {
+              "methods": [
+                "Delete"
+              ]
+            },
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "Insert": {
+              "methods": [
+                "Insert"
+              ]
+            },
+            "List": {
+              "methods": [
+                "List"
+              ]
+            }
+          }
+        }
+      }
+    },
     "InstanceGroupManagers": {
       "clients": {
         "rest": {
@@ -1055,6 +1089,11 @@
                 "Resize"
               ]
             },
+            "ResumeInstances": {
+              "methods": [
+                "ResumeInstances"
+              ]
+            },
             "SetInstanceTemplate": {
               "methods": [
                 "SetInstanceTemplate"
@@ -1063,6 +1102,21 @@
             "SetTargetPools": {
               "methods": [
                 "SetTargetPools"
+              ]
+            },
+            "StartInstances": {
+              "methods": [
+                "StartInstances"
+              ]
+            },
+            "StopInstances": {
+              "methods": [
+                "StopInstances"
+              ]
+            },
+            "SuspendInstances": {
+              "methods": [
+                "SuspendInstances"
               ]
             },
             "UpdatePerInstanceConfigs": {
@@ -1122,6 +1176,25 @@
             "SetNamedPorts": {
               "methods": [
                 "SetNamedPorts"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "InstanceSettingsService": {
+      "clients": {
+        "rest": {
+          "libraryClient": "InstanceSettingsClient",
+          "rpcs": {
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "Patch": {
+              "methods": [
+                "Patch"
               ]
             }
           }
@@ -1280,6 +1353,11 @@
             "RemoveResourcePolicies": {
               "methods": [
                 "RemoveResourcePolicies"
+              ]
+            },
+            "ReportHostAsFaulty": {
+              "methods": [
+                "ReportHostAsFaulty"
               ]
             },
             "Reset": {
@@ -1709,6 +1787,11 @@
                 "SetIamPolicy"
               ]
             },
+            "SetLabels": {
+              "methods": [
+                "SetLabels"
+              ]
+            },
             "TestIamPermissions": {
               "methods": [
                 "TestIamPermissions"
@@ -1894,9 +1977,19 @@
                 "AddAssociation"
               ]
             },
+            "AddPacketMirroringRule": {
+              "methods": [
+                "AddPacketMirroringRule"
+              ]
+            },
             "AddRule": {
               "methods": [
                 "AddRule"
+              ]
+            },
+            "AggregatedList": {
+              "methods": [
+                "AggregatedList"
               ]
             },
             "CloneRules": {
@@ -1924,6 +2017,11 @@
                 "GetIamPolicy"
               ]
             },
+            "GetPacketMirroringRule": {
+              "methods": [
+                "GetPacketMirroringRule"
+              ]
+            },
             "GetRule": {
               "methods": [
                 "GetRule"
@@ -1944,6 +2042,11 @@
                 "Patch"
               ]
             },
+            "PatchPacketMirroringRule": {
+              "methods": [
+                "PatchPacketMirroringRule"
+              ]
+            },
             "PatchRule": {
               "methods": [
                 "PatchRule"
@@ -1952,6 +2055,11 @@
             "RemoveAssociation": {
               "methods": [
                 "RemoveAssociation"
+              ]
+            },
+            "RemovePacketMirroringRule": {
+              "methods": [
+                "RemovePacketMirroringRule"
               ]
             },
             "RemoveRule": {
@@ -1967,6 +2075,25 @@
             "TestIamPermissions": {
               "methods": [
                 "TestIamPermissions"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "NetworkProfiles": {
+      "clients": {
+        "rest": {
+          "libraryClient": "NetworkProfilesClient",
+          "rpcs": {
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "List": {
+              "methods": [
+                "List"
               ]
             }
           }
@@ -2090,6 +2217,11 @@
             "Patch": {
               "methods": [
                 "Patch"
+              ]
+            },
+            "PerformMaintenance": {
+              "methods": [
+                "PerformMaintenance"
               ]
             },
             "SetIamPolicy": {
@@ -2818,6 +2950,11 @@
                 "Resize"
               ]
             },
+            "ResumeInstances": {
+              "methods": [
+                "ResumeInstances"
+              ]
+            },
             "SetInstanceTemplate": {
               "methods": [
                 "SetInstanceTemplate"
@@ -2826,6 +2963,21 @@
             "SetTargetPools": {
               "methods": [
                 "SetTargetPools"
+              ]
+            },
+            "StartInstances": {
+              "methods": [
+                "StartInstances"
+              ]
+            },
+            "StopInstances": {
+              "methods": [
+                "StopInstances"
+              ]
+            },
+            "SuspendInstances": {
+              "methods": [
+                "SuspendInstances"
               ]
             },
             "UpdatePerInstanceConfigs": {
@@ -3203,6 +3355,11 @@
               "methods": [
                 "RemoveRule"
               ]
+            },
+            "SetLabels": {
+              "methods": [
+                "SetLabels"
+              ]
             }
           }
         }
@@ -3460,6 +3617,30 @@
         }
       }
     },
+    "ReservationBlocks": {
+      "clients": {
+        "rest": {
+          "libraryClient": "ReservationBlocksClient",
+          "rpcs": {
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "List": {
+              "methods": [
+                "List"
+              ]
+            },
+            "PerformMaintenance": {
+              "methods": [
+                "PerformMaintenance"
+              ]
+            }
+          }
+        }
+      }
+    },
     "Reservations": {
       "clients": {
         "rest": {
@@ -3493,6 +3674,11 @@
             "List": {
               "methods": [
                 "List"
+              ]
+            },
+            "PerformMaintenance": {
+              "methods": [
+                "PerformMaintenance"
               ]
             },
             "Resize": {
@@ -3588,6 +3774,11 @@
                 "Delete"
               ]
             },
+            "DeleteRoutePolicy": {
+              "methods": [
+                "DeleteRoutePolicy"
+              ]
+            },
             "Get": {
               "methods": [
                 "Get"
@@ -3601,6 +3792,11 @@
             "GetNatMappingInfo": {
               "methods": [
                 "GetNatMappingInfo"
+              ]
+            },
+            "GetRoutePolicy": {
+              "methods": [
+                "GetRoutePolicy"
               ]
             },
             "GetRouterStatus": {
@@ -3618,9 +3814,24 @@
                 "List"
               ]
             },
+            "ListBgpRoutes": {
+              "methods": [
+                "ListBgpRoutes"
+              ]
+            },
+            "ListRoutePolicies": {
+              "methods": [
+                "ListRoutePolicies"
+              ]
+            },
             "Patch": {
               "methods": [
                 "Patch"
+              ]
+            },
+            "PatchRoutePolicy": {
+              "methods": [
+                "PatchRoutePolicy"
               ]
             },
             "Preview": {
@@ -3631,6 +3842,11 @@
             "Update": {
               "methods": [
                 "Update"
+              ]
+            },
+            "UpdateRoutePolicy": {
+              "methods": [
+                "UpdateRoutePolicy"
               ]
             }
           }
@@ -3929,6 +4145,89 @@
             "Patch": {
               "methods": [
                 "Patch"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "StoragePoolTypes": {
+      "clients": {
+        "rest": {
+          "libraryClient": "StoragePoolTypesClient",
+          "rpcs": {
+            "AggregatedList": {
+              "methods": [
+                "AggregatedList"
+              ]
+            },
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "List": {
+              "methods": [
+                "List"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "StoragePools": {
+      "clients": {
+        "rest": {
+          "libraryClient": "StoragePoolsClient",
+          "rpcs": {
+            "AggregatedList": {
+              "methods": [
+                "AggregatedList"
+              ]
+            },
+            "Delete": {
+              "methods": [
+                "Delete"
+              ]
+            },
+            "Get": {
+              "methods": [
+                "Get"
+              ]
+            },
+            "GetIamPolicy": {
+              "methods": [
+                "GetIamPolicy"
+              ]
+            },
+            "Insert": {
+              "methods": [
+                "Insert"
+              ]
+            },
+            "List": {
+              "methods": [
+                "List"
+              ]
+            },
+            "ListDisks": {
+              "methods": [
+                "ListDisks"
+              ]
+            },
+            "SetIamPolicy": {
+              "methods": [
+                "SetIamPolicy"
+              ]
+            },
+            "TestIamPermissions": {
+              "methods": [
+                "TestIamPermissions"
+              ]
+            },
+            "Update": {
+              "methods": [
+                "Update"
               ]
             }
           }
