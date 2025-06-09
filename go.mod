@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.12.2
 	github.com/hashicorp/go-version v1.6.0
-	github.com/lib/pq v1.10.6
+	github.com/lib/pq v1.10.9
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
 	github.com/openshift/api v0.0.0-20231204192004-bfea29e5e6c4
