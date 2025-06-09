@@ -594,8 +594,10 @@ func (p *BlobStorageProvider) getS3BucketConfig(ctx context.Context, bs *v1alpha
 	}
 	// setting Location Restraint required now for all regions outside of us-east-1 for s3 buckets
 	// setting it equal to the default region for the cluster.
-	s3createConfig.CreateBucketConfiguration = &types.CreateBucketConfiguration{
-		LocationConstraint: types.BucketLocationConstraint(defRegion),
+	if defRegion != "us-east-1" {
+		s3createConfig.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(defRegion),
+		}
 	}
 
 	// delete s3 bucket config created by the provider
