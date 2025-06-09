@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func buildDefaultConfigMap(platformType configv1.PlatformType) *v1.ConfigMap {
 			},
 			Data: map[string]string{
 				"blobstorage": `{"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }, "production": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}`,
-				"redis":       `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AtRestEncryptionEnabled":null,"AuthToken":null,"AutoMinorVersionUpgrade":null,"AutomaticFailoverEnabled":null,"CacheNodeType":null,"CacheParameterGroupName":null,"CacheSecurityGroupNames":null,"CacheSubnetGroupName":null,"DataTieringEnabled":null,"Engine":null,"EngineVersion":null,"KmsKeyId":null,"NodeGroupConfiguration":null,"NotificationTopicArn":null,"NumCacheClusters":null,"NumNodeGroups":null,"Port":null,"PreferredCacheClusterAZs":null,"PreferredMaintenanceWindow":"sun:18:05-sun:19:05","PrimaryClusterId":null,"ReplicasPerNodeGroup":null,"ReplicationGroupDescription":null,"ReplicationGroupId":null,"SecurityGroupIds":null,"SnapshotArns":null,"SnapshotName":null,"SnapshotRetentionLimit":null,"SnapshotWindow":"16:04-17:04","Tags":null,"TransitEncryptionEnabled":null},"deleteStrategy":{},"serviceUpdates":null}}`,
+				"redis":       `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"ReplicationGroupDescription":null,"ReplicationGroupId":null,"AtRestEncryptionEnabled":null,"AuthToken":null,"AutoMinorVersionUpgrade":null,"AutomaticFailoverEnabled":null,"CacheNodeType":null,"CacheParameterGroupName":null,"CacheSecurityGroupNames":null,"CacheSubnetGroupName":null,"ClusterMode":"","DataTieringEnabled":null,"Engine":null,"EngineVersion":null,"GlobalReplicationGroupId":null,"IpDiscovery":"","KmsKeyId":null,"LogDeliveryConfigurations":null,"MultiAZEnabled":null,"NetworkType":"","NodeGroupConfiguration":null,"NotificationTopicArn":null,"NumCacheClusters":null,"NumNodeGroups":null,"Port":null,"PreferredCacheClusterAZs":null,"PreferredMaintenanceWindow":"mon:16:05-mon:17:05","PrimaryClusterId":null,"ReplicasPerNodeGroup":null,"SecurityGroupIds":null,"ServerlessCacheSnapshotName":null,"SnapshotArns":null,"SnapshotName":null,"SnapshotRetentionLimit":null,"SnapshotWindow":"15:04-16:04","Tags":null,"TransitEncryptionEnabled":null,"TransitEncryptionMode":"","UserGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`,
 				"postgres":    `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AllocatedStorage":null,"AutoMinorVersionUpgrade":null,"AvailabilityZone":null,"BackupRetentionPeriod":null,"BackupTarget":null,"CharacterSetName":null,"CopyTagsToSnapshot":null,"CustomIamInstanceProfile":null,"DBClusterIdentifier":null,"DBInstanceClass":null,"DBInstanceIdentifier":null,"DBName":null,"DBParameterGroupName":null,"DBSecurityGroups":null,"DBSubnetGroupName":null,"DeletionProtection":null,"Domain":null,"DomainIAMRoleName":null,"EnableCloudwatchLogsExports":null,"EnableIAMDatabaseAuthentication":null,"EnablePerformanceInsights":null,"Engine":null,"EngineVersion":null,"Iops":null,"KmsKeyId":null,"LicenseModel":null,"MasterUserPassword":null,"MasterUsername":null,"MaxAllocatedStorage":null,"MonitoringInterval":null,"MonitoringRoleArn":null,"MultiAZ":null,"OptionGroupName":null,"PerformanceInsightsKMSKeyId":null,"PerformanceInsightsRetentionPeriod":null,"Port":null,"PreferredBackupWindow":"16:04-17:04","PreferredMaintenanceWindow":"sun:18:05-sun:19:05","ProcessorFeatures":null,"PromotionTier":null,"PubliclyAccessible":null,"StorageEncrypted":null,"StorageType":null,"Tags":null,"TdeCredentialArn":null,"TdeCredentialPassword":null,"Timezone":null,"VpcSecurityGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`,
 			},
 		}
@@ -55,7 +56,7 @@ func buildDefaultConfigMap(platformType configv1.PlatformType) *v1.ConfigMap {
 func buildExpectRedisStrat(platformType configv1.PlatformType) string {
 	switch platformType {
 	case configv1.AWSPlatformType:
-		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AtRestEncryptionEnabled":null,"AuthToken":null,"AutoMinorVersionUpgrade":null,"AutomaticFailoverEnabled":null,"CacheNodeType":null,"CacheParameterGroupName":null,"CacheSecurityGroupNames":null,"CacheSubnetGroupName":null,"ClusterMode":null,"DataTieringEnabled":null,"Engine":null,"EngineVersion":null,"GlobalReplicationGroupId":null,"IpDiscovery":null,"KmsKeyId":null,"LogDeliveryConfigurations":null,"MultiAZEnabled":null,"NetworkType":null,"NodeGroupConfiguration":null,"NotificationTopicArn":null,"NumCacheClusters":null,"NumNodeGroups":null,"Port":null,"PreferredCacheClusterAZs":null,"PreferredMaintenanceWindow":"mon:16:05-mon:17:05","PrimaryClusterId":null,"ReplicasPerNodeGroup":null,"ReplicationGroupDescription":null,"ReplicationGroupId":null,"SecurityGroupIds":null,"ServerlessCacheSnapshotName":null,"SnapshotArns":null,"SnapshotName":null,"SnapshotRetentionLimit":null,"SnapshotWindow":"15:04-16:04","Tags":null,"TransitEncryptionEnabled":null,"TransitEncryptionMode":null,"UserGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
+		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AtRestEncryptionEnabled":null,"AuthToken":null,"AutoMinorVersionUpgrade":null,"AutomaticFailoverEnabled":null,"CacheNodeType":null,"CacheParameterGroupName":null,"CacheSecurityGroupNames":null,"CacheSubnetGroupName":null,"ClusterMode":"","DataTieringEnabled":null,"Engine":null,"EngineVersion":null,"GlobalReplicationGroupId":null,"IpDiscovery":"","KmsKeyId":null,"LogDeliveryConfigurations":null,"MultiAZEnabled":null,"NetworkType":"","NodeGroupConfiguration":null,"NotificationTopicArn":null,"NumCacheClusters":null,"NumNodeGroups":null,"Port":null,"PreferredCacheClusterAZs":null,"PreferredMaintenanceWindow":"mon:16:05-mon:17:05","PrimaryClusterId":null,"ReplicasPerNodeGroup":null,"ReplicationGroupDescription":null,"ReplicationGroupId":null,"SecurityGroupIds":null,"ServerlessCacheSnapshotName":null,"SnapshotArns":null,"SnapshotName":null,"SnapshotRetentionLimit":null,"SnapshotWindow":"15:04-16:04","Tags":null,"TransitEncryptionEnabled":null,"TransitEncryptionMode":"","UserGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
 	case configv1.GCPPlatformType:
 		return `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"maintenance_policy":{"weekly_maintenance_window":[{"day":1,"start_time":{"hours":16,"minutes":5}}]}}},"deleteStrategy":{}}}`
 	}
@@ -65,7 +66,7 @@ func buildExpectRedisStrat(platformType configv1.PlatformType) string {
 func buildExpectPostgresStrat(platformType configv1.PlatformType) string {
 	switch platformType {
 	case configv1.AWSPlatformType:
-		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AllocatedStorage":null,"AutoMinorVersionUpgrade":null,"AvailabilityZone":null,"BackupRetentionPeriod":null,"BackupTarget":null,"CACertificateIdentifier":null,"CharacterSetName":null,"CopyTagsToSnapshot":null,"CustomIamInstanceProfile":null,"DBClusterIdentifier":null,"DBInstanceClass":null,"DBInstanceIdentifier":null,"DBName":null,"DBParameterGroupName":null,"DBSecurityGroups":null,"DBSubnetGroupName":null,"DBSystemId":null,"DedicatedLogVolume":null,"DeletionProtection":null,"Domain":null,"DomainAuthSecretArn":null,"DomainDnsIps":null,"DomainFqdn":null,"DomainIAMRoleName":null,"DomainOu":null,"EnableCloudwatchLogsExports":null,"EnableCustomerOwnedIp":null,"EnableIAMDatabaseAuthentication":null,"EnablePerformanceInsights":null,"Engine":null,"EngineVersion":null,"Iops":null,"KmsKeyId":null,"LicenseModel":null,"ManageMasterUserPassword":null,"MasterUserPassword":null,"MasterUserSecretKmsKeyId":null,"MasterUsername":null,"MaxAllocatedStorage":null,"MonitoringInterval":null,"MonitoringRoleArn":null,"MultiAZ":null,"MultiTenant":null,"NcharCharacterSetName":null,"NetworkType":null,"OptionGroupName":null,"PerformanceInsightsKMSKeyId":null,"PerformanceInsightsRetentionPeriod":null,"Port":null,"PreferredBackupWindow":"15:04-16:04","PreferredMaintenanceWindow":"mon:16:05-mon:17:05","ProcessorFeatures":null,"PromotionTier":null,"PubliclyAccessible":null,"StorageEncrypted":null,"StorageThroughput":null,"StorageType":null,"Tags":null,"TdeCredentialArn":null,"TdeCredentialPassword":null,"Timezone":null,"VpcSecurityGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
+		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AllocatedStorage":null,"AutoMinorVersionUpgrade":null,"AvailabilityZone":null,"BackupRetentionPeriod":null,"BackupTarget":null,"CACertificateIdentifier":null,"CharacterSetName":null,"CopyTagsToSnapshot":null,"CustomIamInstanceProfile":null,"DBClusterIdentifier":null,"DBInstanceClass":null,"DBInstanceIdentifier":null,"DBName":null,"DBParameterGroupName":null,"DBSecurityGroups":null,"DBSubnetGroupName":null,"DBSystemId":null,"DatabaseInsightsMode": "","DedicatedLogVolume":null,"DeletionProtection":null,"Domain":null,"DomainAuthSecretArn":null,"DomainDnsIps":null,"DomainFqdn":null,"DomainIAMRoleName":null,"DomainOu":null,"EnableCloudwatchLogsExports":null,"EnableCustomerOwnedIp":null,"EnableIAMDatabaseAuthentication":null,"EnablePerformanceInsights":null,"Engine":null,"EngineLifecycleSupport": null,"EngineVersion":null,"Iops":null,"KmsKeyId":null,"LicenseModel":null,"ManageMasterUserPassword":null,"MasterUserPassword":null,"MasterUserSecretKmsKeyId":null,"MasterUsername":null,"MaxAllocatedStorage":null,"MonitoringInterval":null,"MonitoringRoleArn":null,"MultiAZ":null,"MultiTenant":null,"NcharCharacterSetName":null,"NetworkType":null,"OptionGroupName":null,"PerformanceInsightsKMSKeyId":null,"PerformanceInsightsRetentionPeriod":null,"Port":null,"PreferredBackupWindow":"15:04-16:04","PreferredMaintenanceWindow":"mon:16:05-mon:17:05","ProcessorFeatures":null,"PromotionTier":null,"PubliclyAccessible":null,"StorageEncrypted":null,"StorageThroughput":null,"StorageType":null,"Tags":null,"TdeCredentialArn":null,"TdeCredentialPassword":null,"Timezone":null,"VpcSecurityGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
 	case configv1.GCPPlatformType:
 		return `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"settings":{"backupConfiguration":{"startTime":"15:04"},"maintenanceWindow":{"day":1,"hour":16}}}},"deleteStrategy":{}}}`
 	}
@@ -297,8 +298,30 @@ func TestReconcileStrategyMaps(t *testing.T) {
 			if err != nil {
 				t.Fatal("ReconcileStrategyMaps() unexpected error while getting testable config ", err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("ReconcileStrategyMaps() \n got = %+v, \n want = %+v", got, tt.want)
+			// json order was changing every run so
+			// Change the testcase to handle unordered json and just compare the values not deep equal
+			gotString, ok := got.(string)
+			if !ok {
+				t.Fatalf("ReconcileStrategyMaps() got unexpected type for config, expected string got %T", got)
+			}
+			wantString, ok := tt.want.(string)
+			if !ok {
+				t.Fatalf("ReconcileStrategyMaps() want unexpected type for config, expected string got %T", tt.want)
+			}
+			var gotParsed interface{}
+			var wantParsed interface{}
+			err = json.Unmarshal([]byte(gotString), &gotParsed)
+			if err != nil {
+				t.Fatalf("ReconcileStrategyMaps() failed to unmarshal got JSON: %v", err)
+			}
+			err = json.Unmarshal([]byte(wantString), &wantParsed)
+			if err != nil {
+				t.Fatalf("ReconcileStrategyMaps() failed to unmarshal want JSON: %v", err)
+			}
+			if !reflect.DeepEqual(gotParsed, wantParsed) {
+				gotPretty, _ := json.MarshalIndent(gotParsed, "", "  ")
+				wantPretty, _ := json.MarshalIndent(wantParsed, "", "  ")
+				t.Fatalf("ReconcileStrategyMaps() JSON content mismatch: \n got = %s, \n want = %s", gotPretty, wantPretty)
 			}
 		})
 	}
