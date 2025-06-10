@@ -7,6 +7,7 @@ import (
 	"fmt"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/smithy-go"
 	"strconv"
 	"strings"
 	"time"
@@ -169,6 +170,13 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	cfg, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, strategyConfig)
 	if err != nil {
 		errMsg := "failed to create aws session to create rds db instance"
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.ErrorCode() == "AuthFailure" {
+				logger.Info("AuthFailure creating AWS config, credentials may not be propagated yet, requeuing")
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+		}
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -177,6 +185,14 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
 		errMsg := "failed to check cluster vpc subnets"
+		// Check if the error is an AuthFailure and re-que if present
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.ErrorCode() == "AuthFailure" {
+				logger.Info("AuthFailure when checking network manager, credentials may not be propagated yet, requeuing")
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+		}
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 

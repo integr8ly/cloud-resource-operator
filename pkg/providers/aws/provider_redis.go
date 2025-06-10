@@ -124,6 +124,13 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	cfg, err := CreateConfigFromStrategy(ctx, p.Client, providerCreds, stratCfg)
 	if err != nil {
 		errMsg := "failed to create aws session to create elasticache replication group"
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.ErrorCode() == "AuthFailure" {
+				logger.Info("AuthFailure creating AWS config, credentials may not be propagated yet, requeuing")
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+		}
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -137,7 +144,15 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	networkManager := NewNetworkManager(*cfg, p.Client, logger, isSTSCluster(ctx, p.Client))
 	isEnabled, err := networkManager.IsEnabled(ctx)
 	if err != nil {
+		// Check if the error is an AuthFailure and re-que if present
 		errMsg := "failed to check cluster vpc subnets"
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.ErrorCode() == "AuthFailure" {
+				logger.Info("AuthFailure when checking network manager, credentials may not be propagated yet, requeuing")
+				return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
+			}
+		}
 		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
@@ -1075,6 +1090,11 @@ func (p *RedisProvider) setRedisServiceMaintenanceMetric(ctx context.Context, ca
 	}
 
 	// Retrieve service maintenance updates, create and export Prometheus metrics
+	if instance.ReplicationGroupId == nil {
+		logrus.Warn("Cannot describe update actions: instance.ReplicationGroupId is nil. Resource might not be fully provisioned yet.")
+		return
+	}
+
 	output, err := cacheSvc.DescribeUpdateActions(ctx, &elasticache.DescribeUpdateActionsInput{
 		ReplicationGroupIds: []string{*instance.ReplicationGroupId},
 	})
@@ -1158,6 +1178,9 @@ func (p *RedisProvider) buildCacheName(ctx context.Context, rd *v1alpha1.Redis) 
 }
 
 func replicationGroupStatusIsHealthy(cache *elasticachetypes.ReplicationGroup) bool {
+	if cache == nil || cache.Status == nil {
+		return false
+	}
 	return resources.Contains(healthyAWSReplicationGroupStatuses, *cache.Status)
 
 }
