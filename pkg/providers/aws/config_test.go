@@ -371,27 +371,27 @@ func TestCreateSessionFromStrategy(t *testing.T) {
 			defer func() {
 				k8sutil.AppFS = afero.NewOsFs()
 			}()
-			got, err := CreateSessionFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
+			got, err := CreateConfigFromStrategy(tt.args.ctx, tt.args.c, tt.args.cred, tt.args.strategy)
 			if tt.wantErr {
 				if !errorContains(err, "failed to get region") {
-					t.Fatalf("unexpected error from CreateSessionFromStrategy(): %v", err)
+					t.Fatalf("unexpected error from CreateConfigFromStrategy(): %v", err)
 				}
 				return
 			}
-			cred, _ := got.Config.Credentials.Get()
+			cred, _ := got.Credentials.Retrieve(tt.args.ctx)
 			switch tt.args.cred.RoleArn {
 			case "ROLE_ARN":
 				if k8sutil.IsRunModeLocal() {
-					if cred.ProviderName != "AssumeRoleProvider" {
+					if cred.Source != "AssumeRoleProvider" {
 						t.Fatalf("aws session with sts assume role provider credentials not created properly")
 					}
 				} else {
-					if cred.ProviderName != "" {
+					if cred.Source != "" {
 						t.Fatalf("aws session with sts credentials not created properly")
 					}
 				}
 			default:
-				if cred.ProviderName != "StaticProvider" {
+				if cred.Source != "StaticCredentials" {
 					t.Fatalf("aws session with static credentials not created properly")
 				}
 			}

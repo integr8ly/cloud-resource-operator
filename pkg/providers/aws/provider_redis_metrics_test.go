@@ -3,22 +3,22 @@ package aws
 import (
 	"context"
 	"errors"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"github.com/stretchr/testify/mock"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"reflect"
 	"testing"
 
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/moq/moq_aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,20 +34,20 @@ var (
 	testcacheClusterId2 = "test-002"
 )
 
-func buildReplicationGroupReadyCacheClusterId() []*elasticache.ReplicationGroup {
+func buildReplicationGroupReadyCacheClusterId() []elasticachetypes.ReplicationGroup {
 
-	return []*elasticache.ReplicationGroup{
+	return []elasticachetypes.ReplicationGroup{
 		{
 			ReplicationGroupId:     aws.String("testtesttest"),
 			Status:                 aws.String("available"),
 			CacheNodeType:          aws.String("test"),
-			SnapshotRetentionLimit: aws.Int64(20),
-			MemberClusters:         []*string{&testcacheClusterId1, &testcacheClusterId2},
-			NodeGroups: []*elasticache.NodeGroup{
+			SnapshotRetentionLimit: aws.Int32(20),
+			MemberClusters:         []string{testcacheClusterId1, testcacheClusterId2},
+			NodeGroups: []elasticachetypes.NodeGroup{
 				{
 					NodeGroupId:      aws.String("primary-node"),
 					NodeGroupMembers: nil,
-					PrimaryEndpoint: &elasticache.Endpoint{
+					PrimaryEndpoint: &elasticachetypes.Endpoint{
 						Address: testAddress,
 						Port:    testPort,
 					},
@@ -80,11 +80,11 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx            context.Context
-		cloudWatchApi  cloudwatchiface.CloudWatchAPI
-		redis          *v1alpha1.Redis
-		elastiCacheApi elasticacheiface.ElastiCacheAPI
-		metricTypes    []providers.CloudProviderMetricType
+		ctx               context.Context
+		cloudWatchClient  CloudWatchAPI
+		redis             *v1alpha1.Redis
+		elastiCacheClient ElastiCacheAPI
+		metricTypes       []providers.CloudProviderMetricType
 	}
 	tests := []struct {
 		name    string
@@ -103,27 +103,26 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{
-							MetricDataResults: []*cloudwatch.MetricDataResult{
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.Id = aws.String(testMetricName)
-									result.Values = []*float64{
-										aws.Float64(testMetricValue),
-									}
-								}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+						MetricDataResults: []cloudwatchtypes.MetricDataResult{
+							{
+								Id:         aws.String(testMetricName),
+								Values:     []float64{testMetricValue},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
 							},
-						}, nil
-					}
-				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return &elasticache.DescribeReplicationGroupsOutput{
-							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					return mockCloudWatch
+				}(),
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+						ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
+					}, nil)
+					return mockElasticache
+				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -153,30 +152,31 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{
-							MetricDataResults: []*cloudwatch.MetricDataResult{
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.Id = aws.String(testMetricName)
-									result.Values = []*float64{
-										aws.Float64(testMetricValue),
-									}
-								}),
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.StatusCode = aws.String(cloudwatch.StatusCodeInternalError)
-								}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+						MetricDataResults: []cloudwatchtypes.MetricDataResult{
+							{
+								Id:         aws.String(testMetricName),
+								Values:     []float64{testMetricValue},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
 							},
-						}, nil
-					}
-				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return &elasticache.DescribeReplicationGroupsOutput{
-							ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
-						}, nil
-					}
-				}),
+							{
+								Id:         aws.String(testMetricName),
+								Values:     []float64{testMetricValue},
+								StatusCode: cloudwatchtypes.StatusCodeInternalError,
+							},
+						},
+					}, nil)
+					return mockCloudWatch
+				}(),
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+						ReplicationGroups: buildReplicationGroupReadyCacheClusterId(),
+					}, nil)
+					return mockElasticache
+				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -206,16 +206,16 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{}, nil
-					}
-				}),
-				elastiCacheApi: moq_aws.BuildMockElastiCacheClient(func(watchClient *moq_aws.MockElastiCacheClient) {
-					watchClient.DescribeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return &elasticache.DescribeReplicationGroupsOutput{}, nil
-					}
-				}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{}, nil)
+					return mockCloudWatch
+				}(),
+				elastiCacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					return mockElasticache
+				}(),
 				redis: buildTestRedisCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -232,7 +232,7 @@ func TestRedisMetricsProvider_scrapeRedisCloudWatchMetricData(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := r.scrapeRedisCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchApi, tt.args.redis, tt.args.elastiCacheApi, tt.args.metricTypes)
+			got, err := r.scrapeRedisCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchClient, tt.args.redis, tt.args.elastiCacheClient, tt.args.metricTypes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("scrapeRedisCloudWatchMetricData() error = %v, wantErr %v", err, tt.wantErr)
 				return

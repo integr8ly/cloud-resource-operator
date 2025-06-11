@@ -2,25 +2,25 @@ package aws
 
 import (
 	"context"
-	"reflect"
-	"testing"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/runtime"
+	"reflect"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"testing"
 )
 
 func Test_buildSubnetAddress(t *testing.T) {
 	type args struct {
-		vpc    *ec2.Vpc
+		vpc    *ec2types.Vpc
 		logger *logrus.Entry
 	}
 	tests := []struct {
@@ -33,7 +33,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 			name: "test failure when cidr is not provided",
 			args: args{
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				vpc: &ec2.Vpc{
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String(""),
 				},
 			},
@@ -43,7 +43,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 			name: "test error when cidr mask is greater or equal than 27",
 			args: args{
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				vpc: &ec2.Vpc{
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("127.0.0.1/27"),
 				},
 			},
@@ -53,7 +53,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 			name: "test expected returned networks with /26 source cidr",
 			args: args{
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				vpc: &ec2.Vpc{
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/26"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -68,7 +68,7 @@ func Test_buildSubnetAddress(t *testing.T) {
 			name: "test expected returned networks with /23 source cidr",
 			args: args{
 				logger: logrus.NewEntry(logrus.StandardLogger()),
-				vpc: &ec2.Vpc{
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -125,7 +125,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    []*ec2.Tag
+		want    []ec2types.Tag
 		wantErr bool
 	}{
 		{
@@ -162,7 +162,7 @@ func Test_getDefaultSubnetTags(t *testing.T) {
 					},
 				}),
 			},
-			want: []*ec2.Tag{
+			want: []ec2types.Tag{
 				{
 					Key:   aws.String(defaultAWSPrivateSubnetTagKey),
 					Value: aws.String("1"),
@@ -208,27 +208,30 @@ func Test_createPrivateSubnet(t *testing.T) {
 	}
 
 	type args struct {
-		ctx    context.Context
-		c      client.Client
-		ec2Svc ec2iface.EC2API
-		vpc    *ec2.Vpc
-		logger *logrus.Entry
-		zone   string
-		sub    *ec2.Subnet
+		ctx       context.Context
+		c         client.Client
+		ec2Client EC2API
+		vpc       *ec2types.Vpc
+		logger    *logrus.Entry
+		zone      string
+		sub       *ec2types.Subnet
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *ec2.Subnet
+		want    *ec2types.Subnet
 		wantErr bool
 	}{
 		{
 			name: "failed to build subnet address",
 			args: args{
-				ctx:    context.TODO(),
-				c:      moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Svc: nil,
-				vpc: &ec2.Vpc{
+				ctx: context.TODO(),
+				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					return mockEc2
+				}(),
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String(""),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -243,44 +246,35 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				vpc: &ec2.Vpc{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSubnetOutput)(nil), genericAWSError)
+					return mockEc2
+
+				}(),
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -295,41 +289,36 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				vpc: &ec2.Vpc{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSubnetOutput{
+						Subnet: buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+					}, nil)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					return mockEc2
+				}(),
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -344,45 +333,38 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					err := &smithy.GenericAPIError{
+						Code:    "InvalidSubnet.Conflict",
+						Message: "Subnet conflict error",
 					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-					ec2Client.createSubnetFn = func(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
-						return nil, awserr.New("InvalidSubnet.Conflict", "Subnet conflict error", nil)
-					}
-
-				}),
-				vpc: &ec2.Vpc{
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSubnetOutput)(nil), err)
+					return mockEc2
+				}(),
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
@@ -397,52 +379,48 @@ func Test_createPrivateSubnet(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				c:   moqClient.NewSigsClientMoqWithScheme(scheme, buildTestInfra()),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRTwentySix),
-							},
-						}, nil
-					}
-					ec2Client.createVpcFn = func(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
-						return &ec2.CreateVpcOutput{
-							Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
-						}, nil
-					}
-					ec2Client.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
-					ec2Client.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
-					ec2Client.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
-					ec2Client.describeRouteTablesFn = func(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-						return &ec2.DescribeRouteTablesOutput{
-							RouteTables: []*ec2.RouteTable{
-								buildMockEc2RouteTable(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					}
-					ec2Client.describeAvailabilityZonesFn = func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildSortedStandaloneAZs(),
-						}, nil
-					}
-				}),
-				vpc: &ec2.Vpc{
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRTwentySix),
+						},
+					}, nil)
+					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateVpcOutput{
+						Vpc: buildValidStandaloneVPC(validCIDRTwentySix),
+					}, nil)
+					mockEc2.On("CreateSubnet", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateSubnetOutput{
+						Subnet: buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA),
+					}, err)
+					mockEc2.subnets = buildStandaloneVPCAssociatedSubnets(defaultValidSubnetMaskOneA, defaultValidSubnetMaskOneB)
+					mockEc2.firstSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdOne, defaultAzIdOne, defaultValidSubnetMaskOneA)
+					mockEc2.secondSubnet = buildSubnet(defaultStandaloneVpcId, defaultSubnetIdTwo, defaultAzIdTwo, defaultValidSubnetMaskOneB)
+					mockEc2.On("DescribeRouteTables", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeRouteTablesOutput{
+						RouteTables: []ec2types.RouteTable{
+							*buildMockEc2RouteTable(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildSortedStandaloneAZs(),
+					}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					return mockEc2
+				}(),
+				vpc: &ec2types.Vpc{
 					CidrBlock: aws.String("10.11.128.0/23"),
 					VpcId:     aws.String(mockNetworkVpcId),
 				},
 				logger: logrus.NewEntry(logrus.StandardLogger()),
 				zone:   "eu-west-1",
 			},
-			want: &ec2.Subnet{
+			want: &ec2types.Subnet{
 				AvailabilityZone: aws.String("test-zone-1"),
 				CidrBlock:        aws.String("10.0.0.0/27"),
 				SubnetId:         aws.String("test-id-1"),
-				Tags: []*ec2.Tag{
+				Tags: []ec2types.Tag{
 					{
 						Key:   aws.String("kubernetes.io/role/internal-elb"),
 						Value: aws.String("1"),
@@ -467,7 +445,7 @@ func Test_createPrivateSubnet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createPrivateSubnet(tt.args.ctx, tt.args.c, tt.args.ec2Svc, tt.args.vpc, tt.args.logger, tt.args.zone)
+			got, err := createPrivateSubnet(tt.args.ctx, tt.args.c, tt.args.ec2Client, tt.args.vpc, tt.args.logger, tt.args.zone)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createPrivateSubnet() error = %v, wantErr %v", err, tt.wantErr)
 				return

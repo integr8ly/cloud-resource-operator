@@ -5,6 +5,7 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.23 AS builder
 USER root
 
 WORKDIR /workspace
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum

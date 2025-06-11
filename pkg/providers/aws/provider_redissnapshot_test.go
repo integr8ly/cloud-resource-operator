@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stretchr/testify/mock"
 	"os"
 	"reflect"
 	"testing"
@@ -15,9 +16,9 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"github.com/sirupsen/logrus"
@@ -47,12 +48,12 @@ func buildTestRedisSnapshotCR() *v1alpha1.RedisSnapshot {
 
 func buildDescribeReplicationGroupsOutput(status string) *elasticache.DescribeReplicationGroupsOutput {
 	return &elasticache.DescribeReplicationGroupsOutput{
-		ReplicationGroups: []*elasticache.ReplicationGroup{
+		ReplicationGroups: []elasticachetypes.ReplicationGroup{
 			{
 				Status: aws.String(status),
-				NodeGroups: []*elasticache.NodeGroup{
+				NodeGroups: []elasticachetypes.NodeGroup{
 					{
-						NodeGroupMembers: []*elasticache.NodeGroupMember{
+						NodeGroupMembers: []elasticachetypes.NodeGroupMember{
 							{
 								CacheClusterId: aws.String(testPrimaryCacheNodeId),
 								CurrentRole:    aws.String("primary"),
@@ -82,6 +83,34 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 		logrus.Fatal(err)
 		t.Fatal("failed to build test identifier", err)
 	}
+	defaultOrgTag := resources.GetOrganizationTag()
+	expectedFakeTags := []elasticachetypes.Tag{ // Renamed to avoid conflict later
+		{
+			Key:   aws.String("test-key"),
+			Value: aws.String("test-value"),
+		},
+		{
+			Key:   aws.String(defaultOrgTag + "clusterID"),
+			Value: aws.String("test"),
+		},
+		{
+			Key:   aws.String(defaultOrgTag + "resource-type"),
+			Value: aws.String(""),
+		},
+		{
+			Key:   aws.String(defaultOrgTag + "resource-name"),
+			Value: aws.String("testtesttest000101010000000000UTC"),
+		},
+		{
+			Key:   aws.String(resources.TagManagedKey),
+			Value: aws.String("true"),
+		},
+	}
+	expectedWantSnapshotInput := &elasticache.CreateSnapshotInput{ // Renamed
+		CacheClusterId: aws.String(testPrimaryCacheNodeId), // Assuming testPrimaryCacheNodeId is defined
+		SnapshotName:   aws.String(testTimestampedIdentifier),
+		Tags:           expectedFakeTags,
+	}
 
 	type fields struct {
 		Client            client.Client
@@ -90,10 +119,10 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx        context.Context
-		snapshotCr *v1alpha1.RedisSnapshot
-		redisCr    *v1alpha1.Redis
-		cacheSvc   *mockElasticacheClient
+		ctx               context.Context
+		snapshotCr        *v1alpha1.RedisSnapshot
+		redisCr           *v1alpha1.Redis
+		elasticacheClient ElastiCacheAPI
 	}
 	tests := []struct {
 		name         string
@@ -102,7 +131,6 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 		wantSnapshot *providers.RedisSnapshotInstance
 		wantMsg      croType.StatusMessage
 		wantErr      string
-		wantFn       func(mock *mockElasticacheClient) error
 	}{
 		{
 			name: "test elasticache CreateSnapshot is called",
@@ -110,17 +138,26 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{}, nil
-					}
-					mock.describeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil
-					}
-					mock.createSnapshotFn = func(input *elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error) {
-						return &elasticache.CreateSnapshotOutput{}, nil
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   &testTimestampedIdentifier,
+								SnapshotStatus: aws.String("creating"),
+							},
+						},
+					}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil)
+					mockElasticache.On("CreateSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateSnapshotOutput{
+						Snapshot: &elasticachetypes.Snapshot{
+							SnapshotName:   &testTimestampedIdentifier,
+							SnapshotStatus: aws.String("creating"),
+						},
+					}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -129,45 +166,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			wantSnapshot: nil,
-			wantMsg:      "snapshot started",
-			wantFn: func(mock *mockElasticacheClient) error {
-				if len(mock.calls.CreateSnapshot) != 1 {
-					return errors.New("CreateSnapshot was not called")
-				}
-				defaultOrgTag := resources.GetOrganizationTag()
-				fakeTags := []*elasticache.Tag{
-					{
-						Key:   aws.String("test-key"),
-						Value: aws.String("test-value"),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "clusterID"),
-						Value: aws.String("test"),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "resource-type"),
-						Value: aws.String(""),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "resource-name"),
-						Value: aws.String("testtesttest000101010000000000UTC"),
-					},
-					{
-						Key:   aws.String(resources.TagManagedKey),
-						Value: aws.String("true"),
-					},
-				}
-				wantSnapshotInput := &elasticache.CreateSnapshotInput{
-					CacheClusterId: aws.String(testPrimaryCacheNodeId),
-					SnapshotName:   aws.String(testTimestampedIdentifier),
-					Tags:           fakeTags,
-				}
-				gotSnapshotInput := mock.calls.CreateSnapshot[0].In1
-				if !reflect.DeepEqual(gotSnapshotInput, wantSnapshotInput) {
-					return fmt.Errorf("wrong CreateSnapshotInput got = %+v, want = %+v", gotSnapshotInput, wantSnapshotInput)
-				}
-				return nil
-			},
+			wantMsg:      "current snapshot status : creating",
 		},
 		{
 			name: "test SnapshotInstance is returned when DescribeSnapshots returns snapshot with status available",
@@ -175,24 +174,30 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName:   &testTimestampedIdentifier,
-									SnapshotStatus: aws.String("available"),
-								},
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   &testTimestampedIdentifier,
+								SnapshotStatus: aws.String("available"),
 							},
-						}, nil
-					}
-					mock.describeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil
-					}
-					mock.createSnapshotFn = func(input *elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error) {
-						return &elasticache.CreateSnapshotOutput{}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil)
+					mockElasticache.On("CreateSnapshot",
+						mock.AnythingOfType("context.Context"),
+						mock.MatchedBy(func(input *elasticache.CreateSnapshotInput) bool {
+							isEqual := reflect.DeepEqual(input, expectedWantSnapshotInput)
+							if !isEqual {
+								t.Errorf("CreateSnapshot input mismatch: got = %+v, want = %+v", input, expectedWantSnapshotInput)
+							}
+							return isEqual
+						}),
+						mock.Anything,
+					).Return(&elasticache.CreateSnapshotOutput{}, nil).Once()
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
@@ -211,24 +216,20 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName:   &testTimestampedIdentifier,
-									SnapshotStatus: aws.String("creating"),
-								},
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   &testTimestampedIdentifier,
+								SnapshotStatus: aws.String("creating"),
 							},
-						}, nil
-					}
-					mock.describeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil
-					}
-					mock.createSnapshotFn = func(input *elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error) {
-						return &elasticache.CreateSnapshotOutput{}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil)
+					mockElasticache.On("CreateSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateSnapshotOutput{}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
@@ -244,11 +245,11 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(in *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{}, errors.New("")
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{}, errors.New(""))
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
@@ -265,17 +266,13 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{}, nil
-					}
-					mock.describeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil
-					}
-					mock.createSnapshotFn = func(input *elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error) {
-						return &elasticache.CreateSnapshotOutput{}, errors.New("")
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(buildDescribeReplicationGroupsOutput(testReplicationGroupStatusAvailable), nil)
+					mockElasticache.On("CreateSnapshot", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.CreateSnapshotOutput)(nil), errors.New(""))
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
@@ -300,17 +297,13 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 						Phase: croType.PhaseInProgress,
 					},
 				},
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{}, nil
-					}
-					mock.describeReplicationGroupsFn = func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-						return buildDescribeReplicationGroupsOutput(testReplicationGroupStatusNotAvailable), nil
-					}
-					mock.createSnapshotFn = func(input *elasticache.CreateSnapshotInput) (*elasticache.CreateSnapshotOutput, error) {
-						return &elasticache.CreateSnapshotOutput{}, nil
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(buildDescribeReplicationGroupsOutput(testReplicationGroupStatusNotAvailable), nil)
+					mockElasticache.On("CreateSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.CreateSnapshotOutput{}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestRedisSnapshotCR(), builtTestCredSecret(), buildTestInfra()),
@@ -330,7 +323,7 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			gotSnapshot, gotMsg, err := p.createRedisSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.redisCr, tt.args.cacheSvc)
+			gotSnapshot, gotMsg, err := p.createRedisSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.redisCr, tt.args.elasticacheClient)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("createPostgresSnapshot() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -340,11 +333,6 @@ func TestAWSRedisSnapshotProvider_createRedisSnapshot(t *testing.T) {
 			}
 			if tt.wantSnapshot != nil && !reflect.DeepEqual(tt.wantSnapshot, gotSnapshot) {
 				t.Errorf("createPostgresSnapshot() got = %+v, want %+v", gotSnapshot, tt.wantSnapshot)
-			}
-			if tt.wantFn != nil {
-				if err := tt.wantFn(tt.args.cacheSvc); err != nil {
-					t.Errorf("createPostgresSnapshot() err = %v", err)
-				}
 			}
 		})
 	}
@@ -374,10 +362,10 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx        context.Context
-		snapshotCr *v1alpha1.RedisSnapshot
-		redisCr    *v1alpha1.Redis
-		cacheSvc   *mockElasticacheClient
+		ctx               context.Context
+		snapshotCr        *v1alpha1.RedisSnapshot
+		redisCr           *v1alpha1.Redis
+		elasticacheClient ElastiCacheAPI
 	}
 	tests := []struct {
 		name    string
@@ -385,7 +373,6 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 		args    args
 		want    croType.StatusMessage
 		wantErr string
-		wantFn  func(mock *mockElasticacheClient) error
 	}{
 		{
 			name: "test elasticache DeleteSnapshot is called",
@@ -401,21 +388,31 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 					},
 				},
 				redisCr: buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName:   &testTimestampedIdentifier,
-									SnapshotStatus: aws.String("available"),
-								},
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   &testTimestampedIdentifier,
+								SnapshotStatus: aws.String("available"),
 							},
-						}, nil
+						},
+					}, nil)
+					wantDeleteSnapshotInput := &elasticache.DeleteSnapshotInput{
+						SnapshotName: aws.String(testTimestampedIdentifier),
 					}
-					mock.deleteSnapshotFn = func(input *elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error) {
-						return &elasticache.DeleteSnapshotOutput{}, nil
-					}
-				}),
+					mockElasticache.On("DeleteSnapshot", mock.Anything,
+						mock.MatchedBy(func(input *elasticache.DeleteSnapshotInput) bool {
+							isEqual := reflect.DeepEqual(input, wantDeleteSnapshotInput)
+							if !isEqual {
+								t.Errorf("DeleteSnapshot input mismatch: got = %+v, want = %+v", input, wantDeleteSnapshotInput)
+							}
+							return isEqual
+						}),
+						mock.Anything,
+					).Return(&elasticache.DeleteSnapshotOutput{}, nil).Once()
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -424,19 +421,6 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			want: "snapshot deletion started",
-			wantFn: func(mock *mockElasticacheClient) error {
-				if len(mock.calls.DeleteSnapshot) != 1 {
-					return errors.New("DeleteSnapshot was not called")
-				}
-				wantDeleteSnapshotInput := &elasticache.DeleteSnapshotInput{
-					SnapshotName: aws.String(testTimestampedIdentifier),
-				}
-				gotDeleteSnapshotInput := mock.calls.DeleteSnapshot[0].In1
-				if !reflect.DeepEqual(gotDeleteSnapshotInput, wantDeleteSnapshotInput) {
-					return fmt.Errorf("wrong DeleteSnapshotInput got = %+v, want = %+v", gotDeleteSnapshotInput, wantDeleteSnapshotInput)
-				}
-				return nil
-			},
 		},
 		{
 			name: "test returns snapshot deleted when snapshot instance is not found",
@@ -444,16 +428,14 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{},
-						}, nil
-					}
-					mock.deleteSnapshotFn = func(input *elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error) {
-						return &elasticache.DeleteSnapshotOutput{}, nil
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{},
+					}, nil)
+					mockElasticache.On("DeleteSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteSnapshotOutput{}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -469,13 +451,13 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestRedisSnapshotCR(),
 				redisCr:    buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{},
-						}, errors.New("")
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{},
+					}, errors.New(""))
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -500,21 +482,19 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 					},
 				},
 				redisCr: buildTestRedisCR(),
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName:   &testTimestampedIdentifier,
-									SnapshotStatus: aws.String("available"),
-								},
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   &testTimestampedIdentifier,
+								SnapshotStatus: aws.String("available"),
 							},
-						}, nil
-					}
-					mock.deleteSnapshotFn = func(input *elasticache.DeleteSnapshotInput) (*elasticache.DeleteSnapshotOutput, error) {
-						return &elasticache.DeleteSnapshotOutput{}, errors.New("")
-					}
-				}),
+						},
+					}, nil)
+					mockElasticache.On("DeleteSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DeleteSnapshotOutput{}, errors.New(""))
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -534,18 +514,13 @@ func TestAWSRedisSnapshotProvider_deleteRedisSnapshot(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRedisSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.redisCr, tt.args.cacheSvc)
+			got, err := p.deleteRedisSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.redisCr, tt.args.elasticacheClient)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("deletePostgresSnapshot() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("deletePostgresSnapshot() got = %+v, want %v", got, tt.want)
-			}
-			if tt.wantFn != nil {
-				if err := tt.wantFn(tt.args.cacheSvc); err != nil {
-					t.Errorf("deletePostgresSnapshot() err = %v", err)
-				}
 			}
 		})
 	}
@@ -573,32 +548,34 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		cacheSvc     *mockElasticacheClient
-		snapshotName string
+		ctx               context.Context
+		elasticacheClient ElastiCacheAPI
+		snapshotName      string
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    *elasticache.Snapshot
+		want    *elasticachetypes.Snapshot
 		wantErr string
 	}{
 		{
 			name: "test findSnapshotInstance returns the snapshotInstance",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{
-								{
-									SnapshotName:   aws.String(testIdentifier),
-									SnapshotStatus: aws.String("available"),
-								},
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{
+							{
+								SnapshotName:   aws.String(testIdentifier),
+								SnapshotStatus: aws.String("available"),
 							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -606,7 +583,7 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 			},
-			want: &elasticache.Snapshot{
+			want: &elasticachetypes.Snapshot{
 				SnapshotName:   aws.String(testIdentifier),
 				SnapshotStatus: aws.String("available"),
 			},
@@ -614,14 +591,15 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test returns nil when no snapshots are found",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{},
-						}, nil
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{},
+					}, nil)
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -634,14 +612,15 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test an error is returned when DescribeSnapshots fails",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{},
-						}, errors.New("error msg")
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{},
+					}, errors.New("error msg"))
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -655,15 +634,17 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test an error is not returned when DescribeSnapshots fails with a SnapshotNotFound error",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				cacheSvc: buildMockElasticacheClient(func(mock *mockElasticacheClient) {
-					mock.describeSnapshotsFn = func(input *elasticache.DescribeSnapshotsInput) (*elasticache.DescribeSnapshotsOutput, error) {
-						errorMsg := ""
-						return &elasticache.DescribeSnapshotsOutput{
-							Snapshots: []*elasticache.Snapshot{},
-						}, awserr.New("SnapshotNotFound", errorMsg, errors.New(errorMsg))
-					}
-				}),
+				elasticacheClient: func() ElastiCacheAPI {
+					mockElasticache := new(mock_ElasticacheClient)
+					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
+						Snapshots: []elasticachetypes.Snapshot{},
+					}, &elasticachetypes.SnapshotNotFoundFault{
+						Message: aws.String(""),
+					})
+					return mockElasticache
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -682,7 +663,7 @@ func TestAWSRedisSnapshotProvider_findSnapshotInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.findSnapshotInstance(tt.args.cacheSvc, tt.args.snapshotName)
+			got, err := p.findSnapshotInstance(tt.args.ctx, tt.args.elasticacheClient, tt.args.snapshotName)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("findSnapshotInstance() error = %v, wantErr = %v", err, tt.wantErr)
 				return

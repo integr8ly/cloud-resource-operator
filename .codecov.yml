@@ -14,6 +14,9 @@ coverage:
     - "pkg/providers/types.go"
     - "pkg/client/fake"
     - "pkg/providers/gcp/gcpiface"
+    - "pkg/providers/aws/aws_interface.go"
+    - "pkg/providers/aws/aws_wrapper.go"
+    - "pkg/providers/aws/aws_mock.go"
 
   status:
     project:

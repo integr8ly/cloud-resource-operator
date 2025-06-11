@@ -3,20 +3,21 @@ package aws
 import (
 	"context"
 	"errors"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"github.com/stretchr/testify/mock"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"reflect"
 	"testing"
 
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
-	"github.com/integr8ly/cloud-resource-operator/pkg/moq/moq_aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,13 @@ func buildProviderMetricType(modifyFn func(*providers.CloudProviderMetricType)) 
 	return *mock
 }
 
+type mockCloudWatchClient struct {
+	mock.Mock
+	cloudwatch.Client
+	// Define function fields to mock specific method calls
+	getMetricDataFn func(ctx context.Context, input *cloudwatch.GetMetricDataInput, opts ...func(*rds.Options)) (*cloudwatch.GetMetricDataOutput, error)
+}
+
 func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 	scheme, err := buildTestScheme()
 	if err != nil {
@@ -60,10 +68,10 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		ctx           context.Context
-		cloudWatchApi cloudwatchiface.CloudWatchAPI
-		postgres      *v1alpha1.Postgres
-		metricTypes   []providers.CloudProviderMetricType
+		ctx              context.Context
+		cloudWatchClient CloudWatchAPI
+		postgres         *v1alpha1.Postgres
+		metricTypes      []providers.CloudProviderMetricType
 	}
 	tests := []struct {
 		name    string
@@ -82,20 +90,21 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{
-							MetricDataResults: []*cloudwatch.MetricDataResult{
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.Id = aws.String(testMetricName)
-									result.Values = []*float64{
-										aws.Float64(testMetricValue),
-									}
-								}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+						MetricDataResults: []cloudwatchtypes.MetricDataResult{
+							cloudwatchtypes.MetricDataResult{
+								Id: aws.String(testMetricName),
+								Values: []float64{
+									testMetricValue,
+								},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
 							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					return mockCloudWatch
+				}(),
 				postgres: buildTestPostgresCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -120,23 +129,24 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{
-							MetricDataResults: []*cloudwatch.MetricDataResult{
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.Id = aws.String(testMetricName)
-									result.Values = []*float64{
-										aws.Float64(testMetricValue),
-									}
-								}),
-								moq_aws.BuildMockMetricDataResult(func(result *cloudwatch.MetricDataResult) {
-									result.StatusCode = aws.String(cloudwatch.StatusCodeInternalError)
-								}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{
+						MetricDataResults: []cloudwatchtypes.MetricDataResult{
+							{
+								Id: aws.String(testMetricName),
+								Values: []float64{
+									testMetricValue,
+								},
+								StatusCode: cloudwatchtypes.StatusCodeComplete,
 							},
-						}, nil
-					}
-				}),
+							{
+								StatusCode: cloudwatchtypes.StatusCodeInternalError,
+							},
+						},
+					}, nil)
+					return mockCloudWatch
+				}(),
 				postgres: buildTestPostgresCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -161,11 +171,11 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				cloudWatchApi: moq_aws.BuildMockCloudWatchClient(func(watchClient *moq_aws.MockCloudWatchClient) {
-					watchClient.GetMetricDataFn = func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-						return &cloudwatch.GetMetricDataOutput{}, nil
-					}
-				}),
+				cloudWatchClient: func() CloudWatchAPI {
+					mockCloudWatch := new(mock_CloudWatchClient)
+					mockCloudWatch.On("GetMetricData", mock.Anything, mock.Anything, mock.Anything).Return(&cloudwatch.GetMetricDataOutput{}, nil)
+					return mockCloudWatch
+				}(),
 				postgres: buildTestPostgresCR(),
 				metricTypes: []providers.CloudProviderMetricType{
 					buildProviderMetricType(func(metricType *providers.CloudProviderMetricType) {}),
@@ -182,7 +192,7 @@ func TestPostgresMetricsProvider_scrapeRDSCloudWatchMetricData(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.scrapeRDSCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchApi, tt.args.postgres, tt.args.metricTypes)
+			got, err := p.scrapeRDSCloudWatchMetricData(tt.args.ctx, tt.args.cloudWatchClient, tt.args.postgres, tt.args.metricTypes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("scrapeRDSCloudWatchMetricData() error = %v, wantErr %v", err, tt.wantErr)
 				return

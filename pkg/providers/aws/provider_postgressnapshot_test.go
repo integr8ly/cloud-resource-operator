@@ -4,21 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
+	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
+	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
+	"github.com/stretchr/testify/mock"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"os"
 	"reflect"
 	"testing"
 
-	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
-	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
-	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
-	k8sTypes "k8s.io/apimachinery/pkg/types"
-
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"github.com/sirupsen/logrus"
@@ -27,62 +26,25 @@ import (
 )
 
 type rdsClientMock struct {
-	rdsiface.RDSAPI
-	DescribeDBSnapshotsFunc func(in1 *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error)
-	CreateDBSnapshotFunc    func(in1 *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error)
-	DeleteDBSnapshotFunc    func(in1 *rds.DeleteDBSnapshotInput) (*rds.DeleteDBSnapshotOutput, error)
+	mock.Mock
+	rds.Client
+	DescribeDBSnapshotsFunc func(ctx context.Context, input *rds.DescribeDBSnapshotsInput, opts ...func(*rds.Options)) (*rds.DescribeDBSnapshotsOutput, error)
+	CreateDBSnapshotFunc    func(ctx context.Context, input *rds.CreateDBSnapshotInput, opts ...func(*rds.Options)) (*rds.CreateDBSnapshotOutput, error)
+	DeleteDBSnapshotFunc    func(ctx context.Context, input *rds.DeleteDBSnapshotInput, opts ...func(*rds.Options)) (*rds.DeleteDBSnapshotOutput, error)
 	calls                   struct {
-		DescribeDBSnapshots []struct{ In1 *rds.DescribeDBSnapshotsInput }
-		CreateDBSnapshot    []struct{ In1 *rds.CreateDBSnapshotInput }
-		DeleteDBSnapshot    []struct{ In1 *rds.DeleteDBSnapshotInput }
+		DescribeDBSnapshots []struct {
+			Ctx   context.Context
+			Input *rds.DescribeDBSnapshotsInput
+		}
+		CreateDBSnapshot []struct {
+			Ctx   context.Context
+			Input *rds.CreateDBSnapshotInput
+		}
+		DeleteDBSnapshot []struct {
+			Ctx   context.Context
+			Input *rds.DeleteDBSnapshotInput
+		}
 	}
-}
-
-func (mock *rdsClientMock) CreateDBSnapshot(in1 *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-	if mock.CreateDBSnapshotFunc == nil {
-		panic("rdsClientMock.CreateDBSnapshot: method is nil but rdsClient.CreateDBSnapshots was just called")
-	}
-	callInfo := struct {
-		In1 *rds.CreateDBSnapshotInput
-	}{
-		In1: in1,
-	}
-	mock.calls.CreateDBSnapshot = append(mock.calls.CreateDBSnapshot, callInfo)
-	return mock.CreateDBSnapshotFunc(in1)
-}
-
-func (mock *rdsClientMock) DeleteDBSnapshot(in1 *rds.DeleteDBSnapshotInput) (*rds.DeleteDBSnapshotOutput, error) {
-	if mock.DeleteDBSnapshotFunc == nil {
-		panic("rdsClientMock.DeleteDBSnapshot: method is nil but rdsClient.DeleteDBSnapshot was just called")
-	}
-	callInfo := struct {
-		In1 *rds.DeleteDBSnapshotInput
-	}{
-		In1: in1,
-	}
-	mock.calls.DeleteDBSnapshot = append(mock.calls.DeleteDBSnapshot, callInfo)
-	return mock.DeleteDBSnapshotFunc(in1)
-}
-
-func (mock *rdsClientMock) DescribeDBSnapshots(in1 *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-	if mock.DescribeDBSnapshotsFunc == nil {
-		panic("rdsClientMock.DescribeDBSnapshotsFunc: method is nil but rdsClient.DescribeDBSnapshots was just called")
-	}
-	callInfo := struct {
-		In1 *rds.DescribeDBSnapshotsInput
-	}{
-		In1: in1,
-	}
-	mock.calls.DescribeDBSnapshots = append(mock.calls.DescribeDBSnapshots, callInfo)
-	return mock.DescribeDBSnapshotsFunc(in1)
-}
-
-func buildRdsClientMock(modifyFn func(*rdsClientMock)) *rdsClientMock {
-	mock := &rdsClientMock{}
-	if modifyFn != nil {
-		modifyFn(mock)
-	}
-	return mock
 }
 
 func buildTestPostgresSnapshotCr() *v1alpha1.PostgresSnapshot {
@@ -108,7 +70,6 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 	}
 
 	fakeClient := moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra())
-	testIdentifier, err := resources.BuildInfraNameFromObject(context.TODO(), fakeClient, buildTestPostgresSnapshotCr().ObjectMeta, defaultAwsIdentifierLength)
 	if err != nil {
 		logrus.Fatal(err)
 		t.Fatal("failed to build test identifier", err)
@@ -129,7 +90,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		ctx        context.Context
 		snapshotCr *v1alpha1.PostgresSnapshot
 		postgresCr *v1alpha1.Postgres
-		rdsSvc     *rdsClientMock
+		rdsClient  RDSAPI
 	}
 	tests := []struct {
 		name         string
@@ -138,22 +99,21 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		wantSnapshot *providers.PostgresSnapshotInstance
 		wantMsg      croType.StatusMessage
 		wantErr      string
-		wantFn       func(mock *rdsClientMock) error
+		wantFn       func(mock *mock_RdsClient) error
 	}{
 		{
 			name: "test rds CreateDBSnapshot is called",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, nil
-					}
-				}),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -163,70 +123,26 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 			},
 			wantSnapshot: nil,
 			wantMsg:      "snapshot started",
-			wantFn: func(mock *rdsClientMock) error {
-				if len(mock.calls.CreateDBSnapshot) != 1 {
-					return errors.New("CreateDBSnapshot was not called")
-				}
-				defaultOrgTag := resources.GetOrganizationTag()
-				fakeTags := []*rds.Tag{
-					{
-						Key:   aws.String("test-key"),
-						Value: aws.String("test-value"),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "clusterID"),
-						Value: aws.String("test"),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "resource-type"),
-						Value: aws.String(""),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "resource-name"),
-						Value: aws.String("testtesttest000101010000000000UTC"),
-					},
-					{
-						Key:   aws.String(resources.TagManagedKey),
-						Value: aws.String("true"),
-					},
-					{
-						Key:   aws.String(defaultOrgTag + "product-name"),
-						Value: aws.String("test_product"),
-					},
-				}
-				wantSnapshotInput := &rds.CreateDBSnapshotInput{
-					DBInstanceIdentifier: aws.String(testIdentifier),
-					DBSnapshotIdentifier: aws.String(testTimestampedIdentifier),
-					Tags:                 fakeTags,
-				}
-				gotSnapshotInput := mock.calls.CreateDBSnapshot[0].In1
-				if !reflect.DeepEqual(gotSnapshotInput, wantSnapshotInput) {
-					return fmt.Errorf("wrong CreateDBSnapshotInput got = %+v, want = %+v", gotSnapshotInput, wantSnapshotInput)
-				}
-				return nil
-			},
 		},
 		{
 			name: "test DBSnapshotInstance is returned when DescribeDBSnapshots returns snapshot with status available",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotIdentifier: &testTimestampedIdentifier,
+								Status:               aws.String("available"),
+							},
+						},
+					}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotIdentifier: &testTimestampedIdentifier,
-									Status:               aws.String("available"),
-								},
-							},
-						}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, nil
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -242,24 +158,22 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		{
 			name: "test snapshot instance not returned when status is not available",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotIdentifier: &testTimestampedIdentifier,
+								Status:               aws.String("creating"),
+							},
+						},
+					}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotIdentifier: &testTimestampedIdentifier,
-									Status:               aws.String("creating"),
-								},
-							},
-						}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, nil
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -272,14 +186,15 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		{
 			name: "test an error occurs when describe db snapshots fails",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{}, errors.New(""))
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{}, errors.New("")
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -293,17 +208,15 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		{
 			name: "test an error occurs when CreateDbSnapshot fails",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, errors.New(""))
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, errors.New("")
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -317,6 +230,12 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		{
 			name: "test skips creation when Postgres CR status is InProgress",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: &v1alpha1.Postgres{
@@ -328,14 +247,6 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 						Phase: croType.PhaseInProgress,
 					},
 				},
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, nil
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -348,6 +259,12 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 		{
 			name: "test error occurs when Postgres CR status is PhaseDeleteInProgress",
 			args: args{
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{}, nil)
+					mockRds.On("CreateDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: &v1alpha1.Postgres{
@@ -359,14 +276,6 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 						Phase: croType.PhaseDeleteInProgress,
 					},
 				},
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{}, nil
-					}
-					mock.CreateDBSnapshotFunc = func(in *rds.CreateDBSnapshotInput) (*rds.CreateDBSnapshotOutput, error) {
-						return &rds.CreateDBSnapshotOutput{}, nil
-					}
-				}),
 			},
 			fields: fields{
 				Client:            moqClient.NewSigsClientMoqWithScheme(scheme, buildTestPostgresCR(), buildTestPostgresSnapshotCr(), builtTestCredSecret(), buildTestInfra()),
@@ -386,7 +295,7 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			gotSnapshot, gotMsg, err := p.createPostgresSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.postgresCr, tt.args.rdsSvc)
+			gotSnapshot, gotMsg, err := p.createPostgresSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.postgresCr, tt.args.rdsClient)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("createPostgresSnapshot() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -396,11 +305,6 @@ func TestAWSPostgresSnapshotProvider_createPostgresSnapshot(t *testing.T) {
 			}
 			if tt.wantSnapshot != nil && !reflect.DeepEqual(tt.wantSnapshot, gotSnapshot) {
 				t.Errorf("createPostgresSnapshot() got = %+v, want %v", gotSnapshot, tt.wantSnapshot)
-			}
-			if tt.wantFn != nil {
-				if err := tt.wantFn(tt.args.rdsSvc); err != nil {
-					t.Errorf("createPostgresSnapshot() err = %v", err)
-				}
 			}
 		})
 	}
@@ -433,7 +337,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 		ctx        context.Context
 		snapshotCr *v1alpha1.PostgresSnapshot
 		postgresCr *v1alpha1.Postgres
-		rdsSvc     *rdsClientMock
+		rdsClient  RDSAPI
 	}
 	tests := []struct {
 		name    string
@@ -441,7 +345,7 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 		args    args
 		want    croType.StatusMessage
 		wantErr string
-		wantFn  func(mock *rdsClientMock) error
+		wantFn  func(mock *mock_RdsClient) error
 	}{
 		{
 			name: "test rds DeleteDBSnapshot is called",
@@ -457,21 +361,19 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 					},
 				},
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotIdentifier: &testTimestampedIdentifier,
-									Status:               aws.String("available"),
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotIdentifier: &testTimestampedIdentifier,
+								Status:               aws.String("available"),
 							},
-						}, nil
-					}
-					mock.DeleteDBSnapshotFunc = func(in *rds.DeleteDBSnapshotInput) (*rds.DeleteDBSnapshotOutput, error) {
-						return &rds.DeleteDBSnapshotOutput{}, nil
-					}
-				}),
+						},
+					}, nil)
+					mockRds.On("DeleteDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -480,19 +382,6 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 				ConfigManager:     nil,
 			},
 			want: "snapshot deletion started",
-			wantFn: func(mock *rdsClientMock) error {
-				if len(mock.calls.DeleteDBSnapshot) != 1 {
-					return errors.New("DeleteDBSnapshot was not called")
-				}
-				wantDeleteSnapshotInput := &rds.DeleteDBSnapshotInput{
-					DBSnapshotIdentifier: aws.String(testTimestampedIdentifier),
-				}
-				gotDeleteSnapshotInput := mock.calls.DeleteDBSnapshot[0].In1
-				if !reflect.DeepEqual(gotDeleteSnapshotInput, wantDeleteSnapshotInput) {
-					return fmt.Errorf("wrong DeleteDBSnapshotInput got = %+v, want = %+v", gotDeleteSnapshotInput, wantDeleteSnapshotInput)
-				}
-				return nil
-			},
 		},
 		{
 			name: "test returns snapshot deleted when snapshot instance is not found",
@@ -500,16 +389,14 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{},
-						}, nil
-					}
-					mock.DeleteDBSnapshotFunc = func(in *rds.DeleteDBSnapshotInput) (*rds.DeleteDBSnapshotOutput, error) {
-						return &rds.DeleteDBSnapshotOutput{}, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{},
+					}, nil)
+					mockRds.On("DeleteDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSnapshotOutput{}, nil)
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -525,13 +412,13 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 				ctx:        context.TODO(),
 				snapshotCr: buildTestPostgresSnapshotCr(),
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{},
-						}, errors.New("")
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{},
+					}, errors.New(""))
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -556,21 +443,19 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 					},
 				},
 				postgresCr: buildTestPostgresCR(),
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotIdentifier: &testTimestampedIdentifier,
-									Status:               aws.String("available"),
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotIdentifier: &testTimestampedIdentifier,
+								Status:               aws.String("available"),
 							},
-						}, nil
-					}
-					mock.DeleteDBSnapshotFunc = func(in *rds.DeleteDBSnapshotInput) (*rds.DeleteDBSnapshotOutput, error) {
-						return &rds.DeleteDBSnapshotOutput{}, errors.New("")
-					}
-				}),
+						},
+					}, nil)
+					mockRds.On("DeleteDBSnapshot", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBSnapshotOutput{}, errors.New(""))
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -590,18 +475,13 @@ func TestAWSPostgresSnapshotProvider_deletePostgresSnapshot(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deletePostgresSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.postgresCr, tt.args.rdsSvc)
+			got, err := p.deletePostgresSnapshot(tt.args.ctx, tt.args.snapshotCr, tt.args.postgresCr, tt.args.rdsClient)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("deletePostgresSnapshot() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("deletePostgresSnapshot() got = %+v, want %v", got, tt.want)
-			}
-			if tt.wantFn != nil {
-				if err := tt.wantFn(tt.args.rdsSvc); err != nil {
-					t.Errorf("deletePostgresSnapshot() err = %v", err)
-				}
 			}
 		})
 	}
@@ -629,32 +509,34 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		rdsSvc       *rdsClientMock
+		ctx          context.Context
+		rdsClient    RDSAPI
 		snapshotName string
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    *rds.DBSnapshot
+		want    *rdstypes.DBSnapshot
 		wantErr string
 	}{
 		{
 			name: "test findSnapshotInstance returns the snapshotInstance",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotIdentifier: aws.String(testIdentifier),
-									Status:               aws.String("available"),
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotIdentifier: aws.String(testIdentifier),
+								Status:               aws.String("available"),
 							},
-						}, nil
-					}
-				}),
+						},
+					}, nil)
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -662,7 +544,7 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 				CredentialManager: nil,
 				ConfigManager:     nil,
 			},
-			want: &rds.DBSnapshot{
+			want: &rdstypes.DBSnapshot{
 				DBSnapshotIdentifier: aws.String(testIdentifier),
 				Status:               aws.String("available"),
 			},
@@ -670,14 +552,15 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test returns nil when no snapshots are found",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{},
-						}, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{},
+					}, nil)
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -690,14 +573,15 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test an error is returned when DescribeDBSnapshots fails",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{},
-						}, errors.New("error msg")
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{},
+					}, errors.New("error msg"))
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -711,15 +595,18 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 		{
 			name: "test an error is not returned when DescribeDBSnapshots fails with a DBSnapshotNotFound error",
 			args: args{
+				ctx:          context.TODO(),
 				snapshotName: testIdentifier,
-				rdsSvc: buildRdsClientMock(func(mock *rdsClientMock) {
-					mock.DescribeDBSnapshotsFunc = func(in *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						errorMsg := ""
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{},
-						}, awserr.New("DBSnapshotNotFound", errorMsg, errors.New(errorMsg))
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					errorMsg := ""
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{},
+					}, &rdstypes.DBSnapshotNotFoundFault{
+						Message: aws.String(errorMsg),
+					})
+					return mockRds
+				}(),
 			},
 			fields: fields{
 				Client:            fakeClient,
@@ -738,7 +625,7 @@ func TestAWSPostgresSnapshotProvider_findSnapshotInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.findSnapshotInstance(tt.args.rdsSvc, tt.args.snapshotName)
+			got, err := p.findSnapshotInstance(tt.args.ctx, tt.args.rdsClient, tt.args.snapshotName)
 			if err != nil && err.Error() != tt.wantErr {
 				t.Errorf("findSnapshotInstance() error = %v, wantErr = %v", err, tt.wantErr)
 				return

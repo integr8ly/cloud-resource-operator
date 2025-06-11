@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/smithy-go"
+	"github.com/stretchr/testify/mock"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,14 +22,11 @@ import (
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	configv1 "github.com/openshift/api/config/v1"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
 	croApis "github.com/integr8ly/cloud-resource-operator/api"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
@@ -50,116 +50,9 @@ const (
 )
 
 var (
-	lockMockEc2ClientDescribeRouteTables       sync.RWMutex
-	lockMockEc2ClientDescribeSecurityGroups    sync.RWMutex
-	lockMockEc2ClientDescribeSubnets           sync.RWMutex
-	lockMockEc2ClientDescribeAvailabilityZones sync.RWMutex
-	lockMockEc2ClientDescribeVpcs              sync.RWMutex
-	lockMockEc2ClientCreateRoute               sync.RWMutex
-	snapshotARN                                = "test:arn"
-	snapshotIdentifier                         = "testIdentifier"
+	snapshotARN        = "test:arn"
+	snapshotIdentifier = "testIdentifier"
 )
-
-type mockRdsClient struct {
-	rdsiface.RDSAPI
-	modifyDBSubnetGroupFn               func(*rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error)
-	listTagsForResourceFn               func(*rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error)
-	removeTagsFromResourceFn            func(*rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error)
-	deleteDBSubnetGroupFn               func(*rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error)
-	addTagsToResourceFn                 func(*rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error)
-	describeDBSnapshotsFn               func(*rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error)
-	describeDBInstancesFn               func(*rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
-	describeDBSubnetGroupsFn            func(*rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
-	describePendingMaintenanceActionsFn func(*rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error)
-	applyPendingMaintenanceActionFn     func(*rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error)
-	modifyDBInstanceFn                  func(*rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
-}
-
-type mockEc2Client struct {
-	ec2iface.EC2API
-	firstSubnet     *ec2.Subnet
-	secondSubnet    *ec2.Subnet
-	subnets         []*ec2.Subnet
-	vpcs            []*ec2.Vpc
-	vpc             *ec2.Vpc
-	secGroups       []*ec2.SecurityGroup
-	azs             []*ec2.AvailabilityZone
-	wantErrList     bool
-	returnSecondSub bool
-	// new approach for manually defined mocks
-	// to allow for simple overrides in test table declarations
-	createTagsFn                    func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
-	describeVpcsFn                  func(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
-	describeSecurityGroupsFn        func(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
-	deleteSecurityGroupFn           func(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
-	describeVpcPeeringConnectionFn  func(*ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error)
-	createVpcPeeringConnectionFn    func(*ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error)
-	acceptVpcPeeringConnectionFn    func(*ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error)
-	deleteVpcPeeringConnectionFn    func(*ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error)
-	describeRouteTablesFn           func(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
-	createRouteFn                   func(*ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error)
-	deleteRouteFn                   func(*ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error)
-	createVpcFn                     func(*ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error)
-	deleteVpcFn                     func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error)
-	createSubnetFn                  func(*ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error)
-	describeInstanceTypeOfferingsFn func(*ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error)
-	WaitUntilVpcExistsFn            func(*ec2.DescribeVpcsInput) error
-	describeSubnetsFn               func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
-	describeAvailabilityZonesFn     func(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
-	createSecurityGroupFn           func(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error)
-	calls                           struct {
-		DescribeRouteTables []struct {
-			Tables *ec2.DescribeRouteTablesInput
-		}
-		DescribeSecurityGroups []struct {
-			Groups *ec2.DescribeSecurityGroupsInput
-		}
-		DescribeSubnets []struct {
-			Subnets *ec2.DescribeSubnetsInput
-		}
-		DescribeAvailabilityZones []struct {
-			AvailabilityZones *ec2.DescribeAvailabilityZonesInput
-		}
-		DescribeVpcs []struct {
-			Vpcs *ec2.DescribeVpcsInput
-		}
-		CreateRoute []struct {
-			Route *ec2.CreateRouteInput
-		}
-	}
-}
-
-func buildMockEc2Client(modifyFn func(*mockEc2Client)) *mockEc2Client {
-	mock := &mockEc2Client{}
-	mock.WaitUntilVpcExistsFn = func(input *ec2.DescribeVpcsInput) error {
-		return nil
-	}
-	mock.deleteVpcFn = func(*ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
-		return &ec2.DeleteVpcOutput{}, nil
-	}
-	mock.createTagsFn = func(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-		return &ec2.CreateTagsOutput{}, nil
-	}
-	mock.describeInstanceTypeOfferingsFn = func(input *ec2.DescribeInstanceTypeOfferingsInput) (output *ec2.DescribeInstanceTypeOfferingsOutput, e error) {
-		return &ec2.DescribeInstanceTypeOfferingsOutput{
-			InstanceTypeOfferings: []*ec2.InstanceTypeOffering{
-				{
-					Location: aws.String(defaultAzIdOne),
-				},
-				{
-					Location: aws.String(defaultAzIdTwo),
-				},
-			},
-		}, nil
-	}
-	mock.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-		return &ec2.DescribeSubnetsOutput{}, nil
-	}
-	if modifyFn != nil {
-		modifyFn(mock)
-	}
-	return mock
-}
 
 func buildMockRdsClient(modifyFn func(*mockRdsClient)) *mockRdsClient {
 	mock := &mockRdsClient{}
@@ -190,20 +83,20 @@ func buildTestSchemePostgresql() (*runtime.Scheme, error) {
 	return scheme, nil
 }
 
-func (m *mockRdsClient) DescribeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+func (m *mockRdsClient) DescribeDBInstances(ctx context.Context, input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
 	if m.describeDBInstancesFn == nil {
 		panic("mockEc2Client.DescribeDBInstances: method is nil")
 	}
-	return m.describeDBInstancesFn(input)
+	return m.describeDBInstancesFn(ctx, input)
 }
 
 func (m *mockRdsClient) CreateDBInstance(*rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error) {
 	return &rds.CreateDBInstanceOutput{}, nil
 }
 
-func (m *mockRdsClient) ModifyDBInstance(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
+func (m *mockRdsClient) ModifyDBInstance(ctx context.Context, input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
 	if m.modifyDBInstanceFn != nil {
-		return m.modifyDBInstanceFn(input)
+		return m.modifyDBInstanceFn(ctx, input)
 	}
 	return &rds.ModifyDBInstanceOutput{}, nil
 }
@@ -212,111 +105,77 @@ func (m *mockRdsClient) DeleteDBInstance(*rds.DeleteDBInstanceInput) (*rds.Delet
 	return &rds.DeleteDBInstanceOutput{}, nil
 }
 
-func (m *mockRdsClient) AddTagsToResource(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
+func (m *mockRdsClient) AddTagsToResource(ctx context.Context, input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
 	if resources.SafeStringDereference(input.ResourceName) == snapshotARN {
-		return m.addTagsToResourceFn(input)
+		return m.addTagsToResourceFn(ctx, input)
 	} else {
 		return &rds.AddTagsToResourceOutput{}, nil
 	}
 }
 
-func (m *mockRdsClient) DescribeDBSnapshots(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-	return m.describeDBSnapshotsFn(input)
+func (m *mockRdsClient) DescribeDBSnapshots(ctx context.Context, input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
+	return m.describeDBSnapshotsFn(ctx, input)
 }
 
-func (m *mockRdsClient) ApplyPendingMaintenanceAction(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
+func (m *mockRdsClient) ApplyPendingMaintenanceAction(ctx context.Context, input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
 	if m.applyPendingMaintenanceActionFn == nil {
 		panic("mockEc2Client.ApplyPendingMaintenanceAction: method is nil")
 	}
-	return m.applyPendingMaintenanceActionFn(input)
+	return m.applyPendingMaintenanceActionFn(ctx, input)
 }
 
-func (m *mockRdsClient) DescribePendingMaintenanceActions(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
+func (m *mockRdsClient) DescribePendingMaintenanceActions(ctx context.Context, input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
 	if m.describePendingMaintenanceActionsFn == nil {
 		panic("mockEc2Client.DescribePendingMaintenanceActions: method is nil")
 	}
-	return m.describePendingMaintenanceActionsFn(input)
+	return m.describePendingMaintenanceActionsFn(ctx, input)
 }
 
-func (m *mockRdsClient) DescribeDBSubnetGroups(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
+func (m *mockRdsClient) DescribeDBSubnetGroups(ctx context.Context, input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
 	if m.describeDBSubnetGroupsFn == nil {
 		panic("mockEc2Client.DescribeDBSubnetGroups: method is nil")
 	}
-	return m.describeDBSubnetGroupsFn(input)
+	return m.describeDBSubnetGroupsFn(ctx, input)
 }
 
 func (m *mockRdsClient) CreateDBSubnetGroup(*rds.CreateDBSubnetGroupInput) (*rds.CreateDBSubnetGroupOutput, error) {
 	return &rds.CreateDBSubnetGroupOutput{}, nil
 }
 
-func (m *mockRdsClient) ModifyDBSubnetGroup(input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
-	return m.modifyDBSubnetGroupFn(input)
+func (m *mockRdsClient) ModifyDBSubnetGroup(ctx context.Context, input *rds.ModifyDBSubnetGroupInput) (*rds.ModifyDBSubnetGroupOutput, error) {
+	return m.modifyDBSubnetGroupFn(ctx, input)
 }
 
-func (m *mockRdsClient) DeleteDBSubnetGroup(input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
-	return m.deleteDBSubnetGroupFn(input)
+func (m *mockRdsClient) DeleteDBSubnetGroup(ctx context.Context, input *rds.DeleteDBSubnetGroupInput) (*rds.DeleteDBSubnetGroupOutput, error) {
+	return m.deleteDBSubnetGroupFn(ctx, input)
 }
 
-func (m *mockRdsClient) ListTagsForResource(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
-	return m.listTagsForResourceFn(input)
+func (m *mockRdsClient) ListTagsForResource(ctx context.Context, input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
+	return m.listTagsForResourceFn(ctx, input)
 }
 
-func (m *mockRdsClient) RemoveTagsFromResource(input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
-	return m.removeTagsFromResourceFn(input)
+func (m *mockRdsClient) RemoveTagsFromResource(ctx context.Context, input *rds.RemoveTagsFromResourceInput) (*rds.RemoveTagsFromResourceOutput, error) {
+	return m.removeTagsFromResourceFn(ctx, input)
 }
 
-func (m *mockEc2Client) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-	if m.describeSubnetsFn == nil {
-		panic("mockEc2Client.DescribeSubnets: method is nil")
-	}
-	callInfo := struct {
-		Subnets *ec2.DescribeSubnetsInput
-	}{
-		Subnets: input,
-	}
-
-	lockMockEc2ClientDescribeSubnets.Lock()
-	m.calls.DescribeSubnets = append(m.calls.DescribeSubnets, callInfo)
-	lockMockEc2ClientDescribeSubnets.Unlock()
-
-	return m.describeSubnetsFn(input)
+func (m *mockEc2Client) WaitUntilVpcExists(ctx context.Context, input *ec2.DescribeVpcsInput) error {
+	return m.WaitUntilVpcExistsFn(ctx, input)
 }
 
-func (m *mockEc2Client) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	if m.describeVpcsFn == nil {
-		panic("mockEc2Client.DescribeVpcs: method is nil")
-	}
-	callInfo := struct {
-		Vpcs *ec2.DescribeVpcsInput
-	}{
-		Vpcs: input,
-	}
-
-	lockMockEc2ClientDescribeVpcs.Lock()
-	m.calls.DescribeVpcs = append(m.calls.DescribeVpcs, callInfo)
-	lockMockEc2ClientDescribeVpcs.Unlock()
-
-	return m.describeVpcsFn(input)
-}
-
-func (m *mockEc2Client) WaitUntilVpcExists(input *ec2.DescribeVpcsInput) error {
-	return m.WaitUntilVpcExistsFn(input)
-}
-
-func (m *mockEc2Client) CreateVpc(input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
+func (m *mockEc2Client) CreateVpc(ctx context.Context, input *ec2.CreateVpcInput) (*ec2.CreateVpcOutput, error) {
 	if m.createVpcFn == nil {
 		panic("mockEc2Client.CreateVpc: method is nil")
 	}
-	return m.createVpcFn(input)
+	return m.createVpcFn(ctx, input)
 }
 
-func (m *mockEc2Client) DeleteVpc(input *ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
-	return m.deleteVpcFn(input)
+func (m *mockEc2Client) DeleteVpc(ctx context.Context, input *ec2.DeleteVpcInput) (*ec2.DeleteVpcOutput, error) {
+	return m.deleteVpcFn(ctx, input)
 }
 
-func (m *mockEc2Client) CreateSubnet(input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
+func (m *mockEc2Client) CreateSubnet(ctx context.Context, input *ec2.CreateSubnetInput) (*ec2.CreateSubnetOutput, error) {
 	if m.createSubnetFn != nil {
-		return m.createSubnetFn(input)
+		return m.createSubnetFn(ctx, input)
 	}
 	if m.returnSecondSub {
 		return &ec2.CreateSubnetOutput{
@@ -344,48 +203,44 @@ func (m *mockEc2Client) CreateRouteCalls() []struct {
 		Route *ec2.CreateRouteInput
 	}
 	lockMockEc2ClientCreateRoute.RLock()
-	calls = m.calls.CreateRoute
+	for _, routeInput := range m.calls.CreateRoute {
+		calls = append(calls, struct {
+			Route *ec2.CreateRouteInput
+		}{
+			Route: &routeInput,
+		})
+	}
 	lockMockEc2ClientCreateRoute.RUnlock()
 
 	return calls
 }
 
-func (m *mockEc2Client) CreateRoute(input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
+func (m *mockEc2Client) CreateRoute(ctx context.Context, input *ec2.CreateRouteInput) (*ec2.CreateRouteOutput, error) {
 	if m.createRouteFn == nil {
 		panic("mockEc2Client.DescribeRouteTables: method is nil")
 	}
-	callInfo := struct {
-		Route *ec2.CreateRouteInput
-	}{
-		Route: input,
-	}
 
 	lockMockEc2ClientCreateRoute.Lock()
-	m.calls.CreateRoute = append(m.calls.CreateRoute, callInfo)
+	m.calls.CreateRoute = append(m.calls.CreateRoute, *input)
 	lockMockEc2ClientCreateRoute.Unlock()
 
-	return m.createRouteFn(input)
+	return m.createRouteFn(ctx, input)
 }
 
-func (m *mockEc2Client) DeleteRoute(input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
-	return m.deleteRouteFn(input)
+func (m *mockEc2Client) DeleteRoute(ctx context.Context, input *ec2.DeleteRouteInput) (*ec2.DeleteRouteOutput, error) {
+	return m.deleteRouteFn(ctx, input)
 }
 
-func (m *mockEc2Client) DescribeRouteTables(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+func (m *mockEc2Client) DescribeRouteTables(ctx context.Context, input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 	if m.describeRouteTablesFn == nil {
 		panic("mockEc2Client.DescribeRouteTables: method is nil")
 	}
-	callInfo := struct {
-		Tables *ec2.DescribeRouteTablesInput
-	}{
-		Tables: input,
-	}
 
 	lockMockEc2ClientDescribeRouteTables.Lock()
-	m.calls.DescribeRouteTables = append(m.calls.DescribeRouteTables, callInfo)
+	m.calls.DescribeRouteTables = append(m.calls.DescribeRouteTables, *input)
 	lockMockEc2ClientDescribeRouteTables.Unlock()
 
-	return m.describeRouteTablesFn(input)
+	return m.describeRouteTablesFn(ctx, input)
 }
 
 func (m *mockEc2Client) DescribeRouteTablesCalls() []struct {
@@ -395,26 +250,27 @@ func (m *mockEc2Client) DescribeRouteTablesCalls() []struct {
 		Tables *ec2.DescribeRouteTablesInput
 	}
 	lockMockEc2ClientDescribeRouteTables.RLock()
-	calls = m.calls.DescribeRouteTables
+	for _, tableInput := range m.calls.DescribeRouteTables {
+		calls = append(calls, struct {
+			Tables *ec2.DescribeRouteTablesInput
+		}{
+			Tables: &tableInput,
+		})
+	}
 	lockMockEc2ClientDescribeRouteTables.RUnlock()
 
 	return calls
 }
 
-func (m *mockEc2Client) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+func (m *mockEc2Client) DescribeSecurityGroups(ctx context.Context, input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 	if m.describeSecurityGroupsFn == nil {
 		panic("mockEc2Client.DescribeSecurityGroups: method is nil")
 	}
-	callInfo := struct {
-		Groups *ec2.DescribeSecurityGroupsInput
-	}{
-		Groups: input,
-	}
 	lockMockEc2ClientDescribeSecurityGroups.Lock()
-	m.calls.DescribeSecurityGroups = append(m.calls.DescribeSecurityGroups, callInfo)
+	m.calls.DescribeSecurityGroups = append(m.calls.DescribeSecurityGroups, *input)
 	lockMockEc2ClientDescribeSecurityGroups.Unlock()
 
-	return m.describeSecurityGroupsFn(input)
+	return m.describeSecurityGroupsFn(ctx, input)
 }
 
 func (m *mockEc2Client) DescribeSecurityGroupsCalls() []struct {
@@ -425,65 +281,66 @@ func (m *mockEc2Client) DescribeSecurityGroupsCalls() []struct {
 	}
 
 	lockMockEc2ClientDescribeSecurityGroups.RLock()
-	calls = m.calls.DescribeSecurityGroups
+	for _, groupInput := range m.calls.DescribeSecurityGroups {
+		calls = append(calls, struct {
+			Groups *ec2.DescribeSecurityGroupsInput
+		}{
+			Groups: &groupInput,
+		})
+	}
 	lockMockEc2ClientDescribeSecurityGroups.RUnlock()
 
 	return calls
 }
 
-func (m *mockEc2Client) CreateSecurityGroup(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+func (m *mockEc2Client) CreateSecurityGroup(ctx context.Context, input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
 	if m.createSecurityGroupFn == nil {
 		panic("mockEc2Client.CreateSecurityGroup: method is nil")
 	}
-	return m.createSecurityGroupFn(input)
+	return m.createSecurityGroupFn(ctx, input)
 }
 
-func (m *mockEc2Client) DeleteSecurityGroup(input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
-	return m.deleteSecurityGroupFn(input)
+func (m *mockEc2Client) DeleteSecurityGroup(ctx context.Context, input *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+	return m.deleteSecurityGroupFn(ctx, input)
 }
 
 func (m *mockEc2Client) AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
 	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
 }
 
-func (m *mockEc2Client) DescribeAvailabilityZones(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+func (m *mockEc2Client) DescribeAvailabilityZones(ctx context.Context, input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 	if m.describeAvailabilityZonesFn == nil {
 		panic("mockEc2Client.DescribeAvailabilityZones: method is nil")
 	}
-	callInfo := struct {
-		AvailabilityZones *ec2.DescribeAvailabilityZonesInput
-	}{
-		AvailabilityZones: input,
-	}
 	lockMockEc2ClientDescribeAvailabilityZones.Lock()
-	m.calls.DescribeAvailabilityZones = append(m.calls.DescribeAvailabilityZones, callInfo)
+	m.calls.DescribeAvailabilityZones = append(m.calls.DescribeAvailabilityZones, *input)
 	lockMockEc2ClientDescribeAvailabilityZones.Unlock()
 
-	return m.describeAvailabilityZonesFn(input)
+	return m.describeAvailabilityZonesFn(ctx, input)
 }
 
-func (m *mockEc2Client) DescribeVpcPeeringConnections(input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
-	return m.describeVpcPeeringConnectionFn(input)
+func (m *mockEc2Client) DescribeVpcPeeringConnections(ctx context.Context, input *ec2.DescribeVpcPeeringConnectionsInput) (*ec2.DescribeVpcPeeringConnectionsOutput, error) {
+	return m.describeVpcPeeringConnectionFn(ctx, input)
 }
 
-func (m *mockEc2Client) CreateVpcPeeringConnection(input *ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
-	return m.createVpcPeeringConnectionFn(input)
+func (m *mockEc2Client) CreateVpcPeeringConnection(ctx context.Context, input *ec2.CreateVpcPeeringConnectionInput) (*ec2.CreateVpcPeeringConnectionOutput, error) {
+	return m.createVpcPeeringConnectionFn(ctx, input)
 }
 
-func (m *mockEc2Client) CreateTags(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-	return m.createTagsFn(input)
+func (m *mockEc2Client) CreateTags(ctx context.Context, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return m.createTagsFn(ctx, input)
 }
 
-func (m *mockEc2Client) AcceptVpcPeeringConnection(input *ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
-	return m.acceptVpcPeeringConnectionFn(input)
+func (m *mockEc2Client) AcceptVpcPeeringConnection(ctx context.Context, input *ec2.AcceptVpcPeeringConnectionInput) (*ec2.AcceptVpcPeeringConnectionOutput, error) {
+	return m.acceptVpcPeeringConnectionFn(ctx, input)
 }
 
-func (m *mockEc2Client) DeleteVpcPeeringConnection(input *ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
-	return m.deleteVpcPeeringConnectionFn(input)
+func (m *mockEc2Client) DeleteVpcPeeringConnection(ctx context.Context, input *ec2.DeleteVpcPeeringConnectionInput) (*ec2.DeleteVpcPeeringConnectionOutput, error) {
+	return m.deleteVpcPeeringConnectionFn(ctx, input)
 }
 
-func (m *mockEc2Client) DescribeInstanceTypeOfferings(input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error) {
-	return m.describeInstanceTypeOfferingsFn(input)
+func (m *mockEc2Client) DescribeInstanceTypeOfferings(ctx context.Context, input *ec2.DescribeInstanceTypeOfferingsInput) (*ec2.DescribeInstanceTypeOfferingsOutput, error) {
+	return m.describeInstanceTypeOfferingsFn(ctx, input)
 }
 
 // the only place this is called is the exposePostgresMetrics func which is not being tested
@@ -500,7 +357,7 @@ func buildMockNetworkManager() *NetworkManagerMock {
 		GetClusterNetworkPeeringFunc: func(ctx context.Context) (*NetworkPeering, error) {
 			return &NetworkPeering{}, nil
 		},
-		DeleteNetworkPeeringFunc: func(np *NetworkPeering) error {
+		DeleteNetworkPeeringFunc: func(ctx context.Context, np *NetworkPeering) error {
 			return nil
 		},
 		DeleteNetworkFunc: func(ctx context.Context) error {
@@ -610,8 +467,8 @@ func builtTestCredSecret() *corev1.Secret {
 	}
 }
 
-func buildDbInstanceGroupPending() []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildDbInstanceGroupPending() []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier: aws.String("test-id"),
 			AvailabilityZone:     aws.String("test-availabilityZone"),
@@ -621,8 +478,8 @@ func buildDbInstanceGroupPending() []*rds.DBInstance {
 	}
 }
 
-func buildDbInstanceGroupAvailable() []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildDbInstanceGroupAvailable() []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier:       aws.String("test-id"),
 			DBInstanceStatus:           aws.String("available"),
@@ -635,8 +492,8 @@ func buildDbInstanceGroupAvailable() []*rds.DBInstance {
 	}
 }
 
-func buildDbInstanceDeletionProtection() []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildDbInstanceDeletionProtection() []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier: aws.String("test-id"),
 			DBInstanceStatus:     aws.String("available"),
@@ -647,8 +504,8 @@ func buildDbInstanceDeletionProtection() []*rds.DBInstance {
 	}
 }
 
-func buildAvailableDBInstance(testID string) []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildAvailableDBInstance(testID string) []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier:       aws.String(testID),
 			DBInstanceStatus:           aws.String("available"),
@@ -659,27 +516,27 @@ func buildAvailableDBInstance(testID string) []*rds.DBInstance {
 			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
 			MasterUsername:             aws.String(defaultAwsPostgresUser),
 			DBName:                     aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			BackupRetentionPeriod:      aws.Int32(defaultAwsBackupRetentionPeriod),
 			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+			AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+			MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 			EngineVersion:              aws.String(defaultAwsEngineVersion),
 			Engine:                     aws.String(defaultAwsEngine),
 			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 			MultiAZ:                    aws.Bool(true),
-			Endpoint: &rds.Endpoint{
+			Endpoint: &rdstypes.Endpoint{
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),
-				Port:         aws.Int64(defaultAwsPostgresPort),
+				Port:         aws.Int32(defaultAwsPostgresPort),
 			},
 		},
 	}
 }
 
-func buildAvailableDBInstanceVersion(testID string, version string) []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildAvailableDBInstanceVersion(testID string, version string) []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier:       aws.String(testID),
 			DBInstanceStatus:           aws.String("available"),
@@ -690,27 +547,27 @@ func buildAvailableDBInstanceVersion(testID string, version string) []*rds.DBIns
 			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
 			MasterUsername:             aws.String(defaultAwsPostgresUser),
 			DBName:                     aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			BackupRetentionPeriod:      aws.Int32(defaultAwsBackupRetentionPeriod),
 			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+			AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+			MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 			EngineVersion:              aws.String(version),
 			Engine:                     aws.String(defaultAwsEngine),
 			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 			MultiAZ:                    aws.Bool(true),
-			Endpoint: &rds.Endpoint{
+			Endpoint: &rdstypes.Endpoint{
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),
-				Port:         aws.Int64(defaultAwsPostgresPort),
+				Port:         aws.Int32(defaultAwsPostgresPort),
 			},
 		},
 	}
 }
 
-func buildPendingDBInstance(testID string) []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildPendingDBInstance(testID string) []rdstypes.DBInstance {
+	return []rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier: aws.String(testID),
 			DBInstanceStatus:     aws.String("pending"),
@@ -723,12 +580,12 @@ func buildAvailableCreateInput(testID string) *rds.CreateDBInstanceInput {
 	return &rds.CreateDBInstanceInput{
 		DBInstanceIdentifier:       aws.String(testID),
 		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                       aws.Int64(defaultAwsPostgresPort),
-		BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+		Port:                       aws.Int32(defaultAwsPostgresPort),
+		BackupRetentionPeriod:      aws.Int32(defaultAwsBackupRetentionPeriod),
 		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+		AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+		MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
@@ -740,12 +597,12 @@ func buildRequiresModificationsCreateInput(testID string) *rds.CreateDBInstanceI
 	return &rds.CreateDBInstanceInput{
 		DBInstanceIdentifier:       aws.String(testID),
 		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                       aws.Int64(123),
-		BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+		Port:                       aws.Int32(123),
+		BackupRetentionPeriod:      aws.Int32(defaultAwsBackupRetentionPeriod),
 		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+		AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+		MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
@@ -757,12 +614,12 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 	return &rds.CreateDBInstanceInput{
 		DBInstanceIdentifier:       aws.String(testID),
 		DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
-		Port:                       aws.Int64(123),
-		BackupRetentionPeriod:      aws.Int64(123),
+		Port:                       aws.Int32(123),
+		BackupRetentionPeriod:      aws.Int32(123),
 		DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 		PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-		AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-		MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+		AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+		MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 		EngineVersion:              aws.String(defaultAwsEngineVersion),
 		PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 		PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
@@ -770,8 +627,8 @@ func buildNewRequiresModificationsCreateInput(testID string) *rds.CreateDBInstan
 	}
 }
 
-func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
-	return []*rds.DBInstance{
+func buildPendingModifiedDBInstance(testID string) []*rdstypes.DBInstance {
+	return []*rdstypes.DBInstance{
 		{
 			DBInstanceIdentifier:       aws.String(testID),
 			DBInstanceStatus:           aws.String("available"),
@@ -781,34 +638,34 @@ func buildPendingModifiedDBInstance(testID string) []*rds.DBInstance {
 			DeletionProtection:         aws.Bool(defaultAwsPostgresDeletionProtection),
 			MasterUsername:             aws.String(defaultAwsPostgresUser),
 			DBName:                     aws.String(defaultAwsPostgresDatabase),
-			BackupRetentionPeriod:      aws.Int64(defaultAwsBackupRetentionPeriod),
+			BackupRetentionPeriod:      aws.Int32(defaultAwsBackupRetentionPeriod),
 			DBInstanceClass:            aws.String(defaultAwsDBInstanceClass),
 			PubliclyAccessible:         aws.Bool(defaultAwsPubliclyAccessible),
-			AllocatedStorage:           aws.Int64(defaultAwsAllocatedStorage),
-			MaxAllocatedStorage:        aws.Int64(defaultAwsMaxAllocatedStorage),
+			AllocatedStorage:           aws.Int32(defaultAwsAllocatedStorage),
+			MaxAllocatedStorage:        aws.Int32(defaultAwsMaxAllocatedStorage),
 			EngineVersion:              aws.String(defaultAwsEngineVersion),
 			Engine:                     aws.String(defaultAwsEngine),
 			PreferredMaintenanceWindow: aws.String(testPreferredMaintenanceWindow),
 			PreferredBackupWindow:      aws.String(testPreferredBackupWindow),
 			MultiAZ:                    aws.Bool(true),
-			Endpoint: &rds.Endpoint{
+			Endpoint: &rdstypes.Endpoint{
 				Address:      aws.String("blob"),
 				HostedZoneId: aws.String("blog"),
-				Port:         aws.Int64(defaultAwsPostgresPort),
+				Port:         aws.Int32(defaultAwsPostgresPort),
 			},
-			PendingModifiedValues: &rds.PendingModifiedValues{
-				Port: aws.Int64(123),
+			PendingModifiedValues: &rdstypes.PendingModifiedValues{
+				Port: aws.Int32(123),
 			},
 		},
 	}
 }
 
-func buildVpcs() []*ec2.Vpc {
-	return []*ec2.Vpc{
+func buildVpcs() []ec2types.Vpc {
+	return []ec2types.Vpc{
 		{
 			VpcId:     aws.String(defaultVpcId),
 			CidrBlock: aws.String("10.0.0.0/16"),
-			Tags: []*ec2.Tag{
+			Tags: []ec2types.Tag{
 				{
 					Key:   aws.String("test-vpc"),
 					Value: aws.String("test-vpc"),
@@ -818,16 +675,16 @@ func buildVpcs() []*ec2.Vpc {
 	}
 }
 
-func buildAZ() []*ec2.AvailabilityZone {
-	return []*ec2.AvailabilityZone{
+func buildAZ() []ec2types.AvailabilityZone {
+	return []ec2types.AvailabilityZone{
 		{
 			ZoneName: aws.String("test"),
-			State:    aws.String("available"),
+			State:    "available",
 		},
 	}
 }
-func buildSecurityGroup(modifyFn func(cluster *ec2.SecurityGroup)) *ec2.SecurityGroup {
-	mock := &ec2.SecurityGroup{
+func buildSecurityGroup(modifyFn func(cluster *ec2types.SecurityGroup)) *ec2types.SecurityGroup {
+	mock := &ec2types.SecurityGroup{
 		GroupName: aws.String("test"),
 		GroupId:   aws.String("testID"),
 	}
@@ -838,9 +695,9 @@ func buildSecurityGroup(modifyFn func(cluster *ec2.SecurityGroup)) *ec2.Security
 	return mock
 }
 
-func buildSecurityGroups(groupName string) []*ec2.SecurityGroup {
-	return []*ec2.SecurityGroup{
-		buildSecurityGroup(func(mock *ec2.SecurityGroup) {
+func buildSecurityGroups(groupName string) []ec2types.SecurityGroup {
+	return []ec2types.SecurityGroup{
+		*buildSecurityGroup(func(mock *ec2types.SecurityGroup) {
 			mock.GroupName = aws.String(groupName)
 		}),
 	}
@@ -868,8 +725,8 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 	type args struct {
 		ctx                     context.Context
 		cr                      *v1alpha1.Postgres
-		rdsSvc                  rdsiface.RDSAPI
-		ec2Svc                  ec2iface.EC2API
+		rdsClient               RDSAPI
+		ec2Client               EC2API
 		postgresCfg             *rds.CreateDBInstanceInput
 		standaloneNetworkExists bool
 		maintenanceWindow       bool
@@ -885,37 +742,31 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds CreateReplicationGroup is called (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: &mockRdsClient{
-					describeDBSubnetGroupsFn: func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					},
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("CreateDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             &rds.CreateDBInstanceInput{},
@@ -935,55 +786,46 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and is available (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return &rds.AddTagsToResourceOutput{}, nil
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("CreateDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBInstanceOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&rds.AddTagsToResourceOutput{}, nil)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
@@ -1011,42 +853,37 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and is not available (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: &mockRdsClient{
-					describeDBSubnetGroupsFn: func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					},
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildPendingDBInstance(testIdentifier),
-						}, nil
-					},
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-				},
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildPendingDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("CreateDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
@@ -1068,55 +905,58 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						&smithy.OperationError{
+							ServiceID:     "RDS",
+							OperationName: "AddTagsToResource",
+							Err: &smithy.GenericAPIError{
+								Code:    "DBSnapshotNotFound",
+								Message: "DB snapshot not found",
+								Fault:   smithy.FaultClient,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+						},
+					)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
+							},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("CreateDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBInstanceOutput{}, nil)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -1136,39 +976,45 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds requires modification error creating update strategy (valid_standalone_subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstanceVersion(testIdentifier, testInvalidEngineVersion),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstanceVersion(testIdentifier, testInvalidEngineVersion),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						&smithy.OperationError{
+							ServiceID:     "RDS",
+							OperationName: "AddTagsToResource",
+							Err: &smithy.GenericAPIError{
+								Code:    "DBSnapshotNotFound",
+								Message: "DB snapshot not found",
+								Fault:   smithy.FaultClient,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-				},
+						},
+					)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
+							},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -1188,42 +1034,46 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test error trying to modify available rds (valid_standalone_subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						&smithy.OperationError{
+							ServiceID:     "RDS",
+							OperationName: "AddTagsToResource",
+							Err: &smithy.GenericAPIError{
+								Code:    "DBSnapshotNotFound",
+								Message: "DB snapshot not found",
+								Fault:   smithy.FaultClient,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-					rdsClient.modifyDBInstanceFn = func(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-				},
+						},
+					)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
+							},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return((*rds.ModifyDBInstanceOutput)(nil), genericAWSError)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -1243,55 +1093,45 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and does not need to be modified (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return &rds.AddTagsToResourceOutput{}, nil
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&rds.AddTagsToResourceOutput{}, nil)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildAvailableCreateInput(testIdentifier),
@@ -1311,55 +1151,57 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to be modified but maintenance is pending (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						&smithy.OperationError{
+							ServiceID:     "RDS",
+							OperationName: "AddTagsToResource",
+							Err: &smithy.GenericAPIError{
+								Code:    "DBSnapshotNotFound",
+								Message: "DB snapshot not found",
+								Fault:   smithy.FaultClient,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+						},
+					)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
+							},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildRequiresModificationsCreateInput(testIdentifier),
@@ -1379,55 +1221,57 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds exists and status is available and needs to update pending maintenance (valid cluster bundle subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{}, nil
-					}
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return nil, awserr.New(rds.ErrCodeDBSnapshotNotFoundFault, rds.ErrCodeDBSnapshotNotFoundFault, fmt.Errorf("%v", rds.ErrCodeDBSnapshotNotFoundFault))
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						nil,
+						&smithy.OperationError{
+							ServiceID:     "RDS",
+							OperationName: "AddTagsToResource",
+							Err: &smithy.GenericAPIError{
+								Code:    "DBSnapshotNotFound",
+								Message: "DB snapshot not found",
+								Fault:   smithy.FaultClient,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeVpcsFn: func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					},
-					subnets: buildValidBundleSubnets(),
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-					describeSubnetsFn: func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: buildValidBundleSubnets(),
-						}, nil
-					},
-					describeAvailabilityZonesFn: func(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-						return &ec2.DescribeAvailabilityZonesOutput{
-							AvailabilityZones: buildAZ(),
-						}, nil
-					},
-				},
+						},
+					)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
+							},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					mockRds.On("CreateDBSubnetGroup", mock.Anything, mock.Anything, mock.Anything).Return(&rds.CreateDBSubnetGroupOutput{}, nil)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: buildValidBundleSubnets(),
+					}, nil)
+					mockEc2.On("DescribeAvailabilityZones", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeAvailabilityZonesOutput{
+						AvailabilityZones: buildAZ(),
+					}, nil)
+					mockEc2.On("AuthorizeSecurityGroupIngress", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.AuthorizeSecurityGroupIngressOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             buildNewRequiresModificationsCreateInput(testIdentifier),
@@ -1447,36 +1291,33 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "test rds is exists and is available (valid cluster standalone subnets)",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					}
-					rdsClient.addTagsToResourceFn = func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return &rds.AddTagsToResourceOutput{}, nil
-					}
-					rdsClient.describeDBSnapshotsFn = func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&rds.AddTagsToResourceOutput{}, nil)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
 							},
-						}, nil
-					}
-					rdsClient.describePendingMaintenanceActionsFn = func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					}
-				}),
-				ec2Svc: &mockEc2Client{
-					describeSecurityGroupsFn: func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{
-							SecurityGroups: buildSecurityGroups(secName),
-						}, nil
-					},
-				},
+						},
+					}, nil)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(
+						buildPendingMaintenanceActions(),
+					)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
 				postgresCfg: &rds.CreateDBInstanceInput{
@@ -1504,11 +1345,11 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "error getting replication groups",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return((*rds.DescribeDBInstancesOutput)(nil), genericAWSError)
+					return mockRds
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      nil,
 				postgresCfg:             nil,
@@ -1531,11 +1372,11 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "error setting up resource vpc",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					return mockRds
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      nil,
 				postgresCfg:             nil,
@@ -1555,21 +1396,19 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "error setting up security group",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					}
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{
-							DBSubnetGroups: buildRDSSubnetGroup(),
-						}, nil
-					}
-				}),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return nil, genericAWSError
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: buildRDSSubnetGroup(),
+					}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(nil, genericAWSError)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      nil,
 				postgresCfg:             nil,
@@ -1589,36 +1428,28 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "failed to retrieve rds credential secret",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					}
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{
-							DBSubnetGroups: buildRDSSubnetGroup(),
-						}, nil
-					}
-				}),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return nil, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: buildRDSSubnetGroup(),
+					}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSecurityGroupOutput)(nil), nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             nil,
@@ -1638,36 +1469,28 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 		{
 			name: "unable to retrieve rds password",
 			args: args{
-				rdsSvc: buildMockRdsClient(func(rdsClient *mockRdsClient) {
-					rdsClient.describeDBInstancesFn = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					}
-					rdsClient.describeDBSubnetGroupsFn = func(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error) {
-						return &rds.DescribeDBSubnetGroupsOutput{
-							DBSubnetGroups: buildRDSSubnetGroup(),
-						}, nil
-					}
-				}),
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeSubnetsFn = func(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-						return &ec2.DescribeSubnetsOutput{
-							Subnets: []*ec2.Subnet{
-								buildValidClusterSubnet(nil),
-							},
-						}, nil
-					}
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: buildVpcs(),
-						}, nil
-					}
-					ec2Client.describeSecurityGroupsFn = func(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-						return &ec2.DescribeSecurityGroupsOutput{}, nil
-					}
-					ec2Client.createSecurityGroupFn = func(input *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
-						return nil, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					mockRds.On("DescribeDBSubnetGroups", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: buildRDSSubnetGroup(),
+					}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
+						Subnets: []ec2types.Subnet{
+							buildValidClusterSubnet(nil),
+						},
+					}, nil)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: buildVpcs(),
+					}, nil)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{}, nil)
+					mockEc2.On("CreateSecurityGroup", mock.Anything, mock.Anything, mock.Anything).Return((*ec2.CreateSecurityGroupOutput)(nil), nil)
+					return mockEc2
+				}(),
 				ctx:                     context.TODO(),
 				cr:                      buildTestPostgresCR(),
 				postgresCfg:             nil,
@@ -1709,7 +1532,7 @@ func TestAWSPostgresProvider_createPostgresInstance(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 				TCPPinger:         tt.fields.TCPPinger,
 			}
-			got, _, err := p.reconcileRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.ec2Svc, tt.args.postgresCfg, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
+			got, _, err := p.reconcileRDSInstance(tt.args.ctx, tt.args.cr, tt.args.rdsClient, tt.args.ec2Client, tt.args.postgresCfg, tt.args.standaloneNetworkExists, tt.args.maintenanceWindow)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("reconcileRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1738,8 +1561,8 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 		ctx                     context.Context
 		pg                      *v1alpha1.Postgres
 		networkManager          NetworkManager
-		instanceSvc             rdsiface.RDSAPI
-		ec2Svc                  ec2iface.EC2API
+		rdsClient               RDSAPI
+		ec2Client               EC2API
 		postgresCreateConfig    *rds.CreateDBInstanceInput
 		postgresDeleteConfig    *rds.DeleteDBInstanceInput
 		standaloneNetworkExists bool
@@ -1759,12 +1582,15 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-				},
-				ec2Svc:                  &mockEc2Client{},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -1783,14 +1609,18 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildDbInstanceGroupPending(),
-						}, nil
-					},
-				},
-				ec2Svc:                  &mockEc2Client{},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildDbInstanceGroupPending(),
+					}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -1809,14 +1639,20 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildDbInstanceGroupAvailable(),
-						}, nil
-					},
-				},
-				ec2Svc:                  &mockEc2Client{},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildDbInstanceGroupAvailable(),
+					}, nil)
+					mockRds.On("DeleteDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DeleteDBInstanceOutput{}, nil)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -1835,14 +1671,19 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{DBInstanceIdentifier: aws.String(testIdentifier)},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildDbInstanceDeletionProtection(),
-						}, nil
-					},
-				},
-				ec2Svc:                  &mockEc2Client{},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildDbInstanceDeletionProtection(),
+					}, nil)
+					mockRds.On("ModifyDBInstance", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ModifyDBInstanceOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeInstanceTypes", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypesOutput{}, nil)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: false,
 				isLastResource:          false,
 			},
@@ -1862,20 +1703,20 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-				},
-				ec2Svc: buildMockEc2Client(func(ec2Client *mockEc2Client) {
-					ec2Client.describeVpcsFn = func(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-						return &ec2.DescribeVpcsOutput{
-							Vpcs: []*ec2.Vpc{
-								buildValidStandaloneVPC(validCIDRSixteen),
-							},
-						}, nil
-					}
-				}),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeVpcs", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeVpcsOutput{
+						Vpcs: []ec2types.Vpc{
+							*buildValidStandaloneVPC(validCIDRSixteen),
+						},
+					}, nil)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: true,
 				isLastResource:          true,
 			},
@@ -1895,12 +1736,15 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				postgresCreateConfig: &rds.CreateDBInstanceInput{},
 				pg:                   buildTestPostgresCR(),
 				networkManager:       buildMockNetworkManager(),
-				instanceSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-				},
-				ec2Svc:                  &mockEc2Client{},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					return mockRds
+				}(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					return mockEc2
+				}(),
 				standaloneNetworkExists: false,
 				isLastResource:          true,
 			},
@@ -1922,7 +1766,7 @@ func TestAWSPostgresProvider_deletePostgresInstance(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.instanceSvc, tt.args.ec2Svc, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig, tt.args.standaloneNetworkExists, tt.args.isLastResource)
+			got, err := p.deleteRDSInstance(tt.args.ctx, tt.args.pg, tt.args.networkManager, tt.args.rdsClient, tt.args.ec2Client, tt.args.postgresCreateConfig, tt.args.postgresDeleteConfig, tt.args.standaloneNetworkExists, tt.args.isLastResource)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("deleteRDSInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1992,8 +1836,8 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 	type args struct {
 		ctx           context.Context
 		cr            *v1alpha1.Postgres
-		rdsSvc        rdsiface.RDSAPI
-		foundInstance *rds.DBInstance
+		rdsClient     RDSAPI
+		foundInstance *rdstypes.DBInstance
 	}
 	tests := []struct {
 		name    string
@@ -2007,25 +1851,21 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 			args: args{
 				ctx: context.TODO(),
 				cr:  buildTestPostgresCR(),
-				rdsSvc: &mockRdsClient{
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{}, nil
-					},
-					addTagsToResourceFn: func(input *rds.AddTagsToResourceInput) (*rds.AddTagsToResourceOutput, error) {
-						return &rds.AddTagsToResourceOutput{}, nil
-					},
-					describeDBSnapshotsFn: func(input *rds.DescribeDBSnapshotsInput) (*rds.DescribeDBSnapshotsOutput, error) {
-						return &rds.DescribeDBSnapshotsOutput{
-							DBSnapshots: []*rds.DBSnapshot{
-								{
-									DBSnapshotArn:        &snapshotARN,
-									DBSnapshotIdentifier: &snapshotIdentifier,
-								},
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{}, nil)
+					mockRds.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&rds.AddTagsToResourceOutput{}, nil)
+					mockRds.On("DescribeDBSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBSnapshotsOutput{
+						DBSnapshots: []rdstypes.DBSnapshot{
+							{
+								DBSnapshotArn:        &snapshotARN,
+								DBSnapshotIdentifier: &snapshotIdentifier,
 							},
-						}, nil
-					},
-				},
-				foundInstance: &rds.DBInstance{
+						},
+					}, nil)
+					return mockRds
+				}(),
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
 					DBInstanceArn:        aws.String("arn:test"),
@@ -2049,7 +1889,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.TagRDSPostgres(tt.args.ctx, tt.args.cr, tt.args.rdsSvc, tt.args.foundInstance)
+			got, err := p.TagRDSPostgres(tt.args.ctx, tt.args.cr, tt.args.rdsClient, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagRDSPostgres() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2064,7 +1904,7 @@ func TestAWSPostgresProvider_TagRDSPostgres(t *testing.T) {
 func Test_buildRDSUpdateStrategy(t *testing.T) {
 	type args struct {
 		rdsConfig   *rds.CreateDBInstanceInput
-		foundConfig *rds.DBInstance
+		foundConfig *rdstypes.DBInstance
 		cr          *v1alpha1.Postgres
 	}
 	tests := []struct {
@@ -2079,33 +1919,33 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				rdsConfig: &rds.CreateDBInstanceInput{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2119,31 +1959,31 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				rdsConfig: &rds.CreateDBInstanceInput{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(false),
-					BackupRetentionPeriod:      aws.Int64(0),
+					BackupRetentionPeriod:      aws.Int32(0),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("newValue"),
 					PubliclyAccessible:         aws.Bool(false),
-					MaxAllocatedStorage:        aws.Int64(0),
+					MaxAllocatedStorage:        aws.Int32(0),
 					EngineVersion:              aws.String("11.1"),
 					MultiAZ:                    aws.Bool(false),
 					PreferredBackupWindow:      aws.String("newValue"),
 					PreferredMaintenanceWindow: aws.String("newValue"),
-					Port:                       aws.Int64(0),
+					Port:                       aws.Int32(0),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					AutoMinorVersionUpgrade:    aws.Bool(true),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					MaxAllocatedStorage:        aws.Int64(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2154,15 +1994,15 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				AutoMinorVersionUpgrade:    aws.Bool(false),
 				AllowMajorVersionUpgrade:   aws.Bool(true),
 				DeletionProtection:         aws.Bool(false),
-				BackupRetentionPeriod:      aws.Int64(0),
+				BackupRetentionPeriod:      aws.Int32(0),
 				DBInstanceClass:            aws.String("newValue"),
 				PubliclyAccessible:         aws.Bool(false),
 				EngineVersion:              aws.String("11.1"),
-				MaxAllocatedStorage:        aws.Int64(0),
+				MaxAllocatedStorage:        aws.Int32(0),
 				MultiAZ:                    aws.Bool(false),
 				PreferredBackupWindow:      aws.String("newValue"),
 				PreferredMaintenanceWindow: aws.String("newValue"),
-				DBPortNumber:               aws.Int64(0),
+				DBPortNumber:               aws.Int32(0),
 				DBInstanceIdentifier:       aws.String("test"),
 			},
 		},
@@ -2172,31 +2012,31 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				rdsConfig: &rds.CreateDBInstanceInput{
 					EngineVersion:              aws.String("10.1"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					EngineVersion:              aws.String("11.1"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2209,31 +2049,31 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 			args: args{
 				rdsConfig: &rds.CreateDBInstanceInput{
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					CACertificateIdentifier:    aws.String(newCert),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					EngineVersion:              aws.String("11.1"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2247,31 +2087,31 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				rdsConfig: &rds.CreateDBInstanceInput{
 					EngineVersion:              aws.String("broken version num"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					EngineVersion:              aws.String("11.1"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2286,31 +2126,31 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 				rdsConfig: &rds.CreateDBInstanceInput{
 					EngineVersion:              aws.String("11.1"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					EngineVersion:              aws.String("broken version num"),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					CACertificateIdentifier:    aws.String(newCert),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2326,32 +2166,32 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					CACertificateIdentifier:    aws.String(existingCert),
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					CACertificateIdentifier:    aws.String(existingCert),
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2369,32 +2209,32 @@ func Test_buildRDSUpdateStrategy(t *testing.T) {
 					CACertificateIdentifier:    aws.String(newCert),
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
-				foundConfig: &rds.DBInstance{
+				foundConfig: &rdstypes.DBInstance{
 					CACertificateIdentifier:    aws.String(newCert),
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.1"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Endpoint: &rds.Endpoint{
-						Port: aws.Int64(1),
+					Endpoint: &rdstypes.Endpoint{
+						Port: aws.Int32(1),
 					},
 					DBInstanceIdentifier: aws.String("test"),
 				},
@@ -2436,10 +2276,11 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		ConfigManager     ConfigManager
 	}
 	type args struct {
-		session        rdsiface.RDSAPI
+		ctx            context.Context
+		rdsClient      RDSAPI
 		rdsCfg         *rds.CreateDBInstanceInput
 		serviceUpdates *ServiceUpdate
-		foundInstance  *rds.DBInstance
+		foundInstance  *rdstypes.DBInstance
 	}
 	tests := []struct {
 		name       string
@@ -2452,34 +2293,33 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "test empty update status",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-				},
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(buildPendingMaintenanceActions())
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					return mockRds
+				}(),
 				rdsCfg: &rds.CreateDBInstanceInput{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.15"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
 				serviceUpdates: &ServiceUpdate{
 					updates: nil,
 				},
-				foundInstance: &rds.DBInstance{
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
 					DBInstanceArn:        aws.String("arn:test"),
@@ -2498,39 +2338,36 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "test populated update status",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
-						return &rds.ApplyPendingMaintenanceActionOutput{}, nil
-					},
-				},
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(buildPendingMaintenanceActions())
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("ApplyPendingMaintenanceAction", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ApplyPendingMaintenanceActionOutput{}, nil)
+					return mockRds
+				}(),
 				rdsCfg: &rds.CreateDBInstanceInput{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.18"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
 				serviceUpdates: &ServiceUpdate{
 					updates: []string{
 						"1642032001",
 					},
 				},
-				foundInstance: &rds.DBInstance{
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
 					DBInstanceArn:        aws.String("arn-test"),
@@ -2549,12 +2386,13 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "failed to get pending maintenance information",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return nil, genericAWSError
-					},
-				},
-				foundInstance: &rds.DBInstance{
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return((*rds.DescribePendingMaintenanceActionsOutput)(nil), genericAWSError)
+					return mockRds
+				}(),
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 			},
@@ -2571,17 +2409,18 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "error epoc timestamp requires string",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-				},
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(buildPendingMaintenanceActions())
+					return mockRds
+				}(),
 				serviceUpdates: &ServiceUpdate{
 					updates: []string{
 						"invalid",
 					},
 				},
-				foundInstance: &rds.DBInstance{
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 			},
@@ -2598,20 +2437,19 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "failed to apply service update",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return buildPendingMaintenanceActions()
-					},
-					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
-						return nil, genericAWSError
-					},
-				},
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(buildPendingMaintenanceActions())
+					mockRds.On("ApplyPendingMaintenanceAction", mock.Anything, mock.Anything, mock.Anything).Return((*rds.ApplyPendingMaintenanceActionOutput)(nil), genericAWSError)
+					return mockRds
+				}(),
 				serviceUpdates: &ServiceUpdate{
 					updates: []string{
 						"1642032001",
 					},
 				},
-				foundInstance: &rds.DBInstance{
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 				},
 			},
@@ -2628,49 +2466,48 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 		{
 			name: "test no autoapply date on pending maintenanance action",
 			args: args{
-				session: &mockRdsClient{
-					describePendingMaintenanceActionsFn: func(input *rds.DescribePendingMaintenanceActionsInput) (*rds.DescribePendingMaintenanceActionsOutput, error) {
-						return &rds.DescribePendingMaintenanceActionsOutput{PendingMaintenanceActions: []*rds.ResourcePendingMaintenanceActions{
+				ctx: context.TODO(),
+				rdsClient: func() RDSAPI {
+					mockRds := new(mock_RdsClient)
+					mockRds.On("DescribePendingMaintenanceActions", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribePendingMaintenanceActionsOutput{
+						PendingMaintenanceActions: []rdstypes.ResourcePendingMaintenanceActions{
 							{
 								ResourceIdentifier: aws.String("arn-test"),
-								PendingMaintenanceActionDetails: []*rds.PendingMaintenanceAction{
+								PendingMaintenanceActionDetails: []rdstypes.PendingMaintenanceAction{
 									{
 										Action:      aws.String("system-update"),
 										Description: aws.String("New Operating System update is available"),
 									},
 								},
 							},
-						}}, nil
-					},
-					describeDBInstancesFn: func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-						return &rds.DescribeDBInstancesOutput{
-							DBInstances: buildAvailableDBInstance(testIdentifier),
-						}, nil
-					},
-					applyPendingMaintenanceActionFn: func(input *rds.ApplyPendingMaintenanceActionInput) (*rds.ApplyPendingMaintenanceActionOutput, error) {
-						return &rds.ApplyPendingMaintenanceActionOutput{}, nil
-					},
-				},
+						},
+					}, nil)
+					mockRds.On("DescribeDBInstances", mock.Anything, mock.Anything, mock.Anything).Return(&rds.DescribeDBInstancesOutput{
+						DBInstances: buildAvailableDBInstance(testIdentifier),
+					}, nil)
+					mockRds.On("ApplyPendingMaintenanceAction", mock.Anything, mock.Anything, mock.Anything).Return(&rds.ApplyPendingMaintenanceActionOutput{}, nil)
+					return mockRds
+				}(),
 				rdsCfg: &rds.CreateDBInstanceInput{
 					AutoMinorVersionUpgrade:    aws.Bool(false),
 					DeletionProtection:         aws.Bool(true),
-					BackupRetentionPeriod:      aws.Int64(1),
+					BackupRetentionPeriod:      aws.Int32(1),
 					DBInstanceClass:            aws.String("test"),
 					PubliclyAccessible:         aws.Bool(true),
-					AllocatedStorage:           aws.Int64(1),
-					MaxAllocatedStorage:        aws.Int64(1),
+					AllocatedStorage:           aws.Int32(1),
+					MaxAllocatedStorage:        aws.Int32(1),
 					EngineVersion:              aws.String("10.18"),
 					MultiAZ:                    aws.Bool(true),
 					PreferredBackupWindow:      aws.String("test"),
 					PreferredMaintenanceWindow: aws.String("test"),
-					Port:                       aws.Int64(1),
+					Port:                       aws.Int32(1),
 				},
 				serviceUpdates: &ServiceUpdate{
 					updates: []string{
 						"1642032001",
 					},
 				},
-				foundInstance: &rds.DBInstance{
+				foundInstance: &rdstypes.DBInstance{
 					DBInstanceIdentifier: aws.String(testIdentifier),
 					AvailabilityZone:     aws.String("test-availabilityZone"),
 					DBInstanceArn:        aws.String("arn-test"),
@@ -2695,7 +2532,7 @@ func Test_rdsApplyServiceUpdates(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			update, got, err := p.rdsApplyServiceUpdates(tt.args.session, tt.args.serviceUpdates, tt.args.foundInstance)
+			update, got, err := p.rdsApplyServiceUpdates(tt.args.ctx, tt.args.rdsClient, tt.args.serviceUpdates, tt.args.foundInstance)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("rdsApplyStatusUpdate() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2715,9 +2552,9 @@ func buildPendingMaintenanceActions() (*rds.DescribePendingMaintenanceActionsOut
 	timeStamp := time.Unix(specifiedApplyAfterDate64, 0)
 	return &rds.DescribePendingMaintenanceActionsOutput{
 		Marker: nil,
-		PendingMaintenanceActions: []*rds.ResourcePendingMaintenanceActions{
+		PendingMaintenanceActions: []rdstypes.ResourcePendingMaintenanceActions{
 			{
-				PendingMaintenanceActionDetails: []*rds.PendingMaintenanceAction{
+				PendingMaintenanceActionDetails: []rdstypes.PendingMaintenanceAction{
 					{
 						Action:               aws.String("system-update"),
 						AutoAppliedAfterDate: aws.Time(timeStamp),
@@ -3101,7 +2938,7 @@ func TestPostgresProvider_setPostgresMaxMemoryMetric(t *testing.T) {
 			name: "test no nil pointer if MemoryInfo is nil",
 			args: args{
 				response: &ec2.DescribeInstanceTypesOutput{
-					InstanceTypes: []*ec2.InstanceTypeInfo{
+					InstanceTypes: []ec2types.InstanceTypeInfo{
 						{},
 					},
 				},
@@ -3111,9 +2948,9 @@ func TestPostgresProvider_setPostgresMaxMemoryMetric(t *testing.T) {
 			name: "test no nil pointer if SizeInMiB is nil",
 			args: args{
 				response: &ec2.DescribeInstanceTypesOutput{
-					InstanceTypes: []*ec2.InstanceTypeInfo{
+					InstanceTypes: []ec2types.InstanceTypeInfo{
 						{
-							MemoryInfo: &ec2.MemoryInfo{SizeInMiB: nil},
+							MemoryInfo: &ec2types.MemoryInfo{SizeInMiB: nil},
 						},
 					},
 				},
@@ -3123,9 +2960,9 @@ func TestPostgresProvider_setPostgresMaxMemoryMetric(t *testing.T) {
 			name: "test metric is set",
 			args: args{
 				response: &ec2.DescribeInstanceTypesOutput{
-					InstanceTypes: []*ec2.InstanceTypeInfo{
+					InstanceTypes: []ec2types.InstanceTypeInfo{
 						{
-							MemoryInfo: &ec2.MemoryInfo{SizeInMiB: &testSizeInMiB},
+							MemoryInfo: &ec2types.MemoryInfo{SizeInMiB: &testSizeInMiB},
 						},
 					},
 				},

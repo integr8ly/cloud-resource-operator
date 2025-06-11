@@ -3,13 +3,13 @@ package aws
 import (
 	"context"
 	"errors"
-	"os"
-	"testing"
-	"time"
-
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"os"
+	"testing"
+	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,18 +25,16 @@ import (
 	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/stretchr/testify/mock"
 )
 
-type mockS3Svc struct {
-	s3iface.S3API
-	wantErrList   bool
-	wantErrCreate bool
-	wantErrDelete bool
-	bucketNames   []string
+type MockS3Client struct {
+	s3.Client
+	mock.Mock
 }
 
 func buildTestScheme() (*runtime.Scheme, error) {
@@ -81,52 +79,6 @@ func buildTestCredentialsRequest() *cloudcredentialv1.CredentialsRequest {
 	}
 }
 
-func (s *mockS3Svc) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, error) {
-	if s.wantErrList {
-		return nil, errors.New("mock aws s3 client error")
-	}
-	buckets := make([]*s3.Bucket, 0)
-	for _, bName := range s.bucketNames {
-		buckets = append(buckets, &s3.Bucket{
-			Name: aws.String(bName),
-		})
-	}
-	cbo := &s3.ListBucketsOutput{
-		Buckets: buckets,
-	}
-	return cbo, nil
-}
-
-func (s *mockS3Svc) CreateBucket(*s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
-	if s.wantErrCreate {
-		return nil, errors.New("mock aws s3 client error")
-	}
-	return &s3.CreateBucketOutput{}, nil
-}
-
-func (s *mockS3Svc) DeleteBucket(*s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
-	if s.wantErrDelete {
-		return nil, errors.New("mock aws s3 client error")
-	}
-	return &s3.DeleteBucketOutput{}, nil
-}
-
-func (s *mockS3Svc) ListObjectsV2(*s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
-	return &s3.ListObjectsV2Output{}, nil
-}
-
-func (s *mockS3Svc) PutBucketTagging(*s3.PutBucketTaggingInput) (*s3.PutBucketTaggingOutput, error) {
-	return &s3.PutBucketTaggingOutput{}, nil
-}
-
-func (s *mockS3Svc) PutPublicAccessBlock(*s3.PutPublicAccessBlockInput) (*s3.PutPublicAccessBlockOutput, error) {
-	return &s3.PutPublicAccessBlockOutput{}, nil
-}
-
-func (s *mockS3Svc) PutBucketEncryption(*s3.PutBucketEncryptionInput) (*s3.PutBucketEncryptionOutput, error) {
-	return &s3.PutBucketEncryptionOutput{}, nil
-}
-
 func buildTestBlobStorageCR() *v1alpha1.BlobStorage {
 	return &v1alpha1.BlobStorage{
 		ObjectMeta: metav1.ObjectMeta{
@@ -150,7 +102,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 	}
 	type args struct {
 		ctx       context.Context
-		s3svc     s3iface.S3API
+		s3Client  S3API
 		bucketCfg *s3.CreateBucketInput
 	}
 	tests := []struct {
@@ -169,9 +121,17 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				s3svc: &mockS3Svc{
-					bucketNames: []string{"test"},
-				},
+				s3Client: func() S3API {
+					mockS3 := new(mock_S3Client)
+					mockS3.On("ListBuckets", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListBucketsOutput{
+						Buckets: []types.Bucket{
+							{Name: aws.String("test")},
+						},
+					}, nil)
+					mockS3.On("PutPublicAccessBlock", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutPublicAccessBlockOutput{}, nil)
+					mockS3.On("PutBucketEncryption", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutBucketEncryptionOutput{}, nil)
+					return mockS3
+				}(),
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
@@ -188,9 +148,18 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				s3svc: &mockS3Svc{
-					bucketNames: []string{"test"},
-				},
+				s3Client: func() S3API {
+					mockS3 := new(mock_S3Client)
+					mockS3.On("CreateBucket", mock.Anything, mock.Anything, mock.Anything).Return(&s3.CreateBucketOutput{}, nil)
+					mockS3.On("PutPublicAccessBlock", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutPublicAccessBlockOutput{}, nil)
+					mockS3.On("PutBucketEncryption", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutBucketEncryptionOutput{}, nil)
+					mockS3.On("ListBuckets", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListBucketsOutput{
+						Buckets: []types.Bucket{
+							{Name: aws.String("test")},
+						},
+					}, nil)
+					return mockS3
+				}(),
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test2"),
 				},
@@ -207,7 +176,7 @@ func TestBlobStorageProvider_reconcileBucket(t *testing.T) {
 				ConfigManager:     tt.fields.ConfigManager,
 			}
 			dummyBlobStorage := &v1alpha1.BlobStorage{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test", ResourceVersion: fakeResourceVersion}}
-			if _, err := p.reconcileBucketCreate(tt.args.ctx, dummyBlobStorage, tt.args.s3svc, tt.args.bucketCfg); (err != nil) != tt.wantErr {
+			if _, err := p.reconcileBucketCreate(tt.args.ctx, dummyBlobStorage, tt.args.s3Client, tt.args.bucketCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucket() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -228,7 +197,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 	}
 	type args struct {
 		ctx             context.Context
-		s3svc           s3iface.S3API
+		s3Client        S3API
 		bucketCfg       *s3.CreateBucketInput
 		bucketDeleteCfg *S3DeleteStrat
 		bs              *v1alpha1.BlobStorage
@@ -248,8 +217,14 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				ConfigManager:     &ConfigManagerMock{},
 			},
 			args: args{
-				ctx:   context.TODO(),
-				s3svc: &mockS3Svc{},
+				ctx: context.TODO(),
+				s3Client: func() S3API {
+					mockS3 := new(mock_S3Client)
+					mockS3.On("ListBuckets", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListBucketsOutput{}, nil)
+					mockS3.On("DeleteBucket", mock.Anything, mock.Anything, mock.Anything).Return(&s3.DeleteBucketOutput{}, nil)
+					mockS3.On("ListObjectsV2", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListObjectsV2Output{}, nil)
+					return mockS3
+				}(),
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
@@ -270,10 +245,13 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 			},
 			args: args{
 				ctx: context.TODO(),
-				s3svc: &mockS3Svc{
-					wantErrDelete: true,
-					bucketNames:   []string{"test"},
-				},
+				s3Client: func() S3API {
+					mockS3 := new(mock_S3Client)
+					mockS3.On("ListBuckets", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListBucketsOutput{}, nil)
+					mockS3.On("ListObjectsV2", mock.Anything, mock.Anything, mock.Anything).Return(&s3.ListObjectsV2Output{}, nil)
+					mockS3.On("DeleteBucket", mock.Anything, mock.Anything, mock.Anything).Return((*s3.DeleteBucketOutput)(nil), errors.New("mock aws s3 client error"))
+					return mockS3
+				}(),
 				bucketCfg: &s3.CreateBucketInput{
 					Bucket: aws.String("test"),
 				},
@@ -293,7 +271,7 @@ func TestBlobStorageProvider_reconcileBucketDelete(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3svc, tt.args.bucketCfg, tt.args.bucketDeleteCfg); (err != nil) != tt.wantErr {
+			if _, err := p.reconcileBucketDelete(tt.args.ctx, tt.args.bs, tt.args.s3Client, tt.args.bucketCfg, tt.args.bucketDeleteCfg); (err != nil) != tt.wantErr {
 				t.Errorf("reconcileBucketDelete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -356,7 +334,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 	type args struct {
 		ctx            context.Context
 		bs             *v1alpha1.BlobStorage
-		s3svc          s3iface.S3API
+		s3Client       S3API
 		stratCfgRegion string
 		bucketName     string
 	}
@@ -380,9 +358,11 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 				bucketName:     "test",
 				bs:             buildTestBlobStorageCR(),
 				stratCfgRegion: "test",
-				s3svc: &mockS3Svc{
-					bucketNames: []string{"test"},
-				},
+				s3Client: func() S3API {
+					mockS3 := new(mock_S3Client)
+					mockS3.On("PutBucketTagging", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutBucketTaggingOutput{}, nil)
+					return mockS3
+				}(),
 			},
 			want:    croType.StatusMessage("successfully created and tagged"),
 			wantErr: false,
@@ -396,7 +376,7 @@ func TestBlobStorageProvider_TagBlobStorage(t *testing.T) {
 				CredentialManager: tt.fields.CredentialManager,
 				ConfigManager:     tt.fields.ConfigManager,
 			}
-			got, err := p.TagBlobStorage(tt.args.ctx, tt.args.bucketName, tt.args.bs, tt.args.stratCfgRegion, tt.args.s3svc)
+			got, err := p.TagBlobStorage(tt.args.ctx, tt.args.bucketName, tt.args.bs, tt.args.stratCfgRegion, tt.args.s3Client)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TagBlobStorage() error = %v, wantErr %v", err, tt.wantErr)
 				return
