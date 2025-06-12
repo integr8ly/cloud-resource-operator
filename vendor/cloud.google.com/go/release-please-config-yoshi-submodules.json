@@ -33,11 +33,17 @@
         "apigeeregistry": {
             "component": "apigeeregistry"
         },
+        "apihub": {
+            "component": "apihub"
+        },
         "apikeys": {
             "component": "apikeys"
         },
         "appengine": {
             "component": "appengine"
+        },
+        "apphub": {
+            "component": "apphub"
         },
         "apps": {
             "component": "apps"
@@ -56,6 +62,9 @@
         },
         "automl": {
             "component": "automl"
+        },
+        "backupdr": {
+            "component": "backupdr"
         },
         "baremetalsolution": {
             "component": "baremetalsolution"
@@ -78,8 +87,14 @@
         "channel": {
             "component": "channel"
         },
+        "chat": {
+            "component": "chat"
+        },
         "cloudbuild": {
             "component": "cloudbuild"
+        },
+        "cloudcontrolspartner": {
+            "component": "cloudcontrolspartner"
         },
         "clouddms": {
             "component": "clouddms"
@@ -147,6 +162,9 @@
         "deploy": {
             "component": "deploy"
         },
+        "developerconnect": {
+            "component": "developerconnect"
+        },
         "dialogflow": {
             "component": "dialogflow"
         },
@@ -177,6 +195,9 @@
         "filestore": {
             "component": "filestore"
         },
+        "financialservices": {
+            "component": "financialservices"
+        },
         "functions": {
             "component": "functions"
         },
@@ -204,6 +225,9 @@
         "iap": {
             "component": "iap"
         },
+        "identitytoolkit": {
+            "component": "identitytoolkit"
+        },
         "ids": {
             "component": "ids"
         },
@@ -225,6 +249,9 @@
         "managedidentities": {
             "component": "managedidentities"
         },
+        "managedkafka": {
+            "component": "managedkafka"
+        },
         "maps": {
             "component": "maps"
         },
@@ -234,11 +261,17 @@
         "memcache": {
             "component": "memcache"
         },
+        "memorystore": {
+            "component": "memorystore"
+        },
         "metastore": {
             "component": "metastore"
         },
         "migrationcenter": {
             "component": "migrationcenter"
+        },
+        "modelarmor": {
+            "component": "modelarmor"
         },
         "monitoring": {
             "component": "monitoring"
@@ -255,11 +288,17 @@
         "networksecurity": {
             "component": "networksecurity"
         },
+        "networkservices": {
+            "component": "networkservices"
+        },
         "notebooks": {
             "component": "notebooks"
         },
         "optimization": {
             "component": "optimization"
+        },
+        "oracledatabase": {
+            "component": "oracledatabase"
         },
         "orchestration": {
             "component": "orchestration"
@@ -276,6 +315,9 @@
         "parallelstore": {
             "component": "parallelstore"
         },
+        "parametermanager": {
+            "component": "parametermanager"
+        },
         "phishingprotection": {
             "component": "phishingprotection"
         },
@@ -287,6 +329,9 @@
         },
         "privatecatalog": {
             "component": "privatecatalog"
+        },
+        "privilegedaccessmanager": {
+            "component": "privilegedaccessmanager"
         },
         "rapidmigrationassessment": {
             "component": "rapidmigrationassessment"
@@ -305,9 +350,6 @@
         },
         "resourcemanager": {
             "component": "resourcemanager"
-        },
-        "resourcesettings": {
-            "component": "resourcesettings"
         },
         "retail": {
             "component": "retail"
@@ -357,9 +399,6 @@
         "shopping": {
             "component": "shopping"
         },
-        "spanner/test/opentelemetry/test": {
-            "component": "spanner/test/opentelemetry/test"
-        },
         "speech": {
             "component": "speech"
         },
@@ -368,6 +407,9 @@
         },
         "storagetransfer": {
             "component": "storagetransfer"
+        },
+        "streetview": {
+            "component": "streetview"
         },
         "support": {
             "component": "support"
