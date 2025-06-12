@@ -783,10 +783,6 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.BackupRetentionPeriod = rdsConfig.BackupRetentionPeriod
 		updateFound = true
 	}
-	if *rdsConfig.DBInstanceClass != *foundConfig.DBInstanceClass {
-		mi.DBInstanceClass = rdsConfig.DBInstanceClass
-		updateFound = true
-	}
 	if *rdsConfig.PubliclyAccessible != *foundConfig.PubliclyAccessible {
 		mi.PubliclyAccessible = rdsConfig.PubliclyAccessible
 		updateFound = true
@@ -811,6 +807,18 @@ func buildRDSUpdateStrategy(rdsConfig *rds.CreateDBInstanceInput, foundConfig *r
 		mi.PreferredMaintenanceWindow = rdsConfig.PreferredMaintenanceWindow
 		updateFound = true
 	}
+	// need to set applyImmediately aws flag when DBInstanceClass updates
+	if rdsConfig.DBInstanceClass != nil {
+		if *foundConfig.DBInstanceClass != *rdsConfig.DBInstanceClass {
+			logrus.Info(fmt.Sprintf("DBInstanceClass upgrade found, the current DBInstanceClass is %s and is upgrading to %s", *foundConfig.DBInstanceClass, *rdsConfig.DBInstanceClass))
+			mi.DBInstanceClass = rdsConfig.DBInstanceClass
+			if cr.Spec.ApplyImmediately {
+				mi.ApplyImmediately = aws.Bool(cr.Spec.ApplyImmediately)
+			}
+			updateFound = true
+		}
+	}
+	// need to set applyImmediately aws flag when Engine updates
 	if rdsConfig.EngineVersion != nil {
 		engineUpgradeNeeded, err := resources.VerifyVersionUpgradeNeeded(*foundConfig.EngineVersion, *rdsConfig.EngineVersion)
 		if err != nil {
