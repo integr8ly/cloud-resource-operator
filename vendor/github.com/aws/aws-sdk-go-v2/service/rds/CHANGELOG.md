@@ -1,3 +1,35 @@
+# v1.97.2 (2025-06-11)
+
+* **Documentation**: Updates Amazon RDS documentation for Amazon RDS for Db2 cross-Region replicas in standby mode.
+
+# v1.97.1 (2025-06-10)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.97.0 (2025-06-06)
+
+* **Feature**: Include Global Cluster Identifier in DBCluster if the DBCluster is a Global Cluster Member.
+
+# v1.96.0 (2025-05-20)
+
+* **Feature**: This release introduces the new DescribeDBMajorEngineVersions API for describing the properties of specific major versions of database engines.
+
+# v1.95.0 (2025-04-24)
+
+* **Feature**: This Amazon RDS release adds support for managed master user passwords for Oracle CDBs.
+
+# v1.94.4 (2025-04-10)
+
+* No change notes available for this release.
+
+# v1.94.3 (2025-04-03)
+
+* No change notes available for this release.
+
+# v1.94.2 (2025-03-26)
+
+* **Documentation**: Add note about the Availability Zone where RDS restores the DB cluster for the RestoreDBClusterToPointInTime operation.
+
 # v1.94.1 (2025-03-04.2)
 
 * **Bug Fix**: Add assurance test for operation order.

@@ -216,6 +216,10 @@ type CreateDBInstanceInput struct {
 	//
 	// If you create an RDS Custom DB instance, you must set AutoMinorVersionUpgrade
 	// to false .
+	//
+	// For more information about automatic minor version upgrades, see [Automatically upgrading the minor engine version].
+	//
+	// [Automatically upgrading the minor engine version]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_UpgradeDBInstance.Upgrading.html#USER_UpgradeDBInstance.Upgrading.AutoMinorVersionUpgrades
 	AutoMinorVersionUpgrade *bool
 
 	// The Availability Zone (AZ) where the database will be created. For information
@@ -647,14 +651,14 @@ type CreateDBInstanceInput struct {
 	// You can use this setting to enroll your DB instance into Amazon RDS Extended
 	// Support. With RDS Extended Support, you can run the selected major engine
 	// version on your DB instance past the end of standard support for that engine
-	// version. For more information, see [Using Amazon RDS Extended Support]in the Amazon RDS User Guide.
+	// version. For more information, see [Amazon RDS Extended Support with Amazon RDS]in the Amazon RDS User Guide.
 	//
 	// Valid Values: open-source-rds-extended-support |
 	// open-source-rds-extended-support-disabled
 	//
 	// Default: open-source-rds-extended-support
 	//
-	// [Using Amazon RDS Extended Support]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html
+	// [Amazon RDS Extended Support with Amazon RDS]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html
 	EngineLifecycleSupport *string
 
 	// The version number of the database engine to use.

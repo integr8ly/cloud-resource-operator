@@ -417,21 +417,25 @@ type ConnectionPoolConfiguration struct {
 	//
 	// Constraints:
 	//
-	//   - Must be between 0 and 3600.
+	//   - Must be between 0 and 300.
 	ConnectionBorrowTimeout *int32
 
 	// Add an initialization query, or modify the current one. You can specify one or
 	// more SQL statements for the proxy to run when opening each new database
 	// connection. The setting is typically used with SET statements to make sure that
-	// each connection has identical settings. Make sure that the query you add is
-	// valid. To include multiple variables in a single SET statement, use comma
-	// separators.
+	// each connection has identical settings. Make sure the query added here is valid.
+	// This is an optional field, so you can choose to leave it empty. For including
+	// multiple variables in a single SET statement, use a comma separator.
 	//
 	// For example: SET variable1=value1, variable2=value2
 	//
-	// For multiple statements, use semicolons as the separator.
-	//
 	// Default: no initialization query
+	//
+	// Since you can access initialization query as part of target group
+	// configuration, it is not protected by authentication or cryptographic methods.
+	// Anyone with access to view or manage your proxy target group configuration can
+	// view the initialization query. You should not add sensitive data, such as
+	// passwords or long-lived encryption keys, to this option.
 	InitQuery *string
 
 	// The maximum size of the connection pool for each target in a target group. The
@@ -490,11 +494,18 @@ type ConnectionPoolConfigurationInfo struct {
 	ConnectionBorrowTimeout *int32
 
 	// One or more SQL statements for the proxy to run when opening each new database
-	// connection. Typically used with SET statements to make sure that each
-	// connection has identical settings such as time zone and character set. This
-	// setting is empty by default. For multiple statements, use semicolons as the
-	// separator. You can also include multiple variables in a single SET statement,
-	// such as SET x=1, y=2 .
+	// connection. The setting is typically used with SET statements to make sure that
+	// each connection has identical settings. The query added here must be valid. For
+	// including multiple variables in a single SET statement, use a comma separator.
+	// This is an optional field.
+	//
+	// For example: SET variable1=value1, variable2=value2
+	//
+	// Since you can access initialization query as part of target group
+	// configuration, it is not protected by authentication or cryptographic methods.
+	// Anyone with access to view or manage your proxy target group configuration can
+	// view the initialization query. You should not add sensitive data, such as
+	// passwords or long-lived encryption keys, to this option.
 	InitQuery *string
 
 	// The maximum size of the connection pool for each target in a target group. The
@@ -601,6 +612,10 @@ type DBCluster struct {
 	// Indicates whether minor version patches are applied automatically.
 	//
 	// This setting is for Aurora DB clusters and Multi-AZ DB clusters.
+	//
+	// For more information about automatic minor version upgrades, see [Automatically upgrading the minor engine version].
+	//
+	// [Automatically upgrading the minor engine version]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_UpgradeDBInstance.Upgrading.html#USER_UpgradeDBInstance.Upgrading.AutoMinorVersionUpgrades
 	AutoMinorVersionUpgrade *bool
 
 	// The time when a stopped DB cluster is restarted automatically.
@@ -748,7 +763,7 @@ type DBCluster struct {
 	// The database engine used for this DB cluster.
 	Engine *string
 
-	// The life cycle type for the DB cluster.
+	// The lifecycle type for the DB cluster.
 	//
 	// For more information, see CreateDBCluster.
 	EngineLifecycleSupport *string
@@ -762,6 +777,10 @@ type DBCluster struct {
 
 	// The version of the database engine.
 	EngineVersion *string
+
+	// Contains a user-supplied global database cluster identifier. This identifier is
+	// the unique key that identifies a global database cluster.
+	GlobalClusterIdentifier *string
 
 	// Indicates whether write forwarding is enabled for a secondary cluster in an
 	// Aurora global database. Because write forwarding takes time to enable, check the
@@ -1671,6 +1690,10 @@ type DBInstance struct {
 	AssociatedRoles []DBInstanceRole
 
 	// Indicates whether minor version patches are applied automatically.
+	//
+	// For more information about automatic minor version upgrades, see [Automatically upgrading the minor engine version].
+	//
+	// [Automatically upgrading the minor engine version]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_UpgradeDBInstance.Upgrading.html#USER_UpgradeDBInstance.Upgrading.AutoMinorVersionUpgrades
 	AutoMinorVersionUpgrade *bool
 
 	// The time when a stopped DB instance is restarted automatically.
@@ -1842,7 +1865,7 @@ type DBInstance struct {
 	// The database engine used for this DB instance.
 	Engine *string
 
-	// The life cycle type for the DB instance.
+	// The lifecycle type for the DB instance.
 	//
 	// For more information, see CreateDBInstance.
 	EngineLifecycleSupport *string
@@ -2034,12 +2057,14 @@ type DBInstance struct {
 	// The identifier of the source DB instance if this DB instance is a read replica.
 	ReadReplicaSourceDBInstanceIdentifier *string
 
-	// The open mode of an Oracle read replica. The default is open-read-only . For
-	// more information, see [Working with Oracle Read Replicas for Amazon RDS]in the Amazon RDS User Guide.
+	// The open mode of a Db2 or an Oracle read replica. The default is open-read-only
+	// . For more information, see [Working with read replicas for Amazon RDS for Db2]and [Working with read replicas for Amazon RDS for Oracle] in the Amazon RDS User Guide.
 	//
-	// This attribute is only supported in RDS for Oracle.
+	// This attribute is only supported in RDS for Db2, RDS for Oracle, and RDS Custom
+	// for Oracle.
 	//
-	// [Working with Oracle Read Replicas for Amazon RDS]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/oracle-read-replicas.html
+	// [Working with read replicas for Amazon RDS for Db2]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/db2-replication.html
+	// [Working with read replicas for Amazon RDS for Oracle]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/oracle-read-replicas.html
 	ReplicaMode ReplicaMode
 
 	// The number of minutes to pause the automation. When the time period ends, RDS
@@ -2277,6 +2302,23 @@ type DBInstanceStatusInfo struct {
 
 	// This value is currently "read replication."
 	StatusType *string
+
+	noSmithyDocumentSerde
+}
+
+// This data type is used as a response element in the operation
+// DescribeDBMajorEngineVersions .
+type DBMajorEngineVersion struct {
+
+	// The name of the database engine.
+	Engine *string
+
+	// The major version number of the database engine.
+	MajorEngineVersion *string
+
+	// A list of the lifecycles supported by this engine for the
+	// DescribeDBMajorEngineVersions operation.
+	SupportedEngineLifecycles []SupportedEngineLifecycle
 
 	noSmithyDocumentSerde
 }
@@ -3057,7 +3099,9 @@ type DBSubnetGroup struct {
 	// Provides the status of the DB subnet group.
 	SubnetGroupStatus *string
 
-	// Contains a list of Subnet elements.
+	// Contains a list of Subnet elements. The list of subnets shown here might not
+	// reflect the current state of your VPC. For the most up-to-date information, we
+	// recommend checking your VPC configuration directly.
 	Subnets []Subnet
 
 	// The network type of the DB subnet group.
@@ -3492,7 +3536,7 @@ type GlobalCluster struct {
 	// The Aurora database engine used by the global database cluster.
 	Engine *string
 
-	// The life cycle type for the global cluster.
+	// The lifecycle type for the global cluster.
 	//
 	// For more information, see CreateGlobalCluster.
 	EngineLifecycleSupport *string
@@ -5053,6 +5097,54 @@ type Subnet struct {
 	noSmithyDocumentSerde
 }
 
+// This data type is used as a response element in the operation
+// DescribeDBMajorEngineVersions .
+//
+// You can use the information that this data type returns to plan for upgrades.
+//
+// This data type only returns information for the open source engines Amazon RDS
+// for MariaDB, Amazon RDS for MySQL, Amazon RDS for PostgreSQL, Aurora MySQL, and
+// Aurora PostgreSQL.
+type SupportedEngineLifecycle struct {
+
+	// The end date for the type of support returned by LifecycleSupportName .
+	//
+	// This member is required.
+	LifecycleSupportEndDate *time.Time
+
+	// The type of lifecycle support that the engine version is in.
+	//
+	// This parameter returns the following values:
+	//
+	//   - open-source-rds-standard-support - Indicates RDS standard support or Aurora
+	//   standard support.
+	//
+	//   - open-source-rds-extended-support - Indicates Amazon RDS Extended Support.
+	//
+	// For Amazon RDS for MySQL, Amazon RDS for PostgreSQL, Aurora MySQL, and Aurora
+	// PostgreSQL, this parameter returns both open-source-rds-standard-support and
+	// open-source-rds-extended-support .
+	//
+	// For Amazon RDS for MariaDB, this parameter only returns the value
+	// open-source-rds-standard-support .
+	//
+	// For information about Amazon RDS Extended Support, see [Amazon RDS Extended Support with Amazon RDS] in the Amazon RDS User
+	// Guide and [Amazon RDS Extended Support with Amazon Aurora]in the Amazon Aurora User Guide.
+	//
+	// [Amazon RDS Extended Support with Amazon RDS]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html
+	// [Amazon RDS Extended Support with Amazon Aurora]: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/extended-support.html
+	//
+	// This member is required.
+	LifecycleSupportName LifecycleSupportName
+
+	// The start date for the type of support returned by LifecycleSupportName .
+	//
+	// This member is required.
+	LifecycleSupportStartDate *time.Time
+
+	noSmithyDocumentSerde
+}
+
 // Contains the details about a blue/green deployment.
 //
 // For more information, see [Using Amazon RDS Blue/Green Deployments for database updates] in the Amazon RDS User Guide and [Using Amazon RDS Blue/Green Deployments for database updates] in the Amazon
@@ -5150,6 +5242,15 @@ type TenantDatabase struct {
 
 	// Specifies whether deletion protection is enabled for the DB instance.
 	DeletionProtection *bool
+
+	// Contains the secret managed by RDS in Amazon Web Services Secrets Manager for
+	// the master user password.
+	//
+	// For more information, see [Password management with Amazon Web Services Secrets Manager] in the Amazon RDS User Guide and [Password management with Amazon Web Services Secrets Manager] in the Amazon
+	// Aurora User Guide.
+	//
+	// [Password management with Amazon Web Services Secrets Manager]: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/rds-secrets-manager.html
+	MasterUserSecret *MasterUserSecret
 
 	// The master username of the tenant database.
 	MasterUsername *string
@@ -5274,7 +5375,14 @@ type UserAuthConfig struct {
 	// to the underlying database.
 	AuthScheme AuthScheme
 
-	// The type of authentication the proxy uses for connections from clients.
+	// The type of authentication the proxy uses for connections from clients. The
+	// following values are defaults for the corresponding engines:
+	//
+	//   - RDS for MySQL: MYSQL_CACHING_SHA2_PASSWORD
+	//
+	//   - RDS for SQL Server: SQL_SERVER_AUTHENTICATION
+	//
+	//   - RDS for PostgreSQL: POSTGRES_SCRAM_SHA2_256
 	ClientPasswordAuthType ClientPasswordAuthType
 
 	// A user-specified description about the authentication used by a proxy to log in
