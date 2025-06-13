@@ -88,6 +88,10 @@ type RestoreDBInstanceFromDBSnapshotInput struct {
 	// instance during the maintenance window.
 	//
 	// If you restore an RDS Custom DB instance, you must disable this parameter.
+	//
+	// For more information about automatic minor version upgrades, see [Automatically upgrading the minor engine version].
+	//
+	// [Automatically upgrading the minor engine version]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_UpgradeDBInstance.Upgrading.html#USER_UpgradeDBInstance.Upgrading.AutoMinorVersionUpgrades
 	AutoMinorVersionUpgrade *bool
 
 	// The Availability Zone (AZ) where the DB instance will be created.
@@ -391,7 +395,7 @@ type RestoreDBInstanceFromDBSnapshotInput struct {
 	// You can use this setting to enroll your DB instance into Amazon RDS Extended
 	// Support. With RDS Extended Support, you can run the selected major engine
 	// version on your DB instance past the end of standard support for that engine
-	// version. For more information, see [Using Amazon RDS Extended Support]in the Amazon RDS User Guide.
+	// version. For more information, see [Amazon RDS Extended Support with Amazon RDS]in the Amazon RDS User Guide.
 	//
 	// This setting applies only to RDS for MySQL and RDS for PostgreSQL. For Amazon
 	// Aurora DB instances, the life cycle type is managed by the DB cluster.
@@ -401,7 +405,7 @@ type RestoreDBInstanceFromDBSnapshotInput struct {
 	//
 	// Default: open-source-rds-extended-support
 	//
-	// [Using Amazon RDS Extended Support]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html
+	// [Amazon RDS Extended Support with Amazon RDS]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html
 	EngineLifecycleSupport *string
 
 	// Specifies the amount of provisioned IOPS for the DB instance, expressed in I/O
@@ -446,6 +450,38 @@ type RestoreDBInstanceFromDBSnapshotInput struct {
 	//
 	// [Amazon RDS for Db2 licensing options]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/db2-licensing.html
 	LicenseModel *string
+
+	// Specifies whether to manage the master user password with Amazon Web Services
+	// Secrets Manager in the restored DB instance.
+	//
+	// For more information, see [Password management with Amazon Web Services Secrets Manager] in the Amazon RDS User Guide.
+	//
+	// Constraints:
+	//
+	//   - Applies to RDS for Oracle only.
+	//
+	// [Password management with Amazon Web Services Secrets Manager]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html
+	ManageMasterUserPassword *bool
+
+	// The Amazon Web Services KMS key identifier to encrypt a secret that is
+	// automatically generated and managed in Amazon Web Services Secrets Manager.
+	//
+	// This setting is valid only if the master user password is managed by RDS in
+	// Amazon Web Services Secrets Manager for the DB instance.
+	//
+	// The Amazon Web Services KMS key identifier is the key ARN, key ID, alias ARN,
+	// or alias name for the KMS key. To use a KMS key in a different Amazon Web
+	// Services account, specify the key ARN or alias ARN.
+	//
+	// If you don't specify MasterUserSecretKmsKeyId , then the aws/secretsmanager KMS
+	// key is used to encrypt the secret. If the secret is in a different Amazon Web
+	// Services account, then you can't use the aws/secretsmanager KMS key to encrypt
+	// the secret, and you must use a customer managed KMS key.
+	//
+	// There is a default KMS key for your Amazon Web Services account. Your Amazon
+	// Web Services account has a different default KMS key for each Amazon Web
+	// Services Region.
+	MasterUserSecretKmsKeyId *string
 
 	// Specifies whether the DB instance is a Multi-AZ deployment.
 	//
