@@ -15,9 +15,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.69
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.44.3
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.210.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.225.1
 	github.com/aws/aws-sdk-go-v2/service/elasticache v1.45.1
-	github.com/aws/aws-sdk-go-v2/service/rds v1.94.1
+	github.com/aws/aws-sdk-go-v2/service/rds v1.97.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.21
 	github.com/aws/smithy-go v1.22.2
@@ -31,7 +31,7 @@ require (
 	github.com/openshift/cloud-credential-operator v0.0.0-20240510165258-af5662f1dbe2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.58.0
-	github.com/prometheus/client_golang v1.20.4
+	github.com/prometheus/client_golang v1.22.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/stretchr/testify v1.10.0
@@ -113,7 +113,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/moby/spdystream v0.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -123,7 +122,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.55.0 // indirect
+	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
