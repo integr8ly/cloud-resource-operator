@@ -33,7 +33,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.58.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/afero v1.11.0
+	github.com/spf13/afero v1.14.0
 	github.com/stretchr/testify v1.10.0
 	github.com/xhit/go-str2duration/v2 v2.1.0
 	go.uber.org/multierr v1.11.0
