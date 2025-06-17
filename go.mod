@@ -10,7 +10,7 @@ require (
 	cloud.google.com/go/monitoring v1.24.2
 	cloud.google.com/go/redis v1.18.2
 	cloud.google.com/go/storage v1.55.0
-	github.com/aws/aws-sdk-go v1.53.2
+	github.com/aws/aws-sdk-go v1.55.7
 	github.com/aws/aws-sdk-go-v2 v1.36.4
 	github.com/aws/aws-sdk-go-v2/config v1.29.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.69
