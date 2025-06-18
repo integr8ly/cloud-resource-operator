@@ -22,7 +22,7 @@ import (
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
@@ -460,7 +460,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	defer p.exposeBlobStorageMetrics(ctx, bs)
 
 	if found {
-		if err = reconcileS3BucketSettings(ctx, aws.StringValue(foundBucket.Name), s3Client); err != nil {
+		if err = reconcileS3BucketSettings(ctx, aws.ToString(foundBucket.Name), s3Client); err != nil {
 			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
 			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 		}
@@ -491,8 +491,8 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 
-	if err = reconcileS3BucketSettings(ctx, aws.StringValue(bucketCfg.Bucket), s3Client); err != nil {
-		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.StringValue(bucketCfg.Bucket))
+	if err = reconcileS3BucketSettings(ctx, aws.ToString(bucketCfg.Bucket), s3Client); err != nil {
+		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.ToString(bucketCfg.Bucket))
 		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
 	}
 	p.Logger.Infof("reconcile for aws s3 bucket completed successfully")

@@ -12,7 +12,7 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	cloudwatchTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -51,7 +51,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeStorageAverageMetricName,
 				ProviderMetricName:   "FreeStorageSpace",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeStorageAverageMetricName,
@@ -72,7 +72,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "CPUUtilization",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresCPUUtilizationAverageMetricName,
@@ -93,7 +93,7 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
@@ -152,7 +152,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
 				//calculated on used_memory/maxmemory from Redis INFO http://redis.io/commands/info
 				ProviderMetricName: "DatabaseMemoryUsagePercentage",
-				Statistic:          cloudwatch.StatisticAverage,
+				Statistic:          string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
@@ -173,7 +173,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
@@ -194,7 +194,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "CPUUtilization",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
@@ -215,7 +215,7 @@ var redisGaugeMetrics = []CroGaugeMetric{
 			providers.AWSDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "EngineCPUUtilization",
-				Statistic:            cloudwatch.StatisticAverage,
+				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
 			providers.GCPDeploymentStrategy: {
 				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,

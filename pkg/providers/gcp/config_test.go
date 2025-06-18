@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	configv1 "github.com/openshift/api/config/v1"

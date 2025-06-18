@@ -1,13 +1,12 @@
 package moq_aws
 
 import (
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 )
 
 type MockElastiCacheClient struct {
-	elasticacheiface.ElastiCacheAPI
-	DescribeReplicationGroupsFn func(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error)
+	DescribeReplicationGroupsFn func(ctx context.Context, input *elasticache.DescribeReplicationGroupsInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeReplicationGroupsOutput, error)
 }
 
 func BuildMockElastiCacheClient(modifyFn func(client *MockElastiCacheClient)) *MockElastiCacheClient {
@@ -18,6 +17,9 @@ func BuildMockElastiCacheClient(modifyFn func(client *MockElastiCacheClient)) *M
 	return mock
 }
 
-func (m *MockElastiCacheClient) DescribeReplicationGroups(input *elasticache.DescribeReplicationGroupsInput) (*elasticache.DescribeReplicationGroupsOutput, error) {
-	return m.DescribeReplicationGroupsFn(input)
+func (m *MockElastiCacheClient) DescribeReplicationGroups(ctx context.Context, input *elasticache.DescribeReplicationGroupsInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeReplicationGroupsOutput, error) {
+	if m.DescribeReplicationGroupsFn != nil {
+		return m.DescribeReplicationGroupsFn(ctx, input, optFns...)
+	}
+	return &elasticache.DescribeReplicationGroupsOutput{}, nil
 }

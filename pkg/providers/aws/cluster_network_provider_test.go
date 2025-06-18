@@ -12,7 +12,6 @@ import (
 	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/smithy-go"
 	"github.com/aws/smithy-go/middleware"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -1604,8 +1603,13 @@ func TestNetworkProvider_CreateNetwork(t *testing.T) {
 					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{
 						Subnets: buildValidBundleSubnets(),
 					}, nil)
+
 					mockEc2.On("CreateVpc", mock.Anything, mock.Anything, mock.Anything).Return(
-						awserr.New("VpcLimitExceeded", "The maximum number of VPCs has been reached.", nil))
+						(*ec2.CreateVpcOutput)(nil),
+						&smithy.GenericAPIError{
+							Code:    "VpcLimitExceeded",
+							Message: "The maximum number of VPCs has been reached.",
+						})
 					return mockEc2
 				}(),
 				VpcWaiter: func() VpcWaiter {
