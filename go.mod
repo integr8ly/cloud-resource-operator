@@ -10,7 +10,6 @@ require (
 	cloud.google.com/go/monitoring v1.24.2
 	cloud.google.com/go/redis v1.18.2
 	cloud.google.com/go/storage v1.55.0
-	github.com/aws/aws-sdk-go v1.53.2
 	github.com/aws/aws-sdk-go-v2 v1.36.4
 	github.com/aws/aws-sdk-go-v2/config v1.29.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.69
@@ -110,7 +109,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect

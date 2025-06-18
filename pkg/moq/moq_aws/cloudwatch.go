@@ -1,14 +1,13 @@
 package moq_aws
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 )
 
 type MockCloudWatchClient struct {
-	cloudwatchiface.CloudWatchAPI
-	GetMetricDataFn func(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error)
+	GetMetricDataFn func(ctx context.Context, input *cloudwatch.GetMetricDataInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error)
 }
 
 func BuildMockCloudWatchClient(modifyFn func(*MockCloudWatchClient)) *MockCloudWatchClient {
@@ -19,13 +18,16 @@ func BuildMockCloudWatchClient(modifyFn func(*MockCloudWatchClient)) *MockCloudW
 	return mock
 }
 
-func (m *MockCloudWatchClient) GetMetricData(input *cloudwatch.GetMetricDataInput) (*cloudwatch.GetMetricDataOutput, error) {
-	return m.GetMetricDataFn(input)
+func (m *MockCloudWatchClient) GetMetricData(ctx context.Context, input *cloudwatch.GetMetricDataInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+	if m.GetMetricDataFn != nil {
+		return m.GetMetricDataFn(ctx, input, optFns...)
+	}
+	return &cloudwatch.GetMetricDataOutput{}, nil
 }
 
-func BuildMockMetricDataResult(modifyFn func(*cloudwatch.MetricDataResult)) *cloudwatch.MetricDataResult {
-	mock := &cloudwatch.MetricDataResult{
-		StatusCode: aws.String(cloudwatch.StatusCodeComplete),
+func BuildMockMetricDataResult(modifyFn func(*cloudwatchtypes.MetricDataResult)) *cloudwatchtypes.MetricDataResult {
+	mock := &cloudwatchtypes.MetricDataResult{
+		StatusCode: cloudwatchtypes.StatusCodeComplete,
 	}
 	if modifyFn != nil {
 		modifyFn(mock)
