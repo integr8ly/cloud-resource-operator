@@ -1,3 +1,24 @@
+# v1.46.3 (2025-06-17)
+
+* **Dependency Update**: Update to smithy-go v1.22.4.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.46.2 (2025-06-10)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.46.1 (2025-06-06)
+
+* No change notes available for this release.
+
+# v1.46.0 (2025-04-10)
+
+* **Feature**: AWS ElastiCache SDK now supports using MemcachedUpgradeConfig parameter with ModifyCacheCluster API to enable updating Memcached cache node types. Please refer to updated AWS ElastiCache public documentation for detailed information on API usage and implementation.
+
+# v1.45.2 (2025-04-03)
+
+* No change notes available for this release.
+
 # v1.45.1 (2025-03-04.2)
 
 * **Bug Fix**: Add assurance test for operation order.
