@@ -22,6 +22,8 @@ spec:
         - cloud-resource-operator
         args:
         - --enable-leader-election
+        - --metrics-bind-address=:8383
+        - --metrics-secure=false
         image: controller
         imagePullPolicy: Always
         livenessProbe:
