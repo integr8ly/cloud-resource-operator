@@ -15,6 +15,7 @@ REDIS_NAME ?= example-redis
 # openshift/aws/gcp
 PROVIDER ?= openshift
 CONTAINER_ENGINE ?= podman
+# TEST
 
 ENVTEST_K8S_VERSION = 1.31.0
 
