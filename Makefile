@@ -194,6 +194,7 @@ image/push: image/build
 
 .PHONY: test/e2e/prow
 test/e2e/prow: export component := cloud-resource-operator
+test/e2e/prow: export OPERATOR_IMAGE := ${IMAGE_FORMAT}
 test/e2e/prow: cluster/prepare cluster/deploy
 	@echo Running e2e tests:
 	go clean -testcache && go test -v ./test/e2e -timeout=120m -ginkgo.v
@@ -215,8 +216,8 @@ test/lint: golangci-lint
 
 .PHONY: cluster/deploy
 cluster/deploy: kustomize
-	@echo Deploying operator with image: ${OPERATOR_IMG}
-	@ - cd config/manager && $(KUSTOMIZE) edit set image controller=${OPERATOR_IMG}
+	@echo Deploying operator with image: ${OPERATOR_IMAGE}
+	@ - cd config/manager && $(KUSTOMIZE) edit set image controller=${OPERATOR_IMAGE}
 	@ - $(KUSTOMIZE) build config/cloud-resource-operator | oc apply -f -
 
 .PHONY: test/e2e/image
