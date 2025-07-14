@@ -122,7 +122,7 @@ Postgres, Redis and Blobstorage resources are tagged with the following key valu
 ```bash
 integreatly.org/clusterID: #clusterid
 integreatly.org/product-name: #product name
-integreatly.org/resource-type: #openshift/aws/gcp 
+integreatly.org/resource-type: #openshift/aws
 integreatly.org/resource-name: #postgres/redis/blobstorage
 ```
 
@@ -336,7 +336,7 @@ Navigating to **Installed Operators** -> **Cloud Resource Operator** -> **Subscr
 - `Provider` - A service on which a resource type is provisioned e.g. `aws`, `openshift`
 - `Resource type` - Something that can be requested from the operator via a custom resource e.g. `blobstorage`, `redis`
 - `Resource` - The result of a resource type created via a provider e.g. `S3 Bucket`, `Azure Blob`
-- `Deployment type` - Groups mappings of resource types to providers (see [here](config/samples/cloud_resource_config.yaml)) e.g. `openshift`, `aws`, `gcp`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
+- `Deployment type` - Groups mappings of resource types to providers (see [here](config/samples/cloud_resource_config.yaml)) e.g. `openshift`, `aws`. This provides a layer of abstraction, which allows the end user to not be concerned with _which_ provider is used to deploy the desired resource. 
 - `Deployment tier` - Provides a layer of abstraction, which allows the end user to request a resource of a certain level (for example, a `production` worthy Postgres instance), without being concerned with provider-specific deployment details (such as storage capacity, for example). 
 
 ### Design

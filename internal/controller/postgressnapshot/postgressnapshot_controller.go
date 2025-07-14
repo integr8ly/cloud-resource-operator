@@ -19,7 +19,6 @@ package postgressnapshot
 import (
 	"context"
 	"fmt"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	"time"
 
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
@@ -76,7 +75,6 @@ func New(mgr manager.Manager) (*PostgresSnapshotReconciler, error) {
 	}
 	providerList := []providers.PostgresSnapshotProvider{
 		awsPostgresSnapshotProvider,
-		gcp.NewGCPPostgresSnapshotProvider(client, logger),
 	}
 	return &PostgresSnapshotReconciler{
 		Client:        client,

@@ -14,12 +14,6 @@ $ make cluster/prepare
 $ make cluster/seed/blobstorage PROVIDER=aws
 ```
 
-### GCP
-```
-$ make cluster/prepare 
-$ make cluster/seed/blobstorage PROVIDER=gcp
-```
-
 ## Strategy
 
 ### AWS

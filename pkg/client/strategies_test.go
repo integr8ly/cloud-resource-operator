@@ -10,7 +10,6 @@ import (
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
 	stratType "github.com/integr8ly/cloud-resource-operator/pkg/client/types"
 	croAWS "github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
-	croGCP "github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
 	configv1 "github.com/openshift/api/config/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,18 +36,6 @@ func buildDefaultConfigMap(platformType configv1.PlatformType) *v1.ConfigMap {
 				"postgres":    `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AllocatedStorage":null,"AutoMinorVersionUpgrade":null,"AvailabilityZone":null,"BackupRetentionPeriod":null,"BackupTarget":null,"CharacterSetName":null,"CopyTagsToSnapshot":null,"CustomIamInstanceProfile":null,"DBClusterIdentifier":null,"DBInstanceClass":null,"DBInstanceIdentifier":null,"DBName":null,"DBParameterGroupName":null,"DBSecurityGroups":null,"DBSubnetGroupName":null,"DeletionProtection":null,"Domain":null,"DomainIAMRoleName":null,"EnableCloudwatchLogsExports":null,"EnableIAMDatabaseAuthentication":null,"EnablePerformanceInsights":null,"Engine":null,"EngineVersion":null,"Iops":null,"KmsKeyId":null,"LicenseModel":null,"MasterUserPassword":null,"MasterUsername":null,"MaxAllocatedStorage":null,"MonitoringInterval":null,"MonitoringRoleArn":null,"MultiAZ":null,"OptionGroupName":null,"PerformanceInsightsKMSKeyId":null,"PerformanceInsightsRetentionPeriod":null,"Port":null,"PreferredBackupWindow":"16:04-17:04","PreferredMaintenanceWindow":"sun:18:05-sun:19:05","ProcessorFeatures":null,"PromotionTier":null,"PubliclyAccessible":null,"StorageEncrypted":null,"StorageType":null,"Tags":null,"TdeCredentialArn":null,"TdeCredentialPassword":null,"Timezone":null,"VpcSecurityGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`,
 			},
 		}
-	case configv1.GCPPlatformType:
-		return &v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      croGCP.DefaultConfigMapName,
-				Namespace: testNamespace,
-			},
-			Data: map[string]string{
-				"blobstorage": `{"development": { "region": "", "createStrategy": {}, "deleteStrategy": {} }, "production": { "region": "", "createStrategy": {}, "deleteStrategy": {} }}`,
-				"redis":       `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"maintenance_policy":{"weekly_maintenance_window":[{"day":7,"start_time":{"hours":18,"minutes":5}}]}}},"deleteStrategy":{}}}`,
-				"postgres":    `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"settings":{"backupConfiguration":{"startTime":"16:04"},"maintenanceWindow":{"day":7,"hour":18}}}},"deleteStrategy":{}}}`,
-			},
-		}
 	}
 	return nil
 }
@@ -57,8 +44,6 @@ func buildExpectRedisStrat(platformType configv1.PlatformType) string {
 	switch platformType {
 	case configv1.AWSPlatformType:
 		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AtRestEncryptionEnabled":null,"AuthToken":null,"AutoMinorVersionUpgrade":null,"AutomaticFailoverEnabled":null,"CacheNodeType":null,"CacheParameterGroupName":null,"CacheSecurityGroupNames":null,"CacheSubnetGroupName":null,"ClusterMode":"","DataTieringEnabled":null,"Engine":null,"EngineVersion":null,"GlobalReplicationGroupId":null,"IpDiscovery":"","KmsKeyId":null,"LogDeliveryConfigurations":null,"MultiAZEnabled":null,"NetworkType":"","NodeGroupConfiguration":null,"NotificationTopicArn":null,"NumCacheClusters":null,"NumNodeGroups":null,"Port":null,"PreferredCacheClusterAZs":null,"PreferredMaintenanceWindow":"mon:16:05-mon:17:05","PrimaryClusterId":null,"ReplicasPerNodeGroup":null,"ReplicationGroupDescription":null,"ReplicationGroupId":null,"SecurityGroupIds":null,"ServerlessCacheSnapshotName":null,"SnapshotArns":null,"SnapshotName":null,"SnapshotRetentionLimit":null,"SnapshotWindow":"15:04-16:04","Tags":null,"TransitEncryptionEnabled":null,"TransitEncryptionMode":"","UserGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
-	case configv1.GCPPlatformType:
-		return `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"maintenance_policy":{"weekly_maintenance_window":[{"day":1,"start_time":{"hours":16,"minutes":5}}]}}},"deleteStrategy":{}}}`
 	}
 	return ""
 }
@@ -67,8 +52,6 @@ func buildExpectPostgresStrat(platformType configv1.PlatformType) string {
 	switch platformType {
 	case configv1.AWSPlatformType:
 		return `{"development":{"region":"","createStrategy":{},"deleteStrategy":{},"serviceUpdates":null},"production":{"region":"","createStrategy":{"AllocatedStorage":null,"AutoMinorVersionUpgrade":null,"AvailabilityZone":null,"BackupRetentionPeriod":null,"BackupTarget":null,"CACertificateIdentifier":null,"CharacterSetName":null,"CopyTagsToSnapshot":null,"CustomIamInstanceProfile":null,"DBClusterIdentifier":null,"DBInstanceClass":null,"DBInstanceIdentifier":null,"DBName":null,"DBParameterGroupName":null,"DBSecurityGroups":null,"DBSubnetGroupName":null,"DBSystemId":null,"DatabaseInsightsMode": "","DedicatedLogVolume":null,"DeletionProtection":null,"Domain":null,"DomainAuthSecretArn":null,"DomainDnsIps":null,"DomainFqdn":null,"DomainIAMRoleName":null,"DomainOu":null,"EnableCloudwatchLogsExports":null,"EnableCustomerOwnedIp":null,"EnableIAMDatabaseAuthentication":null,"EnablePerformanceInsights":null,"Engine":null,"EngineLifecycleSupport": null,"EngineVersion":null,"Iops":null,"KmsKeyId":null,"LicenseModel":null,"ManageMasterUserPassword":null,"MasterUserPassword":null,"MasterUserSecretKmsKeyId":null,"MasterUsername":null,"MaxAllocatedStorage":null,"MonitoringInterval":null,"MonitoringRoleArn":null,"MultiAZ":null,"MultiTenant":null,"NcharCharacterSetName":null,"NetworkType":null,"OptionGroupName":null,"PerformanceInsightsKMSKeyId":null,"PerformanceInsightsRetentionPeriod":null,"Port":null,"PreferredBackupWindow":"15:04-16:04","PreferredMaintenanceWindow":"mon:16:05-mon:17:05","ProcessorFeatures":null,"PromotionTier":null,"PubliclyAccessible":null,"StorageEncrypted":null,"StorageThroughput":null,"StorageType":null,"Tags":null,"TdeCredentialArn":null,"TdeCredentialPassword":null,"Timezone":null,"VpcSecurityGroupIds":null},"deleteStrategy":{},"serviceUpdates":null}}`
-	case configv1.GCPPlatformType:
-		return `{"development":{"region":"","projectID":"","createStrategy":{},"deleteStrategy":{}},"production":{"region":"","projectID":"","createStrategy":{"instance":{"settings":{"backupConfiguration":{"startTime":"15:04"},"maintenanceWindow":{"day":1,"hour":16}}}},"deleteStrategy":{}}}`
 	}
 	return ""
 }
@@ -172,74 +155,6 @@ func TestReconcileStrategyMaps(t *testing.T) {
 				return config.Data[stratType.PostgresStratKey], err
 			},
 			want: buildExpectPostgresStrat(configv1.AWSPlatformType),
-		},
-		{
-			name: "gcp strategy config map redis is created successfully",
-			args: args{
-				ctx:        context.TODO(),
-				client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildInfrastructureType(configv1.GCPPlatformType)),
-				timeConfig: stratType.NewStrategyTimeConfig(15, 04, time.Monday, 16, 05),
-				tier:       testTierName,
-				namespace:  testNamespace,
-			},
-			wantErr: false,
-			getConfigSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
-				config := &v1.ConfigMap{}
-				err := c.Get(ctx, types.NamespacedName{Name: croGCP.DefaultConfigMapName, Namespace: testNamespace}, config)
-				return config.Data[stratType.RedisStratKey], err
-			},
-			want: buildExpectRedisStrat(configv1.GCPPlatformType),
-		},
-		{
-			name: "gcp strategy config map redis is updated successfully",
-			args: args{
-				ctx:        context.TODO(),
-				client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildDefaultConfigMap(configv1.GCPPlatformType), buildInfrastructureType(configv1.GCPPlatformType)),
-				timeConfig: stratType.NewStrategyTimeConfig(15, 04, time.Monday, 16, 05),
-				tier:       testTierName,
-				namespace:  testNamespace,
-			},
-			wantErr: false,
-			getConfigSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
-				config := &v1.ConfigMap{}
-				err := c.Get(ctx, types.NamespacedName{Name: croGCP.DefaultConfigMapName, Namespace: testNamespace}, config)
-				return config.Data[stratType.RedisStratKey], err
-			},
-			want: buildExpectRedisStrat(configv1.GCPPlatformType),
-		},
-		{
-			name: "gcp strategy config map postgres is created successfully",
-			args: args{
-				ctx:        context.TODO(),
-				client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildInfrastructureType(configv1.GCPPlatformType)),
-				timeConfig: stratType.NewStrategyTimeConfig(15, 04, time.Monday, 16, 05),
-				tier:       testTierName,
-				namespace:  testNamespace,
-			},
-			wantErr: false,
-			getConfigSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
-				config := &v1.ConfigMap{}
-				err := c.Get(ctx, types.NamespacedName{Name: croGCP.DefaultConfigMapName, Namespace: testNamespace}, config)
-				return config.Data[stratType.PostgresStratKey], err
-			},
-			want: buildExpectPostgresStrat(configv1.GCPPlatformType),
-		},
-		{
-			name: "gcp strategy config map postgres is updated successfully",
-			args: args{
-				ctx:        context.TODO(),
-				client:     moqClient.NewSigsClientMoqWithScheme(scheme, buildDefaultConfigMap(configv1.GCPPlatformType), buildInfrastructureType(configv1.GCPPlatformType)),
-				timeConfig: stratType.NewStrategyTimeConfig(15, 04, time.Monday, 16, 05),
-				tier:       testTierName,
-				namespace:  testNamespace,
-			},
-			wantErr: false,
-			getConfigSpec: func(ctx context.Context, c client.Client) (interface{}, error) {
-				config := &v1.ConfigMap{}
-				err := c.Get(ctx, types.NamespacedName{Name: croGCP.DefaultConfigMapName, Namespace: testNamespace}, config)
-				return config.Data[stratType.PostgresStratKey], err
-			},
-			want: buildExpectPostgresStrat(configv1.GCPPlatformType),
 		},
 		{
 			name: "error retrieving cluster platform type",

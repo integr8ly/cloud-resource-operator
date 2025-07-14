@@ -14,12 +14,6 @@ $ make cluster/prepare
 $ make cluster/seed/postgres PROVIDER=aws
 ```
 
-### GCP
-```
-$ make cluster/prepare 
-$ make cluster/seed/postgres PROVIDER=gcp
-```
-
 ## Strategy
 
 ### AWS
