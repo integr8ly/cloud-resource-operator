@@ -54,6 +54,13 @@ spec:
         volumeMounts:
         - name: bound-sa-token
           mountPath: /var/run/secrets/openshift/serviceaccount
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
       volumes:
       - name: bound-sa-token
         projected:
