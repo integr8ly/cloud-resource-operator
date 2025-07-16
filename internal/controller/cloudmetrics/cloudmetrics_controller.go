@@ -9,9 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"time"
 
-	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
-
 	cloudwatchTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/aws"
@@ -53,11 +50,6 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				ProviderMetricName:   "FreeStorageSpace",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeStorageAverageMetricName,
-				ProviderMetricName:   "cloudsql.googleapis.com/database/disk/quota-cloudsql.googleapis.com/database/disk/bytes_used",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
 		},
 	},
 	{
@@ -74,11 +66,6 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresCPUUtilizationAverageMetricName,
-				ProviderMetricName:   "cloudsql.googleapis.com/database/cpu/utilization",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
 		},
 	},
 	{
@@ -94,43 +81,6 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
-			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresFreeableMemoryAverageMetricName,
-				ProviderMetricName:   "cloudsql.googleapis.com/database/memory/quota-cloudsql.googleapis.com/database/memory/total_usage",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
-		},
-	},
-	{
-		Name: resources.PostgresMaxMemoryMetricName,
-		GaugeVec: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: resources.PostgresMaxMemoryMetricName,
-				Help: "The amount of max random access memory. Units: Bytes",
-			},
-			genericMetricLabelNames()),
-		ProviderType: map[string]providers.CloudProviderMetricType{
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresMaxMemoryMetricName,
-				ProviderMetricName:   "cloudsql.googleapis.com/database/memory/quota",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
-		},
-	},
-	{
-		Name: resources.PostgresAllocatedStorageMetricName,
-		GaugeVec: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: resources.PostgresAllocatedStorageMetricName,
-				Help: "The amount of currently used storage space. Units: Bytes",
-			},
-			genericMetricLabelNames()),
-		ProviderType: map[string]providers.CloudProviderMetricType{
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.PostgresAllocatedStorageMetricName,
-				ProviderMetricName:   "cloudsql.googleapis.com/database/disk/bytes_used",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
@@ -154,11 +104,6 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				ProviderMetricName: "DatabaseMemoryUsagePercentage",
 				Statistic:          string(cloudwatchTypes.StatisticAverage),
 			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisMemoryUsagePercentageAverageMetricName,
-				ProviderMetricName:   "redis.googleapis.com/stats/memory/usage_ratio",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
 		},
 	},
 	{
@@ -174,11 +119,6 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
 				ProviderMetricName:   "FreeableMemory",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
-			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisFreeableMemoryAverageMetricName,
-				ProviderMetricName:   "redis.googleapis.com/stats/memory/maxmemory-redis.googleapis.com/stats/memory/usage",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
@@ -196,11 +136,6 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				ProviderMetricName:   "CPUUtilization",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
 			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisCPUUtilizationAverageMetricName,
-				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
-			},
 		},
 	},
 	{
@@ -216,11 +151,6 @@ var redisGaugeMetrics = []CroGaugeMetric{
 				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,
 				ProviderMetricName:   "EngineCPUUtilization",
 				Statistic:            string(cloudwatchTypes.StatisticAverage),
-			},
-			providers.GCPDeploymentStrategy: {
-				PrometheusMetricName: resources.RedisEngineCPUUtilizationAverageMetricName,
-				ProviderMetricName:   "redis.googleapis.com/stats/cpu_utilization_main_thread",
-				Statistic:            monitoringpb.Aggregation_ALIGN_MEAN.String(),
 			},
 		},
 	},
@@ -253,25 +183,15 @@ func New(mgr manager.Manager) (*CloudMetricsReconciler, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcpPostgresMetricsProvider, err := gcp.NewGCPPostgresMetricsProvider(client, logger)
-	if err != nil {
-		return nil, err
-	}
 	postgresProviderList := []providers.PostgresMetricsProvider{
 		awsPostgresMetricsProvider,
-		gcpPostgresMetricsProvider,
 	}
 	awsRedisMetricsProvider, err := aws.NewAWSRedisMetricsProvider(client, logger)
 	if err != nil {
 		return nil, err
 	}
-	gcpRedisMetricsProvider, err := gcp.NewGCPRedisMetricsProvider(client, logger)
-	if err != nil {
-		return nil, err
-	}
 	redisProviderList := []providers.RedisMetricsProvider{
 		awsRedisMetricsProvider,
-		gcpRedisMetricsProvider,
 	}
 
 	// we only wish to register metrics once when the new reconciler is created

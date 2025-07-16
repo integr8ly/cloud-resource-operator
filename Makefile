@@ -12,7 +12,7 @@ UPGRADE ?= true
 CHANNEL ?= rhmi
 REDIS_NODE_SIZE ?= ""
 REDIS_NAME ?= example-redis
-# openshift/aws/gcp
+# openshift/aws
 PROVIDER ?= openshift
 CONTAINER_ENGINE ?= podman
 

@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/integr8ly/cloud-resource-operator/pkg/providers/gcp"
-
 	croType "github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1/types"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers/openshift"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -76,7 +74,6 @@ func New(mgr manager.Manager) (*BlobStorageReconciler, error) {
 	providerList := []providers.BlobStorageProvider{
 		openshift.NewBlobStorageProvider(client, logger),
 		awsBlobStorageProvider,
-		gcp.NewGCPBlobStorageProvider(client),
 	}
 	rp := resources.NewResourceProvider(client, mgr.GetScheme(), logger)
 	return &BlobStorageReconciler{

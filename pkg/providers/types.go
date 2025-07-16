@@ -15,7 +15,6 @@ type ResourceType string
 const (
 	AWSDeploymentStrategy       = "aws"
 	OpenShiftDeploymentStrategy = "openshift"
-	GCPDeploymentStrategy       = "gcp"
 
 	BlobStorageResourceType ResourceType = "blobstorage"
 	PostgresResourceType    ResourceType = "postgres"
