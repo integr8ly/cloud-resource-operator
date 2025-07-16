@@ -203,6 +203,10 @@ func (r *RealRDSClient) ModifyDBInstance(ctx context.Context, input *rds.ModifyD
 	return r.Client.ModifyDBInstance(ctx, input, optFns...)
 }
 
+func (r *RealRDSClient) DescribeDBEngineVersions(ctx context.Context, input *rds.DescribeDBEngineVersionsInput, optFns ...func(*rds.Options)) (*rds.DescribeDBEngineVersionsOutput, error) {
+	return r.Client.DescribeDBEngineVersions(ctx, input, optFns...)
+}
+
 // ---------- Elasticache ----------
 func NewElasticacheClient(cfg aws.Config) ElastiCacheAPI {
 	return &RealElasticacheClient{

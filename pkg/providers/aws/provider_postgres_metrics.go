@@ -19,6 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	cloudWatchTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/hashicorp/go-version"
+
+	rds_types "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/integr8ly/cloud-resource-operator/api/integreatly/v1alpha1"
 	"github.com/integr8ly/cloud-resource-operator/pkg/providers"
 	"github.com/integr8ly/cloud-resource-operator/pkg/resources"
@@ -85,15 +89,40 @@ func (p PostgresMetricsProvider) ScrapePostgresMetrics(ctx context.Context, post
 		return nil, errorUtil.Wrap(err, "failed to create aws session to scrape rds cloud watch metrics")
 	}
 
-	cloudwatchClient := NewCloudWatchClient(*cfg)
-	// scrape metric data from cloud watch
-	cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, cloudwatchClient, postgres, metricTypes)
-	if err != nil {
-		return nil, errorUtil.Wrap(err, "failed to scrape rds cloud watch metrics")
+	var allMetrics []*providers.GenericCloudMetric
+
+	// separate cloudwatch metrics from upgrade availability metrics
+	var cloudWatchMetrics, upgradeMetrics []providers.CloudProviderMetricType
+	for _, metricType := range metricTypes {
+		if metricType.PrometheusMetricName == resources.PostgresUpgradeAvailableMetricName {
+			upgradeMetrics = append(upgradeMetrics, metricType)
+		} else {
+			cloudWatchMetrics = append(cloudWatchMetrics, metricType)
+		}
+	}
+
+	// scrape cloudwatch metric data if requested
+	if len(cloudWatchMetrics) > 0 {
+		cloudwatchClient := NewCloudWatchClient(*cfg)
+		cloudMetrics, err := p.scrapeRDSCloudWatchMetricData(ctx, cloudwatchClient, postgres, cloudWatchMetrics)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to scrape rds cloud watch metrics")
+		}
+		allMetrics = append(allMetrics, cloudMetrics...)
+	}
+
+	// scrape upgrade availability metric if requested
+	if len(upgradeMetrics) > 0 {
+		rdsClient := NewRDSClient(*cfg)
+		upgradeAvailabilityMetrics, err := p.scrapePostgresUpgradeAvailability(ctx, rdsClient, postgres, upgradeMetrics)
+		if err != nil {
+			return nil, errorUtil.Wrap(err, "failed to scrape postgres upgrade availability metrics")
+		}
+		allMetrics = append(allMetrics, upgradeAvailabilityMetrics...)
 	}
 
 	return &providers.ScrapeMetricsData{
-		Metrics: cloudMetrics,
+		Metrics: allMetrics,
 	}, nil
 }
 
@@ -184,4 +213,102 @@ func buildRDSMetricDataQuery(metricTypes []providers.CloudProviderMetricType, re
 		})
 	}
 	return metricDataQueries
+}
+
+// scrapePostgresUpgradeAvailability checks for available PostgreSQL upgrades using DescribeDBEngineVersions API
+func (p *PostgresMetricsProvider) scrapePostgresUpgradeAvailability(ctx context.Context, rdsAPI RDSAPI, postgres *v1alpha1.Postgres, metricTypes []providers.CloudProviderMetricType) ([]*providers.GenericCloudMetric, error) {
+	resourceID, err := resources.BuildInfraNameFromObject(ctx, p.Client, postgres.ObjectMeta, defaultAwsIdentifierLength)
+	if err != nil {
+		return nil, errorUtil.Errorf("error occurred building instance name: %v", err)
+	}
+
+	logger := resources.NewActionLogger(p.Logger, "scrapePostgresUpgradeAvailability")
+	logger.Infof("checking upgrade availability for postgres instance %s", resourceID)
+
+	// get current DB instance to determine its engine version
+	describeInstancesOutput, err := rdsAPI.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(resourceID),
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to describe DB instances")
+	}
+
+	if len(describeInstancesOutput.DBInstances) == 0 {
+		return nil, errorUtil.New("no DB instance found")
+	}
+
+	currentDBInstance := describeInstancesOutput.DBInstances[0]
+	currentEngineVersion := aws.ToString(currentDBInstance.EngineVersion)
+
+	logger.Infof("current engine version for postgres %s: %s", resourceID, currentEngineVersion)
+
+	// get available engine versions for PostgreSQL
+	describeEngineVersionsOutput, err := rdsAPI.DescribeDBEngineVersions(ctx, &rds.DescribeDBEngineVersionsInput{
+		Engine:      aws.String("postgres"),
+		DefaultOnly: aws.Bool(false),
+		IncludeAll:  aws.Bool(true),
+	})
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "failed to describe DB engine versions")
+	}
+
+	// check if upgrades are available
+	upgradeAvailable := p.checkUpgradeAvailable(currentEngineVersion, describeEngineVersionsOutput.DBEngineVersions)
+
+	// get cluster ID for use in metric labels
+	clusterID, err := resources.GetClusterID(ctx, p.Client)
+	if err != nil {
+		return nil, errorUtil.Wrap(err, "error getting clusterID")
+	}
+
+	// build the upgrade availability metric
+	var metrics []*providers.GenericCloudMetric
+	for _, metricType := range metricTypes {
+		var metricValue float64
+		if upgradeAvailable {
+			metricValue = 1.0
+		} else {
+			metricValue = 0.0
+		}
+
+		metrics = append(metrics, &providers.GenericCloudMetric{
+			Name: metricType.PrometheusMetricName,
+			Labels: map[string]string{
+				resources.LabelClusterIDKey:   clusterID,
+				resources.LabelResourceIDKey:  postgres.Name,
+				resources.LabelNamespaceKey:   postgres.Namespace,
+				resources.LabelInstanceIDKey:  resourceID,
+				resources.LabelProductNameKey: postgres.Labels["productName"],
+				resources.LabelStrategyKey:    postgresProviderName,
+				"current_version":             currentEngineVersion,
+			},
+			Value: metricValue,
+		})
+	}
+
+	logger.Infof("upgrade availability for postgres %s: %v", resourceID, upgradeAvailable)
+	return metrics, nil
+}
+
+// checkUpgradeAvailable compares the current engine version with available versions to determine if upgrades exist
+func (p *PostgresMetricsProvider) checkUpgradeAvailable(currentVersion string, availableVersions []rds_types.DBEngineVersion) bool {
+	currentVer, err := version.NewVersion(currentVersion)
+	if err != nil {
+		p.Logger.Errorf("failed to parse current version %s: %v", currentVersion, err)
+		return false
+	}
+
+	for _, engineVersion := range availableVersions {
+		availableVer, err := version.NewVersion(aws.ToString(engineVersion.EngineVersion))
+		if err != nil {
+			continue // skip invalid versions
+		}
+
+		// check if this available version is newer than current version
+		if availableVer.GreaterThan(currentVer) {
+			return true
+		}
+	}
+
+	return false
 }

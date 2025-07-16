@@ -56,6 +56,7 @@ type RDSAPI interface {
 	DeleteDBInstance(ctx context.Context, config *rds.DeleteDBInstanceInput, optFns ...func(*rds.Options)) (*rds.DeleteDBInstanceOutput, error)
 	CreateDBSnapshot(ctx context.Context, r *rds.CreateDBSnapshotInput, optFns ...func(*rds.Options)) (*rds.CreateDBSnapshotOutput, error)
 	DeleteDBSnapshot(ctx context.Context, input *rds.DeleteDBSnapshotInput, optFns ...func(*rds.Options)) (*rds.DeleteDBSnapshotOutput, error)
+	DescribeDBEngineVersions(ctx context.Context, input *rds.DescribeDBEngineVersionsInput, optFns ...func(*rds.Options)) (*rds.DescribeDBEngineVersionsOutput, error)
 }
 
 type ElastiCacheAPI interface {

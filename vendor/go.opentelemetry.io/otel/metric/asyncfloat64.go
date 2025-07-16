@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package metric // import "go.opentelemetry.io/otel/metric"
 
@@ -39,7 +50,7 @@ type Float64ObservableCounter interface {
 }
 
 // Float64ObservableCounterConfig contains options for asynchronous counter
-// instruments that record float64 values.
+// instruments that record int64 values.
 type Float64ObservableCounterConfig struct {
 	description string
 	unit        string
@@ -97,7 +108,7 @@ type Float64ObservableUpDownCounter interface {
 }
 
 // Float64ObservableUpDownCounterConfig contains options for asynchronous
-// counter instruments that record float64 values.
+// counter instruments that record int64 values.
 type Float64ObservableUpDownCounterConfig struct {
 	description string
 	unit        string
@@ -106,9 +117,7 @@ type Float64ObservableUpDownCounterConfig struct {
 
 // NewFloat64ObservableUpDownCounterConfig returns a new
 // [Float64ObservableUpDownCounterConfig] with all opts applied.
-func NewFloat64ObservableUpDownCounterConfig(
-	opts ...Float64ObservableUpDownCounterOption,
-) Float64ObservableUpDownCounterConfig {
+func NewFloat64ObservableUpDownCounterConfig(opts ...Float64ObservableUpDownCounterOption) Float64ObservableUpDownCounterConfig {
 	var config Float64ObservableUpDownCounterConfig
 	for _, o := range opts {
 		config = o.applyFloat64ObservableUpDownCounter(config)
@@ -156,7 +165,7 @@ type Float64ObservableGauge interface {
 }
 
 // Float64ObservableGaugeConfig contains options for asynchronous counter
-// instruments that record float64 values.
+// instruments that record int64 values.
 type Float64ObservableGaugeConfig struct {
 	description string
 	unit        string
@@ -215,7 +224,7 @@ type Float64Observer interface {
 }
 
 // Float64Callback is a function registered with a Meter that makes
-// observations for a Float64Observable instrument it is registered with.
+// observations for a Float64Observerable instrument it is registered with.
 // Calls to the Float64Observer record measurement values for the
 // Float64Observable.
 //
@@ -241,16 +250,12 @@ type float64CallbackOpt struct {
 	cback Float64Callback
 }
 
-func (o float64CallbackOpt) applyFloat64ObservableCounter(
-	cfg Float64ObservableCounterConfig,
-) Float64ObservableCounterConfig {
+func (o float64CallbackOpt) applyFloat64ObservableCounter(cfg Float64ObservableCounterConfig) Float64ObservableCounterConfig {
 	cfg.callbacks = append(cfg.callbacks, o.cback)
 	return cfg
 }
 
-func (o float64CallbackOpt) applyFloat64ObservableUpDownCounter(
-	cfg Float64ObservableUpDownCounterConfig,
-) Float64ObservableUpDownCounterConfig {
+func (o float64CallbackOpt) applyFloat64ObservableUpDownCounter(cfg Float64ObservableUpDownCounterConfig) Float64ObservableUpDownCounterConfig {
 	cfg.callbacks = append(cfg.callbacks, o.cback)
 	return cfg
 }

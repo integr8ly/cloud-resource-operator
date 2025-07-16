@@ -84,6 +84,22 @@ var postgresGaugeMetrics = []CroGaugeMetric{
 			},
 		},
 	},
+	{
+		Name: resources.PostgresUpgradeAvailableMetricName,
+		GaugeVec: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: resources.PostgresUpgradeAvailableMetricName,
+				Help: "Indicates if a PostgreSQL upgrade is available (1 = upgrade available, 0 = no upgrade available)",
+			},
+			genericMetricLabelNames()),
+		ProviderType: map[string]providers.CloudProviderMetricType{
+			providers.AWSDeploymentStrategy: {
+				PrometheusMetricName: resources.PostgresUpgradeAvailableMetricName,
+				ProviderMetricName:   "upgrade_availability", // Custom metric name for our implementation
+				Statistic:            "",                      // Not used for non-CloudWatch metrics
+			},
+		},
+	},
 }
 
 // redisGaugeMetrics stores a mapping between an exposed (redis) prometheus metric and multiple cloud provider specific metric

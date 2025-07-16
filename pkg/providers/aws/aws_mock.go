@@ -359,6 +359,11 @@ func (m *mock_RdsClient) DeleteDBSnapshot(ctx context.Context, input *rds.Delete
 	return args.Get(0).(*rds.DeleteDBSnapshotOutput), args.Error(1)
 }
 
+func (m *mock_RdsClient) DescribeDBEngineVersions(ctx context.Context, input *rds.DescribeDBEngineVersionsInput, optFns ...func(*rds.Options)) (*rds.DescribeDBEngineVersionsOutput, error) {
+	args := m.Called(ctx, input, optFns)
+	return args.Get(0).(*rds.DescribeDBEngineVersionsOutput), args.Error(1)
+}
+
 // Elasticache Mock
 type mock_ElasticacheClient struct {
 	mock.Mock
