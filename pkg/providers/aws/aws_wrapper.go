@@ -274,6 +274,10 @@ func (r *RealElasticacheClient) CreateReplicationGroup(ctx context.Context, inpu
 	return r.Client.CreateReplicationGroup(ctx, input, optFns...)
 }
 
+func (r *RealElasticacheClient) ListTagsForResource(ctx context.Context, input *elasticache.ListTagsForResourceInput, optFns ...func(*elasticache.Options)) (*elasticache.ListTagsForResourceOutput, error) {
+	return r.Client.ListTagsForResource(ctx, input, optFns...)
+}
+
 // ---------- S3 ----------
 func NewS3Client(cfg aws.Config) S3API {
 	return &RealS3Client{

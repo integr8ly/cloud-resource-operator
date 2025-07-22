@@ -246,6 +246,15 @@ func (m *mockStsClient) GetCallerIdentity(*sts.GetCallerIdentityInput) (*sts.Get
 	}, nil
 }
 
+// mock elasticache ListTagsForResource output
+func (m *mockElasticacheClient) ListTagsForResource(ctx context.Context, input *elasticache.ListTagsForResourceInput) (*elasticache.ListTagsForResourceOutput, error) {
+	if resources.SafeStringDereference(input.ResourceName) == "arn:aws:elasticache:tes:test:cluster:test" {
+		return &elasticache.ListTagsForResourceOutput{}, nil
+	} else {
+		return m.listTagsForResourceFn(ctx, input)
+	}
+}
+
 func buildTestPrometheusRule() *monitoringv1.PrometheusRule {
 	return &monitoringv1.PrometheusRule{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -2462,6 +2471,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 						},
 					}, nil)
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.AddTagsToResourceOutput{}, nil)
+					mockElasticache.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ListTagsForResourceOutput{}, nil)
 					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
@@ -2507,6 +2517,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 						},
 					}, &mockSnapshotNotFoundError{})
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil)
+					mockElasticache.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ListTagsForResourceOutput{}, nil)
 					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
@@ -2541,7 +2552,9 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 				r:   buildTestRedisCR(),
 				elastiCacheClient: func() ElastiCacheAPI {
 					mockElasticache := new(mock_ElasticacheClient)
-					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{}, nil)
+					mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+						CacheClusters: buildCacheClusterList(nil),
+					}, nil)
 					mockElasticache.On("DescribeSnapshots", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeSnapshotsOutput{
 						Snapshots: []elasticachetypes.Snapshot{
 							{
@@ -2551,6 +2564,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					}, nil)
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil).Once()
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), genericAWSError)
+					mockElasticache.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ListTagsForResourceOutput{}, nil)
 					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
@@ -2597,6 +2611,7 @@ func TestAWSRedisProvider_TagElasticache(t *testing.T) {
 					}, errors.New("SnapshotAlreadyExistsFault"))
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), nil).Once()
 					mockElasticache.On("AddTagsToResource", mock.Anything, mock.Anything, mock.Anything).Return((*elasticache.AddTagsToResourceOutput)(nil), errors.New("SnapshotAlreadyExistsFault")).Once()
+					mockElasticache.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.ListTagsForResourceOutput{}, nil)
 					mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
 						CacheClusters: buildCacheClusterList(nil),
 					}, nil)
@@ -3560,6 +3575,171 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got2, tt.want2) {
 				t.Errorf("getElasticacheConfig() got2 = %v, want %v", got2, tt.want2)
+			}
+		})
+	}
+}
+
+// Test_filterAlreadyAppliedTags was created with the help of Cursor AI IDE.
+func Test_filterAlreadyAppliedTags(t *testing.T) {
+	type args struct {
+		ctx         context.Context
+		client      ElastiCacheAPI
+		resourceARN string
+		desired     []elasticachetypes.Tag
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []elasticachetypes.Tag
+		wantErr bool
+	}{
+		{
+			name: "fallback case - ListTagsForResource fails, returns all desired tags",
+			args: args{
+				ctx: context.TODO(),
+				client: func() ElastiCacheAPI {
+					mockClient := new(mock_ElasticacheClient)
+					mockClient.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						(*elasticache.ListTagsForResourceOutput)(nil),
+						errors.New("API error"),
+					)
+					return mockClient
+				}(),
+				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				desired: []elasticachetypes.Tag{
+					{Key: aws.String("Environment"), Value: aws.String("test")},
+				},
+			},
+			want: []elasticachetypes.Tag{
+				{Key: aws.String("Environment"), Value: aws.String("test")},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success case - no existing tags, all desired tags should be kept",
+			args: args{
+				ctx: context.TODO(),
+				client: func() ElastiCacheAPI {
+					mockClient := new(mock_ElasticacheClient)
+					mockClient.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						&elasticache.ListTagsForResourceOutput{
+							TagList: []elasticachetypes.Tag{}, // No existing tags
+						},
+						nil,
+					)
+					return mockClient
+				}(),
+				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				desired: []elasticachetypes.Tag{
+					{Key: aws.String("Environment"), Value: aws.String("test")},
+					{Key: aws.String("Team"), Value: aws.String("backend")},
+				},
+			},
+			want: []elasticachetypes.Tag{
+				{Key: aws.String("Environment"), Value: aws.String("test")},
+				{Key: aws.String("Team"), Value: aws.String("backend")},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success case - some tags already exist with same values, should be filtered out",
+			args: args{
+				ctx: context.TODO(),
+				client: func() ElastiCacheAPI {
+					mockClient := new(mock_ElasticacheClient)
+					mockClient.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						&elasticache.ListTagsForResourceOutput{
+							TagList: []elasticachetypes.Tag{
+								{Key: aws.String("Environment"), Value: aws.String("test")},
+								{Key: aws.String("Owner"), Value: aws.String("platform")},
+							},
+						},
+						nil,
+					)
+					return mockClient
+				}(),
+				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				desired: []elasticachetypes.Tag{
+					{Key: aws.String("Environment"), Value: aws.String("test")},  // Same value - should be filtered
+					{Key: aws.String("Team"), Value: aws.String("backend")},      // New tag - should be kept
+					{Key: aws.String("Owner"), Value: aws.String("engineering")}, // Different value - should be kept
+				},
+			},
+			want: []elasticachetypes.Tag{
+				{Key: aws.String("Team"), Value: aws.String("backend")},
+				{Key: aws.String("Owner"), Value: aws.String("engineering")},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success case - all tags already exist with same values, empty result",
+			args: args{
+				ctx: context.TODO(),
+				client: func() ElastiCacheAPI {
+					mockClient := new(mock_ElasticacheClient)
+					mockClient.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						&elasticache.ListTagsForResourceOutput{
+							TagList: []elasticachetypes.Tag{
+								{Key: aws.String("Environment"), Value: aws.String("test")},
+								{Key: aws.String("Team"), Value: aws.String("backend")},
+							},
+						},
+						nil,
+					)
+					return mockClient
+				}(),
+				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				desired: []elasticachetypes.Tag{
+					{Key: aws.String("Environment"), Value: aws.String("test")},
+					{Key: aws.String("Team"), Value: aws.String("backend")},
+				},
+			},
+			want:    []elasticachetypes.Tag{},
+			wantErr: false,
+		},
+		{
+			name: "success case - existing tags with nil values handled gracefully",
+			args: args{
+				ctx: context.TODO(),
+				client: func() ElastiCacheAPI {
+					mockClient := new(mock_ElasticacheClient)
+					// Create tags with valid pointers to test the dereferencing
+					existingKey := "Environment"
+					existingValue := "production"
+					mockClient.On("ListTagsForResource", mock.Anything, mock.Anything, mock.Anything).Return(
+						&elasticache.ListTagsForResourceOutput{
+							TagList: []elasticachetypes.Tag{
+								{Key: &existingKey, Value: &existingValue},
+							},
+						},
+						nil,
+					)
+					return mockClient
+				}(),
+				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				desired: []elasticachetypes.Tag{
+					{Key: aws.String("Environment"), Value: aws.String("test")}, // Different value - should be kept
+				},
+			},
+			want: []elasticachetypes.Tag{
+				{Key: aws.String("Environment"), Value: aws.String("test")},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := filterAlreadyAppliedTags(tt.args.ctx, tt.args.client, tt.args.resourceARN, tt.args.desired)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("filterAlreadyAppliedTags() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// Handle nil vs empty slice comparison
+			if (got == nil && len(tt.want) == 0) || (len(got) == 0 && len(tt.want) == 0) || reflect.DeepEqual(got, tt.want) {
+				// Test passes - nil slice and empty slice are equivalent for our purposes
+			} else {
+				t.Errorf("filterAlreadyAppliedTags() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

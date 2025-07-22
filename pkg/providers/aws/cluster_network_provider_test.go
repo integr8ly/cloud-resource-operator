@@ -538,6 +538,7 @@ type mockElasticacheClient struct {
 	batchApplyUpdateActionFn    func(ctx context.Context, input *elasticache.BatchApplyUpdateActionInput, opts ...func(*elasticache.Options)) (*elasticache.BatchApplyUpdateActionOutput, error)
 	addTagsToResourceFn         func(ctx context.Context, input *elasticache.AddTagsToResourceInput, opts ...func(*elasticache.Options)) (*elasticache.AddTagsToResourceOutput, error)
 	createReplicationGroupFn    func(ctx context.Context, input *elasticache.CreateReplicationGroupInput, opts ...func(*elasticache.Options)) (*elasticache.CreateReplicationGroupOutput, error)
+	listTagsForResourceFn       func(ctx context.Context, input *elasticache.ListTagsForResourceInput, opts ...func(*elasticache.Options)) (*elasticache.ListTagsForResourceOutput, error)
 	calls                       struct {
 		DescribeSnapshots []struct {
 			In1 *elasticache.DescribeSnapshotsInput

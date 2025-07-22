@@ -465,6 +465,11 @@ func (m *mock_ElasticacheClient) CreateReplicationGroup(ctx context.Context, inp
 	return args.Get(0).(*elasticache.CreateReplicationGroupOutput), args.Error(1)
 }
 
+func (m *mock_ElasticacheClient) ListTagsForResource(ctx context.Context, input *elasticache.ListTagsForResourceInput, optFns ...func(*elasticache.Options)) (*elasticache.ListTagsForResourceOutput, error) {
+	args := m.Called(ctx, input, optFns)
+	return args.Get(0).(*elasticache.ListTagsForResourceOutput), args.Error(1)
+}
+
 // S3 Mock
 type mock_S3Client struct {
 	mock.Mock
