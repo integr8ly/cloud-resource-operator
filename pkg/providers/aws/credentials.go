@@ -99,9 +99,9 @@ var (
 				"rds:RemoveTagsFromResource",
 				"rds:ApplyPendingMaintenanceAction",
 				//"sts:GetCallerIdentity",
-				"iam:CreateServiceLinkedRole",
-				"cloudwatch:ListMetrics",
-				"cloudwatch:GetMetricData",
+				//"iam:CreateServiceLinkedRole", // Only needed for CloudWatch alarms (not used)
+				//"cloudwatch:ListMetrics",	// Only needed for metric discovery (not used)
+				"cloudwatch:GetMetricData", // ACTUALLY USED for metrics collection
 			},
 			Resource: "*",
 		},
