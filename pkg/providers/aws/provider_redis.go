@@ -458,14 +458,14 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, elasticacheClien
 	// Get default tags
 	cacheTags, clusterID, err := p.getDefaultElasticacheTags(ctx, r)
 	if err != nil {
-		msg := "Failed to build default tags"
+		msg := "failed to build default tags"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
 	// Filter out already applied tags
-	filteredTags, err := filterAlreadyAppliedTags(ctx, elasticacheClient, arn, cacheTags)
+	filteredTags, err := filterAlreadyAppliedTags(ctx, elasticacheClient, arn, *cache.CacheClusterId, cacheTags)
 	if err != nil {
-		msg := "Failed to filter already applied tags"
+		msg := "failed to filter already applied tags"
 		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
 	}
 
@@ -479,9 +479,9 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, elasticacheClien
 			msg := "failed to add tags to aws elasticache :"
 			return croType.StatusMessage(msg), err
 		}
-		logrus.Infof("Successfully applied %d new/updated tags to cluster %s", len(filteredTags), arn)
+		logrus.Infof("successfully applied %d new/updated tags to cluster %s", len(filteredTags), *cache.CacheClusterId)
 	} else {
-		logrus.Infof("Redis cluster %s: no tag changes required", arn)
+		logrus.Infof("redis cluster %s: no tag changes required", *cache.CacheClusterId)
 	}
 
 	// if snapshots exist add tags to them
@@ -497,7 +497,7 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, elasticacheClien
 		resources.ResetMetric(metricName)
 		for _, snapshot := range snapshotList.Snapshots {
 			snapshotArn := fmt.Sprintf("arn:aws:elasticache:%s:%s:snapshot:%s", region, *id.Account, *snapshot.SnapshotName)
-			logrus.Infof("Adding operator tags to snapshot : %s", *snapshot.SnapshotName)
+			logrus.Infof("adding operator tags to snapshot : %s", *snapshot.SnapshotName)
 			snapshotInput := &elasticache.AddTagsToResourceInput{
 				ResourceName: aws.String(snapshotArn),
 				Tags:         cacheTags,
@@ -1260,6 +1260,7 @@ func (p *RedisProvider) applySpecifiedSecurityUpdates(ctx context.Context, elast
 	}
 	return nil
 }
+
 func (p *RedisProvider) applyServiceUpdate(ctx context.Context, elasticacheClient ElastiCacheAPI, replicationgroupid, serviceupdateName *string) error {
 	logger := p.Logger.WithField("action", "applyServiceUpdate")
 
@@ -1292,14 +1293,14 @@ func validServiceUpdateStates(status string) bool {
 }
 
 // filterAlreadyAppliedTags removes tags from `desired` that already exist (same key and value) on the resource.
-func filterAlreadyAppliedTags(ctx context.Context, client ElastiCacheAPI, resourceARN string, desired []elasticachetypes.Tag) ([]elasticachetypes.Tag, error) {
+func filterAlreadyAppliedTags(ctx context.Context, client ElastiCacheAPI, resourceARN string, cacheClusterID string, desired []elasticachetypes.Tag) ([]elasticachetypes.Tag, error) {
 	// List current tags on the resource
 	resp, err := client.ListTagsForResource(ctx, &elasticache.ListTagsForResourceInput{
 		ResourceName: aws.String(resourceARN),
 	})
 	if err != nil {
 		// If we can't list tags (permission issue), fall back to applying all tags
-		logrus.Warnf("Could not list existing tags for %s: %v. Will attempt to apply all tags (may result in unnecessary API calls for already-applied tags).", resourceARN, err)
+		logrus.Warnf("could not list existing tags for %s: %v. Will attempt to apply all tags (may result in unnecessary API calls for already-applied tags).", cacheClusterID, err)
 		return desired, nil
 	}
 

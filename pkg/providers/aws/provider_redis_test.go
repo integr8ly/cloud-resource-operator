@@ -3583,10 +3583,11 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 // Test_filterAlreadyAppliedTags was created with the help of Cursor AI IDE.
 func Test_filterAlreadyAppliedTags(t *testing.T) {
 	type args struct {
-		ctx         context.Context
-		client      ElastiCacheAPI
-		resourceARN string
-		desired     []elasticachetypes.Tag
+		ctx            context.Context
+		client         ElastiCacheAPI
+		resourceARN    string
+		cacheClusterID string
+		desired        []elasticachetypes.Tag
 	}
 	tests := []struct {
 		name    string
@@ -3606,7 +3607,8 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 					)
 					return mockClient
 				}(),
-				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				resourceARN:    "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				cacheClusterID: "test-cluster-id",
 				desired: []elasticachetypes.Tag{
 					{Key: aws.String("Environment"), Value: aws.String("test")},
 				},
@@ -3630,7 +3632,8 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 					)
 					return mockClient
 				}(),
-				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				resourceARN:    "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				cacheClusterID: "test-cluster-id",
 				desired: []elasticachetypes.Tag{
 					{Key: aws.String("Environment"), Value: aws.String("test")},
 					{Key: aws.String("Team"), Value: aws.String("backend")},
@@ -3659,7 +3662,8 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 					)
 					return mockClient
 				}(),
-				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				resourceARN:    "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				cacheClusterID: "test-cluster-id",
 				desired: []elasticachetypes.Tag{
 					{Key: aws.String("Environment"), Value: aws.String("test")},  // Same value - should be filtered
 					{Key: aws.String("Team"), Value: aws.String("backend")},      // New tag - should be kept
@@ -3689,7 +3693,8 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 					)
 					return mockClient
 				}(),
-				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				resourceARN:    "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				cacheClusterID: "test-cluster-id",
 				desired: []elasticachetypes.Tag{
 					{Key: aws.String("Environment"), Value: aws.String("test")},
 					{Key: aws.String("Team"), Value: aws.String("backend")},
@@ -3717,7 +3722,8 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 					)
 					return mockClient
 				}(),
-				resourceARN: "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				resourceARN:    "arn:aws:elasticache:us-east-1:123456789012:cluster:test-cluster",
+				cacheClusterID: "test-cluster-id",
 				desired: []elasticachetypes.Tag{
 					{Key: aws.String("Environment"), Value: aws.String("test")}, // Different value - should be kept
 				},
@@ -3730,7 +3736,7 @@ func Test_filterAlreadyAppliedTags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := filterAlreadyAppliedTags(tt.args.ctx, tt.args.client, tt.args.resourceARN, tt.args.desired)
+			got, err := filterAlreadyAppliedTags(tt.args.ctx, tt.args.client, tt.args.resourceARN, tt.args.cacheClusterID, tt.args.desired)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("filterAlreadyAppliedTags() error = %v, wantErr %v", err, tt.wantErr)
 				return
