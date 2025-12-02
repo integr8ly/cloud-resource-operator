@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
-	"github.com/aws/smithy-go"
 	"strconv"
 	"strings"
 	"time"
+
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elasticachetypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -1152,8 +1153,17 @@ func (p *RedisProvider) createElasticacheConnectionMetric(ctx context.Context, c
 	genericLabels := resources.BuildGenericMetricLabels(cr.ObjectMeta, clusterID, cacheName, redisProviderName)
 
 	// check if the node group is available
-	if cache == nil || cache.NodeGroups == nil {
+	if cache == nil || cache.NodeGroups == nil || len(cache.NodeGroups) == 0 {
 		logrus.Infof("%s cache is nil and not yet available", cacheName)
+		resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0)
+		return
+	}
+
+	// check if endpoint is available before accessing it
+	if cache.NodeGroups[0].PrimaryEndpoint == nil ||
+		cache.NodeGroups[0].PrimaryEndpoint.Address == nil ||
+		cache.NodeGroups[0].PrimaryEndpoint.Port == nil {
+		logrus.Infof("%s cache endpoint is not yet available", cacheName)
 		resources.SetMetric(resources.DefaultRedisConnectionMetricName, genericLabels, 0)
 		return
 	}
