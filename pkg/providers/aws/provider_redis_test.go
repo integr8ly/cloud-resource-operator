@@ -3612,7 +3612,7 @@ func TestRedisProvider_createElasticacheConnectionMetric(t *testing.T) {
 			},
 		},
 		{
-			name: "test cluster with node groups but nil endpoints (should still be healthy)",
+			name: "test cluster with node groups but nil endpoints (unhealthy)",
 			fields: fields{
 				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
 				Logger:    testLogger,
@@ -3663,6 +3663,30 @@ func TestRedisProvider_createElasticacheConnectionMetric(t *testing.T) {
 					ReplicationGroupId: aws.String("test-redis"),
 					Status:             aws.String("available"),
 					NodeGroups:         nil,
+				},
+			},
+		},
+		{
+			name: "test cluster with endpoint but nil address (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("available"),
+					NodeGroups: []elasticachetypes.NodeGroup{
+						{
+							PrimaryEndpoint: &elasticachetypes.Endpoint{
+								Address: nil,
+								Port:    testPort,
+							},
+						},
+					},
 				},
 			},
 		},
