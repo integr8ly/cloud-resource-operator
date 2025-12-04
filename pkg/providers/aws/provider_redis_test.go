@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/stretchr/testify/mock"
 	"os"
 	"reflect"
 	"time"
+
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/integr8ly/cloud-resource-operator/internal/k8sutil"
 	moqClient "github.com/integr8ly/cloud-resource-operator/pkg/client/fake"
@@ -3561,6 +3562,156 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 			if !reflect.DeepEqual(got2, tt.want2) {
 				t.Errorf("getElasticacheConfig() got2 = %v, want %v", got2, tt.want2)
 			}
+		})
+	}
+}
+
+func TestRedisProvider_createElasticacheConnectionMetric(t *testing.T) {
+	scheme, err := buildTestSchemeRedis()
+	if err != nil {
+		t.Fatal("failed to build scheme", err)
+	}
+
+	type fields struct {
+		Client    client.Client
+		Logger    *logrus.Entry
+		TCPPinger resources.ConnectionTester
+	}
+	type args struct {
+		ctx        context.Context
+		r          *v1alpha1.Redis
+		foundCache *elasticachetypes.ReplicationGroup
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		{
+			name: "test healthy cluster with node groups",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("available"),
+					NodeGroups: []elasticachetypes.NodeGroup{
+						{
+							PrimaryEndpoint: &elasticachetypes.Endpoint{
+								Address: testAddress,
+								Port:    testPort,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test cluster with node groups but nil endpoints (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("create-failed"),
+					NodeGroups: []elasticachetypes.NodeGroup{
+						{
+							PrimaryEndpoint: nil,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test cluster with empty NodeGroups array (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("available"),
+					NodeGroups:         []elasticachetypes.NodeGroup{},
+				},
+			},
+		},
+		{
+			name: "test cluster with nil NodeGroups (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("available"),
+					NodeGroups:         nil,
+				},
+			},
+		},
+		{
+			name: "test cluster with endpoint but nil address (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx: context.TODO(),
+				r:   buildTestRedisCR(),
+				foundCache: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId: aws.String("test-redis"),
+					Status:             aws.String("available"),
+					NodeGroups: []elasticachetypes.NodeGroup{
+						{
+							PrimaryEndpoint: &elasticachetypes.Endpoint{
+								Address: nil,
+								Port:    testPort,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "test nil cache (unhealthy)",
+			fields: fields{
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), buildTestInfra()),
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+			},
+			args: args{
+				ctx:        context.TODO(),
+				r:          buildTestRedisCR(),
+				foundCache: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &RedisProvider{
+				Client:    tt.fields.Client,
+				Logger:    tt.fields.Logger,
+				TCPPinger: tt.fields.TCPPinger,
+			}
+			p.createElasticacheConnectionMetric(tt.args.ctx, tt.args.r, tt.args.foundCache)
 		})
 	}
 }
