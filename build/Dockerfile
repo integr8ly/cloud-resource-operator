@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.23
+FROM registry.access.redhat.com/ubi9/go-toolset:1.24
 
 ENV OPERATOR=/usr/local/bin/cloud-resource-operator \
     USER_UID=1001 \
