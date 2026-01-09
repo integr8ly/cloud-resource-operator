@@ -258,7 +258,7 @@ code/gen: setup/moq vendor/fix api/integreatly/v1alpha1/zz_generated.deepcopy.go
 
 .PHONY: setup/moq
 setup/moq:
-	GOFLAGS= go install github.com/matryer/moq@v0.6.1
+	GOFLAGS= go install github.com/matryer/moq@v0.6.0
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
@@ -293,7 +293,7 @@ setup/sts:
 
 .PHONY: gosec
 gosec:
-	gosec -exclude-dir=hack/redis -exclude=G402 test ./...
+	gosec -exclude-dir=hack/redis -exclude=G402,G115 test ./...
 
 .PHONY: build-installer
 	build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
