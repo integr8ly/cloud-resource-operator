@@ -258,7 +258,7 @@ code/gen: setup/moq vendor/fix api/integreatly/v1alpha1/zz_generated.deepcopy.go
 
 .PHONY: setup/moq
 setup/moq:
-	GOFLAGS= go install github.com/matryer/moq@v0.6.0
+	GOFLAGS= go install github.com/matryer/moq@v0.5.2
 
 .PHONY: create/olm/bundle
 create/olm/bundle:
