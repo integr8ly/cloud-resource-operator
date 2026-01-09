@@ -4,6 +4,7 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.24
 USER root
 
 ENV OPERATOR_SDK_VERSION=v1.39.0
+ENV MOQ_VERSION=v0.6.1
 
 ENV GOPATH=/go
 ENV GOBIN=$GOPATH/bin
@@ -21,7 +22,7 @@ RUN mkdir -p $GOPATH/src/github.com/operator-framework \
     && rm -rf $GOPATH/.cache
 
 # install gosec
-RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.18.2
+RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.21.4
 
 # Ensure proper permissions for Go cache and workspace, then switch back to default user
 RUN mkdir -p /opt/app-root/src/.cache && \
