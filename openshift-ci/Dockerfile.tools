@@ -4,7 +4,7 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.24
 USER root
 
 ENV OPERATOR_SDK_VERSION=v1.39.0
-ENV MOQ_VERSION=v0.6.0
+ENV MOQ_VERSION=v0.5.2
 
 ENV GOPATH=/go
 ENV GOBIN=$GOPATH/bin
