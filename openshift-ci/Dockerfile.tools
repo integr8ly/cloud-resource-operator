@@ -22,3 +22,12 @@ RUN mkdir -p $GOPATH/src/github.com/operator-framework \
 
 # install gosec
 RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $GOPATH/bin v2.18.2
+
+# Ensure proper permissions for Go cache and workspace, then switch back to default user
+RUN mkdir -p /opt/app-root/src/.cache && \
+    chmod -R 777 /opt/app-root/src/.cache && \
+    chmod -R 777 /opt/app-root/src && \
+    chmod -R 777 /go
+
+# Switch back to default user
+USER 1001
