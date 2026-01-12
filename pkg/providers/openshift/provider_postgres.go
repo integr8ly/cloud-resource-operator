@@ -98,7 +98,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, ps *v1alpha1.P
 	postgresCfg, _, err := p.getPostgresConfig(ctx, ps)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve openshift postgres config for instance %s", ps.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// deploy pvc

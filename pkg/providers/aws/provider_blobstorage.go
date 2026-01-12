@@ -133,7 +133,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile aws blob storage provider credentials for blob storage instance %s", bs.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup aws s3 sdk session
@@ -149,7 +149,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	p.Logger.Infof("reconciling aws s3 bucket %s", *bucketCreateCfg.Bucket)
 	msg, err := p.reconcileBucketCreate(ctx, bs, s3Client, bucketCreateCfg)
 	if err != nil {
-		return nil, msg, errorUtil.Wrapf(err, string(msg))
+		return nil, msg, errorUtil.Wrap(err, string(msg))
 	}
 
 	// create the credentials to be used by the end-user, whoever created the blobstorage instance
@@ -158,7 +158,7 @@ func (p *BlobStorageProvider) CreateStorage(ctx context.Context, bs *v1alpha1.Bl
 	endUserCreds, err := p.CredentialManager.ReconcileBucketOwnerCredentials(ctx, endUserCredsName, bs.Namespace, *bucketCreateCfg.Bucket)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile s3 end-user credentials for blob storage instance %s", bs.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// blobstorageinstance that will be returned if everything is successful
@@ -199,7 +199,7 @@ func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName str
 	bucketTags, err := p.getDefaultS3Tags(ctx, bs)
 	if err != nil {
 		msg := "Failed to build default tags"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// adding the tags to S3
@@ -211,7 +211,7 @@ func (p *BlobStorageProvider) TagBlobStorage(ctx context.Context, bucketName str
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to add tags to S3 bucket: %s", err)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	logrus.Infof("successfully created or updated tags to s3 bucket %s", bucketName)
@@ -235,7 +235,7 @@ func (p *BlobStorageProvider) DeleteStorage(ctx context.Context, bs *v1alpha1.Bl
 	providerCreds, err := p.CredentialManager.ReconcileProviderCredentials(ctx, bs.Namespace)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to reconcile aws provider credentials for blob storage instance %s", bs.Name)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// create new s3 config
@@ -273,31 +273,31 @@ func (p *BlobStorageProvider) reconcileBucketDelete(ctx context.Context, bs *v1a
 	if !found {
 		if err := p.removeCredsAndFinalizer(ctx, bs, s3Client, bucketCfg, bucketDeleteCfg); err != nil {
 			errMsg := fmt.Sprintf("unable to remove credential secrets and finalizer for %s", *bucketCfg.Bucket)
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
 
 	bucketSize, err := getBucketSize(ctx, s3Client, bucketCfg)
 	if err != nil {
 		errMsg := fmt.Sprintf("unable to get bucket size : %s", *bucketCfg.Bucket)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	if *bucketDeleteCfg.ForceBucketDeletion || bucketSize == 0 {
 		if err := emptyBucket(ctx, s3Client, bucketCfg); err != nil {
 			errMsg := fmt.Sprintf("unable to empty bucket : %q", *bucketCfg.Bucket)
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 
 		if err := deleteBucket(ctx, s3Client, bucketCfg); err != nil {
 			errMsg := fmt.Sprintf("unable to delete bucket : %s", *bucketCfg.Bucket)
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 	}
 
 	if err := p.removeCredsAndFinalizer(ctx, bs, s3Client, bucketCfg, bucketDeleteCfg); err != nil {
 		errMsg := fmt.Sprintf("unable to remove credential secrets and finalizer for %s", *bucketCfg.Bucket)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	return croType.StatusEmpty, nil
@@ -318,7 +318,7 @@ func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v
 	if err := p.Client.Delete(ctx, endUserCredsReq); err != nil {
 		if !errors.IsNotFound(err) {
 			errMsg := fmt.Sprintf("failed to delete credential request %s", endUserCredsName)
-			return errorUtil.Wrapf(err, errMsg)
+			return errorUtil.Wrap(err, errMsg)
 		}
 		p.Logger.Infof("could not find credential request %s, already deleted, continuing", endUserCredsName)
 	}
@@ -327,7 +327,7 @@ func (p *BlobStorageProvider) removeCredsAndFinalizer(ctx context.Context, bs *v
 	resources.RemoveFinalizer(&bs.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, bs); err != nil {
 		errMsg := "failed to update blob storage cr as part of finalizer reconcile"
-		return errorUtil.Wrapf(err, errMsg)
+		return errorUtil.Wrap(err, errMsg)
 	}
 
 	p.exposeBlobStorageMetrics(ctx, bs)
@@ -339,7 +339,7 @@ func (p *BlobStorageProvider) getDefaultS3Tags(ctx context.Context, cr *v1alpha1
 	tags, _, err := resources.GetDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
 	if err != nil {
 		msg := "Failed to get default s3 tags"
-		return nil, errorUtil.Wrapf(err, msg)
+		return nil, errorUtil.Wrap(err, msg)
 	}
 	return genericToS3Tags(tags), nil
 }
@@ -359,11 +359,11 @@ func deleteBucket(ctx context.Context, s3Client S3API, bucketCfg *s3.CreateBucke
 				fmt.Println("Bucket does not exist, skipping deletion")
 			} else {
 				// Some other AWS API error
-				return errorUtil.Wrapf(err, fmt.Sprintf("failed to delete s3 bucket: %s", err))
+				return errorUtil.Wrap(err, "failed to delete s3 bucket")
 			}
 		} else {
 			// Other non-AWS errors
-			return errorUtil.Wrapf(err, fmt.Sprintf("failed to delete s3 bucket: %s", err))
+			return errorUtil.Wrap(err, "failed to delete s3 bucket")
 		}
 
 	}
@@ -421,7 +421,7 @@ func getBucketSize(ctx context.Context, s3Client S3API, bucketCfg *s3.CreateBuck
 	resp, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: aws.String(*bucketCfg.Bucket)})
 	if err != nil {
 		errMsg := fmt.Sprintf("unable to list items in bucket %q", *bucketCfg.Bucket)
-		return 0, errorUtil.Wrapf(err, errMsg)
+		return 0, errorUtil.Wrap(err, errMsg)
 	}
 	return len(resp.Contents), nil
 }
@@ -462,7 +462,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	if found {
 		if err = reconcileS3BucketSettings(ctx, aws.ToString(foundBucket.Name), s3Client); err != nil {
 			errMsg := fmt.Sprintf("failed to set s3 bucket settings %s", *foundBucket.Name)
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 		msg := fmt.Sprintf("using bucket %s", *foundBucket.Name)
 		return croType.StatusMessage(msg), nil
@@ -474,7 +474,7 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	if annotations.Has(bs, ResourceIdentifierAnnotation) {
 		errMsg := fmt.Sprintf("BlobStorage CR %s in %s namespace has %s annotation with value %s, but no corresponding S3 Bucket was found",
 			bs.Name, bs.Namespace, ResourceIdentifierAnnotation, bs.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
-		return croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		return croType.StatusMessage(errMsg), fmt.Errorf("%s", errMsg)
 	}
 
 	// create bucket
@@ -482,18 +482,18 @@ func (p *BlobStorageProvider) reconcileBucketCreate(ctx context.Context, bs *v1a
 	_, err = s3Client.CreateBucket(ctx, bucketCfg)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create s3 bucket %s", *bucketCfg.Bucket)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	annotations.Add(bs, ResourceIdentifierAnnotation, *bucketCfg.Bucket)
 	if err := p.Client.Update(ctx, bs); err != nil {
 		errMsg := "failed to add annotation"
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	if err = reconcileS3BucketSettings(ctx, aws.ToString(bucketCfg.Bucket), s3Client); err != nil {
 		errMsg := fmt.Sprintf("failed to set s3 bucket settings on bucket creation %s", aws.ToString(bucketCfg.Bucket))
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	p.Logger.Infof("reconcile for aws s3 bucket completed successfully")
 	return "successfully reconciled", nil
@@ -552,14 +552,14 @@ func (p *BlobStorageProvider) buildS3BucketConfig(ctx context.Context, bs *v1alp
 	p.Logger.Infof("getting aws s3 bucket config for blob storage instance %s", bs.Name)
 	bucketCreateCfg, bucketDeleteCfg, stratCfg, err := p.getS3BucketConfig(ctx, bs)
 	if err != nil {
-		return nil, nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
+		return nil, nil, nil, errorUtil.Wrap(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
 	}
 
 	// cluster infra info
 	p.Logger.Info("getting cluster id from infrastructure for bucket naming")
 	bucketName, err := resources.BuildInfraNameFromObject(ctx, p.Client, bs.ObjectMeta, defaultAwsBucketNameLength)
 	if err != nil {
-		return nil, nil, nil, errorUtil.Wrapf(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
+		return nil, nil, nil, errorUtil.Wrap(err, fmt.Sprintf("failed to retrieve aws s3 bucket config for blob storage instance %s", bs.Name))
 	}
 	if bucketCreateCfg.Bucket == nil {
 		bucketCreateCfg.Bucket = aws.String(bucketName)

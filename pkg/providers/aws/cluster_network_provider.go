@@ -1868,7 +1868,7 @@ func getDefaultNetworkTags(ctx context.Context, client client.Client, customTag 
 	infraTags, err := resources.GetUserInfraTags(ctx, client)
 	if err != nil {
 		msg := "Failed to get user infrastructure tags"
-		return nil, errorUtil.Wrapf(err, msg)
+		return nil, errorUtil.Wrap(err, msg)
 	}
 	if infraTags != nil {
 		// merge tags into single array, where any duplicate

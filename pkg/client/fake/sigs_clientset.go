@@ -30,6 +30,9 @@ func NewSigsClientMoqWithScheme(clientScheme *runtime.Scheme, initObjs ...runtim
 	}
 	sigsClient := fake.NewClientBuilder().WithScheme(clientScheme).WithRuntimeObjects(initObjs...).WithStatusSubresource(clientObjs...).Build()
 	return &SigsClientInterfaceMock{
+		ApplyFunc: func(ctx context.Context, obj runtime.ApplyConfiguration, opts ...k8sclient.ApplyOption) error {
+			return sigsClient.Apply(ctx, obj, opts...)
+		},
 		GetSigsClientFunc: func() k8sclient.Client {
 			return sigsClient
 		},

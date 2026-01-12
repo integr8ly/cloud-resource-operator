@@ -304,7 +304,7 @@ func getDefaultSubnetTags(ctx context.Context, c client.Client) ([]ec2types.Tag,
 	infraTags, err := resources.GetUserInfraTags(ctx, c)
 	if err != nil {
 		msg := "Failed to get user infrastructure tags"
-		return nil, errorUtil.Wrapf(err, msg)
+		return nil, errorUtil.Wrap(err, msg)
 	}
 	if infraTags != nil {
 		// merge tags into single array, where any duplicate

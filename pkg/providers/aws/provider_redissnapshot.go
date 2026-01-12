@@ -144,7 +144,7 @@ func (p *RedisSnapshotProvider) createRedisSnapshot(ctx context.Context, snapsho
 		tags, _, err := resources.GetDefaultResourceTags(ctx, p.client, redis.Spec.Type, snapshotName, redis.ObjectMeta.Labels["productName"])
 		if err != nil {
 			msg := "failed to get default redis tags"
-			return nil, "", errorUtil.Wrapf(err, msg)
+			return nil, "", errorUtil.Wrap(err, msg)
 		}
 		_, err = elasticacheClient.CreateSnapshot(ctx, &elasticache.CreateSnapshotInput{
 			CacheClusterId: aws.String(cacheName),
@@ -200,7 +200,7 @@ func (p *RedisSnapshotProvider) deleteRedisSnapshot(ctx context.Context, snapsho
 
 		if err := p.client.Update(ctx, snapshot); err != nil {
 			msg := "failed to update instance as part of finalizer reconcile"
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		return "snapshot deleted", nil
 	}

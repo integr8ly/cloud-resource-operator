@@ -146,7 +146,7 @@ func (p *PostgresSnapshotProvider) createPostgresSnapshot(ctx context.Context, s
 		tags, _, err := resources.GetDefaultResourceTags(ctx, p.client, postgres.Spec.Type, snapshotName, postgres.ObjectMeta.Labels["productName"])
 		if err != nil {
 			msg := "failed to get default postgres tags"
-			return nil, "", errorUtil.Wrapf(err, msg)
+			return nil, "", errorUtil.Wrap(err, msg)
 		}
 		_, err = rdsClient.CreateDBSnapshot(ctx, &rds.CreateDBSnapshotInput{
 			DBInstanceIdentifier: aws.String(instanceName),
@@ -188,7 +188,7 @@ func (p *PostgresSnapshotProvider) deletePostgresSnapshot(ctx context.Context, s
 
 		if err := p.client.Update(ctx, snapshot); err != nil {
 			msg := "failed to update instance as part of finalizer reconcile"
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 		return "snapshot deleted", nil
 	}
