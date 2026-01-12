@@ -86,7 +86,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	redisConfig, _, err := p.getRedisConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve openshift redis cluster config for instance %s", r.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// deploy pvc

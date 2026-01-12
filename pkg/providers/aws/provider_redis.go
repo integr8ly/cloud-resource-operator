@@ -111,7 +111,7 @@ func (p *RedisProvider) CreateRedis(ctx context.Context, r *v1alpha1.Redis) (*pr
 	elasticacheCreateConfig, _, serviceUpdates, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache cluster config %s", r.Name)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
@@ -238,7 +238,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		// return nil error so this function can be requeueed
 		errMsg := "error getting replication groups"
 		logger.Info(errMsg, err)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// we handle standalone networking in CreateRedis() for installs on >= 4.4.6 openshift clusters
@@ -294,7 +294,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 		if annotations.Has(r, ResourceIdentifierAnnotation) {
 			errMsg := fmt.Sprintf("Redis CR %s in %s namespace has %s annotation with value %s, but no corresponding Elasticache cluster was found",
 				r.Name, r.Namespace, ResourceIdentifierAnnotation, r.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
-			return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+			return nil, croType.StatusMessage(errMsg), errors.New(errMsg)
 		}
 		if isSTS {
 			// the tag should be added to the create strategy in cases where sts is enabled
@@ -323,7 +323,7 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	cacheClustersOutput, err := elasticacheClient.DescribeCacheClusters(ctx, &elasticache.DescribeCacheClustersInput{})
 	if err != nil {
 		errMsg := "failed to describe clusters"
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	var replicationGroupClusters []elasticachetypes.CacheCluster
 	for _, checkedCluster := range cacheClustersOutput.CacheClusters {
@@ -406,7 +406,7 @@ func (p *RedisProvider) buildRedisTagCreateStrategy(ctx context.Context, cr *v1a
 	redisTags, _, err := p.getDefaultElasticacheTags(ctx, cr)
 	if err != nil {
 		msg := "Failed to build default tags"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	if cr.ObjectMeta.Labels["addonName"] != "" {
@@ -459,7 +459,7 @@ func (p *RedisProvider) TagElasticacheNode(ctx context.Context, elasticacheClien
 	cacheTags, clusterID, err := p.getDefaultElasticacheTags(ctx, r)
 	if err != nil {
 		msg := "Failed to build default tags"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// add tags
@@ -539,7 +539,7 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	elasticacheCreateConfig, elasticacheDeleteConfig, _, stratCfg, err := p.getElasticacheConfig(ctx, r)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to retrieve aws elasticache config for instance %s", r.Name)
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// get provider aws creds so the elasticache cluster can be deleted
@@ -620,7 +620,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 			}
 
 			errMsg := fmt.Sprintf("failed to delete elasticache cluster: %s", err)
-			return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+			return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 		}
 
 		return "delete detected, deleteReplicationGroup started", nil
@@ -672,7 +672,7 @@ func (p *RedisProvider) deleteElasticacheCluster(ctx context.Context, networkMan
 	resources.RemoveFinalizer(&r.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, r); err != nil {
 		errMsg := "failed to update instance as part of finalizer reconcile"
-		return croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 	return croType.StatusEmpty, nil
 }
@@ -739,7 +739,7 @@ func (p *RedisProvider) getDefaultElasticacheTags(ctx context.Context, cr *v1alp
 	tags, clusterID, err := resources.GetDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
 	if err != nil {
 		msg := "Failed to get default redis tags"
-		return nil, "", errorUtil.Wrapf(err, msg)
+		return nil, "", errorUtil.Wrap(err, msg)
 	}
 	return genericListToElasticacheTagList(tags), clusterID, nil
 }

@@ -140,7 +140,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	rdsCfg, _, serviceUpdates, strategyConfig, err := p.getRDSConfig(ctx, pg)
 	if err != nil {
 		msg := "failed to retrieve aws rds cluster config for instance"
-		return nil, croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return nil, croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// create the credentials to be used by the aws resource providers, not to be used by end-user
@@ -163,7 +163,7 @@ func (p *PostgresProvider) ReconcilePostgres(ctx context.Context, pg *v1alpha1.P
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create or update secret %s, action was %s", sec.Name, or)
-		return nil, croType.StatusMessage(errMsg), errorUtil.Wrapf(err, errMsg)
+		return nil, croType.StatusMessage(errMsg), errorUtil.Wrap(err, errMsg)
 	}
 
 	// setup aws RDS instance sdk config
@@ -319,7 +319,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	postgresPass := string(credSec.Data[defaultPostgresPasswordKey])
 	if postgresPass == "" {
 		msg := "unable to retrieve rds password"
-		return nil, croType.StatusMessage(msg), errorUtil.Errorf(msg)
+		return nil, croType.StatusMessage(msg), errorUtil.New(msg)
 	}
 
 	// verify and build rds create config
@@ -356,7 +356,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 			return nil, croType.StatusMessage(msg), errorUtil.New(msg)
 		}
 		if *foundInstance.DBInstanceStatus != "available" {
-			logger.Infof(msg)
+			logger.Info(msg)
 			return nil, croType.StatusMessage(fmt.Sprintf("reconcileRDSInstance() in progress, current aws rds resource status is %s", *foundInstance.DBInstanceStatus)), nil
 		}
 
@@ -389,7 +389,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 		}
 
 		msg = fmt.Sprintf("rds instance %s is as expected", *foundInstance.DBInstanceIdentifier)
-		logger.Infof(msg)
+		logger.Info(msg)
 		pdd := &providers.PostgresDeploymentDetails{
 			Username: *foundInstance.MasterUsername,
 			Password: postgresPass,
@@ -413,7 +413,7 @@ func (p *PostgresProvider) reconcileRDSInstance(ctx context.Context, cr *v1alpha
 	if annotations.Has(cr, ResourceIdentifierAnnotation) {
 		errMsg := fmt.Sprintf("Postgres CR %s in %s namespace has %s annotation with value %s, but no corresponding RDS instance was found",
 			cr.Name, cr.Namespace, ResourceIdentifierAnnotation, cr.ObjectMeta.Annotations[ResourceIdentifierAnnotation])
-		return nil, croType.StatusMessage(errMsg), fmt.Errorf(errMsg)
+		return nil, croType.StatusMessage(errMsg), fmt.Errorf("%s", errMsg)
 	}
 	// the tag should be added to the create strategy in cases where sts is enabled
 	// and in the same api request of the first creation of the postgres to allow
@@ -442,7 +442,7 @@ func (p *PostgresProvider) buildRDSTagCreateStrategy(ctx context.Context, cr *v1
 	rdsTags, err := p.getDefaultRdsTags(ctx, cr)
 	if err != nil {
 		msg := "Failed to build default tags"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 
 	}
 
@@ -469,7 +469,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 	rdsTag, err := p.getDefaultRdsTags(ctx, cr)
 	if err != nil {
 		msg := "Failed to build default tags"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 
 	}
 
@@ -480,7 +480,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 	})
 	if err != nil {
 		msg := "Failed to add Tags to RDS instance"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 
 	}
 
@@ -491,7 +491,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 	rdsSnapshotList, err := rdsClient.DescribeDBSnapshots(ctx, rdsSnapshotAttributeInput)
 	if err != nil {
 		msg := "Can't get Snapshot info"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 
 	// Adding tags to each DB Snapshots from list on AWS
@@ -504,7 +504,7 @@ func (p *PostgresProvider) TagRDSPostgres(ctx context.Context, cr *v1alpha1.Post
 		_, err = rdsClient.AddTagsToResource(ctx, inputRdsSnapshot)
 		if err != nil {
 			msg := "Failed to add Tags to RDS Snapshot"
-			return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+			return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 		}
 	}
 
@@ -602,7 +602,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 					return "delete detected, deleteDBInstance() started", err
 				}
 				msg := fmt.Sprintf("failed to delete rds instance : %s", err)
-				return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+				return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 			}
 			return "delete detected, deleteDBInstance() started", nil
 		}
@@ -680,7 +680,7 @@ func (p *PostgresProvider) deleteRDSInstance(ctx context.Context, pg *v1alpha1.P
 	resources.RemoveFinalizer(&pg.ObjectMeta, DefaultFinalizer)
 	if err := p.Client.Update(ctx, pg); err != nil {
 		msg := "failed to update instance as part of finalizer reconcile"
-		return croType.StatusMessage(msg), errorUtil.Wrapf(err, msg)
+		return croType.StatusMessage(msg), errorUtil.Wrap(err, msg)
 	}
 	return croType.StatusEmpty, nil
 }
@@ -753,7 +753,7 @@ func (p *PostgresProvider) getDefaultRdsTags(ctx context.Context, cr *v1alpha1.P
 	tags, _, err := resources.GetDefaultResourceTags(ctx, p.Client, cr.Spec.Type, cr.Name, cr.ObjectMeta.Labels["productName"])
 	if err != nil {
 		msg := "Failed to get default RDS tags"
-		return nil, errorUtil.Wrapf(err, msg)
+		return nil, errorUtil.Wrap(err, msg)
 	}
 	return genericToRdsTags(tags), nil
 }
