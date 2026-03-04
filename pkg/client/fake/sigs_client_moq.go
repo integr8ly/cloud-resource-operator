@@ -22,6 +22,9 @@ var _ SigsClientInterface = &SigsClientInterfaceMock{}
 //
 //		// make and configure a mocked SigsClientInterface
 //		mockedSigsClientInterface := &SigsClientInterfaceMock{
+//			ApplyFunc: func(ctx context.Context, obj runtime.ApplyConfiguration, opts ...k8sclient.ApplyOption) error {
+//				panic("mock out the Apply method")
+//			},
 //			CreateFunc: func(ctx context.Context, obj k8sclient.Object, opts ...k8sclient.CreateOption) error {
 //				panic("mock out the Create method")
 //			},
