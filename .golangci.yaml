@@ -1,6 +1,6 @@
 output:
-  formats: tab
-  sort-results: true
+  formats:
+    - format: tab
 
 linters:
   disable:
@@ -10,35 +10,10 @@ linters:
     - govet
     - staticcheck
 
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 
-linters-settings:
-  revive:
-    rules:
-      - name: comment-spacings
-  gosimple:
-    checks: ["all"]
-  staticcheck:
-    checks: ["all"]
-  errcheck:
-    check-blank: true
-
-presets:
-  - bugs
-  - error
-  - metalinter
-  - style
-  - unused
-
 run:
   modules-download-mode: readonly
   timeout: 5m
-
-build:
-  vendor-dirs:
-    - vendor
-  go-build-flags:
-    - -mod=mod

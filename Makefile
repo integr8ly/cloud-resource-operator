@@ -16,7 +16,7 @@ REDIS_NAME ?= example-redis
 PROVIDER ?= openshift
 CONTAINER_ENGINE ?= podman
 
-ENVTEST_K8S_VERSION = 1.31.0
+ENVTEST_K8S_VERSION := $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 
 SHELL=/bin/bash
 
@@ -29,8 +29,8 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
-CONTROLLER_TOOLS_VERSION ?= v0.17.3
-ENVTEST_VERSION ?= release-0.19
+CONTROLLER_TOOLS_VERSION ?= v0.18.0
+ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 GOLANGCI_LINT_VERSION ?= v1.64.0
 
 .PHONY: envtest
@@ -38,6 +38,12 @@ envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 
 $(ENVTEST): $(LOCALBIN)
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
+
+# Install the envtest binaries for the desired Kubernetes version into LOCALBIN.
+.PHONY: setup-envtest
+setup-envtest: $(ENVTEST)
+	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
+	  echo "Error setting up envtest"; exit 1; }
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
@@ -58,7 +64,7 @@ endef
 
 # If the _correct_ version of operator-sdk is on the path, use that (faster);
 # otherwise use it through "go run" (slower but will always work and will use correct version)
-OPERATOR_SDK_VERSION=1.39.0
+OPERATOR_SDK_VERSION=1.42.0
 ifeq ($(shell operator-sdk version 2> /dev/null | sed -e 's/", .*/"/' -e 's/.* //'), "v$(OPERATOR_SDK_VERSION)")
 	OPERATOR_SDK ?= operator-sdk
 else
