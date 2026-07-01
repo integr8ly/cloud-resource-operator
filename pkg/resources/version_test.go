@@ -56,8 +56,10 @@ func buildTestRedisCR(maintenanceWindow bool) *v1alpha1.Redis {
 			Name:      "test",
 			Namespace: "test",
 		},
-		Spec: croType.ResourceTypeSpec{
-			MaintenanceWindow: maintenanceWindow,
+		Spec: v1alpha1.RedisSpec{
+			ResourceTypeSpec: croType.ResourceTypeSpec{
+				MaintenanceWindow: maintenanceWindow,
+			},
 		},
 	}
 }

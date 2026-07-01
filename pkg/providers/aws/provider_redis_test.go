@@ -3466,12 +3466,13 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 				Logger: testLogger,
 			},
 			args: args{
-				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
-					Tier: "development",
+				r: &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{Tier: "development"},
 				}},
 			},
 			want: &elasticache.CreateReplicationGroupInput{
 				CacheNodeType: aws.String("cache.t3.small"),
+				Engine:        aws.String(croType.EngineRedis),
 			},
 			want1: &elasticache.DeleteReplicationGroupInput{},
 			want2: &ServiceUpdate{
@@ -3496,13 +3497,16 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 				Logger: testLogger,
 			},
 			args: args{
-				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
-					Tier: "development",
-					Size: "cache.m5.large",
+				r: &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{
+						Tier: "development",
+						Size: "cache.m5.large",
+					},
 				}},
 			},
 			want: &elasticache.CreateReplicationGroupInput{
 				CacheNodeType: aws.String("cache.m5.large"),
+				Engine:        aws.String(croType.EngineRedis),
 			},
 			want1: &elasticache.DeleteReplicationGroupInput{},
 			want2: &ServiceUpdate{
@@ -3527,18 +3531,81 @@ func TestRedisProvider_getElasticacheConfig(t *testing.T) {
 				Logger: testLogger,
 			},
 			args: args{
-				r: &v1alpha1.Redis{Spec: croType.ResourceTypeSpec{
-					Tier: "development",
-					Size: "cache.m5.large",
+				r: &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{
+						Tier: "development",
+						Size: "cache.m5.large",
+					},
 				}},
 			},
 			want: &elasticache.CreateReplicationGroupInput{
 				CacheNodeType: aws.String("cache.m5.large"),
+				Engine:        aws.String(croType.EngineRedis),
 			},
 			want1: &elasticache.DeleteReplicationGroupInput{},
 			want2: &ServiceUpdate{
 				updates: []string{"elasticache-20210615-002"},
 			},
+		},
+		{
+			name: "test engine and engine version from spec override strategy defaults",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      DefaultConfigMapName,
+							Namespace: "test",
+						},
+						Data: map[string]string{
+							"redis": "{\"development\": { \"region\": \"\", \"createStrategy\": {\"engine\": \"redis\", \"engineVersion\": \"7.1\"}, \"deleteStrategy\": {}, \"serviceUpdates\": null }}",
+						},
+					},
+					infra,
+				),
+				Logger: testLogger,
+			},
+			args: args{
+				r: &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{Tier: "development"},
+					Engine:           croType.EngineValkey,
+					EngineVersion:    "7.2",
+				}},
+			},
+			want: &elasticache.CreateReplicationGroupInput{
+				Engine:        aws.String(croType.EngineValkey),
+				EngineVersion: aws.String("7.2"),
+			},
+			want1: &elasticache.DeleteReplicationGroupInput{},
+			want2: &ServiceUpdate{},
+		},
+		{
+			name: "test valkey engine clears stale strategy engine version when engineVersion omitted",
+			fields: fields{
+				Client: moqClient.NewSigsClientMoqWithScheme(scheme,
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      DefaultConfigMapName,
+							Namespace: "test",
+						},
+						Data: map[string]string{
+							"redis": "{\"development\": { \"region\": \"\", \"createStrategy\": {\"engine\": \"redis\", \"engineVersion\": \"7.1\"}, \"deleteStrategy\": {}, \"serviceUpdates\": null }}",
+						},
+					},
+					infra,
+				),
+				Logger: testLogger,
+			},
+			args: args{
+				r: &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{Tier: "development"},
+					Engine:           croType.EngineValkey,
+				}},
+			},
+			want: &elasticache.CreateReplicationGroupInput{
+				Engine: aws.String(croType.EngineValkey),
+			},
+			want1: &elasticache.DeleteReplicationGroupInput{},
+			want2: &ServiceUpdate{},
 		},
 	}
 	for _, tt := range tests {
@@ -3713,5 +3780,17 @@ func TestRedisProvider_createElasticacheConnectionMetric(t *testing.T) {
 			}
 			p.createElasticacheConnectionMetric(tt.args.ctx, tt.args.r, tt.args.foundCache)
 		})
+	}
+}
+
+func TestDefaultReplicationGroupDescription(t *testing.T) {
+	if got := defaultReplicationGroupDescription(croType.EngineValkey); got != "A Valkey replication group" {
+		t.Fatalf("valkey: got %q", got)
+	}
+	if got := defaultReplicationGroupDescription(croType.EngineRedis); got != "A Redis replication group" {
+		t.Fatalf("redis: got %q", got)
+	}
+	if got := defaultReplicationGroupDescription(""); got != "A Redis replication group" {
+		t.Fatalf("empty: got %q", got)
 	}
 }

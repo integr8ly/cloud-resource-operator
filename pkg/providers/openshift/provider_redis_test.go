@@ -54,7 +54,7 @@ func buildTestRedisCR() *v1alpha1.Redis {
 			Namespace:       testRedisNamespace,
 			ResourceVersion: FakeResourceVersion,
 		},
-		Spec:   croType.ResourceTypeSpec{},
+		Spec:   v1alpha1.RedisSpec{},
 		Status: croType.ResourceTypeStatus{},
 	}
 }
