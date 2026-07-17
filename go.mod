@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/rds v1.97.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.9
-	github.com/aws/smithy-go v1.23.1
+	github.com/aws/smithy-go v1.27.4
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.14.2
 	github.com/hashicorp/go-version v1.6.0
