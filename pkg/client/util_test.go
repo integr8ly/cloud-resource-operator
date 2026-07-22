@@ -430,6 +430,8 @@ func TestReconcileRedis(t *testing.T) {
 		secretName        string
 		secretNs          string
 		size              string
+		engine            string
+		engineVersion     string
 		applyImmediately  bool
 		maintenanceWindow bool
 		modifyFunc        modifyResourceFunc
@@ -463,12 +465,14 @@ func TestReconcileRedis(t *testing.T) {
 						"productName": "test",
 					},
 				},
-				Spec: croType.ResourceTypeSpec{
-					Type: "aws",
-					Tier: "production",
-					SecretRef: &croType.SecretRef{
-						Name:      "test",
-						Namespace: "test",
+				Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{
+						Type: "aws",
+						Tier: "production",
+						SecretRef: &croType.SecretRef{
+							Name:      "test",
+							Namespace: "test",
+						},
 					},
 				},
 			},
@@ -487,6 +491,8 @@ func TestReconcileRedis(t *testing.T) {
 				secretName:        "test",
 				secretNs:          "test",
 				size:              "test",
+				engine:            croType.EngineValkey,
+				engineVersion:     "7.2",
 				applyImmediately:  true,
 				maintenanceWindow: true,
 				modifyFunc: func(cr metav1.Object) error {
@@ -505,16 +511,20 @@ func TestReconcileRedis(t *testing.T) {
 						"cro": "test",
 					},
 				},
-				Spec: croType.ResourceTypeSpec{
-					Type: "aws",
-					Tier: "production",
-					SecretRef: &croType.SecretRef{
-						Name:      "test",
-						Namespace: "test",
+				Spec: v1alpha1.RedisSpec{
+					ResourceTypeSpec: croType.ResourceTypeSpec{
+						Type: "aws",
+						Tier: "production",
+						SecretRef: &croType.SecretRef{
+							Name:      "test",
+							Namespace: "test",
+						},
+						Size:              "test",
+						ApplyImmediately:  true,
+						MaintenanceWindow: true,
 					},
-					Size:              "test",
-					ApplyImmediately:  true,
-					MaintenanceWindow: true,
+					Engine:        croType.EngineValkey,
+					EngineVersion: "7.2",
 				},
 			},
 			wantErr: false,
@@ -541,7 +551,7 @@ func TestReconcileRedis(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.size, tt.args.applyImmediately, tt.args.maintenanceWindow, tt.args.modifyFunc)
+			got, err := ReconcileRedis(tt.args.ctx, tt.args.client, tt.args.productName, tt.args.deploymentType, tt.args.tier, tt.args.name, tt.args.ns, tt.args.secretName, tt.args.secretNs, tt.args.size, tt.args.engine, tt.args.engineVersion, tt.args.applyImmediately, tt.args.maintenanceWindow, tt.args.modifyFunc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileRedis() error = %v, wantErr %v", err, tt.wantErr)
 				return

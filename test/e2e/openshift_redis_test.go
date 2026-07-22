@@ -360,13 +360,15 @@ func getBasicTestRedis(ctx *TestingContext, namespace string) (*v1alpha1.Redis, 
 			Name:      redisName,
 			Namespace: namespace,
 		},
-		Spec: types2.ResourceTypeSpec{
-			SecretRef: &types2.SecretRef{
-				Name:      "example-redis-sec",
-				Namespace: namespace,
+		Spec: v1alpha1.RedisSpec{
+			ResourceTypeSpec: types2.ResourceTypeSpec{
+				SecretRef: &types2.SecretRef{
+					Name:      "example-redis-sec",
+					Namespace: namespace,
+				},
+				Tier: "development",
+				Type: "openshift",
 			},
-			Tier: "development",
-			Type: "openshift",
 		},
 	}, namespace, nil
 }

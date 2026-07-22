@@ -163,10 +163,11 @@ func (p *RedisProvider) DeleteRedis(ctx context.Context, r *v1alpha1.Redis) (cro
 	}
 
 	// delete config map
-	p.Logger.Info("Deleting redis configmap")
+	profile := getRedisEngineProfile(r)
+	p.Logger.Infof("Deleting %s configmap", profile.engineName)
 	cm := &corev1.ConfigMap{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      redisConfigMapName,
+			Name:      profile.configMapName,
 			Namespace: r.Namespace,
 		},
 	}
@@ -346,16 +347,17 @@ func buildDefaultRedisDeployment(r *v1alpha1.Redis) *appsv1.Deployment {
 }
 
 func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
+	profile := getRedisEngineProfile(r)
 	return []corev1.Container{
 		{
-			Image:           "registry.redhat.io/rhel9/redis-7",
+			Image:           profile.image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
-			Name:            redisContainerName,
+			Name:            profile.containerName,
 			Command: []string{
-				redisContainerCommand,
+				profile.serverCommand,
 			},
 			Args: []string{
-				"/etc/redis.d/redis.conf",
+				profile.configArgPath,
 				"--daemonize",
 				"no",
 			},
@@ -376,7 +378,7 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
 							"container-entrypoint",
 							"bash",
 							"-c",
-							"redis-cli set liveness-probe \"`date`\" | grep OK",
+							readinessProbeCommand(profile.cliCommand),
 						},
 					},
 				},
@@ -396,11 +398,11 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      r.Name,
-					MountPath: "/var/lib/redis/data",
+					MountPath: profile.dataDir,
 				},
 				{
-					Name:      redisConfigVolumeName,
-					MountPath: "/etc/redis.d/",
+					Name:      profile.configVolumeName,
+					MountPath: profile.configMountDir + "/",
 				},
 			},
 		},
@@ -408,6 +410,7 @@ func buildDefaultRedisPodContainers(r *v1alpha1.Redis) []corev1.Container {
 }
 
 func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []corev1.Volume {
+	profile := getRedisEngineProfile(r)
 	return []corev1.Volume{
 		{
 			Name: r.Name,
@@ -418,16 +421,16 @@ func buildDefaultRedisPodVolumes(r *v1alpha1.Redis) []corev1.Volume {
 			},
 		},
 		{
-			Name: redisConfigVolumeName,
+			Name: profile.configVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: redisConfigMapName, // the name of the ConfigMap
+						Name: profile.configMapName,
 					},
 					Items: []corev1.KeyToPath{
 						{
-							Key:  redisConfigMapKey,
-							Path: redisConfigMapKey,
+							Key:  profile.configFileName,
+							Path: profile.configFileName,
 						},
 					},
 				},
@@ -462,9 +465,10 @@ func buildDefaultRedisService(r *v1alpha1.Redis) *corev1.Service {
 }
 
 func buildDefaultRedisConfigMap(r *v1alpha1.Redis) *corev1.ConfigMap {
+	profile := getRedisEngineProfile(r)
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      redisConfigMapName,
+			Name:      profile.configMapName,
 			Namespace: r.Namespace,
 		},
 		TypeMeta: metav1.TypeMeta{
@@ -472,42 +476,9 @@ func buildDefaultRedisConfigMap(r *v1alpha1.Redis) *corev1.ConfigMap {
 			APIVersion: "v1",
 		},
 		Data: map[string]string{
-			"redis.conf": getRedisConfData(),
+			profile.configFileName: getRedisConfData(profile.dataDir),
 		},
 	}
-}
-
-func getRedisConfData() string {
-	return `protected-mode no
-port 6379
-timeout 0
-tcp-keepalive 300
-daemonize no
-supervised no
-loglevel notice
-databases 16
-save 900 1
-save 300 10
-save 60 10000
-stop-writes-on-bgsave-error yes
-rdbcompression yes
-rdbchecksum yes
-dbfilename dump.rdb
-slave-serve-stale-data yes
-slave-read-only yes
-repl-diskless-sync no
-repl-disable-tcp-nodelay no
-appendfilename "appendonly.aof"
-appendfsync everysec
-no-appendfsync-on-rewrite no
-auto-aof-rewrite-percentage 100
-auto-aof-rewrite-min-size 64mb
-aof-load-truncated yes
-lua-time-limit 5000
-activerehashing no
-aof-rewrite-incremental-fsync yes
-dir /var/lib/redis/data
-`
 }
 
 func buildDefaultRedisPVC(r *v1alpha1.Redis) *corev1.PersistentVolumeClaim {
