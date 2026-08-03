@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.9
 
 # Switch to root to install tools
 USER root
