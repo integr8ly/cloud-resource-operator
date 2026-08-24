@@ -281,6 +281,43 @@ func buildTestRedisCluster() *providers.RedisCluster {
 	}}
 }
 
+func availableTestReplicationGroup() elasticachetypes.ReplicationGroup {
+	return elasticachetypes.ReplicationGroup{
+		CacheNodeType:          aws.String("test"),
+		ReplicationGroupId:     aws.String("test-id"),
+		SnapshotRetentionLimit: aws.Int32(20),
+		Status:                 aws.String("available"),
+		NodeGroups: []elasticachetypes.NodeGroup{
+			{
+				NodeGroupId: aws.String("primary-node"),
+				PrimaryEndpoint: &elasticachetypes.Endpoint{
+					Address: testAddress,
+					Port:    testPort,
+				},
+				Status: aws.String("available"),
+			},
+		},
+	}
+}
+
+func mockElasticacheWithExistingEngine(engine *string) *mock_ElasticacheClient {
+	mockElasticache := new(mock_ElasticacheClient)
+	mockElasticache.On("DescribeReplicationGroups", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeReplicationGroupsOutput{
+		ReplicationGroups: []elasticachetypes.ReplicationGroup{availableTestReplicationGroup()},
+	}, nil)
+	mockElasticache.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeCacheClustersOutput{
+		CacheClusters: []elasticachetypes.CacheCluster{
+			{
+				ReplicationGroupId: aws.String("test-id"),
+				Engine:             engine,
+				EngineVersion:      aws.String("7.2"),
+			},
+		},
+	}, nil)
+	mockElasticache.On("DescribeUpdateActions", mock.Anything, mock.Anything, mock.Anything).Return(&elasticache.DescribeUpdateActionsOutput{}, nil)
+	return mockElasticache
+}
+
 func Test_createRedisCluster(t *testing.T) {
 	scheme, err := buildTestSchemeRedis()
 	if err != nil {
@@ -312,12 +349,13 @@ func Test_createRedisCluster(t *testing.T) {
 		TCPPinger         resources.ConnectionTester
 	}
 	tests := []struct {
-		name    string
-		args    args
-		fields  fields
-		want    *providers.RedisCluster
-		wantErr bool
-		mockFn  func()
+		name       string
+		args       args
+		fields     fields
+		want       *providers.RedisCluster
+		wantErr    bool
+		wantEngine *string
+		mockFn     func()
 	}{
 		{
 			name: "test no error on cache clusters of type memcached with no replicationgroupid",
@@ -2083,6 +2121,99 @@ func Test_createRedisCluster(t *testing.T) {
 			want:    buildTestRedisCluster(),
 			wantErr: false,
 		},
+		{
+			name: "empty spec.engine with existing AWS valkey completes",
+			args: args{
+				ctx:               context.TODO(),
+				elasticacheClient: mockElasticacheWithExistingEngine(aws.String(croType.EngineValkey)),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					return mockEc2
+				}(),
+				r: buildTestRedisCR(),
+				stsClient: func() STSAPI {
+					return new(mock_STSClient)
+				}(),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
+			},
+			fields: fields{
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:       buildTestRedisCluster(),
+			wantErr:    false,
+			wantEngine: aws.String(""),
+		},
+		{
+			name: "empty spec.engine with existing AWS redis completes",
+			args: args{
+				ctx:               context.TODO(),
+				elasticacheClient: mockElasticacheWithExistingEngine(aws.String(croType.EngineRedis)),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					return mockEc2
+				}(),
+				r: buildTestRedisCR(),
+				stsClient: func() STSAPI {
+					return new(mock_STSClient)
+				}(),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
+			},
+			fields: fields{
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:       buildTestRedisCluster(),
+			wantErr:    false,
+			wantEngine: aws.String(""),
+		},
+		{
+			name: "spec.engine redis errors when AWS is valkey",
+			args: args{
+				ctx:               context.TODO(),
+				elasticacheClient: mockElasticacheWithExistingEngine(aws.String(croType.EngineValkey)),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DescribeSecurityGroups", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSecurityGroupsOutput{
+						SecurityGroups: buildSecurityGroups(secName),
+					}, nil)
+					return mockEc2
+				}(),
+				r: func() *v1alpha1.Redis {
+					cr := buildTestRedisCR()
+					cr.Spec.Engine = croType.EngineRedis
+					return cr
+				}(),
+				stsClient: func() STSAPI {
+					return new(mock_STSClient)
+				}(),
+				redisConfig:             &elasticache.CreateReplicationGroupInput{ReplicationGroupId: aws.String("test-id")},
+				stratCfg:                &StrategyConfig{Region: "test"},
+				standaloneNetworkExists: true,
+				maintenanceWindow:       false,
+			},
+			fields: fields{
+				Logger:    testLogger,
+				TCPPinger: resources.BuildMockConnectionTester(),
+				Client:    moqClient.NewSigsClientMoqWithScheme(scheme, buildTestRedisCR(), builtTestCredSecret(), buildTestInfra(), buildTestPrometheusRule()),
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2107,6 +2238,24 @@ func Test_createRedisCluster(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("createElasticacheCluster() got = %v, want %v", got, tt.want)
+			}
+			if tt.wantEngine != nil && tt.args.r != nil {
+				if tt.args.r.Spec.Engine != *tt.wantEngine {
+					t.Errorf("spec.engine = %q, want %q", tt.args.r.Spec.Engine, *tt.wantEngine)
+				}
+				if tt.fields.Client != nil && !tt.wantErr {
+					persisted := &v1alpha1.Redis{}
+					if err := tt.fields.Client.Get(tt.args.ctx, k8sTypes.NamespacedName{Name: tt.args.r.Name, Namespace: tt.args.r.Namespace}, persisted); err != nil {
+						t.Errorf("failed to get persisted Redis CR: %v", err)
+					} else if persisted.Spec.Engine != *tt.wantEngine {
+						t.Errorf("persisted spec.engine = %q, want %q", persisted.Spec.Engine, *tt.wantEngine)
+					}
+				}
+			}
+			if tt.wantEngine != nil {
+				if mockClient, ok := tt.args.elasticacheClient.(*mock_ElasticacheClient); ok {
+					mockClient.AssertNotCalled(t, "ModifyReplicationGroup")
+				}
 			}
 		})
 	}
@@ -2987,6 +3136,53 @@ func Test_buildElasticacheUpdateStrategy(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "test existing cluster engine is not changed via modify",
+			args: args{
+				ctx: context.TODO(),
+				ec2Client: func() EC2API {
+					mockEc2 := new(mock_Ec2Client)
+					mockEc2.On("DeleteVpc", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DeleteVpcOutput{}, nil)
+					mockEc2.On("CreateTags", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.CreateTagsOutput{}, nil)
+					mockEc2.On("DescribeInstanceTypeOfferings", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeInstanceTypeOfferingsOutput{
+						InstanceTypeOfferings: []ec2types.InstanceTypeOffering{
+							{
+								Location: aws.String(defaultAzIdOne),
+							},
+							{
+								Location: aws.String(defaultAzIdTwo),
+							},
+						},
+					}, nil)
+					mockEc2.On("DescribeSubnets", mock.Anything, mock.Anything, mock.Anything).Return(&ec2.DescribeSubnetsOutput{}, nil)
+					return mockEc2
+				}(),
+				elasticacheConfig: &elasticache.CreateReplicationGroupInput{
+					CacheNodeType:              aws.String("cache.test"),
+					SnapshotRetentionLimit:     aws.Int32(30),
+					PreferredMaintenanceWindow: aws.String("test"),
+					SnapshotWindow:             aws.String("test"),
+					Engine:                     aws.String(croType.EngineValkey),
+					EngineVersion:              aws.String("7.1"),
+				},
+				foundConfig: &elasticachetypes.ReplicationGroup{
+					ReplicationGroupId:     aws.String("test-id"),
+					CacheNodeType:          aws.String("cache.test"),
+					SnapshotRetentionLimit: aws.Int32(30),
+				},
+				replicationGroupClusters: []elasticachetypes.CacheCluster{
+					{
+						Engine:                     aws.String(croType.EngineRedis),
+						EngineVersion:              aws.String("7.1"),
+						PreferredMaintenanceWindow: aws.String("test"),
+						SnapshotWindow:             aws.String("test"),
+					},
+				},
+				logger: testLogger,
+				redis:  buildTestRedisCR(),
+			},
+			want: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3792,5 +3988,35 @@ func TestDefaultReplicationGroupDescription(t *testing.T) {
 	}
 	if got := defaultReplicationGroupDescription(""); got != "A Redis replication group" {
 		t.Fatalf("empty: got %q", got)
+	}
+}
+
+func Test_existingCacheEngineAllowed(t *testing.T) {
+	tests := []struct {
+		name       string
+		specEngine string
+		awsEngine  string
+		wantErr    bool
+	}{
+		{name: "empty spec and AWS redis", specEngine: "", awsEngine: croType.EngineRedis},
+		{name: "empty spec and AWS valkey", specEngine: "", awsEngine: croType.EngineValkey},
+		{name: "explicit valkey matching AWS valkey", specEngine: croType.EngineValkey, awsEngine: croType.EngineValkey},
+		{name: "explicit redis matching AWS redis", specEngine: croType.EngineRedis, awsEngine: croType.EngineRedis},
+		{name: "explicit redis errors when AWS is valkey", specEngine: croType.EngineRedis, awsEngine: croType.EngineValkey, wantErr: true},
+		{name: "explicit valkey errors when AWS is redis", specEngine: croType.EngineValkey, awsEngine: croType.EngineRedis, wantErr: true},
+		{name: "empty spec errors on unknown AWS engine", specEngine: "", awsEngine: "memcached", wantErr: true},
+		{name: "empty AWS engine is ignored", specEngine: "", awsEngine: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &v1alpha1.Redis{Spec: v1alpha1.RedisSpec{Engine: tt.specEngine}}
+			err := existingCacheEngineAllowed(r, tt.awsEngine)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if r.Spec.Engine != tt.specEngine {
+				t.Fatalf("spec.engine mutated: got %q, want %q", r.Spec.Engine, tt.specEngine)
+			}
+		})
 	}
 }
