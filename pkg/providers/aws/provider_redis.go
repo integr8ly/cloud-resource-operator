@@ -330,10 +330,11 @@ func (p *RedisProvider) createElasticacheCluster(ctx context.Context, r *v1alpha
 	for _, checkedCluster := range cacheClustersOutput.CacheClusters {
 		cluster := checkedCluster
 		if resources.SafeStringDereference(cluster.ReplicationGroupId) == *foundCache.ReplicationGroupId {
-			if cluster.Engine != nil && *cluster.Engine != r.GetEngine() {
-				errMsg := fmt.Sprintf("%s to %s engine migration is not supported",
-					croType.EngineDisplayName(*cluster.Engine), r.EngineDisplayName())
-				return nil, croType.StatusMessage(errMsg), errors.New(errMsg)
+			if cluster.Engine != nil {
+				if err := existingCacheEngineAllowed(r, *cluster.Engine); err != nil {
+					errMsg := err.Error()
+					return nil, croType.StatusMessage(errMsg), err
+				}
 			}
 			replicationGroupClusters = append(replicationGroupClusters, checkedCluster)
 
@@ -776,6 +777,7 @@ func buildElasticacheUpdateStrategy(ctx context.Context, ec2Client EC2API, elast
 	updateFound := false
 
 	// contains the proposed modifications to be made.
+	// Engine is never set: CRO does not convert redis↔valkey on an existing RG.
 	modifyInput := &elasticache.ModifyReplicationGroupInput{}
 	modifyInput.ReplicationGroupId = foundConfig.ReplicationGroupId
 
@@ -1315,6 +1317,20 @@ func defaultEngineVersionFor(engine string) string {
 		return defaultValkeyEngineVersion
 	}
 	return defaultRedisEngineVersion
+}
+
+// existingCacheEngineAllowed is used when the ElastiCache RG already exists.
+// Empty spec.engine means do not convert: AWS redis or valkey is left as-is.
+// A set spec.engine that differs from AWS is an error. Engine is never changed here.
+func existingCacheEngineAllowed(r *v1alpha1.Redis, awsEngine string) error {
+	if awsEngine == "" || awsEngine == r.GetEngine() {
+		return nil
+	}
+	if r.Spec.Engine == "" && (awsEngine == croType.EngineRedis || awsEngine == croType.EngineValkey) {
+		return nil
+	}
+	return fmt.Errorf("%s to %s engine migration is not supported",
+		croType.EngineDisplayName(awsEngine), r.EngineDisplayName())
 }
 
 func defaultReplicationGroupDescription(engine string) string {
