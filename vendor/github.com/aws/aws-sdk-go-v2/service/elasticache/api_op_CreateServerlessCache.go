@@ -4,8 +4,6 @@ package elasticache
 
 import (
 	"context"
-	"fmt"
-	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/smithy-go/middleware"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
@@ -63,6 +61,12 @@ type CreateServerlessCacheInput struct {
 	// cache.
 	MajorEngineVersion *string
 
+	// The IP protocol version used by the serverless cache. Must be either ipv4 | ipv6
+	// | dual_stack . ipv6 is only supported with IPv6-only subnets. If not specified,
+	// defaults to ipv4 , unless all provided subnets are IPv6-only, in which case it
+	// defaults to ipv6 .
+	NetworkType types.NetworkType
+
 	// A list of the one or more VPC security groups to be associated with the
 	// serverless cache. The security group will authorize traffic access for the VPC
 	// end-point (private-link). If no other information is given this will be the
@@ -73,10 +77,9 @@ type CreateServerlessCacheInput struct {
 	// Available for Valkey, Redis OSS and Serverless Memcached only.
 	SnapshotArnsToRestore []string
 
-	// The number of snapshots that will be retained for the serverless cache that is
-	// being created. As new snapshots beyond this limit are added, the oldest
-	// snapshots will be deleted on a rolling basis. Available for Valkey, Redis OSS
-	// and Serverless Memcached only.
+	// The number of days for which ElastiCache retains automatic snapshots before
+	// deleting them. Available for Valkey, Redis OSS and Serverless Memcached only.
+	// The maximum value allowed is 35 days.
 	SnapshotRetentionLimit *int32
 
 	// A list of the identifiers of the subnets where the VPC endpoint for the
@@ -107,9 +110,6 @@ type CreateServerlessCacheOutput struct {
 }
 
 func (c *Client) addOperationCreateServerlessCacheMiddlewares(stack *middleware.Stack, options Options) (err error) {
-	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
-		return err
-	}
 	err = stack.Serialize.Add(&awsAwsquery_serializeOpCreateServerlessCache{}, middleware.After)
 	if err != nil {
 		return err
@@ -118,17 +118,8 @@ func (c *Client) addOperationCreateServerlessCacheMiddlewares(stack *middleware.
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "CreateServerlessCache"); err != nil {
-		return fmt.Errorf("add protocol finalizers: %v", err)
-	}
 
 	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
-		return err
-	}
-	if err = addSetLoggerMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
 	if err = addComputeContentLength(stack); err != nil {
@@ -140,19 +131,7 @@ func (c *Client) addOperationCreateServerlessCacheMiddlewares(stack *middleware.
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
-		return err
-	}
-	if err = addRawResponseToMetadata(stack); err != nil {
-		return err
-	}
 	if err = addRecordResponseTiming(stack); err != nil {
-		return err
-	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
 	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
@@ -161,25 +140,13 @@ func (c *Client) addOperationCreateServerlessCacheMiddlewares(stack *middleware.
 	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
 		return err
 	}
-	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
 	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCreateServerlessCacheValidationMiddleware(stack); err != nil {
 		return err
 	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opCreateServerlessCache(options.Region), middleware.Before); err != nil {
-		return err
-	}
-	if err = addRecursionDetection(stack); err != nil {
+	if err = stack.Initialize.Add(newServiceMetadataMiddleware(options.Region, "CreateServerlessCache"), middleware.Before); err != nil {
 		return err
 	}
 	if err = addRequestIDRetrieverMiddleware(stack); err != nil {
@@ -194,25 +161,8 @@ func (c *Client) addOperationCreateServerlessCacheMiddlewares(stack *middleware.
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
-}
-
-func newServiceMetadataMiddleware_opCreateServerlessCache(region string) *awsmiddleware.RegisterServiceMetadata {
-	return &awsmiddleware.RegisterServiceMetadata{
-		Region:        region,
-		ServiceID:     ServiceID,
-		OperationName: "CreateServerlessCache",
-	}
 }
